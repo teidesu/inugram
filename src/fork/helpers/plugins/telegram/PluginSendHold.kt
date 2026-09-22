@@ -9,23 +9,16 @@ import org.telegram.ui.ChatActivity
 import org.telegram.ui.LaunchActivity
 
 /**
- * The grace window between the composer minting a local message and that message being drawn, for
- * the sends a middleware could still drop.
+ * Delays drawing outgoing messages briefly while middleware can still drop them.
  *
- * `interceptSendMessage` runs at `ConnectionsManager.sendRequest`, which is the last step of a send:
- * by the time a middleware answers `drop`, the bubble is already on screen and all
- * [PluginRpc.handleDroppedSend] can do is delete it again. A handler that answers in a few
- * milliseconds - which is what one costs, the whole round trip being a queue hop and a js call -
- * can instead be waited for, and the message never drawn at all.
+ * `interceptSendMessage` runs at `ConnectionsManager.sendRequest`, after the composer would
+ * normally draw the bubble. Holding the draw lets quick drop verdicts suppress it entirely.
  *
- * So the draw is parked for at most [GRACE_MILLIS] and released by whichever comes first: the chain
- * passing the request through, a middleware dropping it, or the deadline. Nothing about the send
- * itself is delayed - the request goes out while its bubble is parked - and a send no registered
- * middleware could claim is drawn on the spot, which is every send when no plugin intercepts one.
+ * Release the hold on passthrough, drop, or [GRACE_MILLIS], whichever comes first. The request
+ * itself is not delayed. Sends that no registered middleware can handle draw immediately.
  *
- * Media rarely benefits: its request is only built once the upload finishes, so the deadline wins
- * and it flashes the way it did before. Text, which is what a middleware filters on, is the case
- * this is for.
+ * Media uploads usually finish after the grace deadline, so their bubbles may still appear
+ * before a drop. The hold mainly benefits text sends.
  */
 object PluginSendHold {
     private const val GRACE_MILLIS = 100L

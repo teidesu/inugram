@@ -8,11 +8,8 @@ import org.telegram.messenger.LocaleController.getString
 import org.telegram.messenger.R
 
 /**
- * why a plugin isn't running.
- *
- * [Site.REFUSED] is the one case where the plugin's own code never ran, and the only one that
- * leaves it switched on: an app too old for its `@plugin-api` starts working on its own once the
- * app updates, so switching it off would just hide it.
+ * Why a plugin is not running. [Site.REFUSED] means its code never ran and leaves it enabled.
+ * For example, a plugin requiring a newer `@plugin-api` can start after the app updates.
  */
 class PluginFailure(val at: Site, val detail: String) {
     enum class Site(val labelRes: Int?) {

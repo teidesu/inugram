@@ -3,11 +3,9 @@
 
   const unsupported = message => new PluginError('unsupported', message)
 
-  // the requests one `OutgoingMessage` covers, which are the methods the middleware registers for,
-  // and what each of them can carry. read off the
-  // method rather than probed per field: a flag-gated field that is *clear* is omitted from reads
-  // exactly like one the constructor never declared, so `'silent' in raw` cannot tell "this send is
-  // not silent" from "an edit has no such field"
+  // Request shapes handled by `OutgoingMessage` and its middleware. Read capabilities from the
+  // method name: absent fields may be unsupported or merely cleared by flags, so `'silent' in raw`
+  // cannot distinguish an unsilenced send from an edit.
   const SHAPES = Object.assign(Object.create(null), {
     'messages.sendMessage': { silent: true, reply: true, media: 'none', edit: false },
     'messages.sendMedia': { silent: true, reply: true, media: 'single', edit: false },
@@ -66,8 +64,8 @@
     return reply === null ? null : toNumber(optional(reply, 'top_msg_id'))
   }
 
-  // a message posted into a forum topic with no reply of its own addresses the topic's own root
-  // message, so the two ids coincide - which is not a reply anyone wrote and must not read as one
+  // A forum message without a reply uses the topic root as its reply ID. Matching IDs therefore
+  // indicate the topic, not a user-written reply.
   const readReplyId = (raw, shape) => {
     const reply = replyOf(raw, shape)
     if (reply === null) return null
@@ -216,8 +214,8 @@
         return shape.edit ? toNumber(optional(raw, 'id')) : null
       },
     }
-    // sealed rather than frozen: the accessors are the api, and a typo'd `msg.silence = true` is a
-    // dropped intent that would otherwise pass silently
+    // Seal the object while keeping accessors writable, so typos such as `msg.silence = true` fail
+    // instead of silently doing nothing.
     return Object.seal(message)
   }
 
@@ -228,8 +226,8 @@
     const raw = context.request
     const account = context.account
     const shape = SHAPES[baseName(raw)]
-    // the host only ever dispatches `SHAPES`' own methods, so this is a shape the engine does not know rather
-    // than a plugin error: pass it on untouched instead of failing the user's send over it
+    // The host should dispatch only SHAPES methods. Pass unknown shapes through unchanged; a host
+    // mismatch must not fail the user's send.
     if (shape === undefined) return next()
     const verdict = await middleware({
       message: buildOutgoing(raw, shape, account, dispatchId),

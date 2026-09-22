@@ -1,9 +1,6 @@
 package desu.inugram.core.plugins
 
-/**
- * What a host object hands out per owner - a running plugin, in practice - so that owner's teardown
- * takes all of it at once and nothing it started outlives it. Safe from any thread.
- */
+/** Tracks resources by owner, usually a running plugin, so teardown can release all of its resources. Thread-safe. */
 class OwnerRegistry<O : Any, T> {
     private val byOwner = HashMap<O, MutableList<T>>()
 

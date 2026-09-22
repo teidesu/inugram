@@ -76,9 +76,9 @@
     return { text: texts.join(''), entities }
   }
 
-  // a legacy constructor is `<base>_<suffix>` (`message_old7`, `documentAttributeSticker_old2`,
-  // `messageMediaDocument_layer197_2`) and no live TL name contains an underscore, so cutting at
-  // the first one is what makes a check written against the modern name see every variant of it
+  // Legacy names use `<base>_<suffix>`, such as `message_old7`, `documentAttributeSticker_old2`, or
+  // `messageMediaDocument_layer197_2`. Current TL names have no underscores, so stripping the
+  // suffix matches all variants of a modern name.
   const baseName = (value) => {
     if (value === null || typeof value !== 'object') return ''
     const name = value._
@@ -199,9 +199,8 @@
     return ids.map(id => toMessageId(id, what))
   }
 
-  // a TL field name is a java identifier, which is also what keeps one clear of the separators the
-  // wire joins on. Whether the object *has* the field is the host's business: it carries what it
-  // can and leaves the rest to the lazy read, so a name it does not know costs nothing but itself
+  // Field names must be Java identifiers, which excludes wire separators. The host preloads
+  // supported fields and leaves other names for lazy reads.
   const FIELD_NAME = /^[A-Z_]\w{0,63}$/i
 
   const toFieldNames = (value, what) => {

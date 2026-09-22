@@ -27,15 +27,12 @@ import java.lang.ref.WeakReference
 import java.util.WeakHashMap
 
 /**
- * Kotlin side of `inu.icons`/`inu.android.resourceIcon` (rust: `icons.rs`). Native owns every
- * decision; this only answers whether something resolves and turns a spec into a [Drawable].
+ * Resolves `inu.icons` and `inu.android.resourceIcon` specs into Drawables (Rust: `icons.rs`).
+ * Native validates the spec; this class checks whether it resolves and renders it.
  *
- * Threading: [iconResolves] arrives on [org.telegram.messenger.Utilities.globalQueue] from the
- * call that mints the icon, and touches no view - a drawable name is a resource-table lookup and
- * an svg is parsed into a bitmap, neither of which needs an `Activity`. [setIcon] is the
- * ui-thread half, called while a row binds, so an icon is resolved against whichever activity is
- * showing it: a configuration change, a theme change or an icon-pack swap re-resolves the same
- * spec through the new resources with nothing to invalidate.
+ * [iconResolves] runs on globalQueue during icon creation. Resource lookups and SVG parsing
+ * need no Activity. [setIcon] runs on the UI thread during row binding and uses the current
+ * activity's resources, so configuration, theme, and icon-pack changes need no cache invalidation.
  */
 object PluginIcons {
     /** stock's own menu/settings drawables are 24dp */

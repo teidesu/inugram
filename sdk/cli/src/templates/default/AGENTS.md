@@ -23,7 +23,8 @@ grants, TL fields, or globals, or hide missing APIs with `any` casts.
 
 Under `node_modules/@inugram/plugin-types/`:
 
-- `common.d.ts`: primary contract, globals, lifecycle, limits, and `@needs-grant` tags.
+- `common.d.ts`: plugin APIs, lifecycle, limits, and `@needs-grant` tags.
+- `dom.d.ts`: web API globals, including timers, URLs, blobs, and `fetch`.
 - `grants.json`: valid permissions and scopes.
 - `android.tl.d.ts`: Telegram objects and RPC methods for this SDK version.
 - `android.jvm.d.ts`, `android.xposed.d.ts`, `android.notification-center.d.ts`:

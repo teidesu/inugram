@@ -6,9 +6,8 @@ import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.Utilities
 
 /**
- * The shape every per-install tree shares: the id names a path, so it is re-checked wherever one is
- * built, and a directory that cannot be made answers "" rather than failing the plugin. What each
- * tree differs in - which root it hangs off, and whether that root exists yet - stays with its owner.
+ * Builds per-install paths, revalidating IDs each time. Returns "" if a directory cannot
+ * be created instead of failing the plugin. Each owner chooses and initializes its root.
  */
 internal object PluginPaths {
     fun scopedDir(installId: String, dirOf: (String) -> File?): String {

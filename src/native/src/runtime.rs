@@ -7,7 +7,7 @@ use crate::api::error;
 use crate::jni::is_caller_entry;
 use crate::sandbox::registry::RequestIds;
 
-/// which table a host's answer settles; keep in step with `QuickJs.SETTLE_*`
+/// Selects the host response table; keep in sync with `QuickJs.SETTLE_*`.
 pub(crate) const SETTLE_FETCH: i32 = 0;
 pub(crate) const SETTLE_CANVAS: i32 = 1;
 pub(crate) const SETTLE_MODAL: i32 = 2;
@@ -81,12 +81,12 @@ pub fn pump_jobs(rt: &Runtime, context: &rquickjs::Context, log: &dyn Fn(&str)) 
   context.with(|ctx| error::report_rejections(&ctx));
 }
 
-/// state an engine lets go of at `nativeDestroy`, while its runtime is still there to release into
+/// State released by `nativeDestroy` before the runtime is destroyed.
 pub(crate) trait Dispose {
   fn dispose(&self, context: &rquickjs::Context);
 }
 
-/// what a parked request holds besides its promise, and what becomes of it once the request is over
+/// Resources held with a pending promise and their cleanup outcome.
 pub(crate) trait Parked: Sized {
   /// the request failed: refused before it crossed, or answered with an error
   fn reject(self, _ctx: &Ctx<'_>) {}
@@ -102,9 +102,8 @@ struct Entry<T> {
   parked: T,
 }
 
-/// Every request a host answers later, one table per api: the id it crosses under, the promise it
-/// settles, and whatever the api keeps until then. A settle for an id that is not here - answered
-/// twice, or after an abort - is dropped.
+/// Tracks pending host requests by API, including their IDs, promises, and resources. Ignores
+/// settlements for unknown IDs, including duplicate responses and responses after abort.
 pub(crate) struct PendingTable<T: Parked> {
   ids: RequestIds,
   entries: RefCell<HashMap<i64, Entry<T>>>,
@@ -120,8 +119,8 @@ impl<T: Parked> Default for PendingTable<T> {
 }
 
 impl<T: Parked> PendingTable<T> {
-  /// registers the request before `ask` tells the host about it, so an answer arriving from inside
-  /// the ask still finds it; a refusal `ask` returns rejects the same promise
+  /// Registers before calling `ask`, so synchronous host responses can find the request. An error
+  /// returned by `ask` rejects the same promise.
   pub(crate) fn park<'js>(
     &self,
     ctx: &Ctx<'js>,
@@ -160,11 +159,10 @@ impl<T: Parked> PendingTable<T> {
     })
   }
 
-  /// Settles a request with whatever `produce` makes of it. What it throws rejects the promise, and
-  /// so does an answer it cannot read at all, since a promise left hanging is worse than either.
+  /// Settles from `produce`; rejects if it throws or returns an unreadable response.
   ///
-  /// `keep` settles the promise but holds on to what was parked until a later settle for the same
-  /// id, which is how an answer arrives in two halves.
+  /// With `keep`, settles the promise but retains resources until a second response with the same
+  /// ID. This supports responses delivered in two stages.
   pub(crate) fn settle_with<'js>(
     &self,
     ctx: &Ctx<'js>,
@@ -215,7 +213,7 @@ impl<T: Parked> PendingTable<T> {
     settled.map_err(|_| error::format_exception(ctx))
   }
 
-  /// drops a request nobody will read the answer to, without settling it
+  /// Removes a request without settling its promise when its response is no longer needed.
   pub(crate) fn forget(&self, ctx: &Ctx<'_>, id: i64) {
     let removed = self.entries.borrow_mut().remove(&id);
     if let Some(entry) = removed {

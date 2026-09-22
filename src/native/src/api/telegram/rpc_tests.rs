@@ -1129,9 +1129,9 @@ fn levels(logs: &std::sync::Arc<crate::testing::harness::Logs>) -> Vec<(i32, Str
     .collect()
 }
 
-/// the 0.11 failure policy: the host stores a fault and switches the plugin off, so a
-/// middleware that fails every `messages.sendMessage` has to be distinguishable from the engine
-/// having a bad day - it fails the send once instead of forever
+/// A plugin exception records a fault and disables the plugin; a host failure does not. Distinguish
+/// them so middleware that throws on every messages.sendMessage fails only the first send, then
+/// stops running.
 #[test]
 fn a_plugin_throw_faults_where_a_host_failure_does_not() {
   let (rt, ctx, host, state, logs) = setup_logging(&["interceptRpc", "onUpdate"]);

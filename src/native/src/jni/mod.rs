@@ -62,8 +62,8 @@ impl Deref for TransferEngine {
   }
 }
 
-/// the lease-free part of an engine's slot: what a java thread reaches without entering the
-/// engine, which is how `PluginJvm` encodes a reference while the engine is busy elsewhere
+/// Engine-slot state accessible from Java without an engine lease. Allows `PluginJvm` to encode
+/// references while another thread uses the engine.
 struct EngineSlot {
   engine: Arc<Serialized<TransferEngine>>,
   jvm_refs: Option<Arc<crate::api::platform::jvm::RefTable>>,

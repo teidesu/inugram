@@ -1,7 +1,7 @@
 import { loadConfig } from './config.js'
 import { CliError } from './log.js'
 
-/** what a command was pointed at, as citty parsed it: `_` holds every positional */
+/** Command arguments parsed by citty; `_` contains positional arguments. */
 export interface ProjectArgs {
   config?: string
   _: string[]

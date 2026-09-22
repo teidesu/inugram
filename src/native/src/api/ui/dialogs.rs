@@ -50,9 +50,8 @@ pub struct DialogState {
 }
 
 impl DialogState {
-  /// A bulletin is parked like the modals are: it has an outcome the plugin may wait for, and
-  /// reusing that machinery is what keeps a tappable bulletin from needing a dispatch of its own.
-  /// Nothing has to be awaited - a plugin that only wants to say something drops the promise.
+  /// Tracks a bulletin through the same pending-request table as modals, allowing callers to await
+  /// a tap or dismissal without a separate dispatch. Callers may ignore the promise.
   fn js_ui_bulletin<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, options: Value<'js>) -> JsResult<Value<'js>> {
     let Some(options) = options.as_object() else {
       return Err(Exception::throw_type(ctx, "bulletin: expected an options object"));
@@ -74,9 +73,7 @@ impl DialogState {
       let spec = icon_value.as_object().expect("an avatars icon is an object");
       let list: Value =
         spec.get("avatars").map_err(|_| Exception::throw_type(ctx, "bulletin: cannot read 'avatars'"))?;
-      let list = list
-        .as_array()
-        .ok_or_else(|| Exception::throw_type(ctx, "bulletin: 'avatars' must be an array"))?;
+      let list = list.as_array().ok_or_else(|| Exception::throw_type(ctx, "bulletin: 'avatars' must be an array"))?;
       let ids = arguments::array_values(ctx, list, "bulletin: 'avatars'")?;
       // stock's own layout draws three and counts the rest; more than that is a silent no-op
       if ids.len() > AVATAR_LIMIT {
@@ -95,8 +92,8 @@ impl DialogState {
         out_list.set(index, id)?;
       }
       out.set("avatars", out_list)?;
-      // the peers are looked up in an account, and the one showing the bulletin is not always the
-      // one the peers belong to - a notification about another account's chat is the whole reason
+      // Resolve peers in their specified account, which may differ from the account displaying the
+      // bulletin, such as for a notification about another account.
       if let Some(account) = arguments::opt_int(ctx, spec, "bulletin", "account")? {
         out.set("account", account)?;
       }

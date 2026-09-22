@@ -10,18 +10,15 @@ import org.telegram.tgnet.TLObject
 import org.telegram.tgnet.TLRPC
 
 /**
- * What a plugin may see wherever a TL value is materialized for it ([TlHandles] live views and
- * [TlJson] snapshots alike): the account-takeover filter, bypassed for a plugin holding
- * `unsafe.disableApiFiltering`, and draft text, which is `account.read(draft)`'s to hand out and
- * rides on far more than `getDraft`.
+ * Filters TL values consistently across [TlHandles] views and [TlJson] snapshots.
+ * Applies takeover filtering unless `unsafe.disableApiFiltering` is granted, and requires
+ * `account.read(draft)` for draft text wherever it appears, not just through `getDraft`.
  *
- * Both are per plugin rather than per api, for the same reason: a rule enforced per method is one
- * an api added later walks past. So a [Policy] is built once, at [PluginRpc.attach].
+ * Build one [Policy] per plugin in [PluginRpc.attach], so new API methods use the same rules.
  *
- * [ApiFilter.HIDDEN_FIELDS] is matched by constructor id, never by wire name: `TL_message_old7`'s
- * canonical name is `message_old7`, so a name check walks past every legacy variant, while
- * `idsOf("message")` carries all of their ids. The per-class memo makes the steady-state check one
- * hash lookup, this running on every field read of every materialized object.
+ * Match [ApiFilter.HIDDEN_FIELDS] by constructor ID. Name checks would miss legacy names such
+ * as `message_old7`; `idsOf("message")` includes all variants. Cache decisions per class
+ * because every field read uses this check.
  */
 object TlFilter {
     /**
@@ -93,10 +90,10 @@ object TlFilter {
     }
 
     /**
-     * true for the fields [filterFieldValue] decides on. they are refused as writes and handed out
-     * read-only, so a plugin holding a writable view cannot clear the sender and re-read the text in
-     * clear - the verdict is recomputed live on every read, including [TlJson]'s snapshot walk, so
-     * sealing the inputs is what makes it stable rather than caching the verdict.
+     * Identifies fields used by [filterFieldValue]. Reject writes and expose their values
+     * read-only so a plugin cannot clear the sender to reveal redacted text. Decisions are
+     * recomputed on every read, including [TlJson] snapshots; protecting the inputs keeps
+     * those decisions consistent.
      */
     fun decidesRedaction(cls: Class<*>, key: String): Boolean = when {
         TLRPC.Message::class.java.isAssignableFrom(cls) ->

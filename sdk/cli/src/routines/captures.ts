@@ -33,14 +33,14 @@ interface Site {
 export interface CaptureProblem {
   name: string
   message: string
-  /** where the routine first reads it, so an error points at the name and not at the whole body */
+  /** The first reference to the capture, for precise error locations. */
   start: number
   end: number
 }
 
 /**
- * Anywhere a name can be bound or assigned. `Expression` is in it because an assignment target may
- * be written through a cast, and what a cast wraps is one.
+ * Nodes that can bind or assign names. Includes `Expression` because assignment targets
+ * can be wrapped in casts.
  */
 type Bindable
   = | BindingPattern
@@ -51,7 +51,7 @@ type Bindable
     | ParamPattern
     | Expression
 
-/** a pattern binds one name or several, and which ones is all that matters here */
+/** Finds all names bound by a pattern. */
 function collectPatternNames(node: Bindable, into: string[]): void {
   switch (node.type) {
     case 'Identifier':
@@ -101,9 +101,9 @@ function kindOf(declaration: VariableDeclaration): Kind {
 }
 
 /**
- * The enclosing file's bindings as the routine sees them: what a capture resolves to, and whether
- * anything in the file assigns it. Captures are taken by value when the routine is constructed, so
- * a binding that changes afterwards runs stale with no sign of it at runtime.
+ * Resolves captures in the enclosing file and tracks assignments to their bindings.
+ * Captures are snapshots taken at routine construction, so later assignments would leave
+ * stale values without a runtime error.
  */
 class FileScopes {
   private readonly scopes: Scope[] = []
@@ -139,7 +139,7 @@ class FileScopes {
     for (const declarator of declaration.declarations) this.declarePattern(declarator.id, kind)
   }
 
-  /** what a block makes visible to everything inside it, wherever the declaration stands */
+  /** Collects declarations visible throughout a block, regardless of their position. */
   private declareStatements(statements: readonly Statement[]): void {
     for (const raw of statements) {
       const statement = declarationOf(raw)
@@ -160,10 +160,7 @@ class FileScopes {
     }
   }
 
-  /**
-   * A `var` belongs to the function around it however deep it was written, so a body is swept for
-   * them before anything in it is visited.
-   */
+  /** Scan for `var` declarations before visiting a function body, including those in nested blocks. */
   private hoistVars(statements: readonly Statement[]): void {
     const walk = (statement: Statement): void => {
       const it = declarationOf(statement)
@@ -300,7 +297,7 @@ class FileScopes {
     }).visit(program)
   }
 
-  /** where the body first says the name, which is nowhere when the compiler named it for us */
+  /** The name's first source occurrence, or none for compiler-generated names. */
   siteOf(start: number, name: string): Site | null {
     return this.uses.get(start)?.get(name) ?? null
   }
@@ -324,8 +321,8 @@ class FileScopes {
 }
 
 /**
- * Checks what each of [names] resolves to where [calls] stand. The compiler cannot make this check
- * itself: it sees one routine body, and the answer is in the file around it.
+ * Resolves [names] in the enclosing scope of each routine in [calls].
+ * The compiler cannot do this itself because it only receives the routine body.
  */
 export function checkCaptures(
   program: Program,

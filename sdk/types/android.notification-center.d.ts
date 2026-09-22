@@ -721,16 +721,16 @@ declare namespace inu {
     }
 
     /**
-     * The signatures above name what the *app* passes. A scalar crosses as itself; everything else
-     * - a TL object, a `MessageObject`, a list, an array - crosses as the same {@link JavaObject}
-     * handle `inu.jvm` would answer with, since these events are not TL and there is nothing else
-     * to turn them into. Which is why this needs `unsafe.jvm` as well.
+     * Event signatures describe the app's arguments. Scalars pass through unchanged;
+     * objects, including TL objects, lists, and arrays, are passed as {@link JavaObject} handles.
      */
     type NotificationArg<T> = T extends number | string | boolean | undefined ? T : JavaObject
 
     type NotificationArgs<T extends unknown[]> = { [K in keyof T]: NotificationArg<T[K]> }
 
     /**
+     * Add a listener to the android app's raw `NotificationCenter` events.
+     *
      * @needs-grant unsafe.notificationCenter
      * @needs-grant unsafe.jvm
      */

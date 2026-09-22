@@ -165,8 +165,8 @@ impl XposedHost for TestXposedHost {
   }
 }
 
-/// Both states hold GC roots and `Persistent` has no `Drop`, so an undisposed one aborts
-/// `JS_FreeRuntime`. Fields drop in declaration order, hence the disposers ahead of the runtime.
+/// Both states need explicit disposal: `Persistent` has no Drop, and leaked roots make
+/// `JS_FreeRuntime` abort. Fields drop in declaration order, so disposers precede the runtime.
 struct Fixture {
   _xposed: crate::testing::harness::DisposeOnDrop<XposedState>,
   _jvm: crate::testing::harness::DisposeOnDrop<crate::api::platform::jvm::JvmState>,
@@ -411,6 +411,41 @@ fn hooks_run_in_registration_order() {
 }
 
 #[test]
+fn afters_run_in_reverse_registration_order_within_one_plugin() {
+  let fixture = granted();
+  *fixture.host.sites.borrow_mut() = vec!["S100".to_string(), "S100".to_string()];
+  fixture.eval(
+    "globalThis.order = [];
+         globalThis.answer = false;
+         const m = stringLength;
+         globalThis.a = inu.xposed.hookMethod(m, {
+           before(ctx) { order.push('a'); if (answer) ctx.setReturnValue(1) },
+           after() { order.push('A') },
+         });
+         globalThis.b = inu.xposed.hookMethod(m, { before() { order.push('b') }, after() { order.push('B') } })",
+  );
+  fixture.dispatch(100, &["GO9"]);
+  let proceeded: String = fixture.ctx.with(|ctx| ctx.eval("order.join('')").unwrap());
+  assert_eq!(proceeded, "abBA");
+
+  fixture.eval("order = []; answer = true");
+  fixture.dispatch(100, &["GO9"]);
+  let answered: String = fixture.ctx.with(|ctx| ctx.eval("order.join('')").unwrap());
+  assert_eq!(answered, "aBA");
+
+  *fixture.host.sites.borrow_mut() = vec!["S100".to_string(), "S100".to_string()];
+  fixture.eval(
+    "a(); b(); order = [];
+         inu.xposed.hookMethod(stringLength, { after() { order.push('C') } });
+         inu.xposed.hookMethod(stringLength, { after() { order.push('D') } })",
+  );
+  assert_eq!(fixture.host.befores(100), 0);
+  fixture.dispatch(100, &["GO9"]);
+  let after_only: String = fixture.ctx.with(|ctx| ctx.eval("order.join('')").unwrap());
+  assert_eq!(after_only, "DC");
+}
+
+#[test]
 fn two_hooks_on_one_site_uninstall_only_when_the_last_goes() {
   let fixture = granted();
   // both registrations answer with the same site, which is what two hooks on one method is
@@ -439,8 +474,8 @@ fn a_disposer_called_twice_unhooks_once() {
   assert_eq!(fixture.host.ops().iter().filter(|op| **op == OP_UNHOOK).count(), 1);
 }
 
-/// nothing read the argument wires, so the answer must say so rather than echo them: the host
-/// releases what it minted, and a `P0` would tell it the engine had taken them
+/// Unread argument wires must be reported as unclaimed. The host releases their handles; returning
+/// P0 would incorrectly transfer ownership to the engine.
 #[test]
 fn a_site_with_no_hooks_answers_that_nothing_was_dispatched() {
   let fixture = granted();
@@ -955,8 +990,7 @@ fn a_filter_reaches_the_host_as_the_routine_the_plugin_built() {
 #[test]
 fn a_filter_that_is_not_a_routine_is_refused_before_installation() {
   let fixture = granted();
-  let error =
-    fixture.eval_err("inu.xposed.hookMethod(fixtureRun, { filter: (ctx) => true, before() {} })");
+  let error = fixture.eval_err("inu.xposed.hookMethod(fixtureRun, { filter: (ctx) => true, before() {} })");
   assert!(error.contains("filter must be an inu.jvm.routine"), "{error}");
   assert!(fixture.host.ops().is_empty(), "a hook refused for its filter never reaches the host");
 }

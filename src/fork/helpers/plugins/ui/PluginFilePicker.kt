@@ -22,13 +22,11 @@ import org.telegram.messenger.Utilities
 import org.telegram.ui.LaunchActivity
 
 /**
- * `inu.ui.pickFile` and `inu.ui.saveFile` (rust: `api/ui/files.rs`): the device's own document
- * picker, which is the only thing that hands a plugin a file it did not make. The gesture is the
- * permission - one file, chosen once - so nothing here asks for a grant and nothing reports where
- * the file came from.
+ * Implements `inu.ui.pickFile` and `inu.ui.saveFile` using Android's document picker
+ * (Rust: `api/ui/files.rs`). The user's selection grants access to that file; no plugin
+ * grant is required, and the source path is not exposed.
  *
- * The content is copied rather than read through the uri it arrived as: that uri's permission lasts
- * as long as the picker's own result, while the `File` the plugin holds outlives it.
+ * Copies content into plugin storage because the returned `File` can outlive the URI permission.
  */
 internal object PluginFilePicker : SessionResource {
     private const val TAG = "InuPluginFiles"
@@ -99,10 +97,10 @@ internal object PluginFilePicker : SessionResource {
     }
 
     /**
-     * The one shape both take: hand the device an intent from the ui thread, wait for the result on
-     * [NotificationCenter.onActivityResultReceived] - which is how stock reports one to anything
-     * that is not a fragment - and turn it into the plugin's answer off that thread, copying a file
-     * being disk work. A plugin torn down in between answers nothing, its promises being gone.
+     * Launches the picker on the UI thread and receives its result through
+     * [NotificationCenter.onActivityResultReceived], stock's callback for non-fragment consumers.
+     * Copies files and prepares the response off the UI thread. Drops responses after teardown,
+     * when the plugin's promises no longer exist.
      */
     private fun launch(
         session: PluginSession,
@@ -218,8 +216,8 @@ internal object PluginFilePicker : SessionResource {
     }
 
     /**
-     * The cap is counted as the bytes arrive rather than taken off the provider, which is allowed to
-     * report no size at all - and does, for plenty of cloud providers. Answers the refusal, or null.
+     * Counts bytes while copying because providers, including cloud providers, may omit size.
+     * Returns an error wire on failure, null on success.
      */
     private fun copy(uri: Uri, target: File, described: Described): String? {
         val resolver = ApplicationLoader.applicationContext.contentResolver

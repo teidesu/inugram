@@ -5,9 +5,9 @@ import desu.inugram.helpers.plugins.io.PluginPaths
 import java.io.File
 
 /**
- * Where `inu.kv` keeps an install's store (rust: `kv.rs`, which owns the store and its quota).
- * `filesDir` rather than the cache, since a store is meant to outlive restarts, and keyed by
- * install id so a rename keeps it and nothing can name its way into another's.
+ * Locates each install's `inu.kv` store. Rust `kv.rs` owns its contents and quota.
+ * Uses `filesDir` to survive restarts and install IDs to preserve data across renames
+ * without letting another plugin claim it by name.
  */
 object PluginKv {
     private const val ROOT = "inu_kv"

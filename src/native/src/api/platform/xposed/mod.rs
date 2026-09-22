@@ -156,7 +156,7 @@ impl XposedState {
     let Some(entry) = sites.get(&site) else {
       return Vec::new();
     };
-    entry.hooks.iter().filter_map(|hook| hook.after.clone()?.restore(ctx).ok()).collect()
+    entry.hooks.iter().rev().filter_map(|hook| hook.after.clone()?.restore(ctx).ok()).collect()
   }
 }
 
@@ -521,9 +521,8 @@ pub trait JavaValues {
   fn read<'js>(&self, ctx: &Ctx<'js>, index: usize) -> JsResult<Value<'js>>;
 }
 
-/// The caller's own array, borrowed rather than referenced globally: it is valid only inside the
-/// JNI call that was handed it, which is why every read goes through a hook context that expires
-/// when its phase returns.
+/// Borrows the caller's invocation array for this JNI call without creating global references.
+/// Reads go through a hook context that expires when the phase returns.
 pub struct HookedValues {
   jvm: Rc<JvmState>,
   array: jobjectArray,
@@ -648,7 +647,7 @@ impl XposedState {
       }
     }
 
-    let afters: Vec<Function> = hooks.iter().filter_map(|hook| hook.after.clone()).collect();
+    let afters: Vec<Function> = hooks.iter().rev().filter_map(|hook| hook.after.clone()).collect();
     let wants_after = !afters.is_empty();
     if let Some(wire) = answer {
       let after = state.run_after(ctx, &afters, hook_context, Published::Answer(&wire))?;

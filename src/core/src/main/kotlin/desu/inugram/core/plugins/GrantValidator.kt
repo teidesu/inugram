@@ -1,9 +1,8 @@
 package desu.inugram.core.plugins
 
 /**
- * install-time validation of a manifest's `@grant` scopes against the closed vocabularies
- * [GrantCatalog] gives each grant. Unknown grant *names* are ignored on purpose (open vocabulary);
- * this only rejects a scope a *known* grant would never accept.
+ * Validates manifest scopes at installation against [GrantCatalog].
+ * Ignores unknown grant names but rejects unknown scopes for known grants.
  */
 object GrantValidator {
     fun validateGrants(tokens: List<String>): List<String> {

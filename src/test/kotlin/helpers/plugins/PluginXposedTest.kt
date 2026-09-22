@@ -291,6 +291,24 @@ class PluginXposedTest {
         assertEquals(2, seen.size)
     }
 
+    @Test
+    fun native_afters_run_in_reverse_registration_order() {
+        val plugin = startPlugin("native-hook-order", "unsafe.jvm", "unsafe.xposed")
+        val bridge = PluginJvm.bridgeFor(plugin.js)!!
+        val order = ArrayList<String>()
+        fun record(label: String) = "G" + jvmHandleId(bridge.encode(Runnable { order.add(label) }))
+        val reflected = JvmFixture::class.java.getDeclaredMethod("sum", Int::class.java, Int::class.java)
+        val method = jvmHandleId(bridge.encode(reflected))
+        val firstBefore = record("a")
+        val firstAfter = record("A")
+        val site = stringOf(plugin.xposed(PluginXposed.OP_HOOK, method, args = arrayOf(firstBefore, firstAfter))).toLong()
+        plugin.xposed(PluginXposed.OP_NATIVE_ADD, site, "1", firstBefore, firstAfter)
+        plugin.xposed(PluginXposed.OP_NATIVE_ADD, site, "2", record("b"), record("B"))
+        assertEquals(3, invokeOffQueue { reflected.invoke(null, 1, 2) as Int })
+        assertEquals(listOf("a", "b", "B", "A"), order)
+        plugin.xposed(PluginXposed.OP_UNHOOK, site)
+    }
+
     private fun Plugin.jvm(op: Int, target: Long = 0, name: String = "", vararg args: String): String =
         js.listener!!.jvm(op, target, name, arrayOf(*args))
 

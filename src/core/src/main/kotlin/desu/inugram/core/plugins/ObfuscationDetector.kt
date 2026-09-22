@@ -57,9 +57,8 @@ object ObfuscationDetector {
     }
 
     /**
-     * measures only *code*: string literal contents and comments are stripped first, so embedded
-     * base64 assets or other long strings never read as minification, while a long line of actual
-     * code always does - even one hidden in the middle of an otherwise readable file.
+     * Measures code after stripping strings and comments. Long embedded assets do not count
+     * as minification; long code lines do, even inside otherwise readable files.
      */
     private fun isMinified(source: String): Boolean {
         val lines = stripStringsAndComments(source).lineSequence()
@@ -75,9 +74,9 @@ object ObfuscationDetector {
     }
 
     /**
-     * keeps quotes and newlines, drops everything between them. Regex literals aren't understood:
-     * a quote inside one opens a phantom string that swallows code until the next quote, which only
-     * under-counts code - the failure direction that never flags a readable file.
+     * Preserves quotes and newlines while stripping string contents. Regex literals are not
+     * parsed: a quote inside one can hide code until the next quote. This undercounts code
+     * rather than falsely flagging readable source.
      */
     private fun stripStringsAndComments(source: String): String {
         val out = StringBuilder(source.length)

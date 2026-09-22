@@ -1,12 +1,11 @@
-//! `inu.jvm`'s call path: a cached `jmethodID`, arguments laid out as `jvalue`s, one JNI call.
+//! Calls JVM members using cached `jmethodID`s, `jvalue` arguments, and one JNI invocation.
 //!
-//! Kotlin still decides what a name means (`PluginJvm.jvmResolve` walks the class), but it is
-//! asked once per class and name and the answer is kept here as a plan. Everything per call - picking the overload, converting
-//! the arguments, the invocation, wrapping the result - happens on this side without a string.
+//! Kotlin's `PluginJvm.jvmResolve` resolves names once per class and name. Rust caches that plan
+//! and handles overload selection, conversion, invocation, and result wrapping without string
+//! encoding.
 //!
-//! The conversion rules are `PluginJvm.convert`'s, which stays for the paths that run on java
-//! threads (routines, `defineClass` bodies, `inu.xposed`'s answers); the two must agree, and the
-//! bundled `jvm-test.js` oracle plus `PluginJvmTest` are what say they do.
+//! Keep conversions aligned with `PluginJvm.convert`, which handles routines, `defineClass` bodies,
+//! and Xposed results on Java threads. `jvm-test.js` and `PluginJvmTest` check that they agree.
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -319,9 +318,9 @@ fn static_method_id(
   env.get_static_method_id(cls, JNIString::from(name), MethodSignature::from(&parsed))
 }
 
-/// `FromReflectedMethod`/`FromReflectedField` read the id off the reflected object itself: unlike
-/// `GetMethodID`, they do not initialize the declaring class, so describing a member runs no
-/// static initializer that `Class.getDeclaredMethod` would not have run either
+/// Reads IDs from reflected members without initializing their declaring class. Unlike
+/// `GetMethodID`, this preserves `Class.getDeclaredMethod` behavior and does not run static
+/// initializers.
 fn reflected_method_id(env: &mut Env, member: &JObject) -> OpResult<jni::sys::jmethodID> {
   let raw = env.get_raw();
   let id = unsafe { ((**raw).v1_2.FromReflectedMethod)(raw, member.as_raw()) };
@@ -1302,11 +1301,10 @@ impl Native {
     }
   }
 
-  /// Reflection initializes a class on its first static use and `FromReflectedMethod` never
-  /// does, nor does the `Class.forName(name, false, ...)` naming a class deliberately uses: so
-  /// the same `forName` is run with `initialize` set, once, where java would run `<clinit>`.
-  /// An initializer that throws leaves the plan uninitialized, and java reports it the way it
-  /// reports any thrown exception.
+  /// Initialize the class on first static use, matching reflection. Member lookup and
+  /// `Class.forName(name, false, ...)` deliberately skip initialization, so call `forName` with
+  /// initialization enabled here. If it throws, leave the plan uninitialized and propagate the Java
+  /// exception.
   fn ensure_initialized(
     &self,
     ctx: &Ctx<'_>,
@@ -1649,8 +1647,9 @@ impl Native {
     })
   }
 
-  /// a pinned member's plan was not derived from the receiver's class the way `call`/`get`/`set`
-  /// derive theirs, so an unchecked call through its id must first know the receiver is one it fits
+  /// A pinned member plan may come from a different class than the receiver. Validate the receiver
+  /// before calling through its JNI ID; unlike `call`/`get`/`set`, resolution did not already
+  /// establish compatibility.
   fn receiver_arg(
     &self,
     ctx: &Ctx<'_>,
@@ -1714,7 +1713,12 @@ impl Native {
   }
 
   /// `Class.isInstance`, over the handle the caller already narrowed to one (see `js_is_instance`)
-  pub(crate) fn is_instance<'js>(&self, ctx: &Ctx<'js>, target: &Class<'js, JvmRef>, value: &Arg<'js>) -> JsResult<bool> {
+  pub(crate) fn is_instance<'js>(
+    &self,
+    ctx: &Ctx<'js>,
+    target: &Class<'js, JvmRef>,
+    value: &Arg<'js>,
+  ) -> JsResult<bool> {
     self.with_env(ctx, |env, known| {
       let entry = self.entry_of(ctx, target)?;
       if entry.kind != KIND_CLASS {

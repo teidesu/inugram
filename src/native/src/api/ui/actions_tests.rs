@@ -391,9 +391,8 @@ fn the_row_cap_reaches_the_plugin_as_a_quota_exceeded_plugin_error() {
   assert_eq!(code, "true:quota-exceeded:true");
 }
 
-/// the other half of that rule. `action_register` answers a JNI-level failure the same way
-/// every other upcall does - as `internal` - and reporting one as `quota-exceeded` tells a plugin
-/// to back off a row count it is nowhere near while blaming the author for the host's bad day.
+/// JNI failures from `action_register` must report `internal`, not `quota-exceeded`. A plugin
+/// should not be told to reduce its row count when the bridge failed.
 #[test]
 fn a_host_failure_is_not_reported_to_the_plugin_as_a_quota() {
   let (_rt, ctx, host, _state, _logs) = setup();
@@ -415,9 +414,8 @@ fn a_host_failure_is_not_reported_to_the_plugin_as_a_quota() {
   assert_eq!(code, "true:internal:true");
 }
 
-/// re-registering an id is the documented way to change a row, and the replacement's token is
-/// allocated before the displaced one is retired - so a cap consulted on the count alone leaves
-/// a plugin at the cap unable to update any of its rows for the rest of the process
+/// Updating a row allocates its replacement token before retiring the old one. Check the limit by
+/// new row ID, not token count, so updates still work at capacity.
 #[test]
 fn a_keyed_re_registration_at_the_cap_replaces_rather_than_being_refused() {
   let (rt, ctx, host, state, _logs) = setup();

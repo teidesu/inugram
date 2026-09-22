@@ -17,7 +17,7 @@ export interface BuildOutcome {
   bytes: number
   problems: Message[]
   warnings: Message[]
-  /** what is wrong with the manifest, which is not in any source file to point at */
+  /** A manifest error without a source-file location. */
   notes: string[]
 }
 
@@ -95,8 +95,8 @@ export interface Watcher {
 }
 
 /**
- * one esbuild context per plugin, each rebuilding on its own. [onBuilt] runs after every rebuild,
- * the first one included, so a caller can push what changed and nothing else.
+ * Creates one independent esbuild context per plugin. Calls [onBuilt] after every build,
+ * including the first, so callers can push only the changed plugin.
  */
 export async function watchPlugins(options: {
   config: ResolvedCliConfig

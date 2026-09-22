@@ -14,12 +14,9 @@ import org.telegram.ui.Components.TextStyleSpan
 import org.telegram.ui.Components.URLSpanMono
 
 /**
- * `InputText` as a surface draws it: the plain text plus the entities beside it, turned into the
- * spans stock already knows how to render (rust: `arguments::read_input_text`).
- *
- * An entity the app cannot build is dropped rather than refused - a surface asked for text, and a
- * malformed entity must not cost it the text. [fontMetrics] is the target view's, and is what custom
- * emoji need to size themselves; without it they stay the text they replaced.
+ * Converts `InputText` and its entities to stock spans (Rust: `arguments::read_input_text`).
+ * Drops malformed or unsupported entities while keeping their text. Custom emoji use the
+ * target view's [fontMetrics] for sizing; without metrics, they remain plain text.
  */
 object PluginText {
 
@@ -85,10 +82,8 @@ object PluginText {
     }
 
     /**
-     * Stock draws a code entity through a span that hard-sets the chat bubble's own text colour and
-     * the chat font size, since in a message that is the only place it can appear: unreadable on a
-     * bulletin's dark background, and mis-sized anywhere else. A plain style span keeps the monospace
-     * face and inherits whatever colour and size the view draws with.
+     * Stock code spans force chat text color and size, making them unsuitable for other views,
+     * such as dark bulletins. Use a monospace style span that inherits the view's color and size.
      */
     private fun inheritCodeColor(text: SpannableStringBuilder) {
         for (span in text.getSpans(0, text.length, URLSpanMono::class.java)) {

@@ -64,16 +64,16 @@ export class RoutineCompileError extends Error {
   }
 }
 
-/** what a routine may be written as: a function expression, or an arrow where `this` is refused */
+/** A function expression or arrow; arrows cannot access `this`. */
 export type RoutineBody = OxcFunction | ArrowFunctionExpression
 
-/** every node carries one, which is all an error needs of it */
+/** Source offsets shared by all nodes, used for error locations. */
 interface Spanned {
   start: number
   end: number
 }
 
-/** syntax the routine subset looks straight through, because it says nothing at runtime */
+/** TypeScript wrappers with no runtime effect. */
 type Wrapper
   = | ParenthesizedExpression
     | TSAsExpression
@@ -97,9 +97,8 @@ type Binding
 type Scope = Map<string, Binding>
 
 /**
- * `this` and an argument each cost the host a bridge check, so they are emitted where they are
- * read rather than at the top, and a filter that turns a call away never pays for the ones
- * the rest of the body would have read. Only captures belong in the prologue.
+ * Read `this` and arguments at their use sites: each read costs a host bridge check,
+ * so an early return should skip unused inputs. Only captures are read in the prologue.
  */
 interface PrologueEntry {
   key: string
@@ -109,7 +108,7 @@ interface PrologueEntry {
 
 interface RegionEntry {
   finalizer: BlockStatement | null
-  /** where the `try` sits, because a finalizer reads the scope it was written in, not the exit's */
+  /** The try block's scope, used by its finalizer even when inlined at another exit site. */
   scopeDepth: number
   targetDepth: number
   rangeStart: number | null
@@ -117,8 +116,8 @@ interface RegionEntry {
 }
 
 /**
- * Where a `continue` goes: back to a header the loop already emitted, or forward to one it has not.
- * A `switch` or a labelled block has neither, which is what `null` says.
+ * A continue target: backward to an existing loop header or forward to a pending one.
+ * Null for switches and labelled blocks, which have no continue target.
  */
 type ContinuePoint = { kind: 'header', at: number } | { kind: 'patches', patches: Patch[] } | null
 
@@ -134,7 +133,7 @@ interface ChainState {
   exits: Patch[]
 }
 
-/** a tuple spread reads as a plain array, so the shape is put back by hand */
+/** Restores the tuple type lost when spreading it into an array. */
 function cloneInstruction(node: Instruction): Instruction {
   const [op, ...fields] = node
   return [op, ...fields]
@@ -158,9 +157,8 @@ function isWrapper(node: { type: string }): node is Wrapper {
 }
 
 /**
- * The one cast in the compiler, and the loop above it is what makes it sound: it ends only when the
- * node is not a wrapper, which is what `Exclude<T, Wrapper>` says. Typescript cannot carry that from
- * the condition to the result, because what a wrapper holds is an `Expression` and not a `T`.
+ * The loop has removed every wrapper, so the result is `Exclude<T, Wrapper>`.
+ * TypeScript needs this cast because a wrapper contains an `Expression`, not a `T`.
  */
 function unwrap<T extends { type: string }>(node: T): Exclude<T, Wrapper> {
   let it: { type: string } = node
@@ -242,18 +240,14 @@ function hasOptionalChain(node: Expression): boolean {
   return false
 }
 
-/**
- * A routine body is written as a function expression or as an arrow. An arrow has no `this` of its
- * own, so one is refused where it reads `this`, not where it is declared.
- */
+/** Accepts function expressions and arrows. Rejects arrows only if they read `this`. */
 export function isRoutineFunction(fn: { type: string } | null | undefined): fn is RoutineBody {
   return fn?.type === 'FunctionExpression' || fn?.type === 'ArrowFunctionExpression'
 }
 
 /**
- * A concise arrow body is the value the call answers with, which in method mode is a `return`. A
- * hook answers through `ctx`, and the verifier refuses a `return` with a value there, so its
- * concise body is the expression on its own.
+ * A concise arrow body returns its expression in method mode. Hook mode uses the expression
+ * as a statement because hooks set results through `ctx` and cannot return a value.
  */
 function statementsOf(fn: RoutineBody, mode: CompileOptions['mode']): Statement[] {
   const body = fn.body
@@ -406,9 +400,8 @@ class RoutineCompiler {
   }
 
   /**
-   * A slot holding the value a `&&`, a `?:` or a `?.` chain settles on, which nothing can name and
-   * which every path writes before the join reads. It dies at that read, so the next expression
-   * takes it back rather than growing the array every run allocates.
+   * A temporary slot for `&&`, `?:`, or `?.`. Every path writes it before the join reads it.
+   * Release it after that read so later expressions reuse it and limit per-run allocations.
    */
   private allocTemp(node: Spanned): number {
     return this.freeTemps.pop() ?? this.allocSlot(node)
@@ -1360,9 +1353,9 @@ export function compileRoutine(fn: RoutineBody, source: string, options: Compile
 }
 
 /**
- * Reusing a read is only right if every path has already written it. A read nothing wrote is a
- * bug in the lowering, and the host cannot see it: a skipped register reads as `null` rather than
- * being refused. Inputs may throw, so fixing such a read by hoisting it would change its handler.
+ * Reuse a register only if every incoming path has written it. The host reads skipped
+ * registers as `null`, so it cannot catch this compiler bug. Do not hoist input reads
+ * to fix it: they can throw, and moving them may change the exception handler.
  */
 function assertWrittenRegisters(program: RoutineProgram): void {
   const first = findUndominatedReads(program.code, program.tries)[0]

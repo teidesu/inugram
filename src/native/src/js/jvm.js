@@ -6,8 +6,8 @@
     return value
   }
 
-  // a handle *is* the native `JvmRef` these sit on the prototype of: what it names is read off
-  // the object on the far side, so nothing here keeps a table of its own
+  // These methods are on native `JvmRef` prototypes. Native reads the reference from the object
+  // directly; JS keeps no separate table.
   const objectMembers = {
     getField(field) {
       return natives.get(this, named('getField', field))

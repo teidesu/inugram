@@ -149,14 +149,9 @@ fn the_finer_pair_is_delivered_alongside_the_coarse_one() {
       .unwrap();
   });
 
-  for mode in [
-    AppMode::Paused,
-    AppMode::Paused,
-    AppMode::Background,
-    AppMode::Foreground,
-    AppMode::Resumed,
-    AppMode::Resumed,
-  ] {
+  for mode in
+    [AppMode::Paused, AppMode::Paused, AppMode::Background, AppMode::Foreground, AppMode::Resumed, AppMode::Resumed]
+  {
     state.app_visibility_changed(&rt, &ctx, mode);
   }
   let modes: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__modes)").unwrap());

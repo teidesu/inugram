@@ -19,8 +19,8 @@ interface Verdict {
 }
 
 /**
- * The built file is whatever the bundler printed, so a routine is compared by what it says, not by
- * how it was spaced. Every part of a compiled routine is a literal, so reading it needs no eval.
+ * Compare parsed routine values, ignoring formatting changes from the bundler.
+ * Compiled routines contain only literals, so no evaluation is needed.
  */
 function readLiteral(node: Expression | SpreadElement | null): unknown {
   if (node === null) throw new CliError('not a literal')
@@ -63,8 +63,8 @@ function readLiteral(node: Expression | SpreadElement | null): unknown {
 }
 
 /**
- * The names the program declares say nothing about what the built call actually hands it.
- * Esbuild can rename or inline captures, so check the positional count, not binding identities.
+ * Esbuild can rename or inline captures. Check the number of positional values,
+ * not their surrounding binding names.
  */
 function countCaptures(node: Argument | undefined): number | null {
   if (node === undefined) return 0
@@ -76,8 +76,8 @@ function countCaptures(node: Argument | undefined): number | null {
 }
 
 /**
- * The compiler is a pure function of the parsed body, so a routine matches its recorded source
- * when recompiling that source emits the same text. Nothing is executed to check it.
+ * Recompile the recorded source and compare the output. The compiler is a pure function
+ * of the parsed body, so this check requires no execution.
  */
 export function verifyFile(file: string, source: string): Verdict[] {
   const parsed = parseFile(file, source)

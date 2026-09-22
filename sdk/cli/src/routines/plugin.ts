@@ -12,7 +12,7 @@ const LOADERS: Record<string, Loader> = { ts: 'ts', tsx: 'tsx', js: 'js', jsx: '
 
 const ROUTINE_CALL = /\binu\s*\.\s*(?:jvm|xposed)\s*\.\s*routine\s*\(/
 
-/** the leading whitespace of the line [offset] sits on, which is where the bundler reprints it */
+/** The leading whitespace on the line containing [offset], used when reprinting the call. */
 function indentOf(source: string, offset: number): string {
   const line = source.slice(source.lastIndexOf('\n', offset - 1) + 1, offset)
   return line.slice(0, line.length - line.trimStart().length)
@@ -40,9 +40,8 @@ function checkCallShape(call: RoutineCall, file: string, source: string): BodyCh
 }
 
 /**
- * Compiles every `inu.*.routine(function () {})` in the plugin's own sources. The call is replaced
- * where it stands and nothing else in the file is rewritten, so what esbuild goes on to bundle is
- * the source the author wrote.
+ * Compiles each `inu.*.routine(function () {})` in plugin sources.
+ * Replaces only the call's span before esbuild bundles the file.
  */
 export function compileRoutines(): EsbuildPlugin {
   return {

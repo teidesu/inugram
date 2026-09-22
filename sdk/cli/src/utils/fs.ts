@@ -6,7 +6,7 @@ export async function readFileSize(file: string): Promise<number> {
   return await fs.stat(file).then(stat => stat.size, () => 0)
 }
 
-/** null when there is nothing to hash yet: the file is missing, or a build is halfway through it */
+/** Returns null if the file is missing or a build is still writing it. */
 export async function readFileHash(file: string): Promise<string | null> {
   const body = await fs.readFile(file).catch(() => null)
   if (!body || body.length === 0) return null
@@ -16,9 +16,9 @@ export async function readFileHash(file: string): Promise<string | null> {
 export interface CopyTree {
   from: string
   into: string
-  /** the name each entry is written under, default its own */
+  /** Output name for each entry; defaults to its original name. */
   rename?: (name: string) => string
-  /** the body each file is written with, default its own */
+  /** Output content for each file; defaults to its original content. */
   substitute?: (body: string) => string
 }
 

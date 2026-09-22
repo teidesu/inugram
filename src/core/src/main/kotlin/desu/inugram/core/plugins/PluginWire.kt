@@ -1,8 +1,7 @@
 package desu.inugram.core.plugins
 
 /**
- * a host's refusal, carrying the error wire the engine is answered with: thrown where the refusal
- * is decided and caught where the host answers, which is what keeps every refusal one shape
+ * A host error carrying its wire representation. Throw where the failure is detected; catch when returning the host response.
  */
 class PluginRefusal(val wire: String) : RuntimeException(wire, null, false, false)
 
@@ -50,9 +49,8 @@ object PluginWire {
     const val CLASS_SEPARATOR = '.' 
 
     /**
-     * a handle plus the scalar fields already read off the object, as a JSON object: rust seeds the
-     * view's cache with them, so reading one never crosses. [projection] must not contain a newline,
-     * the list separator; `JSONObject` never emits a raw one.
+     * Encodes a handle with scalar fields as JSON for Rust to cache without further bridge calls.
+     * [projection] must contain no raw newlines, which separate list entries; `JSONObject` escapes them.
      */
     fun encodeHandle(vector: Boolean, id: Long, readOnly: Boolean, projection: String, classId: Int = NO_CLASS): String =
         "${encodeHandle(vector, id, readOnly, classId)}$PROJECTION_SEPARATOR$projection"

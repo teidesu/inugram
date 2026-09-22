@@ -11,12 +11,11 @@ function escapeTemplate(text: string): string {
 }
 
 /**
- * The body as it was written, kept readable: a template literal holds its newlines instead of
- * spelling them, so the half of a published plugin a reader can check is the half they can read.
- * A backslash, a backtick and a `${` are escaped, so the cooked text is the body again.
+ * Records the original body in a readable template literal. Escape backslashes, backticks,
+ * and `${` so the cooked value matches the source.
  *
- * Its lines get a uniform margin, including the first and blank lines. Verification removes only
- * that margin: trimming the original indentation would change multiline literals in the body.
+ * Add a uniform margin to every line, including the first and blank lines. Verification
+ * removes only that margin; trimming original indentation would change multiline literals.
  */
 function emitSource(source: string, indent: string): string {
   if (!source.includes('\n')) return `\`${escapeTemplate(source)}\``
@@ -51,10 +50,7 @@ export function emitProgram(program: RoutineProgram, indent = ''): string {
   ].join('\n')
 }
 
-/**
- * [indent] is the leading whitespace of the line the call sits on, which is where the bundler will
- * put the object back, and so where the recorded body has to be written to line up with it.
- */
+/** `indent` is the call line's leading whitespace, used to align the recorded body with the output. */
 export function emitRoutineCall(callee: string, program: RoutineProgram, indent = ''): string {
   const captures = program.captures.length === 0 ? '' : `, [${program.captures.join(', ')}]`
   return `${callee}(${emitProgram(program, indent)}${captures})`

@@ -24,15 +24,13 @@ data class PluginManifest(
     val raw: Map<String, List<String>>,
 ) {
     /**
-     * what two files must agree on for one to be an update of the other, compared verbatim.
+     * Identifies updates, compared verbatim. Prefer an explicit `@id`, usually a reverse domain
+     * name, to preserve identity across renames.
      *
-     * A plugin says it with `@id`, canonically a reverse domain name, and then keeps it across
-     * every rename. A plugin that says nothing gets one derived from [author] and [name], which
-     * costs it that: rename either half and the next file is a plugin of its own. Both halves are
-     * required there, because [name] alone would let two unrelated plugins overwrite each other,
-     * and a false match costs a user the plugin they had.
+     * Without `@id`, derive from both [author] and [name]. Changing either creates a separate
+     * plugin. Both are required to avoid unrelated same-name plugins replacing each other.
      *
-     * Not storage identity - a plugin that renames itself keeps its stores either way.
+     * Storage uses the separate install ID and survives renames.
      */
     val id: String? by lazy {
         if (declaredId != null) return@lazy declaredId
@@ -54,9 +52,8 @@ data class PluginManifest(
 
     companion object {
         /**
-         * one lowercase run of letters and digits per word, joined by dashes. `@inugram/cli` derives
-         * the `@id` it writes the same way, so a plugin built before it started writing one keeps
-         * matching the plugin built after.
+         * Lowercase words of letters and digits joined by dashes. Keep in sync with `@inugram/cli`
+         * so CLI-written IDs match IDs derived for older plugins without `@id`.
          */
         fun slug(value: String): String = buildString {
             var gap = false

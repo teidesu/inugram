@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::fmt::Write as _;
 use std::ops::Range;
 
-use crate::{parse_iso8601, utf16_len, utf16_map, DateFormat, Entity, EntityKind, Sub, TextWithEntities};
+use crate::{DateFormat, Entity, EntityKind, Sub, TextWithEntities, parse_iso8601, utf16_len, utf16_map};
 
 pub fn escape(text: &str, quote: bool) -> String {
   let mut out = String::with_capacity(text.len());
@@ -67,9 +67,8 @@ impl Quote {
   }
 }
 
-/// The named references this decodes. The full whatwg table is some 2200 names and 32 KiB of data
-/// for entities nobody writes by hand; anything outside this set stays literal text, which is what
-/// an unescaped `&` in a message does anyway.
+/// Supported named HTML references. The full WHATWG table has about 2200 names and uses 32 KiB.
+/// Unsupported names remain literal text, as does an unescaped `&` in a message.
 #[rustfmt::skip]
 const NAMED: &[(&str, char)] = &[
   ("amp", '&'), 

@@ -8,12 +8,9 @@ fn setup() -> (Runtime, Context) {
   (rt, ctx)
 }
 
-/// evaluates `source` and reads the result back as a string, so a test reads as the JS a plugin
-/// would have written.
-///
-/// Wrapped in a block, because these share one context (installing the globals per case would be
-/// most of the runtime) and a bare `const u` in the second case redeclares the first one's. A block
-/// still evaluates to its last expression, so nothing about the sources changes.
+/// Evaluates JS source and returns a string. Wraps each case in a block so tests can reuse bindings
+/// such as `const u` in the shared context. The block preserves the final expression result and
+/// avoids reinstalling globals for every case.
 fn eval(ctx: &Context, source: &str) -> String {
   let source = format!("{{ {source} }}");
   ctx.with(|ctx| match ctx.eval::<Coerced<String>, _>(source.as_str()) {

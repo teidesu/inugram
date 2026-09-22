@@ -9,10 +9,9 @@ import {
 } from '../src/routines/ops.js'
 
 /**
- * A mirror of the load-time checks in `PluginJvmRoutine`'s `init`, hand-kept in step with it the
- * way every other wire in this repo is. It exists so a program the host would refuse fails here,
- * where there is no device to find out on. What an op's fields are it reads from `OP_SPECS`, so an
- * op added there is checked here without being named here.
+ * Mirrors the load-time checks in `PluginJvmRoutine.init`; keep them in sync manually.
+ * This catches programs the host would reject without requiring a device.
+ * Reads field definitions from `OP_SPECS`, so new opcodes are checked automatically.
  */
 
 export function verifyProgram(program: RoutineProgram, hookMode: boolean): void {

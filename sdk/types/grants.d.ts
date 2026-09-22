@@ -1,6 +1,4 @@
-// the shape of `grants.json`, the hand-written grant catalogue shipped with these typings.
-// `pnpm run generate-grants` renders it into the app's `GrantCatalog.kt` and the cli reads it as it
-// is, so both refuse exactly the same manifest.
+// Schema for `grants.json`, the grant catalogue used by the app and CLI.
 
 export type ScopeKind = 'none' | 'list' | 'domain' | 'fsSize' | 'rpcMethod' | 'updateType'
 export type GrantTier = 'neutral' | 'caution' | 'dangerous'

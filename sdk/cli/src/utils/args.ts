@@ -25,9 +25,8 @@ export const deviceArgs = {
 } satisfies ArgsDef
 
 /**
- * citty's own [defineCommand], plus the error reporting every command here wants. There is no hook
- * for this in citty: a plugin only gets `setup` and `cleanup`, and `runMain` prints whatever
- * reaches it with a stack trace, while a [CliError] is a message for the user rather than a bug.
+ * Wraps citty's [defineCommand] to print [CliError] messages without stack traces.
+ * Citty plugins only provide `setup` and `cleanup`; `runMain` prints a stack trace for all errors.
  */
 export function defineCommand<const T extends ArgsDef>(def: CommandDef<T>): CommandDef<T> {
   const run = def.run

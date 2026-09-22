@@ -1,13 +1,13 @@
-Test assets for the on-device plugin suite. `src/test/kotlin` is synced into a *kotlin* source
-root, so anything that is not source lives here instead.
+Assets for device plugin tests. Keep non-source files here because `src/test/kotlin` syncs
+to a Kotlin source root.
 
 `routines.json` is compiler output pinned by `sdk/cli/test/routines-runtime.test.ts`.
 `PluginJvmRoutineTest` executes it through the actual Kotlin interpreter and checks
 return values and side-effect order. After reviewing compiler changes, regenerate
 with `pnpm --filter @inugram/cli test --update`; do not hand-edit the bytecode.
 
-`probe.dex` is a dex the platform loader accepts, so `inu.jvm.loadDex` is checked by loading a class
-out of it rather than against a recorded path. One class, built once and committed:
+`probe.dex` tests `inu.jvm.loadDex` by loading a real class. It contains one class,
+built with these commands and committed:
 
     javac --release 8 desu/inugram/probe/Probe.java
     d8 --min-api 26 --output . desu/inugram/probe/Probe.class
@@ -33,6 +33,5 @@ boxing/unboxing, arrays, wide arguments/results, and constructor range calls.
 Native tests compare production output byte-for-byte. ART execution is covered
 by the separate device class-definition suite, not established by these fixtures.
 
-`canvas-variable-delay.gif` is a 16x16, three-frame gif whose frames last 900, 100, and 200 ms,
-so `inu.canvas.decodeAnimation` is checked against timestamps a fixed frame rate could not
-produce.
+`canvas-variable-delay.gif` is a 16×16 GIF with frame durations of 900, 100, and 200 ms.
+It checks that `inu.canvas.decodeAnimation` preserves variable frame timing.

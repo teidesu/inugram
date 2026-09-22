@@ -35,13 +35,11 @@ const InuCliConfigSchema = v.object({
    */
   outDir: v.optional(v.string()),
   /**
-   * map of plugins built by this repo
-   *
-   * key is basically a "slug" short name, which can be used in other sub-commands (`dev`, `build`)
-   * to target a specific plugin (or plugins)
+   * Plugins built by this repo, keyed by short names used to select them in `dev`, `build`,
+   * and other commands.
    */
   plugins: v.record(v.string(), PluginConfigSchema),
-  /** finalizer the esbuild config used to build the plugins */
+  /** Customizes the esbuild configuration for all plugins. */
   esbuild: v.optional(customFn<(options: BuildOptions, plugin: ResolvedPluginConfig) => BuildOptions | void>()),
 })
 export type InuCliConfig = v.InferInput<typeof InuCliConfigSchema>
@@ -55,7 +53,7 @@ export interface ResolvedPluginConfig {
   outFile: string
   /** manifest of the plugin */
   manifest: Manifest
-  /** finalizer the esbuild config used to build this plugin */
+  /** Customizes the esbuild configuration for this plugin. */
   esbuild?: (options: BuildOptions) => BuildOptions | void
 }
 
@@ -94,8 +92,8 @@ function refuse(configFile: string, issues: string[]): never {
 }
 
 /**
- * every manifest judged the way the app would judge it. Valibot cannot be handed the catalogue
- * mid-parse, so this is a second pass over what the config schema already accepted.
+ * Validates each manifest using the app's rules. This runs after schema validation
+ * because Valibot cannot receive the grant catalogue during parsing.
  */
 function checkManifests(configFile: string, config: InuCliConfig, vocabulary: Vocabulary) {
   const schema = createManifestSchema(vocabulary)
@@ -111,8 +109,8 @@ function checkManifests(configFile: string, config: InuCliConfig, vocabulary: Vo
 }
 
 /**
- * node resolves a bare import against the importing file, so the bundle has to sit inside the
- * project: anywhere else and the config's own `@inugram/cli` import has nothing to resolve against.
+ * Keep the bundle inside the project so Node can resolve the config's bare imports,
+ * including `@inugram/cli`, relative to it.
  */
 async function importConfig(configFile: string): Promise<InuCliConfig> {
   const bundled = join(dirname(configFile), `.inu.config.${Date.now()}-${Math.random().toString(36).slice(2)}.mjs`)
@@ -154,6 +152,7 @@ export async function loadConfig(cwd: string, explicit?: string): Promise<Resolv
     entry: resolve(root, plugin.entry),
     outFile: plugin.outFile ? resolve(root, plugin.outFile) : join(outDir, `${slug}.inu.js`),
     manifest: plugin.manifest,
+    esbuild: plugin.esbuild,
   }))
 
   return {

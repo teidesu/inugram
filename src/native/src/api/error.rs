@@ -34,8 +34,8 @@ pub(crate) fn format_exception(ctx: &Ctx<'_>) -> String {
   format_thrown(ctx, &ctx.catch())
 }
 
-/// what a host-installed callback's failure reads as: an exception carries its js message and
-/// stack, anything else is the rquickjs error itself
+/// Formats a callback failure: JS exceptions include their message and stack; other failures use
+/// the rquickjs error.
 pub(crate) fn report_callback_error(log: &crate::Log, ctx: &Ctx<'_>, what: &str, error: rquickjs::Error) {
   if error.is_exception() {
     log(&crate::fault(format_args!("{what} threw: {}", format_exception(ctx))));
@@ -44,8 +44,8 @@ pub(crate) fn report_callback_error(log: &crate::Log, ctx: &Ctx<'_>, what: &str,
   }
 }
 
-/// Calls a plugin's callback, reporting what it raised the way every api on this surface reports
-/// one: a thrown value is a fault naming the exception, anything else the rquickjs error.
+/// Calls a plugin callback and reports failures as faults. Uses the thrown JS value when available,
+/// otherwise the rquickjs error.
 pub(crate) fn call_callback<'js, A: IntoArgs<'js>>(
   ctx: &Ctx<'js>,
   log: &crate::Log,
@@ -290,8 +290,8 @@ pub fn wire_error_to_js<'js>(ctx: &Ctx<'js>, wire: &str) -> Option<JsResult<Valu
   structured_error_to_js(ctx, wire)
 }
 
-/// an error channel's refusal: a `P`/`R` wire as the host built it, and anything else - which the
-/// host never sends on purpose, it being what the bridge's own failures read as - `internal`
+/// Decodes `P`/`R` errors from an error-only channel. Other strings represent bridge failures and
+/// become `internal` errors.
 pub fn host_error_to_js<'js>(ctx: &Ctx<'js>, err: &str) -> JsResult<Value<'js>> {
   match structured_error_to_js(ctx, err) {
     Some(value) => value,

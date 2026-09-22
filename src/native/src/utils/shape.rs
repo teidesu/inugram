@@ -20,10 +20,9 @@ pub fn define_disposable<'js>(ctx: &Ctx<'js>, target: &Object<'js>, f: Function<
   target.prop(dispose_atom(ctx)?, Property::from(f).writable().configurable())
 }
 
-/// rquickjs' own well-known symbols stop at `asyncIterator` and `PredefinedAtom` has no variant
-/// for this one, so this is its `impl_symbols!` by hand. The atom is one quickjs-ng always has,
-/// which is why it is taken from the runtime rather than looked up on the global `Symbol` - a
-/// lookup would read whatever that object happens to hold.
+/// rquickjs has no `dispose` entry in its well-known symbols or `PredefinedAtom`. Read the atom
+/// directly from quickjs-ng, where it always exists, rather than from the mutable global `Symbol`
+/// object.
 fn dispose_atom<'js>(ctx: &Ctx<'js>) -> JsResult<Atom<'js>> {
   // SAFETY: a static atom of this runtime, turned into a value this scope then owns
   let symbol = unsafe {

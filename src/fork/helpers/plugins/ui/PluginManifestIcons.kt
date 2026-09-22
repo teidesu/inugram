@@ -20,17 +20,17 @@ import org.telegram.ui.Components.AnimatedEmojiDrawable
 import org.telegram.ui.Components.BackupImageView
 
 /**
- * Resolves a manifest `@icon` into a [BackupImageView]. Arbitrary remote urls are deliberately not
- * supported - an icon fetch would leak the user's IP to whatever host the manifest names every
- * time the plugins list renders - so everything resolves through the app itself or Telegram:
+ * Loads manifest icons into [BackupImageView]. Remote URLs are unsupported because loading
+ * them would expose the user's IP to a manifest-selected host whenever the list renders.
+ * Supported forms resolve locally or through Telegram:
  *
- * - `inu://{name}` - a name from the `inu.icons.common` table, drawn from local resources
- * - `tg://emoji?id={documentId}` - a custom emoji, resolved the way messages resolve them
- * - `tg://addstickers?set={slug}` - a sticker out of a set: `&idx={n}` picks by 0-based position,
- *   `&id={documentId}` by document id, neither picks the set's preview sticker
+ * - `inu://{name}`: a local icon from `inu.icons.common`.
+ * - `tg://emoji?id={documentId}`: a custom emoji, resolved as in messages.
+ * - `tg://addstickers?set={slug}`: a sticker; `&idx={n}` selects a zero-based index,
+ *   `&id={documentId}` selects an ID, and neither selects the set's preview sticker.
  *
- * Anything else falls back to [placeholder].
- * TODO: surface a warning for an unresolvable `@icon` instead of failing silently
+ * Other values use [placeholder].
+ * TODO: show a warning when `@icon` cannot be resolved.
  */
 object PluginManifestIcons {
     private const val FILTER = "56_56"

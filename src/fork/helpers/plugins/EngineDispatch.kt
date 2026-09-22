@@ -6,16 +6,13 @@ import org.telegram.messenger.DispatchQueue
 import org.telegram.messenger.Utilities
 
 /**
- * The one rule every host callback into an engine obeys, in one place: a settle that crossed a
- * queue hop has to prove it is still talking to the engine it left from.
+ * Checks engine identity after host callbacks cross queues.
  *
- * A plugin that reloaded is running on a *different* engine whose request, invoke, callback and
- * menu ids all restart at 1, so a settle that crossed a queue hop has to prove the plugin is still
- * on the engine it left from - a missed check does not fail loudly, it resolves someone else's
- * pending promise with the wrong value.
+ * Reloads create a new engine whose request, invoke, callback, and menu IDs restart at 1.
+ * A stale callback could otherwise settle an unrelated promise on the replacement engine.
  *
- * [onDropped] runs on the stale path, because some of these settles carry an obligation: a bitmap
- * to recycle, a response whose free stock suppressed, a fetched body's bytes.
+ * [onDropped] releases resources carried by stale callbacks, such as bitmaps, fetched bodies,
+ * and responses whose stock free was suppressed.
  */
 internal object EngineDispatch {
     private val queue = DispatchQueue("inuPlugins")
@@ -47,10 +44,9 @@ internal object EngineDispatch {
     }
 
     /**
-     * [onEngine] for a request the host answers with one wire, into the [QuickJs.settle] table [api].
-     * [produce] throwing is the host's own bad day rather than the plugin's, so it becomes an
-     * `internal` error wire naming [what] rather than escaping onto the plugin queue. [release] runs
-     * once whichever way it went: after the settle, or in its place when the plugin moved on.
+     * Settles a request in [QuickJs.settle]'s [api] table with one wire.
+     * Exceptions from [produce] become `internal` errors naming [what].
+     * [release] runs exactly once, after settlement or when a stale callback is dropped.
      */
     fun settle(
         session: PluginSession,

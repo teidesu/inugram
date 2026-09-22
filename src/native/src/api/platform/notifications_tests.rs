@@ -1,8 +1,8 @@
 use super::*;
 use crate::api::platform::jvm::{install_jvm, JvmHost, JvmState};
-use std::ops::Deref;
 use crate::sandbox::grants::TestGrantHost;
 use rquickjs::Context;
+use std::ops::Deref;
 
 /// the names the app's own `NotificationCenter` would answer to; a closed vocabulary is the
 /// point, so the fake has one too
@@ -82,8 +82,7 @@ fn setup(grants: &[&str]) -> Fixture {
   let jvm_host_dyn: Rc<dyn JvmHost> = jvm_host.clone();
   let (state, jvm_state) = ctx.with(|ctx| {
     let inu = crate::testing::harness::get_api_globals(&ctx);
-    let jvm =
-      install_jvm(&ctx, jvm_host_dyn, None, grants.clone(), Lifecycle::new(), log.clone(), None, &inu).unwrap();
+    let jvm = install_jvm(&ctx, jvm_host_dyn, None, grants.clone(), Lifecycle::new(), log.clone(), None, &inu).unwrap();
     let state =
       install_notifications(&ctx, host_dyn, grants, Lifecycle::new(), log.clone(), Some(jvm.clone()), &inu).unwrap();
     (state, jvm)
@@ -259,8 +258,7 @@ fn a_throwing_handler_is_a_fault() {
   );
 }
 
-/// a wire only the host could have got wrong is its bad day, not the plugin's - so the handler is
-/// not entered and nothing is charged to it
+/// Malformed host wires are host errors. Do not call or fault the plugin handler.
 #[test]
 fn a_payload_that_is_not_a_wire_is_an_ordinary_error() {
   let (rt, ctx, host, state, logs, _jvm) = setup(GRANTED);
@@ -391,9 +389,8 @@ fn an_account_suppresses_only_its_own_notifications() {
   let (_rt, ctx, host, state, _logs, _jvm) = setup(&["notifications.suppress"]);
   let accounts = ctx.with(|ctx| {
     let inu = crate::testing::harness::get_api_globals(&ctx);
-    let account_host = crate::api::telegram::account::tests::TestAccountHost::with(
-      crate::api::telegram::account::tests::TWO_ACCOUNTS,
-    );
+    let account_host =
+      crate::api::telegram::account::tests::TestAccountHost::with(crate::api::telegram::account::tests::TWO_ACCOUNTS);
     let account = crate::api::telegram::account::install_account(
       &ctx,
       account_host,

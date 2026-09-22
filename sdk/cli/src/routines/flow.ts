@@ -2,10 +2,9 @@ import type { Instruction, RoutineProgram, TryRegion } from './ops.js'
 import { isRegister, OPS } from './ops.js'
 
 /**
- * The host verifier cannot catch a register read the code reaches without having written it: a
- * skipped instruction leaves `null` behind, which is a value like any other, so a lowering bug of
- * that shape miscompiles silently instead of being refused. This walks the emitted code and finds
- * those reads, so the compiler can refuse its own output rather than ship it.
+ * Finds register reads reachable before a write. The host verifier cannot detect these:
+ * skipped instructions leave `null`, which is a valid value. Reject such compiler output
+ * instead of silently changing the program's behavior.
  */
 
 function fieldsOf(node: Instruction): readonly string[] {
@@ -48,7 +47,7 @@ function registersRead(node: Instruction): number[] {
   return found
 }
 
-/** the registers every path into each instruction has written by the time it arrives */
+/** Registers written on every path entering each instruction. */
 function computeWritten(code: Instruction[], tries: TryRegion[]): Map<number, Uint8Array> {
   const count = code.length
   const incoming = new Map<number, Uint8Array>()

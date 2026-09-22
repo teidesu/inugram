@@ -1,6 +1,6 @@
 import { Deferred } from '@fuman/utils'
 
-/** resolves when the process is asked to stop, so a watch can tear its contexts down first */
+/** Resolves on a shutdown request so watchers can clean up before exit. */
 export function untilInterrupted(): Promise<void> {
   const stopped = new Deferred()
   process.once('SIGINT', () => stopped.resolve())

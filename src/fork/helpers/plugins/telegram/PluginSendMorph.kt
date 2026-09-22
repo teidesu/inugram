@@ -12,26 +12,21 @@ import org.telegram.messenger.SendMessagesHelper
 import org.telegram.tgnet.TLRPC
 
 /**
- * `message.setMedia(file)`: a middleware giving a send its media as a file to be staged, on the
- * message the composer already drew rather than on a send of its own.
+ * Implements `message.setMedia(file)` by updating the composer's existing local message.
  *
- * The composer wires a media send through `DelayedMessage` from `sendMessage(params)` onwards, so
- * there is no seam that grows media onto a request already built. What there is instead is the
- * retry seam: `SendMessageParams.of(retryMessageObject)` reuses the very `TLRPC.Message` it is
- * handed, id and all. So the send is unwound, its local message takes the new media in place, and
- * that same message goes back to the composer - which uploads it and reports progress on the bubble
- * that was already on screen.
+ * Stock configures media through `DelayedMessage` during `sendMessage(params)`, so an existing
+ * request cannot gain media directly. Instead, unwind the send, update its local message,
+ * and retry through `SendMessageParams.of(retryMessageObject)`, which preserves the message
+ * and ID. The composer then uploads media and shows progress on the existing bubble.
  *
- * The object that ends up on screen is the composer's own rather than one built here: it makes one
- * for the retry anyway, after it has set the sending state and registered the upload, and
- * [PluginSendHold] turns that draw into a replace so the cell animates the change.
+ * Use the composer's retry MessageObject, created after sending state and upload registration.
+ * [PluginSendHold] converts its draw into a replacement so the cell animates the change.
  */
 object PluginSendMorph {
     /**
-     * stock persists `Message.params` and hands them back on every retry, which makes a key in
-     * there the one marker a re-sent message cannot lose. A message carries it once: the re-send is
-     * dispatched to the chains like any other, and without this a middleware that always sets media
-     * would set it again on its own answer, forever.
+     * Stores a marker in `Message.params`, which stock persists across retries.
+     * The replacement send passes through middleware again; the marker prevents another
+     * `setMedia` call from causing an infinite retry loop.
      */
     private const val MORPHED_KEY = "inu_plugin_morphed"
 

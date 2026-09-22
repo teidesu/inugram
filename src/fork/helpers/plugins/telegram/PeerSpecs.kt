@@ -9,18 +9,13 @@ import org.telegram.tgnet.TLObject
 import org.telegram.tgnet.TLRPC
 
 /**
- * The `InputPeerLike` vocabulary, which is the *argument* shape both tg surfaces take rather than
- * part of either of them: `reads.js`'s `toSpec` normalizes every form a plugin can write into one
- * of `S` (myself), `D<dialog id>` and `U<username>`, and nothing else about a peer ever crosses.
+ * Shared peer format for reads and writes. `toSpec` normalizes `InputPeerLike` into
+ * `S` (self), `D<dialog id>`, or `U<username>` before crossing the bridge.
  *
- * Here rather than in [PluginReads] because [PluginWrites] names its peers the same way and a
- * second decoder is how the refusals below would come apart. Two of them are the point:
- *
- * - **an encrypted dialog id is never a peer** ([dialogIdOf] answering null, and `PluginWrites`
- *   refusing outright), which is what makes "secret chats, which plugin code never reaches at all"
- *   true of the whole surface rather than of whichever call site remembered to check.
- * - **"not cached" and "cached, wrong kind" are different answers** ([Built]), because the first is
- *   worth a `resolvePeer` and the second never will be.
+ * A single decoder keeps both APIs' validation consistent:
+ * - Encrypted dialog IDs are rejected: [dialogIdOf] returns null and writes fail.
+ * - [Built] distinguishes cache misses, which may need `resolvePeer`, from cached peers
+ *   of the wrong kind, which cannot be fixed by fetching.
  */
 object PeerSpecs {
     // keep in sync with rust `reads::KIND_*`

@@ -462,12 +462,9 @@ fn a_nonsense_delay_is_taken_as_zero_and_a_huge_one_is_clamped() {
   assert_eq!(clamp_delay(Some(f64::NAN)), 0);
 }
 
-/// The bundled timers oracle, which nothing else runs.
-///
-/// It needs three things at once - the wheel here, `inu.kv`/`inu.onUnload`, and
-/// a host that actually *serves* the wakes - so it gets its own fixture rather than a fourth
-/// variant of [`tests::setup`]. The clock is the real one, because the oracle times itself with
-/// `performance.now()` and no host double can move that.
+/// Runs the bundled timers oracle with a timer wheel, `inu.kv`, `inu.onUnload`, and a host that
+/// serves wakes. Uses a separate fixture because it needs all three. The clock must be real: the
+/// oracle measures elapsed time with `performance.now()`.
 #[cfg(test)]
 mod bundled_oracle {
   use super::*;
@@ -476,12 +473,9 @@ mod bundled_oracle {
 
   const ORACLE: &str = include_str!("../../../test/plugins/timers-test.js");
 
-  /// what the oracle's own pacing assertion is measured against. A **port** of
-  /// `TimerThrottle`, not the thing itself: the throttle is java, lives on the app's
-  /// `globalQueue`, and rust has no way to reach either. So that one assertion holds this driver
-  /// to the rule rather than the app to it, and the app's own copy is what
-  /// `src/fork/helpers/plugins/TimerThrottle.kt` owes a test. Everything else the oracle asserts is
-  /// the wheel's, and that is here.
+  /// A Rust port of TimerThrottle for the oracle's pacing assertion. It tests this driver against
+  /// the rule, not the Android throttle on globalQueue; `TimerThrottle.kt` needs its own test.
+  /// Other assertions exercise the real timer wheel.
   const DUTY_PERCENT: u128 = 10;
   const MIN_WAKE_GAP_MS: u64 = 4;
 
@@ -558,10 +552,9 @@ mod bundled_oracle {
 
   const VISIBILITY_ORACLE: &str = include_str!("../../../test/plugins/visibility-test.js");
 
-  /// [`WakeHost`] on a clock the test moves. The visibility oracle's subject is *when* the wheel
-  /// is allowed to tick, not what a tick costs, so a driver that sleeps would spend four real
-  /// seconds measuring what stepping the clock decides exactly. Its own `performance.now()`
-  /// readings stay near zero, which only tightens the bound it derives from them.
+  /// A WakeHost with a manually advanced clock. The visibility oracle tests when ticks are allowed,
+  /// so this avoids four seconds of real waiting. Its near-zero `performance.now()` readings make
+  /// the derived bound stricter.
   #[derive(Default)]
   struct SteppedWakeHost {
     now: Cell<u64>,
@@ -604,7 +597,11 @@ mod bundled_oracle {
     api.app_visibility_changed(
       rt,
       ctx,
-      if visible { crate::api::lifecycle::AppMode::Foreground } else { crate::api::lifecycle::AppMode::Background },
+      if visible {
+        crate::api::lifecycle::AppMode::Foreground
+      } else {
+        crate::api::lifecycle::AppMode::Background
+      },
     );
   }
 

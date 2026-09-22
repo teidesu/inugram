@@ -3,7 +3,7 @@
 
 use std::borrow::Cow;
 
-use crate::{utf16_len, utf16_map, DateFormat, Entity, EntityKind, Sub, TextWithEntities};
+use crate::{DateFormat, Entity, EntityKind, Sub, TextWithEntities, utf16_len, utf16_map};
 
 const TAG_BOLD: &str = "**";
 const TAG_ITALIC: &str = "__";
@@ -514,9 +514,8 @@ impl Parser {
       self.entities.push(Entity::new(EntityKind::Blockquote { collapsed: false }, offset, length));
     }
 
-    // an entity left open is not an entity: its opening tag goes back into the text, in front of
-    // what followed it, which was parsed already and stays as it is. A link's url was never text
-    // though, so it is parsed now
+    // Restore the opening marker of an unterminated entity as plain text. Keep content already
+    // parsed; parse link URLs now because they were not previously treated as text.
     for index in 0..self.stacks.len() {
       let (name, items) = &mut self.stacks[index];
       let name = *name;
@@ -653,8 +652,8 @@ fn parse_time(rest: &str) -> Option<(i64, DateFormat)> {
   Some((date, format))
 }
 
-/// The hexadecimal access hash of a mention link, read the way `Long.fromString` reads one: signed,
-/// and wrapping rather than refusing when it is wider than 64 bits.
+/// Parses a mention link's hexadecimal access hash like `Long.fromString`: signed, with wrapping
+/// for values wider than 64 bits.
 fn parse_hex_i64(value: &str) -> i64 {
   let (negative, digits) = match value.strip_prefix('-') {
     Some(digits) => (true, digits),
@@ -666,11 +665,7 @@ fn parse_hex_i64(value: &str) -> i64 {
     result = result.wrapping_mul(16).wrapping_add(digit);
   }
   let result = result as i64;
-  if negative {
-    result.wrapping_neg()
-  } else {
-    result
-  }
+  if negative { result.wrapping_neg() } else { result }
 }
 
 /// Whether the last character of the text is whitespace, for hosts that assemble several parses.

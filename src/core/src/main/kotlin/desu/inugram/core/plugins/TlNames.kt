@@ -1,21 +1,19 @@
 package desu.inugram.core.plugins
 
 /**
- * maps stock's java TL classes onto the `namespace.member` names plugins see over the JSON bridge
- * (`TLRPC.TL_messages_sendMessage` -> `messages.sendMessage`).
+ * Maps stock Java TL classes to plugin wire names, such as
+ * `TLRPC.TL_messages_sendMessage` to `messages.sendMessage`.
  *
- * the name is whatever the TL schema calls the constructor, so [TlTables.Table.nameOverrides] lists
- * every class stock spells differently. the exception is the legacy variants of one predicate:
- * `TL_message` and `TL_message_old7` are both `message` on the wire, so whichever loses the name
- * keeps its derived one.
+ * [TlTables.Table.nameOverrides] supplies schema names where stock uses different Java names.
+ * Legacy variants can share a schema name, such as `TL_message` and `TL_message_old7` both using
+ * `message`; the variant that does not get that name keeps its derived name.
  *
- * that derivation is also the fallback for classes the schema dumps don't cover, and it can only
- * guess the namespace. a leading `foo_` is one only when `foo` really is a namespace - otherwise
- * `TL_user_old` would read as `user.old` - and the ~200 classes stock declares without a `TL_`
- * prefix carry nothing to read at all. nor does the container decide it: `TL_stars.transferStarGift`
- * is `payments.transferStarGift`, and `TL_stories.TL_storyView` is namespaced nowhere.
+ * Derivation is also the fallback for classes absent from schema dumps. A leading `foo_` is
+ * a namespace only if `foo` is known; otherwise `TL_user_old` would become `user.old`.
+ * About 200 classes have no `TL_` prefix. Containers are not reliable namespaces either:
+ * `TL_stars.transferStarGift` belongs to `payments`, while `TL_stories.TL_storyView` has none.
  *
- * the overrides and namespaces are generated into [TlTables] from stock's own layer dumps.
+ * Overrides and namespaces are generated into [TlTables] from stock's layer dumps.
  */
 object TlNames {
     private val LAYER_SUFFIX = Regex("_layer\\d+$")

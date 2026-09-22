@@ -9,7 +9,7 @@ export interface RoutineCall {
   start: number
   end: number
   body: Argument | undefined
-  /** the first argument, whatever it turned out to be */
+  /** The first argument, before validating its type. */
   argument: Argument | undefined
   arguments: Argument[]
 }

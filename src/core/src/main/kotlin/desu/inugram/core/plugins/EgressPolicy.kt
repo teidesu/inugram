@@ -3,19 +3,13 @@ package desu.inugram.core.plugins
 import java.net.URI
 
 /**
- * Which hosts and addresses a plugin's `fetch` may reach, and the whole of that decision.
- *
- * It is a decision about a url and a set of answers a resolver gave, so it is here rather than with
- * the transport that acts on it: nothing below needs a socket, and pinning [screenHop] to addresses
- * a test names is the only way to state the rules at all - against dns they would be assertions
- * about whatever a name points at today.
+ * Decides which fetch hosts and resolved addresses are allowed. Kept separate from transport
+ * so tests can pass fixed resolver results to [screenHop] without sockets or live DNS.
  */
 object EgressPolicy {
     /**
-     * the host this url would *connect* to, or null if it is not one this api follows at all.
-     *
-     * Reads the caller's own string, never a normalized re-spelling of it: the whole job is refusing
-     * the spellings whose host depends on who parses them.
+     * Returns the URL's connection host, or null for unsupported URLs.
+     * Checks the original string to reject spellings that different parsers interpret differently.
      */
     fun hostOf(url: String): String? {
         val uri = try {

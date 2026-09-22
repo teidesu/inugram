@@ -14,22 +14,16 @@ import desu.inugram.helpers.plugins.ui.PluginAppVisibility
 import org.telegram.ui.LaunchActivity
 
 /**
- * What an engine is wired with, and the order it happens in.
- *
- * Separate from the bridge because none of it is an api: it is the bring-up `PluginManager`
- * runs once per engine, and the ordering constraints among the pieces are the whole content of the
- * file. Split off the api for the same reason the api is not the bridge - a file everything imports
- * is not the file everything belongs in.
+ * Installs engine bindings in dependency order. Called once per engine by `PluginManager`.
+ * Kept separate from the bridge and API definitions because it handles startup only.
  */
 object EngineBindings {
     /** the app screen is here rather than in `PluginJvm`, which reaches no `Activity` of its own */
     fun jvmListenerFor(session: PluginSession) = PluginJvm.listenerFor(session, AppScreen)
 
     /**
-     * Everything the engine's own bindings need in place, in the one order that works: the read
-     * surface installs from inside `installApi`, taking the peer helpers `inu.utils` leaves behind
-     * and the `Account` handles it hangs its getters on, and `inu.xposed` mints every handle its
-     * entry points take out of `inu.jvm`'s table.
+     * Installs prerequisites in dependency order. Reads install inside `installApi` and need
+     * `inu.utils` peer helpers plus `Account` handles. Xposed needs the JVM handle table.
      */
     fun start(session: PluginSession, bridge: PluginBridge) {
         val quota = FsQuota.forGrants(session.manifest.grants)

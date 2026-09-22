@@ -71,10 +71,9 @@
     })
   }
 
-  // the raw TL message behind whichever of the two shapes `common.d.ts` accepts. a wrapper is
-  // unwrapped rather than snapshotted, so what crosses is still the live view the host can resolve
-  // back to its own object - which is what lets a download name the message as its parent and get a
-  // refreshed file reference out of it
+  // Unwrap either supported message shape without taking a snapshot. The host can resolve the live
+  // handle to its original object, which lets downloads refresh attachment file references using
+  // their parent message.
   const toRawMessage = (message, what) => {
     const raw = message instanceof Message ? message.raw : message
     if (raw === null || typeof raw !== 'object') throw invalid(`${what}: expected a message`)
@@ -89,9 +88,8 @@
       throw invalid(`${what}: expected a Blob, bytes, an InputFile/InputMedia or { path }`)
     }
     if (file._ !== undefined) return file
-    // a `path` key is what makes it the `{ path }` arm, so one that is not a string is that arm
-    // written wrong rather than a `Blob`: falling through would hand it to the TL encoder and blame
-    // the wrong half of the union
+    // A `path` property selects the path variant and must be a string. Do not fall through to TL
+    // encoding, which would report the wrong error.
     if (file.path !== undefined) {
       if (typeof file.path !== 'string') throw invalid(`${what}: path must be a string`)
       return { path: file.path }
@@ -355,9 +353,8 @@
     },
   }
 
-  // the read surface's own frozen prototype is the inner link, so one `Account` answers for both
-  // families and neither file has to know the other's members. Set before the freeze: a frozen
-  // object's prototype can no longer be changed, which is the point of doing it here
+  // Extend the frozen read prototype so one Account supports reads and writes without coupling
+  // their member lists. Set the prototype before freezing this object.
   if (readsPrototype !== null && readsPrototype !== undefined) Object.setPrototypeOf(proto, readsPrototype)
 
   return Object.freeze(proto)

@@ -15,15 +15,11 @@ import java.util.ArrayDeque
 import java.util.concurrent.Executor
 
 /**
- * The mp4 writer behind `inu.canvas.createEncoder`: a frame at a time out of whatever the plugin
- * drew, through the device's own h264 encoder. The result is silent, which is what telegram's
- * animations are.
+ * Encodes canvas frames into silent MP4 using the device's H.264 encoder.
  *
- * A frame is taken in two halves. [snapshot] runs on the engine's thread, where the source bitmap
- * is owned, and copies its memory into a buffer the encoder lends out; [addFrame] then runs on
- * [queue] with that buffer and gives it back. `MediaCodec` may not be used from two threads at
- * once and a plugin is free to add a frame without awaiting the one before it, so the engine's own
- * ordering is not enough.
+ * [snapshot] copies bitmap memory on the engine thread into a borrowed encoder buffer.
+ * [addFrame] processes and returns the buffer on [queue]. MediaCodec requires serialized
+ * access, and plugins may submit another frame before awaiting the previous one.
  */
 internal class PluginVideoEncoder private constructor(
     private val output: File,
@@ -52,9 +48,9 @@ internal class PluginVideoEncoder private constructor(
     private var scaled: Bitmap? = null
 
     /**
-     * The source's pixels as they are now, so it may go on being drawn on: a copy of the bitmap's
-     * memory, which is a memcpy rather than the unpremultiplying walk `getPixels` does. As many
-     * buffers circulate as the host keeps frames in flight; one more is the plugin's to fill.
+     * Copies the current pixels so the source can be drawn on again. Uses memcpy rather than
+     * `getPixels`, which would unpremultiply them. Keeps one buffer per in-flight frame,
+     * plus one for the plugin to fill.
      */
     fun snapshot(source: Bitmap): ByteBuffer {
         val buffer = synchronized(spare) { spare.poll() }
@@ -115,9 +111,8 @@ internal class PluginVideoEncoder private constructor(
     }
 
     /**
-     * What [finish] does when the encoding is abandoned instead: nothing is kept, the file included.
-     * Called from whichever thread the plugin's handle went away on, so the teardown itself is put
-     * on [queue] behind whatever frame is still in flight - which sees `closed` and gives up.
+     * Cancels encoding and deletes the output. May be called from any thread, so cleanup
+     * runs on [queue] after pending frames, which check `closed` and stop.
      */
     fun close() {
         if (closed) return
@@ -128,10 +123,8 @@ internal class PluginVideoEncoder private constructor(
     }
 
     /**
-     * Whether there is anything to abandon is decided here rather than in [close], which runs on the
-     * thread the handle went away on: a [finish] that already handed the file over may be settling
-     * on [queue] at that very moment, and deleting its result then would answer with a blob over a
-     * file that is gone.
+     * Decide whether to delete output on [queue], not in [close]'s caller thread.
+     * A concurrent [finish] may have returned the file; deleting it would invalidate its blob.
      */
     private fun discard() {
         if (finished) return

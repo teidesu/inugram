@@ -22,9 +22,8 @@ fn a_spinning_script_is_interrupted_and_logged_once() {
 
   assert!(err.contains("interrupted"), "unexpected error: {err}");
   assert!(armed.tripped());
-  // `Logs` is a `Mutex`, and `assert_eq!` keeps both operands' temporaries alive across the arm
-  // that formats the failure message: a second `borrow()` in there blocks the thread forever
-  // instead of reporting, which is how a failing run gets left behind as a hung `cargo test`
+  // `assert_eq!` keeps operand temporaries alive while formatting failures. Release the Logs mutex
+  // first; borrowing it again in the failure message would deadlock.
   let logged = logs.borrow().clone();
   assert_eq!(logged.len(), 1, "got: {logged:?}");
   assert!(logged[0].contains("execution budget exceeded"), "got: {logged:?}");
@@ -92,16 +91,12 @@ fn honest_work_within_the_real_entry_budget_is_never_interrupted() {
   assert!(done);
 }
 
-/// The handler reads the deadline out of a thread-local, so whatever armed it and whatever polls it
-/// have to be the same thread, and both directions of getting that wrong are silent. A slot read
-/// off the *wrong* thread answers `None`, which the handler reports as "no ceiling" and a
-/// `while (true) {}` then runs for as long as the process does; a slot *shared* between threads
-/// cuts down a neighbour that never asked for a budget. Two engines side by side is what the suite
-/// itself does under `--test-threads`, so the halves here run against each other rather than one
-/// after the other: the neighbour's own work is timed to fall strictly inside the window where the
-/// armed thread holds an already-expired deadline, which is the only window a shared slot is
-/// visible in and is microseconds wide if it is left to chance. Results come back over a channel
-/// with a timeout, so a regression fails this test rather than wedging the run that found it.
+/// Checks that deadlines are thread-local and armed on the thread that polls them. A deadline on
+/// the wrong thread would disable the limit; a shared deadline would interrupt another engine.
+///
+/// Run both engines concurrently and hold an expired deadline while the neighbor works, making a
+/// shared-slot bug deterministic. Receive results through a timeout channel so regressions fail
+/// instead of hanging the suite.
 #[test]
 fn one_thread_being_armed_neither_arms_nor_disarms_another() {
   use std::sync::mpsc;

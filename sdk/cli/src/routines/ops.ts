@@ -13,7 +13,7 @@ export const MAX_CALL_ARGS = 256
 
 const IndexSchema = v.pipe(v.number(), v.integer(), v.minValue(0))
 
-/** what a literal may hold: a bigint crosses as `['L', '123']`, and nothing else crosses at all */
+/** Supported literal values. Bigints use `['L', '123']` on the wire. */
 const ScalarSchema = v.union([v.null(), v.boolean(), v.number(), v.string()])
 
 const OperandSchema = v.union([
@@ -32,10 +32,9 @@ const FIELD_SCHEMAS: Record<FieldKind, v.GenericSchema> = {
 }
 
 /**
- * An instruction is named by its first element and shaped by `OPS`, so this is the one place that
- * says what the wire holds. What it cannot say is anything that needs the rest of the program: a
- * register below this one, a jump that goes forwards, a handler that is a `catch`. Those are the
- * host's checks, mirrored for the tests in `test/verifier.ts`.
+ * `OPS` defines each instruction's name and wire fields. Checks that need the whole program,
+ * such as earlier register references, forward jumps, and `catch` handlers, run on the host
+ * and are mirrored in `test/verifier.ts`.
  */
 const InstructionSchema = v.pipe(
   v.custom<Instruction>(
@@ -155,10 +154,10 @@ export interface OpSpec {
   readonly hook: boolean
 }
 
-/** [OPS] keyed by a name that came off the wire, which may not be an instruction at all */
+/** Looks up a wire instruction name in [OPS]; the name may be unknown. */
 export const OP_SPECS: Record<string, OpSpec | undefined> = OPS
 
-/** a js value the routine can hold as a constant, as opposed to one it has to capture */
+/** A JS value supported as a literal without capturing it. */
 export function literalOperand(value: unknown): Operand {
   if (typeof value === 'bigint') return ['L', value.toString()]
   return [value]

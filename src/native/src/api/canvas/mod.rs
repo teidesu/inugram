@@ -319,8 +319,8 @@ impl Drop for Surface {
 }
 
 impl Surface {
-  /// what [`Drop`] does, reached early. Every op guards on `alive`, so a context over a disposed
-  /// canvas and a pattern made from one both answer `handle-expired` rather than a dead host id.
+  /// Releases resources before [`Drop`]. Every operation checks `alive`, so contexts and patterns
+  /// referencing a disposed canvas return `handle-expired` instead of using a stale host ID.
   fn free(&self) {
     if !self.alive.replace(false) {
       return;
@@ -917,8 +917,8 @@ impl Font {
 }
 
 impl CanvasState {
-  /// What the host is already opening: a create only becomes live once it answers, so counting the
-  /// live ones alone would let a plugin that never awaits start as many at once as it liked.
+  /// Counts pending creations as well as live handles. Otherwise, plugins could exceed the limit by
+  /// starting creations without awaiting them.
   fn count_starting(&self, matches: fn(&PendingKind) -> bool) -> usize {
     self.pending.count(|request| matches(&request.kind))
   }
@@ -1254,12 +1254,11 @@ impl CanvasState {
     })
   }
 
-  /// Every asynchronous canvas op, start to promise: the request is registered before the host is
-  /// told about it, and an answer the host refuses on the spot rejects that same promise.
+  /// Registers an async canvas request before notifying the host. Immediate host errors reject the
+  /// same promise.
   ///
-  /// `staged` is a source the host reads *during* the op, which is every case but an animation -
-  /// that one holds its file for as long as its decoder does, so it passes `None` here and keeps
-  /// the [`StagedFile`] on its own pending kind instead.
+  /// `staged` holds source files needed during the operation. Animations instead retain their
+  /// [`StagedFile`] in the pending kind for the decoder's full lifetime and pass `None` here.
   fn start_op<'js>(
     self: &Rc<Self>,
     ctx: &Ctx<'js>,
@@ -1553,8 +1552,8 @@ impl CanvasState {
     state.sources.attach_fs(fs);
   }
 
-  /// an encoder frame answers twice: an `A`-prefixed answer once the host has admitted it to its
-  /// queue, which settles the promise, and an ordinary one once the pixels are consumed
+  /// Encoder frames receive two responses: an `A`-prefixed queue-admission response settles the
+  /// promise; the later ordinary response releases the consumed pixels.
   pub fn settle(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
     let state = self;
     context.with(|ctx| {

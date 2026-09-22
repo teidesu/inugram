@@ -122,10 +122,8 @@ fn bulletin_carries_entities_beside_the_text() {
   });
   assert_eq!(
     bulletin_options(&host),
-    vec![
-      r#"{"text":"hi","textEntities":[{"_":"messageEntityBold","offset":0,"length":2}],"icon":"rmsg_info"}"#
-        .to_string(),
-    ],
+    vec![r#"{"text":"hi","textEntities":[{"_":"messageEntityBold","offset":0,"length":2}],"icon":"rmsg_info"}"#
+      .to_string(),],
   );
 }
 
@@ -385,8 +383,8 @@ fn prompt_resolves_with_text_and_null() {
   assert!(state.pending.is_empty());
 }
 
-/// every modal shares one table and one wire, so an error the host answers with rejects whichever
-/// kind it was, and an answer it cannot read rejects rather than leaving the promise hanging
+/// All modal types share one request table and wire format. Host errors must reject the correct
+/// promise, and malformed responses must reject instead of leaving it pending.
 #[test]
 fn a_modal_answer_that_is_an_error_or_unreadable_rejects() {
   let (rt, ctx, host, _lifecycle, state, _logs) = setup(&[]);

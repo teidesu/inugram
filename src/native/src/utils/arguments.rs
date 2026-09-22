@@ -49,10 +49,10 @@ pub fn opt_str<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) ->
   }
 }
 
-/// `InputText`, as `common.d.ts` declares it: a bare string, or `{ text, entities }`.
+/// Reads `InputText` from `common.d.ts`: a string or `{ text, entities }`.
 ///
-/// The entities cross as the value the plugin handed over rather than as anything parsed here: a
-/// surface that renders them turns them into spans, and one that does not still has the text.
+/// Passes entities through unchanged. Hosts that support formatting convert them to spans; other
+/// hosts use the plain text.
 pub fn read_input_text<'js>(
   ctx: &Ctx<'js>,
   value: &Value<'js>,
@@ -79,9 +79,8 @@ pub fn read_input_text<'js>(
   Ok((text.to_string()?, Some(entities)))
 }
 
-/// The other side of [`read_input_text`]: the two keys a host payload carries, the plain text and
-/// the entities beside it under `<key>Entities`. A surface that renders spans reads both; one that
-/// does not reads the text alone and loses nothing else.
+/// Writes [`read_input_text`] output as the text key and a `<key>Entities` key. Hosts that render
+/// spans read both; other hosts read the text only.
 pub fn write_input_text<'js>(out: &Object<'js>, key: &str, value: (String, Option<Value<'js>>)) -> JsResult<()> {
   out.set(key, value.0)?;
   if let Some(entities) = value.1 {
@@ -119,9 +118,13 @@ pub fn req_bool<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -
 }
 
 pub fn opt_bool<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<bool> {
+  opt_bool_or(ctx, obj, what, key, false)
+}
+
+pub fn opt_bool_or<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str, default: bool) -> JsResult<bool> {
   let v = field(ctx, obj, what, key)?;
   if v.is_undefined() || v.is_null() {
-    return Ok(false);
+    return Ok(default);
   }
   v.as_bool().ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: '{key}' must be a boolean")))
 }

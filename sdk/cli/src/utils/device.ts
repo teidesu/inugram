@@ -12,16 +12,16 @@ export const RELEASE_APP_ID = 'desu.inugram'
 
 const DROP_DIR_NAME = 'plugin-dev'
 const DEV_ACTION = 'desu.inugram.plugins.DEV'
-/** what PluginManager.logConsole and its neighbours tag with; logcat filterspecs have no wildcards */
+/** Log tags used by PluginManager.logConsole and related methods. Logcat filters have no wildcards. */
 const LOG_TAG_PREFIX = 'InuPlugin'
 
-/** what `PluginDevServer.fail` answers, whatever the command was */
+/** The error returned by `PluginDevServer.fail` for any command. */
 const FailureSchema = v.object({
   ok: v.literal(false),
   error: v.string(),
 })
 
-/** `PluginDevServer.describe`; `pluginId` and `failure` are `putOpt`, so absent rather than null */
+/** `PluginDevServer.describe` output. `pluginId` and `failure` use `putOpt`, so null values are omitted. */
 const DevPluginSchema = v.object({
   id: v.string(),
   name: v.string(),
@@ -48,7 +48,7 @@ const ListSchema = v.object({
   plugins: v.array(DevPluginSchema),
 })
 
-/** one pushed file, which the app may refuse on its own while the others go in */
+/** Result for one pushed file. The app can reject individual files in a batch. */
 const InstallSchema = v.union([
   FailureSchema,
   v.object({
@@ -105,7 +105,7 @@ export class Device {
     }
   }
 
-  /** null when the app is not running, which is also when there is no dev receiver to talk to */
+  /** Returns null if the app is not running and no dev receiver is available. */
   async pid(): Promise<string | null> {
     const out = await this.adb(['shell', 'pidof', this.appId], true)
     const value = out.stdout.trim().split(/\s+/)[0]
@@ -119,8 +119,8 @@ export class Device {
   }
 
   /**
-   * `am broadcast` prints the ordered result the receiver set, which is the only thing that says
-   * whether an install worked. No data at all means nothing received it: dev mode is off.
+   * `am broadcast` prints the receiver's ordered result, which reports whether installation
+   * succeeded. No result data means no receiver handled it: dev mode is off.
    */
   private async send<TSchema extends v.GenericSchema>(
     extras: Record<string, string>,
@@ -184,8 +184,8 @@ export class Device {
   }
 
   /**
-   * logcat's tag filters are exact, so the whole process is read and filtered here. The pid is
-   * re-resolved when the tail ends, which is how an app restart is picked up.
+   * Logcat only supports exact tag filters, so read the whole process and filter here.
+   * Resolve the PID again when the stream ends to handle app restarts.
    */
   async tailLogs(onLine: (level: string, tag: string, message: string) => void, signal: AbortSignal) {
     while (!signal.aborted) {

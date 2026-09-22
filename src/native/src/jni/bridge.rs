@@ -13,17 +13,17 @@ use crate::LEVEL_ERROR;
 
 use super::env::{clear_exception, with_current_env};
 
-/// What a callback arriving on its caller's thread may still reach. Everything else keeps host
-/// state that only the plugin queue touches, and a plain `HashMap` is what it keeps it in.
-/// A member here either holds no state, guards its own, or hands it to
-/// `EngineDispatch.createHostDispatcher`, which posts to the plugin queue when the caller is not it;
-/// what it reads of stock is concurrent, and what it shows it posts to the ui thread itself, so
-/// the answer is still decided on this thread and a refusal still reaches the plugin.
+/// Hosts callable from synchronous caller-thread callbacks. Other hosts keep queue-confined state,
+/// such as plain HashMaps.
 ///
-/// This gates only the calls that answer something: `call_void` has nothing to answer a refusal
-/// with, so a void host is never asked and the void names below are here for the contract rather
-/// than for the check. Every one of them hands its work to `EngineDispatch.createHostDispatcher`
-/// or to the ui thread on the kotlin side, which is what actually keeps them off the plugin queue.
+/// Each allowed host is stateless, synchronizes its state, or uses
+/// `EngineDispatch.createHostDispatcher` to reach the plugin queue. Stock reads must be
+/// thread-safe; UI work posts to the UI thread. Return values and errors still reach the calling
+/// thread.
+///
+/// The check applies only to calls returning values. `call_void` cannot report a refusal, so its
+/// hosts must arrange their own queue handoff in Kotlin. Void names remain listed to document that
+/// contract.
 const CALLER_THREAD_HOSTS: &[&str] = &[
   "jvm",
   "xposed",
@@ -350,9 +350,9 @@ impl JniBridge {
     });
   }
 
-  /// What [`Self::call_bool`], [`Self::call_int`] and [`Self::call_bytes`] all are: the thread
-  /// check, the marshalling, one call, and `fallback` wherever any of those does not get an answer.
-  /// `report` is for a host whose refusal nothing else would ever surface.
+  /// Shared implementation for [`Self::call_bool`], [`Self::call_int`], and [`Self::call_bytes`]:
+  /// check the thread, marshal arguments, call once, and use `fallback` on failure. `report` logs
+  /// failures that would otherwise be hidden.
   fn call_answering<T>(
     &self,
     what: &str,
@@ -405,9 +405,8 @@ impl JniBridge {
     })
   }
 
-  /// [`Self::call_int`] for arguments that are already jni values: no [`Self::marshal`], and so
-  /// neither of the two vectors it and [`jvalues`] allocate. Worth having only where a call is made
-  /// per field rather than per request.
+  /// Like [`Self::call_int`], with prebuilt JNI arguments. Skips [`Self::marshal`] and both vectors
+  /// it and [`jvalues`] allocate, reducing per-field read overhead.
   pub(crate) fn call_int_prims(&self, what: &str, method: JMethodID, args: &[jvalue], fallback: i32) -> i32 {
     if self.check_host_thread(what).is_err() {
       return fallback;

@@ -84,8 +84,8 @@ pub(super) fn create_hook_context<'js>(
 }
 
 impl<'js> HookContext<'js> {
-  /// the values are the caller's own, so they die with the call that lent them. What a phase read
-  /// while it ran stays readable; anything it did not is gone.
+  /// The borrowed call values expire when the phase returns. Values read during the phase remain
+  /// accessible; unread values do not.
   pub(super) fn expire(&self) {
     self.live.set(false);
   }
@@ -212,8 +212,7 @@ impl<'js> HookContext<'js> {
   }
 }
 
-/// the prototype comes back to be kept: looking it up through the class registry is a hash of the
-/// class's type id, which a dispatch would pay on every call
+/// Returns the prototype for caching, avoiding a class-registry type-ID lookup on every dispatch.
 pub(super) fn install_hook_context<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
   let proto = get_class_prototype::<HookContext>(ctx)?;
   define_accessor(

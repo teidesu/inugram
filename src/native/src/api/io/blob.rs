@@ -115,8 +115,8 @@ impl BlobState {
     })
   }
 
-  /// Takes a file the host already wrote as this plugin's spilled content: nothing is copied, the
-  /// bytes count against the spill budget like any other, and the file is deleted when the blob is.
+  /// Adopts a host-written file as spilled blob content without copying it. Charges its size to the
+  /// spill budget and deletes it when the blob is released.
   fn adopt_spill(self: &Rc<Self>, ctx: &Ctx<'_>, path: &Path, len: u64) -> Result<SpillFile, BlobFault> {
     self.reserve_spill_slot(ctx)?;
     let file = fs::OpenOptions::new().read(true).open(path).map_err(io_fault)?;
@@ -704,8 +704,8 @@ fn now_millis() -> f64 {
   SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as f64).unwrap_or(0.0)
 }
 
-/// A file the host wrote for this plugin alone, handed over as a `File` that owns it: reading it is
-/// reading the file, and disposing the handle deletes it.
+/// Wraps a host-written file in an owning `File` handle. Reads access the file directly; disposal
+/// deletes it.
 pub fn mint_owned_file<'js>(
   ctx: &Ctx<'js>,
   blobs: &Rc<BlobState>,

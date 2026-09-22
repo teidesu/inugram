@@ -8,16 +8,12 @@ import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.FileLoader
 
 /**
- * Where `inu.fs` lives, and how big it may get (rust: `fs.rs`).
+ * Configures `inu.fs` with its directory, quota, and scoped mode once at installation
+ * (Rust: `fs.rs`). All file operations run in Rust, where Blob bytes live, avoiding copies
+ * of large writes through the app's Java heap.
  *
- * The host's whole share is three answers - the directory, the cap, and whether scoping is on -
- * handed over once at install. Everything after that happens in rust, because `fs.write` takes a
- * `Blob` whose bytes only that side can read: routing them through an upcall would put every
- * written megabyte on the app-wide java heap.
- *
- * Deliberately `filesDir` and not the cache area: `fs.d.ts` promises the content survives restarts.
- * Keyed by the install id, so renaming a plugin keeps its data and no plugin can name its way into
- * another's directory.
+ * Uses `filesDir` for persistence across restarts. Storage is keyed by install ID, preserving
+ * data across renames and preventing one plugin from selecting another's directory by name.
  */
 object PluginFs {
     private const val SCOPED_ROOT = "inu_plugins"

@@ -1,7 +1,7 @@
 /*
 Plugin lifecycle follows its grants. Network hooks can run with no activity after a push wakeup.
-One JavaScript turn may run 2 seconds of uninterrupted work, or 10 for the top-level evaluation.
-Native-backed values have their own budget, 64 MB per plugin; API arrays have at most 65536 elements.
+
+**Limits: 2 seconds of uninterrupted work per JavaScript turn, 10 seconds for top-level evaluation, 64 MB of native-backed values per plugin, 65536 elements per API array.**
 
 Unknown grant names give no access. Unknown grant scopes reject installation.
 
@@ -11,188 +11,18 @@ A plugin runs one JavaScript turn at a time. A callback has a time and memory li
 */
 
 /**
- * Prints like Node's `util.inspect`: a string argument as-is, anything else inspected two levels deep.
- * A leading string with more arguments after it formats them through `%s %d %i %f %j %o %O %c %%`.
- * A TL view prints as its type name and present fields.
+ * Upload/download progress callback
+ *
+ * **Limits: one progress report per 100 ms.**
  */
-declare const console: {
-  log(...args: any[]): void
-  info(...args: any[]): void
-  warn(...args: any[]): void
-  error(...args: any[]): void
-  debug(...args: any[]): void
-}
-
-declare function atob(data: string): string
-declare function btoa(data: string): string
-
-declare const performance: {
-  now(): number
-  readonly timeOrigin: number
-}
-
-declare class DOMException extends Error {
-  constructor(message?: string, name?: string)
-
-  readonly code: number
-}
-
-/** Timers share a per-plugin limit of 512 live timeout/interval registrations. */
-declare function setTimeout(callback: () => void, ms?: number): number
-declare function clearTimeout(id?: number): void
-/** An interval repeats every 4 ms at the fastest and counts against the shared timer limit. */
-declare function setInterval(callback: () => void, ms?: number): number
-declare function clearInterval(id?: number): void
-declare function queueMicrotask(callback: () => void): void
-
-declare class TextEncoder {
-  encode(input?: string): Uint8Array
-  readonly encoding: 'utf-8'
-}
-declare class TextDecoder {
-  constructor(label?: 'utf-8')
-  decode(input?: Uint8Array | ArrayBufferLike): string
-  readonly encoding: 'utf-8'
-}
-
-declare class URL {
-  constructor(url: string, base?: string)
-  static canParse(url: string, base?: string): boolean
-  static parse(url: string, base?: string): URL | null
-
-  href: string
-  protocol: string
-  username: string
-  password: string
-  host: string
-  hostname: string
-  port: string
-  pathname: string
-  search: string
-  hash: string
-
-  readonly searchParams: URLSearchParams
-  readonly origin: string
-  toString(): string
-  toJSON(): string
-}
-
-declare class URLSearchParams {
-  constructor(init?: string | string[][] | Record<string, string> | URLSearchParams)
-  readonly size: number
-  append(name: string, value: string): void
-
-  delete(name: string, value?: string): void
-  get(name: string): string | null
-  getAll(name: string): string[]
-  has(name: string, value?: string): boolean
-
-  set(name: string, value: string): void
-
-  sort(): void
-  forEach(callback: (value: string, name: string, parent: URLSearchParams) => void, thisArg?: any): void
-  keys(): IterableIterator<string>
-  values(): IterableIterator<string>
-  entries(): IterableIterator<[string, string]>
-  [Symbol.iterator](): IterableIterator<[string, string]>
-  toString(): string
-}
-
-declare const crypto: {
-
-  getRandomValues: <T extends Uint8Array>(array: T) => T
-  randomUUID: () => string
-}
-
-declare class AbortController {
-  readonly signal: AbortSignal
-  abort(reason?: any): void
-}
-declare interface AbortSignal {
-  readonly aborted: boolean
-  readonly reason: any
-  addEventListener(type: 'abort', listener: () => void): void
-  removeEventListener(type: 'abort', listener: () => void): void
-}
-
-declare function structuredClone<T>(value: T): T
-
-/** One call assembles at most 32 MB; spilled content is **2 GB of spilled content live at once** and **64 spilled blobs held at once**. */
-declare class Blob {
-  constructor(parts?: (Blob | Uint8Array | ArrayBuffer | string)[], options?: { type?: string })
-
-  readonly size: number
-
-  readonly type: string
-
-  slice(start?: number, end?: number, contentType?: string): Blob
-
-  /** Labels are **truncated at 1024 characters**. */
-  bytes(): Promise<Uint8Array>
-  /** `arrayBuffer()` are capped at 16 MB**. */
-  arrayBuffer(): Promise<ArrayBuffer>
-
-  /** `text()` stops at 8 MB**. */
-  text(): Promise<string>
-
-  /**
-   * Frees the content now. Dropping the last reference frees it too, whenever the collector gets
-   * to it - this is the eager path, and it is also `[Symbol.dispose]`, so `using` works:
-   * `using png = await canvas.convertToBlob()`.
-   */
-  dispose(): void
-  [Symbol.dispose](): void
-}
-
-declare class File extends Blob {
-  constructor(parts: (Blob | Uint8Array | ArrayBuffer | string)[], name: string, options?: {
-    type?: string
-
-    lastModified?: number
-  })
-
-  readonly name: string
-  readonly lastModified: number
-}
-
-/** Progress reports at most one per 100 ms. */
 declare type ProgressCallback = (loaded: number, total: number) => void
 
-declare type HeadersInit = Record<string, string | string[]>
-
-declare interface Response {
-  readonly ok: boolean
-  readonly status: number
-  readonly statusText: string
-
-  readonly url: string
-  readonly headers: Record<string, string | string[]>
-  text(): Promise<string>
-  json(): Promise<any>
-
-  bytes(): Promise<Uint8Array>
-  arrayBuffer(): Promise<ArrayBuffer>
-
-  blob(): Promise<Blob>
-}
-
-/** @needs-grant fetch. A response has 32 MB in each direction; a plugin may hold at most 256 MB of fetched content, and a chain is refused when longer than 20 hops. */
-declare function fetch(url: string, init?: {
-  method?: string
-  headers?: HeadersInit
-  body?: string | Uint8Array | Blob
-
-  redirect?: 'follow' | 'manual' | 'error'
-
-  signal?: AbortSignal
-
-  timeout?: number
-}): Promise<Response>
-
 declare const __opaque__: unique symbol
-
 declare interface OpaqueType<Brand> { readonly [__opaque__]: Brand }
 
+/**
+ * Raw TL object. May or may not be backed by a real Java `TLObject`
+ */
 declare type TLObject = tl.TypeTlObject
 declare type MaybePromise<T> = T | Promise<T>
 
@@ -208,14 +38,18 @@ declare interface InterceptRpcOptions {
 }
 
 /**
- * Undo whatever handed it back. Calling it twice is a no-op, and everything a plugin still holds
- * is disposed for it on unload.
+ * Releases the registration or resource that returned it. Repeated calls are safe.
+ * Remaining resources are disposed on unload.
  *
- * Also a `Disposable`, so it can be held by a `using` declaration or a `DisposableStack` rather
- * than by hand.
+ * Implements `Disposable`, so it works with `using` and `DisposableStack`.
  */
 declare type Disposer = (() => void) & Disposable
 
+/**
+ * Dialog ID:
+ * - a user id as-is (e.g. `123456`)
+ * - a chat or channel id, negated (e.g. `-123123`)
+ */
 declare type DialogId = number
 
 declare type PeerLikeObject
@@ -224,6 +58,7 @@ declare type PeerLikeObject
 
 declare type InputPeerLike = DialogId | PeerLikeObject | 'me' | 'self' | (string & {})
 
+/** Formatted text representation */
 declare interface TextWithEntities {
   text: string
   entities?: tl.TypeMessageEntity[]
@@ -232,13 +67,30 @@ declare interface TextWithEntities {
 declare type InputText = string | TextWithEntities
 
 declare namespace inu {
+  /** An RPC error, returned by Telegram server */
   class RpcError extends Error {
     constructor(code: number, text: string)
     code: number
     text: string
   }
 
+  /** A plugin error, thrown by plugin APIs */
   class PluginError extends Error {
+    /**
+     *  Error code:
+     * - `not-granted`: You are trying to use an API you haven't specified a `@grant` for
+     * - `forbidden`: You are trying to access a protected resource
+     * - `quota-exceeded`: You are trying to use more resources than the quota allows (fs, timers, native memory, actions, etc.)
+     * - `handle-expired`: You are trying to read data from an expired/disposed handle.
+     * - `unknown-constructor`: You are trying to use an unknown TL constructor
+     * - `invalid-argument`: You passed an invalid argument (type or something else)
+     * - `not-found`: You are trying to access something that doesn't exist
+     * - `unsupported`: You are trying to use an unsupported API
+     * - `timed-out`: Your operation has timed out
+     * - `aborted`: You operation was aborted
+     * - `network`: Some network-related issue happened
+     * - `internal`: An internal plugin engine error happened, please report this
+     */
     code:
       | 'not-granted'
       | 'forbidden'
@@ -254,34 +106,40 @@ declare namespace inu {
       | 'internal'
       | (string & {})
 
+    /** If `code == 'not-granted'`, the grant you're missing */
     grant?: string
-
+    /** If `code == `quota-exceeded'`, the current quota usage */
     usage?: number
+    /** If `code == `quota-exceeded'`, the current quota limit */
     quota?: number
   }
 
+  /** Get information about the current environment */
   function info(): {
+    /** Platform we're running on (currently only Android) */
     platform: 'android' | (string & {})
+    /** Application version (display string) */
     appVersion: string
+    /** Application build number */
     appBuild: string
+    /** Supported plugin API version */
     apiVersion: number
+    /** Current TL layer */
     layer: number
+    /** User's preferred language */
     language: string
-    /**
-     * The manifest's directives, one array entry per repeated key. `@icon` names the icon shown
-     * in the plugins list and accepts no remote urls - only `inu://{name}` where the name comes
-     * from the {@link icons.common} set, `tg://emoji?id={documentId}` for a custom emoji, or
-     * `tg://addstickers?set={slug}` for a sticker out of a set (`&idx={n}` picks by 0-based
-     * position, `&id={documentId}` by document id, neither picks the set's preview sticker).
-     * Anything else falls back to the default icon.
-     */
+    /** The manifest header directives, one array entry per repeated key */
     header: Record<string, string[]>
   }
 
   /**
-   * Handlers run in registration order; returned promises share a 2-second cleanup window.
+   * Register a handler that will run when the plugin is unloaded
+   *
+   * Handlers run in registration order and share one cleanup window.
    * Resources remain available until settlement/timeout. Ordinary callbacks and timers stop first.
    * JVM runnables created during cleanup can run on the UI thread; existing callbacks stay stopped.
+   *
+   * **Limits: 2 seconds total for async cleanup.**
    */
   function onUnload(callback: () => void | Promise<void>): Disposer
 
@@ -307,7 +165,10 @@ declare namespace inu {
     callback: (mode: 'foreground' | 'resumed' | 'paused' | 'background') => void,
   ): Disposer
 
-  /** 1 MB per-plugin quota. */
+  /**
+   * A simple key-value storage, semantically similar to `localStorage`
+   * **Limits: 1 MB per plugin.**
+   */
   namespace kv {
     /** @needs-grant kv */
     function get(key: string): string | null
@@ -329,85 +190,110 @@ declare namespace inu {
     function usage(): number
   }
 
+  /** Access to the system clipboard */
   namespace clipboard {
-    /** @needs-grant clipboard.write */
+    /**
+     * Write something into the clipboard
+     *
+     * @needs-grant clipboard.write
+     */
     function write(text: string): void
-    /** @needs-grant clipboard.read */
+    /**
+     * Read the clipboard value
+     *
+     * @needs-grant clipboard.read
+     */
     function read(): string
   }
 
+  /** A high-level wrapper over a TL Message */
   class Message {
     constructor(raw: tl.TypeMessage)
 
+    /** Raw TL object of the message */
     readonly raw: tl.TypeMessage
+    /** Whether the message is a service message */
+    get isService(): boolean
+    /** Whether the message is from a secret chat */
+    get isSecret(): boolean
 
+    /** Message ID */
     get id(): number
+    /** If the message belongs to an album, ID of the album */
+    get groupedId(): string | null
 
+    /** ID of the dialog where the message was sent */
     get dialogId(): DialogId | null
-
-    get senderId(): number | null
-
+    /** ID of the topic where the message belongs */
     get topicId(): number | null
+    /** ID of the message sender */
+    get senderId(): number | null
+    /** Date of the message, as a unix date in seconds */
     get date(): number
+    /** Date when the message was edited, as a unix date in seconds */
     get editDate(): number | null
+    /** Whether this message is outgoing */
     get out(): boolean
-
+    /** Plain text of the message */
     get text(): string
+    /** Formatted text of the message */
     get textWithEntities(): TextWithEntities
 
+    /** Media inside the message, if any */
     get media(): tl.TypeMessageMedia | null
-
+    /** Document inside the message, if any */
     get document(): tl.TypeDocument | null
 
+    /** Type of the media in the message, if any */
     get mediaType():
       | 'photo' | 'video' | 'roundVideo' | 'voice' | 'music' | 'sticker' | 'gif' | 'document'
       | 'poll' | 'contact' | 'location' | 'venue' | 'story' | 'giveaway' | 'invoice' | 'other'
       | null
 
+    /** For playable media types, duration of the media */
     get duration(): number | null
 
-    get groupedId(): string | null
-
+    /** If the message is a reply to another message, ID of that message */
     get replyToMessageId(): number | null
+    /** If the message is a forward, info about that */
     get forwardedFrom(): tl.TypeMessageFwdHeader | null
+    /** If the message was sent via an inline bot, ID of that bot */
     get viaBotId(): number | null
+    /** Whether the message is pinned */
     get isPinned(): boolean
+    /** View count of the message, if available */
     get views(): number | null
+    /** Forwards count of the message, if available */
     get forwards(): number | null
+    /** Reactions on the message, if any */
     get reactions(): tl.TypeMessageReactions | null
-    get isService(): boolean
-
-    get isSecret(): boolean
 
     toJSON(): tl.TypeMessage
   }
 
+  /** Information about an account in the app */
   interface AccountInfo {
-
+    /** Stable ID of the account slot */
     id: number
+    /** ID of the user represented by the account */
     userId: number
+    /** Whether this account is the currently active one */
     isCurrent: boolean
+    /** Whether this account has Telegram Premium active */
     isPremium: boolean
   }
 
-  /**
-   * A chat folder, as the folder tabs show it. This is app state rather than a TL object - the
-   * app keeps its own class for it, with the dialogs it currently resolves to - so it crosses as
-   * a plain object rather than a `tl.Type*` handle.
-   */
+  /** A chat folder as shown in the folder tabs. */
   interface ChatFolder {
     /** `0` is the "All chats" tab, which every account has and which cannot be edited. */
     id: number
     title: TextWithEntities
-    /**
-     * The folder's emoji, or `null` when it has none. Inugram-only: stock android drops the
-     * emoticon the server sends, and the fork keeps it in its own storage.
-     */
+    /** The folder's emoji, or `null` if unset. */
     emoticon: string | null
     /** Telegram's folder colour, `0`-`7` into its own palette - not an ARGB value. `null` when the folder has no colour. */
     colorIndex: number | null
     unreadCount: number
-    /** How many dialogs {@link Account.getDialogsCached} would answer for this folder right now. */
+    /** The number of dialogs {@link Account.getDialogsCached} currently returns for this folder. */
     dialogCount: number
     isDefault: boolean
     /** A shared folder, added from an invite link. */
@@ -416,24 +302,38 @@ declare namespace inu {
     pinned: DialogId[]
   }
 
-  /** @needs-grant account.read(self) */
+  /**
+   * Get the list of logged-in accounts
+   *
+   * @needs-grant account.read(self)
+   */
   function accounts(): AccountInfo[]
 
-  /** @needs-grant account.read(self) */
+  /**
+   * Register on updates for when the account list updates
+   *
+   * @needs-grant account.read(self)
+   */
   function onAccountsChanged(callback: (accounts: AccountInfo[]) => void): Disposer
 
   /**
-   * Run [callback] for whichever account is current, again on every switch. What it returns is torn
-   * down when the account changes and when the plugin unloads, so a callback that registers several
-   * things can hand back a `DisposableStack` rather than a function of its own.
+   * Runs `callback` for the current account, and again on each account switch.
+   *
+   * When a function/Disposable is returned, it's called whenever the account changes,
+   * or the returned `Disposer` is disposed
    */
   function withCurrentAccount(callback: (account: Account) => (() => void) | Disposable | void): Disposer
 
   function account(id?: number): Account
 
-  /** The cursor table holds **32 cursors at once**. */
+  /**
+   * An opaque cursor for paginated lists
+   *
+   * **Limits: 32 live cursors.**
+   */
   type Cursor<List extends string> = OpaqueType<`Cursor:${List}`> & string
 
+  /** Wrapper for paginated list return types */
   type Paged<T, List extends string> = T[] & { next: Cursor<List> | null }
 
   interface Account {
@@ -447,9 +347,9 @@ declare namespace inu {
     isCurrent(): boolean
 
     /**
-     * {@link notifications.suppress} for this account alone: the app posts none of its own for it
-     * until the returned {@link Disposer} runs or the plugin is unloaded. Holds stack, and an
-     * app-level hold covers every account whatever this one says.
+     * Suppresses app notifications for this account until the returned {@link Disposer} runs
+     * or the plugin unloads. Suppression remains active while any hold exists.
+     * App-wide suppression also applies to this account.
      *
      * @needs-grant notifications.suppress
      */
@@ -487,35 +387,27 @@ declare namespace inu {
      */
     getDialog(peer: InputPeerLike): tl.TypeDialog | null
     /**
-     * whether the app would keep quiet about this dialog - stock's own answer, which folds the
-     * account's default for that kind of peer into the dialog's own override, and the topic's into
-     * both when one is named. A dialog the app does not know is not muted.
+     * Whether the app considers this dialog muted. Combines account defaults, dialog overrides,
+     * and topic overrides when a topic is specified. Unknown dialogs are not muted.
      *
      * @needs-grant account.read(dialogs)
      */
     isDialogMuted(peer: InputPeerLike, options?: { topicId?: number }): boolean
 
     /**
-     * The one line the app itself would show for this message - in a dialog row, in a notification:
-     * a media label like "📷 Photo", a service message written out in the app's language, or the
-     * text. Only the app knows it, and it is not derivable from the message alone.
+     * The app's message preview: message text, a media label such as "📷 Photo", or a service
+     * message in the app's language. Entities describe the preview, not the original message.
      *
-     * The app formats a preview with spans rather than entities - a service message's names are
-     * bold, its custom emoji are spans - and they are read back out here, so the entities are the
-     * preview's own and have nothing to do with the message's.
-     *
-     * With `hideSpoilers`, spoilers are masked the way the app masks them in its own notification,
-     * and any entity covering a masked range is dropped, that text no longer being there. Masking
-     * only ever touches a preview that *is* the message's own text, since that is what the entity
-     * offsets are counted against; a media label is left alone.
+     * `hideSpoilers` masks spoilers and removes entities covering masked text.
+     * Media labels are unchanged.
      *
      * @needs-grant account.read(messages)
      */
     previewMessage(message: Message | tl.TypeMessage, options?: { hideSpoilers?: boolean }): TextWithEntities
 
     /**
-     * a forum topic the app has already loaded (cached, never a network call, `null` on a miss or
-     * on a peer that is not a forum). {@link getTopics} is the one that fetches.
+     * Returns a cached forum topic, or `null` if missing or the peer is not a forum.
+     * Never uses the network; use {@link getTopics} to fetch topics.
      *
      * @needs-grant account.read(dialogs)
      */
@@ -534,15 +426,11 @@ declare namespace inu {
     getChats(peers: InputPeerLike[]): (tl.TypeChat | null)[]
 
     /**
-     * get one or more messages out of what this device already has - the app's memory first, then
-     * its own database - without ever going to the network. `null` on a miss.
-     *
-     * The database read is synchronous and blocks this turn on the app's storage queue, which is
-     * what lets this answer at all rather than only for the handful of messages memory holds.
-     * Reading a whole range is {@link getHistory}'s job, not a loop over this.
+     * Reads locally stored messages without using the network. Returns `null` for missing messages.
+     * May block on a database read; use {@link getHistory} to read a range instead of looping.
      *
      * @needs-grant account.read(messages)
-     * @peer the dialog, or `0` for the common message box (dms, legacy groups)
+     * @peer the dialog, or `0` for the common message box (DMs, legacy groups)
      * @messageId the message to get
      */
     getMessagesCached(peer: InputPeerLike, messageId: number): Message | null
@@ -584,7 +472,11 @@ declare namespace inu {
       onProgress?: ProgressCallback
     }): Promise<{ path: string }>
 
-    /** @needs-grant account.write(send). One staged copy is **one such copy is capped at 256 MB**; the same 256 MB staging cap applies to every write. */
+    /**
+     * **Limits: 256 MB per staged copy, for all write operations.**
+     *
+     * @needs-grant account.write(send)
+     */
     uploadFile(file: Blob | Uint8Array | { path: string }, options?: {
       fileName?: string
       onProgress?: ProgressCallback
@@ -596,8 +488,7 @@ declare namespace inu {
     getChatFull(peer: InputPeerLike): Promise<tl.TypeChatFull | null>
 
     /**
-     * `fields` names the fields you are going to read, exactly as {@link getDialogsCached} takes
-     * them: their values cross with the dialogs rather than one at a time when you touch them.
+     * `fields` preloads selected fields for faster reads, as in {@link getDialogsCached}.
      *
      * @needs-grant account.read(dialogs)
      */
@@ -607,7 +498,10 @@ declare namespace inu {
       fields?: readonly string[]
       cursor?: Cursor<'dialogs'>
     }): Promise<Paged<tl.TypeDialog, 'dialogs'>>
-    /** @needs-grant account.read(dialogs). `batchSize` defaults to (omitted, **100**, which is telegram's own page). `fields` is passed to every page. */
+    /**
+     * @needs-grant account.read(dialogs). `batchSize` defaults to Telegram's page size of 100.
+     * `fields` applies to every page.
+     */
     iterDialogs(options?: {
       folderId?: number
       limit?: number
@@ -616,25 +510,15 @@ declare namespace inu {
     }): AsyncIterableIterator<tl.TypeDialog>
 
     /**
-     * The dialogs the app already holds in memory, ordered the way the chat list orders them:
-     * pinned first, then by date. Never goes to the network and never pages - one call answers
-     * the whole list, consistently.
+     * Returns all cached dialogs in chat-list order: pinned first, then by date.
+     * Does not use the network or paginate. Resolves on the next turn; unavailable in synchronous
+     * contexts such as an `inu.xposed` phase.
      *
-     * Asynchronous all the same: the app owns these lists on its ui thread and rebuilds them in
-     * place, so the read hops there rather than walking a list mid-rebuild. It resolves on the
-     * next turn, and cannot be called from a synchronous context such as an `inu.xposed` phase.
+     * `archive` selects the main list (`'exclude'`, the default), the archive (`'only'`), or both
+     * (`'keep'`). `chatFolderId` selects a folder from {@link getChatFoldersCached} instead.
+     * Specifying both options throws `invalid-argument`; folders have their own archive rules.
      *
-     * `archive` picks what the answer covers: `'exclude'` (the default) is the main list, `'only'`
-     * the archive, `'keep'` both. `chatFolderId` narrows to one folder from
-     * {@link getChatFoldersCached} instead; a folder already decides for itself whether it shows
-     * archived chats, so naming both `archive` and `chatFolderId` is `invalid-argument`.
-     *
-     * `fields` names the fields you are going to read, so their values cross with the dialogs
-     * themselves rather than one at a time when you touch them. It changes nothing about what a
-     * dialog answers - a field you did not name still reads, and so does one this could not carry
-     * (an object, a vector, a very long string, or no such field on that constructor). It is worth
-     * naming for a list you walk: reading two fields of a few hundred dialogs is a few hundred
-     * crossings otherwise.
+     * `fields` preloads selected fields for faster reads. Other fields remain readable.
      *
      * @needs-grant account.read(dialogs)
      */
@@ -646,14 +530,17 @@ declare namespace inu {
     }): Promise<tl.TypeDialog[]>
 
     /**
-     * The account's chat folders, in the order their tabs appear. Reads what
-     * {@link getDialogsCached} reads, and is asynchronous for the same reason.
+     * Returns cached chat folders in tab order. Asynchronous, like {@link getDialogsCached}.
      *
      * @needs-grant account.read(dialogs)
      */
     getChatFoldersCached(): Promise<ChatFolder[]>
 
-    /** @needs-grant account.read(history) */
+    /**
+     * Get chat history in a specific dialog
+     *
+     * @needs-grant account.read(history)
+     */
     getHistory(
       peer: InputPeerLike,
       options?: {
@@ -678,7 +565,11 @@ declare namespace inu {
       },
     ): AsyncIterableIterator<Message>
 
-    /** @needs-grant account.read(dialogs) */
+    /**
+     * Get topics in a specific forum
+     *
+     * @needs-grant account.read(dialogs)
+     */
     getTopics(peer: InputPeerLike, options?: {
       limit?: number
       cursor?: Cursor<'topics'>
@@ -689,15 +580,38 @@ declare namespace inu {
       batchSize?: number
     }): AsyncIterableIterator<tl.TypeForumTopic>
 
-    /** @needs-grant account.read(peers) */
+    /**
+     * Resolve an `InputPeer` from `InputPeerLike`
+     *
+     * @needs-grant account.read(peers)
+     */
     resolvePeer(peer: InputPeerLike): Promise<tl.TypeInputPeer>
-    /** @needs-grant account.read(peers) */
+    /**
+     * Resolve an `InputPeer` from `InputPeerLike`, without hitting the network, returning `null` on miss
+     *
+     * @needs-grant account.read(peers)
+     */
     resolvePeerCached(peer: InputPeerLike): tl.TypeInputPeer | null
-    /** @needs-grant account.read(peers) */
+    /**
+     * Resolve an `InputUser` from `InputPeerLike`
+     *
+     * @needs-grant account.read(peers)
+     * @throws if the peer is not a user
+     */
     resolveUser(peer: InputPeerLike): Promise<tl.TypeInputUser>
-    /** @needs-grant account.read(peers) */
+    /**
+     * Resolve an `InputChannel` from `InputPeerLike`
+     *
+     * @needs-grant account.read(peers)
+     * @throws if the peer is not a channel
+     */
     resolveChannel(peer: InputPeerLike): Promise<tl.TypeInputChannel>
-    /** @needs-grant account.read(peers). Resolves at most **8 in flight**. */
+
+    /**
+     * **Limits: 8 resolutions in flight.**
+     *
+     * @needs-grant account.read(peers)
+     */
     resolvePeerMany(peers: InputPeerLike[]): Promise<(tl.TypeInputPeer | null)[]>
 
     /**
@@ -943,10 +857,8 @@ declare namespace inu {
     invokeRaw(method: Uint8Array): Promise<Uint8Array | null>
 
     /**
-     * open a takeout session, which increases the rate limits for history reads
-     *
-     * Telegram keeps the session until {@link TakeoutSession.finish}, so finish the one you
-     * opened rather than leaving it behind.
+     * Opens a takeout session with higher rate limits for history reads.
+     * Call {@link TakeoutSession.finish} when done; Telegram keeps the session until then.
      *
      * @needs-grant takeout
      */
@@ -979,35 +891,50 @@ declare namespace inu {
   }
 
   /**
-   * A text format, as a tagged template: `` md`**hi**` `` parses what it is given and answers the
-   * text plus the entities it found. Interpolated values are never parsed - a string is written as
-   * text, a number or bigint as its digits, a `TextWithEntities` brings its own entities along, and
-   * anything falsy is dropped. Offsets are utf-16 code units, as telegram counts them.
+   * A tagged template that returns text and entities, for example:
+   * ```ts
+   * md`**hi**`
+   * ```.
+   *
+   * Interpolated values are not parsed: strings are inserted as text, numbers and bigints as
+   * digits, and `TextWithEntities` values keep their entities. `boolean`, `NaN` and `Infinity` are omitted
+   *
+   * Offsets use UTF-16 code units.
    */
   interface TextFormat {
     (strings: TemplateStringsArray, ...values: (InputText | string | number | bigint | boolean | null | undefined)[]): TextWithEntities
-    /** parse a string already written in this format, such as one a server handed over */
+    /** Parses a string in this format, such as text received from a server. */
     (text: string): TextWithEntities
     /**
-     * escape text so parsing gives it back unchanged. Rarely needed: an interpolated string is
-     * already written as text. `quote` also escapes `"`, for html that goes inside an attribute.
+     * Escapes text so parsing returns it unchanged. Interpolated strings are already escaped.
+     * `quote` also escapes `"` for HTML attribute values.
      */
     escape(text: string, quote?: boolean): string
-    /** the other direction: text and its entities, written back out in this format */
+    /** Formats text and its entities using this format. */
     unparse(input: InputText): string
   }
 
   namespace utils {
-    /** mtcute's markdown: `**bold**`, `__italic__`, `--underline--`, `~~strike~~`, `||spoiler||`, `` `code` ``, ```` ```pre ````, `[text](url)` and `> quote`. */
+    /**
+     * mtcute's markdown:
+     * - `**bold**`
+     * - `__italic__`
+     * - `--underline--`
+     * - `~~strike~~`
+     * - `||spoiler||`
+     * - `` `code` ``
+     * - ```` ```pre ````
+     * - `[text](url)`
+     * - `> quote`.
+     */
     const md: TextFormat
     /** telegram's html subset. Whitespace collapses as it does in real html; `<br>` breaks a line. */
     const html: TextFormat
-    /** {@link html}, but whitespace is kept as written and the template is dedented first. */
+    /** {@link html}, but whitespace is kept as written and the template is dedented first, like Bot API */
     const thtml: TextFormat
 
     /**
-     * Join texts into one, shifting each part's entities to where that part landed. mtcute's
-     * helper, for building a text out of pieces that each carry their own formatting:
+     * Joins text parts and adjusts their entity offsets:
      *
      * ```ts
      * const board = inu.utils.joinTextWithEntities(
@@ -1016,8 +943,7 @@ declare namespace inu {
      * )
      * ```
      *
-     * The delimiter goes in once something has been written, so a leading empty part is not
-     * separated from what follows it.
+     * The delimiter is inserted only after nonempty output, so leading empty parts add no delimiter.
      */
     function joinTextWithEntities(parts: InputText[], delim?: InputText): TextWithEntities
 
@@ -1059,7 +985,9 @@ declare namespace inu {
     }
   }
 
+  /** An opaque reference to a UI element */
   type UIElement = OpaqueType<'UIElement'>
+  /** An opaque reference to an icon used by UI elements */
   type UIIcon = OpaqueType<'UIIcon'>
 
   namespace icons {
@@ -1070,10 +998,10 @@ declare namespace inu {
       static?: boolean
     }
 
-    /** UIIcon from a built-in common animation */
+    /** {@link UIIcon} from a built-in common animation */
     function animation(name: 'success' | 'error' | 'info' | 'loading'): UIIcon
 
-    /** UIIcon from a Telegram custom emoji (`id` is the custom emoji ID as a string) */
+    /** {@link UIIcon} from a Telegram custom emoji (`id` is the custom emoji ID as a string) */
     function customEmoji(id: string, options?: LottieOptions): UIIcon
 
     type StickerOptions = { slug: string } & LottieOptions & (
@@ -1083,7 +1011,7 @@ declare namespace inu {
     )
 
     /**
-     * UIIcon from a Telegram sticker.
+     * {@link UIIcon} from a Telegram sticker.
      *
      * `slug` is the slug of a stickerset, and to address a sticker you can use one of:
      * - `index` - zero-based index of a sticker in the set
@@ -1097,7 +1025,7 @@ declare namespace inu {
      */
     function sticker(options: StickerOptions): UIIcon
 
-    /** UIIcon from a built-in common icon */
+    /** {@link UIIcon} from a built-in common icon */
     function common(
       name:
         | 'settings' | 'info' | 'search' | 'edit' | 'delete' | 'copy' | 'share' | 'download'
@@ -1106,15 +1034,29 @@ declare namespace inu {
         | 'plus' | 'minus' | 'check' | 'close' | 'more' | 'translate' | 'bookmark',
     ): UIIcon
 
-    /** UIIcon from a custom SVG, **at most 64 KiB of source**. */
+    /**
+     * {@link UIIcon} from a custom SVG.
+     *
+     * **Limits: 64 KiB of SVG source.**
+     */
     function svg(source: string): UIIcon
   }
+
   namespace ui {
     interface UIPage {
+      /** Refresh the page by calling its callback again */
       invalidate(): void
+      /** Dispose the page */
       dispose(): void
     }
 
+    /**
+     * Target for {@link openPage}
+     * - `chat`: open a specific dialog (and optionally topic)
+     * - `profile`: open a specific user/channel's profile
+     * - `dialogs`: open a list of dialogs
+     * - `settings`: open the settings page
+     */
     type PageTarget
       = | { type: 'chat', dialogId: DialogId, topicId?: number, account?: number }
         | { type: 'profile', dialogId: DialogId, account?: number }
@@ -1127,33 +1069,38 @@ declare namespace inu {
     function openPage(screen: PageTarget): void
 
     /**
-     * Stands in for a bulletin's icon: a stack of peer avatars is drawn where the icon would be.
-     * A peer the app does not know is skipped.
+     * Displays a stack of peer avatars in place of a bulletin's icon.
+     * Skips peers unknown to the app.
      */
     interface BulletinAvatars {
       type: 'avatars'
       /** 1 to 3 peers */
       avatars: DialogId[]
-      /** which account they are looked up in; defaults to the one on screen */
+      /** which account they are looked up in; defaults to the active one */
       account?: number
     }
 
     /** show a toast */
     function toast(text: string): void
     /**
-     * show a bulletin (aka snackbar)
+     * Shows a bulletin (snackbar). Resolves with `'button'` when its button is tapped,
+     * `'clicked'` when its body is tapped, or `'dismissed'` when it closes otherwise.
      *
-     * Resolves once the bulletin is done with: `'button'` if its button was tapped, `'clicked'` if
-     * its body was, and `'dismissed'` when it simply went away. Nothing has to be awaited - a
-     * plugin that only wants to say something drops the promise.
+     * You can ignore the promise if you do not need the result.
      */
     function bulletin(options: {
-      /** the text, or the title when there is a `subtitle` */
+      /** The text, or the title when there is a `subtitle` */
       text: InputText
+      /** Subtitle for the bulletin */
       subtitle?: InputText
       icon: UIIcon | BulletinAvatars
-      /** `'short'` (1.5s), `'long'` (2.75s, the default), or 500-30000 ms */
+      /**
+       * `'short'` (1.5s), `'long'` (2.75s, the default), or a duration in milliseconds.
+       *
+       * **Limits: 500–30000 ms for numeric durations.**
+       */
       duration?: 'short' | 'long' | number
+      /** Placement of the bulletin */
       position?: 'top' | 'bottom'
       /** label of a trailing button; tapping it resolves with `'button'` */
       button?: string
@@ -1201,6 +1148,7 @@ declare namespace inu {
       multiple: true
     }): Promise<number[] | null>
 
+    /** Info about the currently visible screen */
     interface CurrentScreen {
       type: 'chat' | 'profile' | 'dialogs' | 'settings' | 'other'
       /** @needs-grant account.read(dialogs) */
@@ -1210,8 +1158,10 @@ declare namespace inu {
       account: Account
     }
 
+    /** Get the currently visible screen */
     function getCurrentScreen(): CurrentScreen | null
 
+    /** Info about a navigation event */
     interface ScreenChange {
       screen: CurrentScreen | null
       previous: CurrentScreen | null
@@ -1219,8 +1169,10 @@ declare namespace inu {
       readonly stack: CurrentScreen[]
     }
 
+    /** Subscribe to navigation changes */
     function onScreenChanged(callback: (change: ScreenChange) => void): Disposer
 
+    /** Prompt a user for some text input */
     function prompt(options: {
       title: string
       hint?: string
@@ -1255,107 +1207,177 @@ declare namespace inu {
       type?: string
     }): Promise<boolean>
 
+    /** Anchor for the menus */
     interface UIAnchor {
+      /** Open a contextual menu */
       openMenu(items: {
+        /** Text of the item */
         text: string
+        /** Whether the item should have a checkmark */
         checked?: boolean
+        /** Whether the item should be shown as "dangerous" */
         danger?: boolean
+        /** Click handler */
         onClick: () => void
       }[]): void
     }
 
+    /** Header element */
     function header(text: string): UIElement
 
+    /** Check (switch) element */
     function check(options: {
+      /** Stable ID of the element */
       id?: string
+      /** Label for the switch */
       text: string
+      /** Subtitle for the switch */
       subtitle?: string
+      /** Icon shown next to the switch */
       icon?: UIIcon
+      /** Current switch status */
       checked: boolean
+      /** Switch change (click) handler */
       onChange: (checked: boolean, anchor: UIAnchor) => void
+      /** Secondary tap (long tap) handler */
       onSecondaryClick?: (anchor: UIAnchor) => void
     }): UIElement
 
+    /** Button element */
     function button(options: {
+      /** Stable ID of the element */
       id?: string
+      /** Button label */
       text: InputText
       subtitle?: InputText
+      /** Icon shown in the button */
       icon?: UIIcon
+      /** "Value" of the button */
       value?: InputText
+      /** Whether the button is "dangerous" */
       danger?: boolean
+      /** Click handler */
       onClick: (anchor: UIAnchor) => void
+      /** Secondary click (long tap) handler */
       onSecondaryClick?: (anchor: UIAnchor) => void
     }): UIElement
 
+    /** Select element. A button showing a selector on tap */
     function select(options: {
+      /** Stable ID of the element */
       id?: string
+      /** Label for the button */
       text: InputText
+      /** Icon shown in the button */
       icon?: UIIcon
+      /** Select items */
       items: (string | { text: string, subtitle?: string })[]
+      /** Index of the selected item */
       selected: number
+      /**
+       * Whether the selector should be a dialog
+       *
+       * @default `true` if any of `items` has a `subtitle`, otherwise `false`
+       */
       dialog?: boolean
+      /** Value change handler */
       onChange: (index: number, anchor: UIAnchor) => void
+      /** Secondary click (long tap) handler */
       onSecondaryClick?: (anchor: UIAnchor) => void
     }): UIElement
 
-    /** A label may have at most 501 steps**. */
+    /**
+     * Slider element
+     *
+     * **Limits: 501 label steps.**
+     */
     function slider(options: {
+      /** Stable ID of the element */
       id?: string
+      /** Header label for the slider */
       text?: string
+      /** Minimum value */
       min: number
+      /** Maximum value */
       max: number
+      /** Step of the slider */
       step: number
+      /** Current value of the slider */
       value: number
+      /** Default value for the slider */
       default?: number
+      /**
+       * Value label renderer
+       *
+       * @default val => String(val)
+       */
       label?: (value: number) => string
+      /** Value change listener */
       onChange: (value: number, anchor: UIAnchor) => void
     }): UIElement
 
+    /** A separator element, with optional text */
     function separator(text?: InputText): UIElement
 
+    /** Define a declarative settings page */
     function settingsPage(options: {
+      /** Page title */
       title: string
       /**
-       * Disposes the page as soon as it closes, after {@link onClose} has returned: for a page
-       * built per open, whose definition is of no use once the user navigates back. A page opened
-       * more than once must not ask for this - opening a disposed page is `handle-expired`.
+       * Disposes the page when it closes, after {@link onClose} returns.
+       * Use for pages created on each open. Reopening a disposed page throws `handle-expired`.
        */
       transient?: boolean
+      /**
+       * Items rendered by the page
+       *
+       * Whenever the return value is expected to change, call {@link UIPage.invalidate}
+       */
       items: () => UIElement[]
+      /** Bottom CTA button on the page */
       bottomButton?: {
+        /** Text of the button */
         text: string
+        /** Click handler for the CTA */
         onClick: (anchor: UIAnchor) => void
       }
+      /** Close handler for the page */
       onClose?: () => void
     }): UIPage
   }
 
+  /** Register a UIPage as a plugin settings page */
   function registerSettings(page: ui.UIPage): Disposer
 
-  /** @needs-grant invokeRpc */
+  /**
+   * invoke a raw mtproto rpc method via the currently active account
+   *
+   * @needs-grant invokeRpc
+   */
   function invokeRpc<T extends tl.TypeRpcMethod>(params: T): Promise<tl.RpcCallReturn[T['_']] | null>
 
   /**
-   * Send a method this build has no class for, as the bytes of the whole method - its constructor
-   * id first, then its arguments - and get the response back the same way, constructor id
-   * included. An rpc error still rejects as {@link RpcError}, and a request the app answered with
-   * nothing at all resolves `null`.
+   * invoke a raw mtproto rpc method via the currently active account,
+   * given its TL serialization, and return the TL serialization of the server's response
    *
-   * Nothing about the payload is interpreted, so nothing about it is checked either: the api
-   * filter can only read the constructor the bytes open with, and refuses a takeover method by
-   * that alone - one no layer this build knows is sent as written, which is what this is for.
-   * What the bytes mean past the constructor is the plugin's to get right.
+   * ⚠️ this method is primarily intended for **advanced users**, primarily
+   * for cases where you want to call a method that is not yet supported by the current
+   * app's layer. beware that can cause the app to crash or otherwise misbehave,
+   * due to the server "bumping" the layer. in almost all cases, you should use
+   * {@link invokeRpc} instead.
    *
    * @needs-grant unsafe.invokeRaw
    */
   function invokeRaw(method: Uint8Array): Promise<Uint8Array | null>
 
+  /** Context of the RPC middleware */
   interface RpcMiddlewareContext<M extends tl.TypeRpcMethod['_']> {
+    /** Original request */
     request: Extract<tl.TypeRpcMethod, { _: M }>
+    /** Account used for the request */
     account: Account
     /**
-     * Aborted once this stage no longer matters: the app cancelled the request, the chain's budget
-     * ran out, or the chain was torn down. `reason` is a {@link PluginError} coded `aborted` or `timed-out`.
+     * Abort signal of the request, aborted if the app cancels the request
      */
     readonly signal: AbortSignal
   }
@@ -1363,7 +1385,11 @@ declare namespace inu {
   /** `next()` without a request forwards `context.request`, including any changes made to it */
   type RpcNext<M extends tl.TypeRpcMethod['_'], R> = (request?: Extract<tl.TypeRpcMethod, { _: M }>) => MaybePromise<R | null>
 
-  /** @needs-grant interceptRpc */
+  /**
+   * Register an RPC interceptor
+   *
+   * @needs-grant interceptRpc
+   */
   function interceptRpc<M extends tl.TypeRpcMethod['_']>(
     method: M,
     middleware: (
@@ -1382,40 +1408,47 @@ declare namespace inu {
   ): Disposer
 
   /**
-   * Every `updateNewMessage`/`updateNewChannelMessage`, for every account.
+   * Register a new message handler
    *
-   * This is the update pipeline, not the app's own message handling: a message reaches here as the
-   * app is about to apply it, before it has been attached to its dialog or turned into the object
-   * the ui draws. So the app's view of the chat may not have caught up yet, and a message the app
-   * creates by itself rather than receiving - a local one - raises nothing. Scheduled messages
-   * arrive as their own update type and so are not seen here at all.
+   * Receives every `updateNewMessage` and `updateNewChannelMessage` for every account.
+   * Runs before the app applies the update, so chat state may not reflect it yet.
+   * Local and scheduled messages are not included.
    *
    * @needs-grant onUpdate(new_message)
    */
   function onNewMessage(callback: (message: Message, account: Account) => void): Disposer
-  /** @needs-grant onUpdate(edit_message) */
+  /**
+   * Register a message edit handler
+   *
+   * @needs-grant onUpdate(edit_message)
+   */
   function onMessageEdited(callback: (message: Message, account: Account) => void): Disposer
-  /** @needs-grant onUpdate(delete_message) */
+  /**
+   * Register a message deletion handler
+   *
+   * @needs-grant onUpdate(delete_message)
+   */
   function onMessageDeleted(
     callback: (dialogId: DialogId | null, messageIds: number[], account: Account) => void,
   ): Disposer
 
   namespace notifications {
     /**
-     * Keep the app from posting notifications of its own, until the returned {@link Disposer} runs
-     * or the plugin is unloaded. A hold rather than a switch: the app stays quiet while any plugin
-     * holds one, so two plugins asking at once cannot cancel each other out.
-     *
-     * Every account at once, and every notification the app raises, not only message ones; see
-     * {@link Account.suppressNotifications} for one account's. A notification already on screen is
-     * dismissed rather than left behind.
+     * Suppresses all app notifications for all accounts and dismisses existing notifications.
+     * Suppression lasts until the returned {@link Disposer} runs or the plugin unloads.
+     * Multiple holds can coexist; notifications resume only when all holds are released.
+     * See {@link Account.suppressNotifications} to suppress one account's notifications.
      *
      * @needs-grant notifications.suppress
      */
     function suppress(): Disposer
   }
 
-  /** @needs-grant onUpdate */
+  /**
+   * Register a handler for raw TL updates
+   *
+   * @needs-grant onUpdate
+   */
   function onUpdate<U extends tl.TypeUpdate['_']>(
     types: U | U[],
     callback: (update: Extract<tl.TypeUpdate, { _: U }>, account: Account) => void,
@@ -1431,7 +1464,11 @@ declare namespace inu {
     readonly signal: AbortSignal
   }
 
-  /** @needs-grant interceptUpdate */
+  /**
+   * Register an app-wide update interceptor
+   *
+   * @needs-grant interceptUpdate
+   */
   function interceptUpdate<U extends tl.TypeUpdate['_']>(
     types: U | U[],
     middleware: (context: UpdateMiddlewareContext<U>) => MaybePromise<'deliver' | 'drop'>,
@@ -1469,51 +1506,58 @@ declare namespace inu {
     placements?: readonly MessageActionSource[]
   }
 
-  /** Renders in 150ms for every plugin's answer; at most 8 rows per menu per plugin. */
+  /**
+   * Register a global action handler, shown in the drawer or the hamburger menu on the main page
+   *
+   * **Limits: 150 ms to render plugin actions, 8 rows per menu per plugin.**
+   */
   function registerAction(options: ActionOptions<ActionContext>): Disposer
 
+  /** Register a chat action, shown in the chat hamburger menu */
   function registerChatAction(options: ActionOptions<ChatActionContext, ChatActionContext | null>): Disposer
 
+  /** Register a message action, shown in the message context menu */
   function registerMessageAction(options: MessageActionOptions): Disposer
 
+  /** Register a profile action, shown in the profile hamburger menu */
   function registerProfileAction(options: ActionOptions<ChatActionContext>): Disposer
 
+  /** Register a message editor action, shown when long-tapping the send button in the message editor */
   function registerMessageEditorAction(options: ActionOptions<MessageEditorActionContext>): Disposer
 
+  /** Info about an outgoing message, for {@link interceptSendMessage} */
   interface OutgoingMessage {
+    /** Dialog ID of the message */
     peer: DialogId
+    /** Formatted text of the message */
     text: TextWithEntities
+    /** If this message is a reply, ID of the replied-to message */
     replyToMessageId: number | null
+    /** If this message is in a topic, ID of the topic */
     topicId: number | null
+    /** If this message is scheduled, date of the schedule */
     scheduleDate: number | null
+    /** Whether this message is sent as "silent" */
     silent: boolean
+    /** Any media attached to the message. */
     media: tl.TypeInputMedia[]
+    /** Whether this event is an edit of an existing message */
     readonly isEdit: boolean
+    /** ID of the message being edited, if any */
     readonly editMessageId: number | null
 
     /**
-     * Gives this send its media as a file to stage, **on the message the app already drew** rather
-     * than as a send of your own: that bubble grows or swaps its media in place, and the app is
-     * what uploads the file and draws the progress on it. Works on a text send and on a single
-     * media send; an album or an edit throws `unsupported`.
+     * Replaces an outgoing message's media, updating its bubble and upload progress in place.
+     * Supports text and single-media sends; albums and edits currently throw `unsupported`.
      *
-     * The caption is this message's own `text`, so set that rather than passing one here. Await it:
-     * it resolves once the file is staged, and rejects if the file cannot be read — so a failure is
-     * yours to handle rather than a send that fails afterwards. Return `'send'` once it resolves,
-     * since the request you were handed never goes out and `'drop'` discards the media with it.
+     * Caption can be edited via `text`.
      *
-     * Because it never goes out, there is no response: the `next()` an `interceptRpc` middleware
-     * above this one awaits resolves with `null` rather than with `Updates`.
+     * Keep a `{ path }` file available for upload and retries after this call resolves.
      *
-     * The message is re-sent, so it reaches send middleware a second time as a `messages.sendMedia`
-     * — carrying a mark that refuses a second `setMedia`, which is what stops this recursing.
-     * Replacing the media of a send that already has some costs the upload the app already did.
-     *
-     * A `{ path }` is uploaded from where it is, after this resolves, so leave the file in place:
-     * the app retries a failed send from it too. It is copied instead when its extension disagrees
-     * with the name it is sent under.
+     * @throws if the file cannot be read
      */
     setMedia(file: Blob | Uint8Array | { path: string }, options?: {
+      /** customize the file name */
       fileName?: string
       /** send an image as a file rather than recompressing it into a photo */
       asDocument?: boolean
@@ -1531,32 +1575,45 @@ declare namespace inu {
   }
 
   interface SendMessageFilter {
-    /** Compiled by Android's `java.util.regex.Pattern`; unsupported syntax rejects registration. */
+    /**
+     * Regex the message is supposed to match for the hook to fire
+     *
+     * Compiled by Android's `java.util.regex.Pattern`; unsupported syntax throws.
+     */
     text?: RegExp
+    /**
+     * Filter for edit events:
+     * - `undefined`/not passed: fires both edits and newly sent messages
+     * - `false`: fires only new messages
+     * - `true`: fires only edits
+     */
     isEdit?: boolean
   }
 
   /**
+   * Register a hook before the message is sent.
+   *
+   * A drop verdict within ~100 ms suppresses the message before it is drawn. Longer work
+   * shows a pending bubble until the chain settles. This applies to sync and async callbacks.
+   *
+   * Outer `interceptRpc` middleware can catch a rejected `next()` and return a retry or
+   * fallback response, but cannot override a drop verdict.
+   *
    * @needs-grant interceptSendMessage
-   *
-   * A middleware that answers within ~100ms drops a message before it is ever drawn.
-   * Longer work shows a pending bubble, which is updated or removed when the chain settles.
-   * This applies equally to synchronous and async functions.
-   *
-   * A `drop` is a verdict, not a response, and the two behave differently in a chain. An
-   * `interceptRpc` middleware wrapping this one may catch what its `next()` rejects with and answer
-   * something else, which is how a failed request is retried or given a fallback. It cannot do that
-   * to a verdict: the send is already being unwound when the verdict is made, so the app acts on it
-   * whatever the stages above return.
    */
   function interceptSendMessage(
     middleware: (context: SendMessageContext) => MaybePromise<'send' | 'drop'>,
   ): Disposer
   /**
-   * @needs-grant interceptSendMessage. Filters are checked before entering the plugin engine.
+   * Register a hook before the message is sent, with a filter.
    *
-   * Same timing as the unfiltered form: a verdict within ~100ms can suppress the bubble;
+   * This overload is recommended over the general one because it avoids unnecessary JS
+   * jumps for messages that are not matched.
+   *
+   * Same timing as the unfiltered form: a verdict within ~100 ms can suppress the bubble;
    * longer work shows a pending bubble until the chain settles.
+   *
+   * @needs-grant interceptSendMessage
    */
   function interceptSendMessage(
     filter: SendMessageFilter,

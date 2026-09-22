@@ -24,10 +24,8 @@ fn sources(extension: &str) -> Vec<(String, String)> {
   out
 }
 
-/// A prelude `build.rs` does not know about is not compiled, and the module that owns it then has
-/// nothing to `include_bytes!` - which fails the build only if someone remembered to write that
-/// line. Left as an `include_str!` and evaluated at runtime it costs the parse this whole mechanism
-/// exists to avoid, and nothing anywhere says so.
+/// Checks that build.rs knows every prelude. Otherwise a forgotten prelude could still use
+/// `include_str!` and parse at each engine startup instead of using compiled bytecode.
 #[test]
 fn every_prelude_is_compiled_by_build_rs() {
   let preludes = sources("js");
@@ -37,8 +35,7 @@ fn every_prelude_is_compiled_by_build_rs() {
   }
 }
 
-/// The other half: a prelude reached as text is one being parsed per engine, whatever `build.rs`
-/// did with it.
+/// Checks that preludes load as bytecode, not text parsed per engine.
 #[test]
 fn no_prelude_is_evaluated_from_source() {
   for (path, text) in sources("rs") {

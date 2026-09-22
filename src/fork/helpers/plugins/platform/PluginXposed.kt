@@ -22,18 +22,18 @@ import java.util.concurrent.atomic.AtomicLong
 import org.telegram.messenger.Utilities
 
 /**
- * Kotlin side of `inu.xposed` (rust: `xposed::XposedHost`), per `android.xposed.d.ts`.
+ * Implements `inu.xposed` (Rust: `xposed::XposedHost`), per `android.xposed.d.ts`.
+ * Rust owns callback registries; Kotlin shares physical ART hooks across plugins.
  *
- * **Callback registries are rust's; physical ART hooks are shared here.** A `XposedBridge` with `hook0` on it would *be* the grant for anyone
- * holding `unsafe.jvm`, so the property is structural: [Native] is private to this file, and the one
- * class lsplant can reach ([Hooker]) dispatches an existing shared site and has no installation authority.
+ * Keep [Native] private: exposing hook installation would let `unsafe.jvm` bypass the Xposed
+ * grant. LSPlant can reach [Hooker], which only dispatches existing sites and cannot install hooks.
  *
  * JS and native phases run synchronously on the hooked thread. Rust serializes engine entry;
- * a busy or recursively entered engine bypasses the JS phase. Promise jobs run on the plugin queue.
- * A plugin's own callback phases bypass that plugin only; the original and the other plugins'
- * layers still dispatch. A site cannot mix JS and native hooks within one plugin.
+ * busy or recursive entry skips JS phases. Promise jobs run on the plugin queue. Recursion
+ * suppression applies only to the plugin's callback phases; the original method and other
+ * plugins' layers still dispatch. One plugin cannot mix JS and native hooks at a site.
  *
- * Values are [PluginJvm]'s, borrowed through [PluginJvm.ValueBridge] rather than kept twice.
+ * Shares values through [PluginJvm.ValueBridge] instead of keeping a second handle table.
  */
 object PluginXposed : SessionResource {
     private const val TAG = "InuPluginXposed"
@@ -389,7 +389,7 @@ object PluginXposed : SessionResource {
             val context = PluginHookContext(entry.target, receiver, args.toMutableList())
             fun runPhase(before: Boolean) = runCallbackPhase(guard) {
                 val deadline = System.nanoTime() + budgetMs * 1_000_000L
-                for (hook in hooks) {
+                for (hook in if (before) hooks else hooks.asReversed()) {
                     if (closed || !entry.live || System.nanoTime() >= deadline) break
                     try {
                         when (val phase = if (before) hook.before else hook.after) {

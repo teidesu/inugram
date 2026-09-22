@@ -24,18 +24,13 @@ import org.telegram.tgnet.TLRPC
 import org.telegram.tgnet.tl.TL_update
 
 /**
- * Kotlin side of the `Account` write surface (rust: `writes.rs`), and where the media transfers
- * ([PluginMedia]) settle.
+ * Implements Account writes and settles [PluginMedia] transfers (Rust: `writes.rs`).
  *
- * **One send path, carrying both rules `common.d.ts` states for this block.** Every write builds a
- * request and hands it to [send], which goes out through [PluginRpc.sendWithoutInterceptors], so
- * nothing a plugin sends re-enters the interceptor chains; every one names its peer through
- * [writePeer], which refuses an encrypted dialog id. Structural rather than repeated: a write that
- * skipped either would have to build its own request *and* its own peer.
+ * Writes use [send] and [PluginRpc.sendWithoutInterceptors] to bypass plugin interceptors.
+ * They resolve peers through [writePeer], which rejects encrypted dialog IDs.
  *
- * Called on [EngineDispatch.scheduler] from a JNI upcall, and like [PluginReads] never answers inline.
- * What a write resolves with is minted read-only: a sent message is the app's own state the moment
- * `processUpdates` has applied it.
+ * JNI upcalls run on [EngineDispatch.scheduler] and never settle inline, as in [PluginReads].
+ * Results are read-only because sent messages become app-owned once `processUpdates` applies them.
  */
 object PluginWrites {
     private const val TAG = "InuPluginWrites"
