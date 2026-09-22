@@ -27,7 +27,7 @@ class BootCohortTest {
 
     @Test
     fun `a plugin that only needs a screen does not`() {
-        assertFalse(cohort("ui", "registerAction", "registerSettings", "clipboard", "openUrl"))
+        assertFalse(cohort("ui", "registerGlobalAction", "registerSettings", "clipboard", "openUrl"))
         assertFalse(cohort("fs(64kb)", "fetch(example.com)"))
         assertFalse(cohort("account.read(messages)", "account.write(send)"))
         assertFalse(cohort())

@@ -1486,7 +1486,7 @@ declare namespace inu {
    *
    * **Limits: 150 ms to render plugin actions, 8 rows per menu per plugin.**
    */
-  function registerAction(options: ActionOptions<ActionContext>): Disposer
+  function registerGlobalAction(options: ActionOptions<ActionContext>): Disposer
 
   /** Register a chat action, shown in the chat hamburger menu */
   function registerChatAction(options: ActionOptions<ChatActionContext, ChatActionContext | null>): Disposer

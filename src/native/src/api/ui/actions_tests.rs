@@ -231,7 +231,7 @@ fn a_global_action_gets_no_dialog_at_all() {
   let (rt, ctx, _host, state, _logs) = setup();
   eval(
     &ctx,
-    r#"inu.registerAction({
+    r#"inu.registerGlobalAction({
                id: 'a',
                text: ctx => `${'dialogId' in ctx}/${'messages' in ctx}`,
                callback: () => {},

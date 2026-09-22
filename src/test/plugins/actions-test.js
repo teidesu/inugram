@@ -138,7 +138,7 @@ inu.registerProfileAction({
   },
 })
 
-inu.registerAction({
+inu.registerGlobalAction({
   id: 'global',
   text: 'Global row',
   callback: (ctx) => {
