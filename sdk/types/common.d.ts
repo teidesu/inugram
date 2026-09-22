@@ -247,17 +247,6 @@ declare namespace inu {
   }
 
   /** Information about an account in the app */
-  interface AccountInfo {
-    /** Stable ID of the account slot */
-    id: number
-    /** ID of the user represented by the account */
-    userId: number
-    /** Whether this account is the currently active one */
-    isCurrent: boolean
-    /** Whether this account has Telegram Premium active */
-    isPremium: boolean
-  }
-
   /** A chat folder as shown in the folder tabs. */
   interface ChatFolder {
     /** `0` is the "All chats" tab, which every account has and which cannot be edited. */
@@ -278,18 +267,14 @@ declare namespace inu {
   }
 
   /**
-   * Get the list of logged-in accounts, in the order the user sees them in the app
-   *
-   * @needs-grant account.read(self)
+   * Get the logged-in accounts, in the order the user sees them in the app
    */
-  function accounts(): AccountInfo[]
+  function accounts(): Account[]
 
   /**
    * Register on updates for when the account list updates, including when the user reorders it
-   *
-   * @needs-grant account.read(self)
    */
-  function onAccountsChanged(callback: (accounts: AccountInfo[]) => void): Disposer
+  function onAccountsChanged(callback: (accounts: Account[]) => void): Disposer
 
   /**
    * Runs `callback` for the current account, and again on each account switch.
@@ -320,6 +305,13 @@ declare namespace inu {
 
     /** whether this is the currently active account */
     isCurrent(): boolean
+
+    /**
+     * whether this account has Telegram Premium active
+     *
+     * @needs-grant account.read(self)
+     */
+    isPremium(): boolean
 
     /**
      * Suppresses app notifications for this account until the returned {@link Disposer} runs

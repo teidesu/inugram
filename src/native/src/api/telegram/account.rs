@@ -3,6 +3,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use rquickjs::function::Opt;
+use rquickjs::object::Property;
 use rquickjs::{Array, Ctx, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
 use crate::api::error::{call_callback, describe_js_error, PluginErrorCode};
@@ -72,26 +73,26 @@ impl AccountState {
     if let Some(prototype) = self.prototype.borrow().clone() {
       obj.set_prototype(Some(&prototype.restore(ctx)?))?;
     }
-    obj.set("id", info.id)?;
-    obj.set("userId", info.user_id as f64)?;
+    obj.prop("id", Property::from(info.id).enumerable())?;
+    obj.prop("userId", Property::from(info.user_id as f64).enumerable())?;
+    let (id, user_id) = (info.id, info.user_id);
     let state = self.clone();
-    let id = info.id;
-    let is_current =
-      Function::new(ctx.clone(), move || state.accounts.borrow().iter().any(|a| a.id == id && a.is_current))?;
+    let is_current = Function::new(ctx.clone(), move || state.find_login(id, user_id).is_some_and(|a| a.is_current))?;
     obj.set("isCurrent", is_current)?;
+    let state = self.clone();
+    let is_premium = Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<bool> {
+      state.grants.check_grant(&ctx, "account.read", Some("self"), MATCH_EXACT)?;
+      Ok(state.find_login(id, user_id).is_some_and(|a| a.is_premium))
+    })?;
+    obj.set("isPremium", is_premium)?;
     Ok(obj.into_value())
   }
 
-  fn build_account_infos<'js>(&self, ctx: &Ctx<'js>) -> JsResult<Value<'js>> {
+  fn build_accounts<'js>(self: &Rc<Self>, ctx: &Ctx<'js>) -> JsResult<Value<'js>> {
     let list = self.accounts.borrow().clone();
     let array = Array::new(ctx.clone())?;
     for (index, info) in list.iter().enumerate() {
-      let obj = Object::new(ctx.clone())?;
-      obj.set("id", info.id)?;
-      obj.set("userId", info.user_id as f64)?;
-      obj.set("isCurrent", info.is_current)?;
-      obj.set("isPremium", info.is_premium)?;
-      array.set(index, obj)?;
+      array.set(index, self.build_account(ctx, info)?)?;
     }
     Ok(array.into_value())
   }
@@ -221,7 +222,6 @@ impl AccountState {
     if self.lifecycle.is_unloading() {
       return noop_disposer(ctx);
     }
-    self.grants.check_grant(ctx, "account.read", Some("self"), MATCH_EXACT)?;
     let token = self.changed_fns.alloc();
     self.changed_fns.register(ctx, token, None, cb);
     let state = self.clone();
@@ -235,7 +235,7 @@ impl AccountState {
       if !self.refresh(&ctx) {
         return;
       }
-      let infos = match self.build_account_infos(&ctx) {
+      let accounts = match self.build_accounts(&ctx) {
         Ok(v) => v,
         Err(e) => {
           (self.log)(&format!("onAccountsChanged: cannot build the account list: {e:?}"));
@@ -243,7 +243,7 @@ impl AccountState {
         }
       };
       for f in self.changed_fns.snapshot(&ctx) {
-        call_callback(&ctx, &self.log, "onAccountsChanged callback", &f, (infos.clone(),));
+        call_callback(&ctx, &self.log, "onAccountsChanged callback", &f, (accounts.clone(),));
       }
       let current = self.current().map(|info| (info.id, info.user_id));
       for scope in self.scopes.values() {
@@ -262,6 +262,11 @@ impl AccountState {
 
   fn find(&self, id: i32) -> Option<AccountInfo> {
     self.accounts.borrow().iter().find(|a| a.id == id).cloned()
+  }
+
+  /// the slot index is reused once its account logs out, so a handle answers only for the login it was minted for
+  fn find_login(&self, id: i32, user_id: i64) -> Option<AccountInfo> {
+    self.accounts.borrow().iter().find(|a| a.id == id && a.user_id == user_id).cloned()
   }
 
   fn current(&self) -> Option<AccountInfo> {
@@ -383,10 +388,7 @@ pub fn install_account<'js>(
     let state = state.clone();
     globals.inu.set(
       "accounts",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<Value<'js>> {
-        state.grants.check_grant(&ctx, "account.read", Some("self"), MATCH_EXACT)?;
-        state.build_account_infos(&ctx)
-      })?,
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>| state.build_accounts(&ctx))?,
     )?;
   }
   {

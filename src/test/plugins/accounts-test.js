@@ -40,15 +40,16 @@ function describe(account) {
 
 const list = inu.accounts()
 check('accounts() lists the logged-in slots', Array.isArray(list) && list.length > 0, `${list.length} slot(s)`)
+check('accounts() hands out account handles', list.every(a => typeof a.invokeRpc === 'function'))
 check(
   'exactly one slot is current',
-  list.filter(a => a.isCurrent).length === 1,
-  list.map(a => `${a.id}:${a.isCurrent}`).join(','),
+  list.filter(a => a.isCurrent()).length === 1,
+  list.map(a => `${a.id}:${a.isCurrent()}`).join(','),
 )
 check(
   'every slot answers whether it is premium',
-  list.every(a => typeof a.isPremium === 'boolean'),
-  list.map(a => `${a.id}:${a.isPremium}`).join(','),
+  list.every(a => typeof a.isPremium() === 'boolean'),
+  list.map(a => `${a.id}:${a.isPremium()}`).join(','),
 )
 
 const current = inu.account()
@@ -81,8 +82,8 @@ inu.onAccountsChanged((accounts) => {
   sawChange = true
   check(
     'onAccountsChanged hands over the new list',
-    Array.isArray(accounts) && accounts.filter(a => a.isCurrent).length === 1,
-    accounts.map(a => `${a.id}:${a.isCurrent}`).join(','),
+    Array.isArray(accounts) && accounts.filter(a => a.isCurrent()).length === 1,
+    accounts.map(a => `${a.id}:${a.isCurrent()}`).join(','),
   )
   check(
     'the pinned handle keeps its slot across the change',
