@@ -37,7 +37,10 @@ declare namespace inu {
       /** Set a throwable. In `before` phase, skips the original implementation */
       readonly setThrowable: (throwable: JavaObject) => void
 
-      /** Any additional data to pass between the `before` and `after` phases. */
+      /**
+       * Any additional data to pass between the `before` and `after` phases of one call.
+       * Unset at the start of each call, and shared by every hook this plugin has on the method.
+       */
       extra?: any
     }
 
