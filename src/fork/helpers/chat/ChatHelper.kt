@@ -1252,7 +1252,7 @@ object ChatHelper {
             ?: return false
         when {
             isSettings -> SettingsBackupHelper.startImportFromFile(activity, file)
-            isPlugin -> PluginImportHelper.startImportFromFile(activity, file, name)
+            isPlugin -> PluginImportHelper.startImportFromFile(activity, file)
             else -> FontImportHelper.startImportFromFile(activity, message, file, name)
         }
         return true

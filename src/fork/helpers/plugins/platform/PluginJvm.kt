@@ -115,6 +115,8 @@ object PluginJvm : SessionResource {
     /** **only on uninstall**: a class cannot be unloaded, so a merely-stopped plugin's code may still be running */
     fun wipe(installId: String) = PluginPaths.wipe(installId, ::dexDir)
 
+    fun sweepOrphans(live: Set<String>) = PluginPaths.sweepOrphans(ROOT, live) { it }
+
     /**
      * `inu.xposed` takes a `JavaMethod` at every entry point and hands a hook java values, so it
      * borrows this table rather than keeping a second one - which is what makes a `JavaObject` a

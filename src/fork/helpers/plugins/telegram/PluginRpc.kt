@@ -276,6 +276,13 @@ object PluginRpc : SessionResource {
     @Volatile private var hasBypass = false
     private val optimisticMessagesByRequest = IdentityHashMap<TLObject, OptimisticMessages>()
 
+    /**
+     * whether [optimisticMessagesByRequest] holds anything. A binding made while a chain was
+     * registered is still owed its release when the chain is gone by the time stock sends, so
+     * [maybeIntercept]'s fast path reads this too.
+     */
+    @Volatile private var hasOptimistic = false
+
     @JvmStatic
     fun bindOptimisticMessage(request: TLObject, account: Int, message: MessageObject) =
         bindOptimisticMessages(request, account, arrayListOf(message))
@@ -295,6 +302,7 @@ object PluginRpc : SessionResource {
         val draft = messages.firstOrNull()?.let { draftAwaitingClear(account, it) }
         synchronized(optimisticMessagesByRequest) {
             optimisticMessagesByRequest[request] = OptimisticMessages(account, messages.toList(), draft)
+            hasOptimistic = true
         }
     }
 
@@ -497,9 +505,9 @@ object PluginRpc : SessionResource {
         requestToken: Int,
         currentAccount: Int,
     ): Boolean {
-        // nothing to intercept and nothing leased: the app's own request path costs two volatile
-        // reads rather than the two locks below
-        if (!hasInterceptors && !hasBypass) return false
+        // nothing to intercept, leased or bound: the app's own request path costs three volatile
+        // reads rather than the locks below
+        if (!hasInterceptors && !hasBypass && !hasOptimistic) return false
         // a leased request is ours however the entry got here, including stock's own re-send
         if (isBypassed(request)) return unintercepted(request)
         if (!hasInterceptors) return unintercepted(request)
@@ -508,7 +516,7 @@ object PluginRpc : SessionResource {
             ?.filter { it.filter?.matches(tlName, request) != false }
             ?.takeIf { it.isNotEmpty() }
             ?: return unintercepted(request)
-        val optimisticMessages = synchronized(optimisticMessagesByRequest) { optimisticMessagesByRequest.remove(request) }
+        val optimisticMessages = takeOptimisticMessages(request)
         val params = OriginalParams(flags, datacenterId, connectionType, immediate, requestToken, onQuickAck, onWriteToSocket)
         val requestKey = tokenKey(currentAccount, requestToken)
         EngineDispatch.scheduler.postRunnable {
@@ -568,10 +576,14 @@ object PluginRpc : SessionResource {
 
     /** no chain will walk this request, so a draw parked on the chance of one is owed its release */
     private fun unintercepted(request: TLObject): Boolean {
-        val optimistic = synchronized(optimisticMessagesByRequest) { optimisticMessagesByRequest.remove(request) }
-        optimistic?.let { PluginSendHold.release(it.account, it.messages) }
+        takeOptimisticMessages(request)?.let { PluginSendHold.release(it.account, it.messages) }
         return false
     }
+
+    private fun takeOptimisticMessages(request: TLObject): OptimisticMessages? =
+        synchronized(optimisticMessagesByRequest) {
+            optimisticMessagesByRequest.remove(request).also { hasOptimistic = optimisticMessagesByRequest.isNotEmpty() }
+        }
 
     /**
      * the token only reaches native once the passthrough sends it, so stock's `cancelRequest` finds

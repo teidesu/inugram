@@ -24,20 +24,19 @@ object PluginImportHelper {
 
     fun isPluginFileName(name: String): Boolean = name.lowercase().endsWith(SUFFIX)
 
-    fun startImportFromFile(fragment: BaseFragment, file: File, displayName: String) {
+    fun startImportFromFile(fragment: BaseFragment, file: File) {
         EngineDispatch.scheduler.postRunnable {
             val source = runCatching { file.readText() }.getOrNull()
             if (source == null) {
                 failOnUi(fragment, getString(R.string.InuPluginsErrorRead))
                 return@postRunnable
             }
-            present(fragment, displayName, source)
+            present(fragment, source)
         }
     }
 
-    /** [fileName] only suggests the name on disk; the install id is minted at install */
-    fun startImport(fragment: BaseFragment, fileName: String, source: String) {
-        EngineDispatch.scheduler.postRunnable { present(fragment, fileName, source) }
+    fun startImport(fragment: BaseFragment, source: String) {
+        EngineDispatch.scheduler.postRunnable { present(fragment, source) }
     }
 
     /** every bail on the plugin queue reports the same way: the dialog belongs to the ui thread */
@@ -46,7 +45,7 @@ object PluginImportHelper {
     }
 
     /** plugin queue only */
-    private fun present(fragment: BaseFragment, fileName: String, source: String) {
+    private fun present(fragment: BaseFragment, source: String) {
         val manifest = PluginManifestParser.parseOrNull(source)
         if (manifest == null) {
             failOnUi(fragment, getString(R.string.InuPluginsErrorNoManifest))
@@ -83,7 +82,7 @@ object PluginImportHelper {
                         // what to *show*, and the installed set is the ui thread's to answer for
                         val target = PluginManager.findUpdateTarget(manifest)
                         if (target != null) confirmUpdate(fragment, target, manifest, source)
-                        else confirmInstall(fragment, fileName, manifest, source, enable)
+                        else confirmInstall(fragment, manifest, source, enable)
                     }
                 )
             }
@@ -92,12 +91,11 @@ object PluginImportHelper {
 
     private fun confirmInstall(
         fragment: BaseFragment,
-        fileName: String,
         manifest: PluginManifest,
         source: String,
         enable: Boolean,
     ) {
-        when (val result = PluginManager.import(fileName, source, enable)) {
+        when (val result = PluginManager.import(source, enable)) {
             is PluginManager.ImportResult.Refused -> showError(fragment, result.reason)
             is PluginManager.ImportResult.Installed -> {
                 val text = formatString(R.string.InuPluginInstalled, manifest.name)

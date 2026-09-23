@@ -66,4 +66,6 @@ object PluginFs {
      * plugin-owned tree that is meant to outlive the engine.
      */
     fun wipe(installId: String) = PluginPaths.wipe(installId, ::dir)
+
+    fun sweepOrphans(live: Set<String>) = PluginPaths.sweepOrphans(SCOPED_ROOT, live) { it.removePrefix("scoped_") }
 }

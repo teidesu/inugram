@@ -195,6 +195,7 @@ class PluginsActivity : SettingsPageActivity() {
     private fun safeModeNotice(): CharSequence? = when (PluginManager.safeModeReason) {
         BootGuard.Reason.FORCED -> LocaleController.getString(R.string.InuPluginsSafeModeForced)
         BootGuard.Reason.CRASHED -> LocaleController.getString(R.string.InuPluginsSafeModeCrashed)
+        BootGuard.Reason.CRASH_LOOP -> LocaleController.getString(R.string.InuPluginsSafeModeCrashLoop)
         null -> null
     }
 
@@ -337,7 +338,6 @@ class PluginsActivity : SettingsPageActivity() {
         if (requestCode != REQ_LOAD || resultCode != Activity.RESULT_OK) return
         val uri = data?.data ?: return
         val ctx = context ?: parentActivity ?: return
-        val name = uri.lastPathSegment?.substringAfterLast('/') ?: "plugin.js"
         Utilities.globalQueue.postRunnable {
             val source = try {
                 ctx.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
@@ -351,7 +351,7 @@ class PluginsActivity : SettingsPageActivity() {
                     ).show()
                     return@runOnUIThread
                 }
-                PluginImportHelper.startImport(this, name, source)
+                PluginImportHelper.startImport(this, source)
             }
         }
     }

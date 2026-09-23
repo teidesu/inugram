@@ -41,20 +41,23 @@ class PluginBootTest {
     }
 
     /**
-     * The one property of the guard nothing can observe: `apply()` reaches disk *after* it returns,
-     * so a guard armed with one is not armed at all for the process that dies inside the plugin it
-     * was arming. A device cannot tell the two apart - it never dies mid-write - and the flag reads
-     * back either way, so both of them are green on every target there is.
+     * The guard writes once before and once after every plugin the early pass starts, while the
+     * main thread waits on that pass. A write to the shared `inugram` prefs rewrites and syncs every
+     * setting the app has, and nothing on a device shows that cost until the boot budget runs out.
      */
     @Test
-    fun `the guard's flags are committed rather than applied`() {
+    fun `the guard keeps its flags out of the app's prefs`() {
         val guard = forkSource("BootGuard.kt").readText()
-        val writes = Regex("""InuConfig\.prefs\.edit\(([^)]*)\)""").findAll(guard).toList()
-        assertEquals(1, writes.size, "BootGuard writes its flags in more than one place")
-        assertTrue(
-            writes.single().groupValues[1].contains("commit = true"),
-            "the crash guard is only a guard if the arming write outlives the process that armed it",
-        )
+        assertTrue(!guard.contains("InuConfig"), "BootGuard writes its flags through the shared prefs file")
+    }
+
+    @Test
+    fun `a crash soon after boot is counted`() {
+        val pass = bodyOf("private fun runPass(")
+        assertTrue(pass.contains("watchCrashes()"), "a plugin crashing the app from a hook would restart forever")
+        val watch = bodyOf("private fun watchCrashes(")
+        assertTrue(watch.contains("guard.recordCrash()"))
+        assertTrue(watch.contains("guard.survivedWindow()"))
     }
 
     @Test

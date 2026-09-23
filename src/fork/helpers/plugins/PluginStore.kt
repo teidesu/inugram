@@ -11,14 +11,14 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Owns installed files: one `.js` per install, plus its plugin ID, order, and enabled state
- * in `PLUGINS_STATE`. [PluginManager] owns running engines and runtime failures; this class
+ * Owns installed files: one `<install id>.js` per install, plus its plugin ID, order, and enabled
+ * state in `PLUGINS_STATE`. [PluginManager] owns running engines and runtime failures; this class
  * handles file loading and persistence.
  *
- * [PluginInstalls.mintId] creates an install ID independently of the filename or manifest.
- * It keys `localStorage` and `fs` storage, preserving data across renames and preventing another plugin
- * from claiming it by name. Preserve records when reads fail; discarding them loses access
- * to the user's data.
+ * [PluginInstalls.mintId] creates an install ID independently of the manifest. It keys
+ * `localStorage` and `fs` storage, preserving data across renames and preventing another plugin
+ * from claiming it by name. The ID is the file name, so losing `PLUGINS_STATE` loses order and
+ * flags, never the link between a plugin and its storage.
  */
 object PluginStore {
 
@@ -28,20 +28,18 @@ object PluginStore {
     private var unloaded: List<PluginInstall> = emptyList()
 
     /**
-     * every install on disk that loads, in persisted order. A file nobody has a record for is a new
-     * install and is assigned a fresh id here, so [persist] has to follow before anything uses one.
+     * Every install on disk that loads, in persisted order, or null when the directory could not be
+     * listed. Null is not "there are no plugins": the persisted state is kept as it is, and nothing
+     * may treat the missing installs as gone.
      */
-    fun load(): List<Plugin> {
-        // null is "could not list", which is not "there are no plugins": reconciling against an empty
-        // set drops every record, and [persist] would then write that back, losing the ids the plugin
-        // stores are keyed on. leave the persisted state alone and run no plugins this boot
-        val files = dir.listFiles { f -> f.isFile && f.name.endsWith(".js") }
+    fun load(): List<Plugin>? {
+        val files = dir.list()
         if (files == null) {
             PluginLog.HOST.e("store", "could not list $dir; keeping the persisted installs and skipping plugins")
             unloaded = readPersisted()
-            return emptyList()
+            return null
         }
-        val installs = PluginInstalls.reconcile(readPersisted(), files.map { it.name }.sorted())
+        val installs = PluginInstalls.reconcile(readPersisted(), files.asList())
         val loaded = ArrayList<Plugin>()
         for (install in installs) {
             val file = File(dir, install.file)
@@ -65,23 +63,27 @@ object PluginStore {
         }
         // a file we could not load this boot keeps its record, or fixing it later would land it on a
         // fresh id and an empty store
-        unloaded = installs.filter { install -> loaded.none { it.file.name == install.file } }
+        unloaded = installs.filter { install -> loaded.none { it.id == install.id } }
         return loaded
     }
+
+    /** every install with a source file: the ones [plugins] holds and the ones that did not load */
+    fun installIds(plugins: List<Plugin>): Set<String> =
+        plugins.mapTo(HashSet()) { it.id }.apply { unloaded.mapTo(this) { it.id } }
 
     fun persist(plugins: List<Plugin>) {
         val arr = JSONArray()
         for (p in plugins) {
-            arr.put(record(p.id, p.file.name, p.enabled, p.manifest.id, p.dev))
+            arr.put(record(p.id, p.enabled, p.manifest.id, p.dev))
         }
         for (install in unloaded) {
-            arr.put(record(install.id, install.file, install.enabled, install.pluginId, install.dev))
+            arr.put(record(install.id, install.enabled, install.pluginId, install.dev))
         }
         InuConfig.PLUGINS_STATE.value = arr.toString()
     }
 
-    private fun record(id: String, file: String, enabled: Boolean, pluginId: String?, dev: Boolean): JSONObject =
-        JSONObject().put("id", id).put("file", file).put("enabled", enabled).putOpt("pluginId", pluginId)
+    private fun record(id: String, enabled: Boolean, pluginId: String?, dev: Boolean): JSONObject =
+        JSONObject().put("id", id).put("enabled", enabled).putOpt("pluginId", pluginId)
             .apply { if (dev) put("dev", true) }
 
     /**
@@ -119,46 +121,38 @@ object PluginStore {
      * written and read back: `.inu.js` is what the install flow and the dev server both expect.
      */
     fun exportTo(into: File, plugin: Plugin): File {
-        val base = plugin.file.name.removeSuffix(".js").removeSuffix(".inu").ifBlank { "plugin" }
+        val base = plugin.manifest.name.replace(Regex("[^A-Za-z0-9._-]"), "_").ifBlank { "plugin" }
         val file = File(into, "$base.inu.js")
         into.mkdirs()
         file.writeText(plugin.source, Charsets.UTF_8)
         return file
     }
 
-    /** a free path under [dir] for [suggestedName]; the caller writes the source into it */
-    fun fileFor(suggestedName: String): File {
-        val safe = suggestedName.replace(Regex("[^A-Za-z0-9._-]"), "_")
-            .removeSuffix(".js").ifBlank { "plugin" }
-        var candidate = File(dir, "$safe.js")
-        var i = 1
-        while (candidate.exists()) {
-            candidate = File(dir, "$safe-$i.js")
-            i++
-        }
-        return candidate
-    }
+    fun fileFor(installId: String): File = File(dir, PluginInstalls.fileName(installId))
 
+    /** a record that does not parse is skipped rather than failing the rest: the file keeps its id either way */
     private fun readPersisted(): List<PluginInstall> {
         val raw = InuConfig.PLUGINS_STATE.value
         if (raw.isBlank()) return emptyList()
-        return try {
-            val arr = JSONArray(raw)
-            (0 until arr.length()).mapNotNull { i ->
-                val o = arr.getJSONObject(i)
-                val file = o.optString("file")
-                if (file.isEmpty()) null
-                else PluginInstall(
-                    o.optString("id"),
-                    file,
-                    o.optBoolean("enabled", true),
-                    o.optString("pluginId").takeIf { it.isNotEmpty() },
-                    o.optBoolean("dev", false),
-                )
-            }
+        val arr = try {
+            JSONArray(raw)
         } catch (e: Exception) {
-            PluginLog.HOST.e("store", "bad plugins state", e)
-            emptyList()
+            PluginLog.HOST.e("store", "bad plugins state; installs keep their ids but lose order and flags", e)
+            return emptyList()
+        }
+        return (0 until arr.length()).mapNotNull { i ->
+            val o = arr.optJSONObject(i)
+            val id = o?.optString("id")?.takeIf(PluginInstalls::isValidId)
+            if (o == null || id == null) {
+                PluginLog.HOST.w("store", "dropping bad plugins state record #$i")
+                return@mapNotNull null
+            }
+            PluginInstall(
+                id,
+                o.optBoolean("enabled", true),
+                o.optString("pluginId").takeIf { it.isNotEmpty() },
+                o.optBoolean("dev", false),
+            )
         }
     }
 }

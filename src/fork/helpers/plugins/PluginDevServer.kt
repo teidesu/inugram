@@ -163,7 +163,7 @@ object PluginDevServer {
             PluginManager.update(target, source, dev = true)?.let { return failFile(file, it) }
             return installed("updated", file, target)
         }
-        return when (val result = PluginManager.import(file.name, source, enabled = true, dev = true)) {
+        return when (val result = PluginManager.import(source, enabled = true, dev = true)) {
             is PluginManager.ImportResult.Refused -> failFile(file, result.reason)
             is PluginManager.ImportResult.Installed -> installed("installed", file, result.plugin)
         }
@@ -179,17 +179,15 @@ object PluginDevServer {
 
     /**
      * uninstalls what the dropped [name] identifies. Resolved through the file's own plugin id, the
-     * same way an install of it would land - the install's name on disk is [PluginStore]'s to
-     * choose and need not be the pushed one, so that is only the fallback.
+     * same way an install of it would land: the install's name on disk is its install id.
      */
     private fun remove(context: Context, name: String?): JSONObject {
         if (name == null) return fail("remove needs --es file <name>")
         val file = resolve(context, name).firstOrNull()
-        val byIdentity = file
+        val target = file
             ?.let { runCatching { it.readText() }.getOrNull() }
             ?.let { PluginManifestParser.parseOrNull(it) }
             ?.let { PluginManager.findUpdateTarget(it) }
-        val target = byIdentity ?: PluginManager.plugins().firstOrNull { it.file.name == name }
             ?: return fail("not installed: $name")
         val described = describe(target)
         PluginManager.remove(target)
