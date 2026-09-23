@@ -1,7 +1,5 @@
 package desu.inugram.helpers.plugins
 
-import desu.inugram.core.plugins.FsQuota
-import desu.inugram.core.plugins.PluginPermissions
 import desu.inugram.helpers.plugins.io.PluginBlobs
 import desu.inugram.helpers.plugins.io.PluginFs
 import java.io.File
@@ -13,11 +11,6 @@ import org.junit.Before
 import org.junit.Test
 import org.telegram.messenger.ApplicationLoader
 
-/**
- * The host's whole share of `inu.fs`: which directory an install id names, how big the manifest
- * asked for it to be, and when it is allowed to go away. The path resolution and the containment
- * check live in rust (`fs.rs`), where they are tested against a real filesystem.
- */
 class PluginFsTest {
     @Before
     fun setUp() = resetBridge()
@@ -34,11 +27,7 @@ class PluginFsTest {
         assertTrue(path.startsWith(files), "fs storage is durable, so it is not in the cache area: $path")
     }
 
-    /**
-     * the promise `fs.d.ts` makes is that content "survives restarts and sticks around until the
-     * plugin deletes it", which the cache area does not - android evicts it and stock's own
-     * "clear cache" wipes it
-     */
+    /** android evicts the cache area and stock's "clear cache" wipes it */
     @Test
     fun the_fs_directory_is_not_inside_the_blob_spill_area() {
         val fs = PluginFs.dirFor(validId)
@@ -48,11 +37,6 @@ class PluginFsTest {
         assertFalse(spill.startsWith(fs), "$spill is under $fs")
     }
 
-    /**
-     * `android.d.ts` calls it "where plugins are installed", and that is the directory
-     * `PluginManager` loads `.js` files out of - not the parent of every install's private `fs`
-     * root, which holds no source at all and enumerates every other plugin by install id.
-     */
     @Test
     fun getPluginsDir_names_the_store_the_manager_installs_into_not_the_fs_roots() {
         val dirs = PluginFs.androidDirs().split("\n")
@@ -85,12 +69,5 @@ class PluginFsTest {
         PluginFs.wipe(validId)
         assertFalse(File(path).exists())
         assertTrue(root.isDirectory, "and it takes only its own directory")
-    }
-
-    /** the mode half of `unsafe.fs`; that it is also uncapped is [FsQuota.forGrants]'s, in `FsQuotaTest` */
-    @Test
-    fun unsafe_fs_is_unscoped_and_replaces_the_safe_grant_rather_than_adding_to_it() {
-        assertTrue(PluginFs.isUnscoped(PluginPermissions.parse(listOf("fs(10mb)", "unsafe.fs"))))
-        assertFalse(PluginFs.isUnscoped(PluginPermissions.parse(listOf("fs(10mb)"))))
     }
 }

@@ -6,12 +6,9 @@ import org.telegram.messenger.LocaleController.formatString
 import org.telegram.messenger.LocaleController.getString
 import org.telegram.messenger.R
 
-/**
- * Why a plugin is not running. [Site.REFUSED] means its code never ran and leaves it enabled.
- * For example, a plugin requiring a newer `@plugin-api` can start after the app updates.
- */
 class PluginFailure(val at: Site, val detail: String) {
     enum class Site(val labelRes: Int?) {
+        // failed to load, but kept enabled
         REFUSED(null),
         LOAD(R.string.InuPluginsFailedAtLoad),
         RUNTIME(R.string.InuPluginsFailedAtRuntime),
@@ -27,39 +24,27 @@ class PluginFailure(val at: Site, val detail: String) {
     }
 }
 
-/**
- * an installed plugin + its runtime state. one [QuickJs] engine per running plugin.
- *
- * [id] is the install id ([desu.inugram.core.plugins.PluginInstalls]), not anything [manifest] says:
- * it keys the plugin's storage and survives the plugin renaming itself.
- */
+/** [id] is the install id, not the manifest's: it keys storage and survives renames */
 class Plugin(
     val id: String,
     val file: File,
     @Volatile var source: String,
     @Volatile var manifest: PluginManifest,
 ) {
-    // written on the UI thread, read from the plugin queue by every queued engine op
+    // written on the ui thread, read from the plugin queue
     @Volatile var enabled: Boolean = true
 
-    /** the source on disk came from the dev server, so it passed no trust or permission sheet; UI-thread owned */
+    /** from the dev server: skipped the trust sheet. ui-thread owned */
     @Volatile var dev: Boolean = false
 
-    /** why the plugin isn't running, shown in the settings list; null when healthy */
     @Volatile var failure: PluginFailure? = null
 
-    /**
-     * non-null while the plugin is running. written only on the plugin queue, but read from the ui thread
-     * too - `PluginActions.render` takes the live order there before it posts.
-     */
+    /** written on the plugin queue, read on the ui thread by `PluginActions.render` */
     @Volatile var session: PluginSession? = null
 
     val engine: QuickJs? get() = session?.engine
 
-    /**
-     * the page id passed to `inu.registerSettings`, backing the settings button in the plugins
-     * list. set on the plugin queue during evaluation, read from the UI thread; cleared on stop.
-     */
+    /** set on the plugin queue, read on the ui thread */
     val settingsPageId: Long? get() = session?.settingsPageId
 
     val running: Boolean get() = engine != null

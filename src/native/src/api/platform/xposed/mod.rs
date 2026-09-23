@@ -15,12 +15,13 @@ use rquickjs::{Class, Context, Ctx, Function, Object, Persistent, Result as JsRe
 use crate::api::error::PluginErrorCode;
 use crate::api::platform::jvm::JvmState;
 use crate::sandbox::grants::{GrantHost, MATCH_NAMESPACE};
-use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Token};
+use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle};
 use crate::utils::arguments::array_values;
+use crate::utils::shape::get_class_prototype;
 
 use crate::api::error::report_callback_error;
 use crate::runtime::pump_jobs;
-use context::{create_hook_context, install_hook_context, HookContext};
+use context::{create_hook_context, HookContext};
 
 pub trait XposedHost {
   fn xposed(&self, op: i32, target: i64, name: &str, args: &[String]) -> String;
@@ -44,7 +45,7 @@ pub const HOOK_LIMIT: usize = 512;
 pub const HOOK_BUDGET_MS: i64 = 250;
 
 struct Hook {
-  token: Token,
+  token: u32,
   native: bool,
   before: Option<Persistent<Function<'static>>>,
   after: Option<Persistent<Function<'static>>>,
@@ -59,7 +60,7 @@ pub struct XposedState {
   context_proto: RefCell<Option<Persistent<Object<'static>>>>,
   sites: RefCell<HashMap<i64, SiteHooks>>,
   held: Cell<usize>,
-  next_token: Cell<Token>,
+  next_token: Cell<u32>,
   pending: RefCell<HashMap<i64, PendingDispatch>>,
 }
 
@@ -74,17 +75,8 @@ struct PendingDispatch {
   after: Vec<Persistent<Function<'static>>>,
 }
 
-impl PendingDispatch {
-  fn release(self, ctx: &Ctx<'_>) {
-    let _ = self.context.restore(ctx);
-    for f in self.after {
-      let _ = f.restore(ctx);
-    }
-  }
-}
-
 impl XposedState {
-  fn take_hook(&self, site: i64, token: Token) -> Option<(Hook, usize, bool)> {
+  fn take_hook(&self, site: i64, token: u32) -> Option<(Hook, usize, bool)> {
     let mut sites = self.sites.borrow_mut();
     let entry = sites.get_mut(&site)?;
     let index = entry.hooks.iter().position(|hook| hook.token == token)?;
@@ -101,7 +93,7 @@ impl XposedState {
     Some((hook, befores, emptied))
   }
 
-  fn release(&self, ctx: &Ctx<'_>, site: i64, token: Token) {
+  fn release(&self, _ctx: &Ctx<'_>, site: i64, token: u32) {
     let Some((hook, befores, emptied)) = self.take_hook(site, token) else {
       return;
     };
@@ -109,12 +101,7 @@ impl XposedState {
       self.host.xposed(OP_NATIVE_REMOVE, site, &token.to_string(), &[]);
     }
     let had_before = hook.before.is_some();
-    if let Some(before) = hook.before {
-      let _ = before.restore(ctx);
-    }
-    if let Some(after) = hook.after {
-      let _ = after.restore(ctx);
-    }
+    drop(hook);
     if emptied {
       self.host.xposed(OP_UNHOOK, site, "", &[]);
     } else if had_before {
@@ -122,7 +109,7 @@ impl XposedState {
     }
   }
 
-  fn release_tokens(&self, ctx: &Ctx<'_>, tokens: &[(i64, Token)]) {
+  fn release_tokens(&self, ctx: &Ctx<'_>, tokens: &[(i64, u32)]) {
     for (site, token) in tokens {
       self.release(ctx, *site, *token);
     }
@@ -172,11 +159,10 @@ impl XposedState {
   }
 
   fn require_handle<'js>(&self, ctx: &Ctx<'js>, value: &Value<'js>, what: &str) -> JsResult<i64> {
-    let id = self.jvm.handle_id(ctx, value)?;
-    if id < 0 {
-      return PluginErrorCode::InvalidArgument.throw(ctx, &format!("xposed: {what} expected a java class or method"));
+    match self.jvm.handle_id(value) {
+      Some(id) => Ok(id),
+      None => PluginErrorCode::InvalidArgument.throw(ctx, &format!("xposed: {what} expected a java class or method")),
     }
-    Ok(id)
   }
 }
 
@@ -201,7 +187,12 @@ struct Callbacks<'js> {
   filter: Option<String>,
 }
 
-fn callbacks_of<'js>(ctx: &Ctx<'js>, jvm: &JvmState, hook: &Object<'js>, what: &str) -> JsResult<Callbacks<'js>> {
+fn read_hook_callbacks<'js>(
+  ctx: &Ctx<'js>,
+  jvm: &JvmState,
+  hook: &Object<'js>,
+  what: &str,
+) -> JsResult<Callbacks<'js>> {
   let mut callbacks = Callbacks {
     before: None,
     after: None,
@@ -215,8 +206,7 @@ fn callbacks_of<'js>(ctx: &Ctx<'js>, jvm: &JvmState, hook: &Object<'js>, what: &
     if value.is_undefined() {
       continue;
     }
-    let id = jvm.handle_id(ctx, &value)?;
-    if id >= 0 {
+    if let Some(id) = jvm.handle_id(&value) {
       wires[index] = format!("G{id}");
       has_native = true;
     } else if let Some(callback) = value.as_function() {
@@ -245,10 +235,9 @@ fn callbacks_of<'js>(ctx: &Ctx<'js>, jvm: &JvmState, hook: &Object<'js>, what: &
       return PluginErrorCode::InvalidArgument
         .throw(ctx, "xposed: a native hook already runs on the hooked thread, so a filter would only cost it");
     }
-    let id = jvm.handle_id(ctx, &filter)?;
-    if id < 0 {
+    let Some(id) = jvm.handle_id(&filter) else {
       return PluginErrorCode::InvalidArgument.throw(ctx, &format!("{what}: filter must be an inu.jvm.routine"));
-    }
+    };
     callbacks.filter = Some(format!("G{id}"));
   }
   Ok(callbacks)
@@ -325,7 +314,7 @@ impl XposedState {
     let Some(hook) = hook.as_object() else {
       return PluginErrorCode::InvalidArgument.throw(ctx, &format!("{what}: expected a hook object"));
     };
-    let callbacks = callbacks_of(ctx, &self.jvm, hook, what)?;
+    let callbacks = read_hook_callbacks(ctx, &self.jvm, hook, what)?;
     if self.lifecycle.is_unloading() {
       return noop_disposer(ctx);
     }
@@ -385,7 +374,8 @@ pub fn install_xposed<'js>(
   log: crate::Log,
   globals: &crate::api::Globals<'js>,
 ) -> JsResult<Rc<XposedState>> {
-  let context_proto = Persistent::save(ctx, install_hook_context(ctx)?);
+  // cached so a dispatch skips the class registry's type-id lookup
+  let context_proto = Persistent::save(ctx, get_class_prototype::<HookContext>(ctx)?);
   let state = Rc::new(XposedState {
     host,
     grants,
@@ -400,15 +390,15 @@ pub fn install_xposed<'js>(
   });
 
   let xposed = Object::new(ctx.clone())?;
-  {
-    let state = state.clone();
-    xposed.set(
-      "hookMethod",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, method: Opt<Value<'js>>, hook: Opt<Value<'js>>| {
-        state.js_hook(&ctx, OP_HOOK, or_undefined(&ctx, method), "", or_undefined(&ctx, hook), "hookMethod")
-      })?,
-    )?;
-  }
+  set_fn!(
+    xposed,
+    "hookMethod",
+    ctx,
+    state,
+    move |ctx: Ctx<'js>, method: Opt<Value<'js>>, hook: Opt<Value<'js>>| {
+      state.js_hook(&ctx, OP_HOOK, or_undefined(&ctx, method), "", or_undefined(&ctx, hook), "hookMethod")
+    }
+  );
   {
     let state = state.clone();
     xposed.set(
@@ -435,15 +425,15 @@ pub fn install_xposed<'js>(
       )?,
     )?;
   }
-  {
-    let state = state.clone();
-    xposed.set(
-      "hookAllConstructors",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, class: Opt<Value<'js>>, hook: Opt<Value<'js>>| {
-        state.js_hook(&ctx, OP_HOOK_ALL, or_undefined(&ctx, class), "", or_undefined(&ctx, hook), "hookAllConstructors")
-      })?,
-    )?;
-  }
+  set_fn!(
+    xposed,
+    "hookAllConstructors",
+    ctx,
+    state,
+    move |ctx: Ctx<'js>, class: Opt<Value<'js>>, hook: Opt<Value<'js>>| {
+      state.js_hook(&ctx, OP_HOOK_ALL, or_undefined(&ctx, class), "", or_undefined(&ctx, hook), "hookAllConstructors")
+    }
+  );
   {
     let state = state.clone();
     xposed.set(
@@ -456,33 +446,21 @@ pub fn install_xposed<'js>(
       )?,
     )?;
   }
-  {
-    let state = state.clone();
-    xposed.set(
-      "allocateInstance",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, class: Opt<Value<'js>>| {
-        state.js_allocate(&ctx, or_undefined(&ctx, class))
-      })?,
-    )?;
-  }
-  {
-    let state = state.clone();
-    xposed.set(
-      "disableProfileSaver",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>| state.js_disable_profile_saver(&ctx))?,
-    )?;
-  }
-  {
-    let state = state.clone();
-    xposed.set(
-      "routine",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, program: Value<'js>, captures: Opt<Value<'js>>| {
-        state.grants.check_grant(&ctx, GRANT, None, MATCH_NAMESPACE)?;
-        let captures = captures.0.unwrap_or_else(|| Value::new_undefined(ctx.clone()));
-        state.jvm.build_xposed_routine(&ctx, program, captures)
-      })?,
-    )?;
-  }
+  set_fn!(xposed, "allocateInstance", ctx, state, move |ctx: Ctx<'js>, class: Opt<Value<'js>>| {
+    state.js_allocate(&ctx, or_undefined(&ctx, class))
+  });
+  set_fn!(xposed, "disableProfileSaver", ctx, state, move |ctx: Ctx<'js>| state.js_disable_profile_saver(&ctx));
+  set_fn!(
+    xposed,
+    "routine",
+    ctx,
+    state,
+    move |ctx: Ctx<'js>, program: Value<'js>, captures: Opt<Value<'js>>| {
+      state.grants.check_grant(&ctx, GRANT, None, MATCH_NAMESPACE)?;
+      let captures = captures.0.unwrap_or_else(|| Value::new_undefined(ctx.clone()));
+      state.jvm.build_xposed_routine(&ctx, program, captures)
+    }
+  );
   globals.inu.set("xposed", xposed)?;
 
   Ok(state)
@@ -612,20 +590,19 @@ impl XposedState {
     site: i64,
     call: &Invocation,
   ) -> Vec<String> {
-    let state = self;
     let answer = context.with(|ctx| -> JsResult<Vec<String>> {
-      let hooks = state.snapshot(&ctx, site);
+      let hooks = self.snapshot(&ctx, site);
       if hooks.is_empty() {
         return Ok(Vec::new());
       }
 
-      let hook_context = create_hook_context(&state.jvm, call, state.hook_proto(&ctx)?)?;
-      let answer = state.run_before(&ctx, &hooks, &hook_context, dispatch_id);
+      let hook_context = create_hook_context(&self.jvm, call, self.hook_proto(&ctx)?)?;
+      let answer = self.run_before(&ctx, &hooks, &hook_context, dispatch_id);
       hook_context.borrow().expire();
       answer
     });
 
-    pump_jobs(rt, context, state.log.as_ref());
+    pump_jobs(rt, context, self.log.as_ref());
     answer.unwrap_or_default()
   }
 
@@ -636,11 +613,10 @@ impl XposedState {
     hook_context: &Class<'js, HookContext<'js>>,
     dispatch_id: i64,
   ) -> JsResult<Vec<String>> {
-    let state = self;
     let mut answer = None;
     for hook in hooks {
       let Some(before) = &hook.before else { continue };
-      state.run_callback(ctx, before, hook_context, "before");
+      self.run_callback(ctx, before, hook_context, "before");
       answer = hook_context.borrow().get_answer(ctx)?;
       if answer.is_some() {
         break;
@@ -650,14 +626,14 @@ impl XposedState {
     let afters: Vec<Function> = hooks.iter().rev().filter_map(|hook| hook.after.clone()).collect();
     let wants_after = !afters.is_empty();
     if let Some(wire) = answer {
-      let after = state.run_after(ctx, &afters, hook_context, Published::Answer(&wire))?;
+      let after = self.run_after(ctx, &afters, hook_context, Published::Answer(&wire))?;
       return Ok(vec!["A".to_string(), if let Answer::Wire(after) = after { after } else { wire }]);
     }
 
     let call_args = hook_context.borrow().get_call_args(ctx)?;
     if wants_after {
       let after = afters.into_iter().map(|f| Persistent::save(ctx, f)).collect();
-      state.pending.borrow_mut().insert(
+      self.pending.borrow_mut().insert(
         dispatch_id,
         PendingDispatch {
           context: Persistent::save(ctx, hook_context.clone().into_inner()),
@@ -676,9 +652,8 @@ impl XposedState {
     call: &Invocation,
     returned: &Returned,
   ) -> Answer {
-    let state = self;
     let answer = context.with(|ctx| -> JsResult<Answer> {
-      let Some(pending) = state.pending.borrow_mut().remove(&dispatch_id) else {
+      let Some(pending) = self.pending.borrow_mut().remove(&dispatch_id) else {
         return Ok(Answer::NotDispatched);
       };
       let object = pending.context.restore(&ctx)?;
@@ -687,11 +662,11 @@ impl XposedState {
       };
       let afters: Vec<Function> = pending.after.into_iter().filter_map(|f| f.restore(&ctx).ok()).collect();
       hook_context.borrow().revive(call);
-      let answer = state.run_after(&ctx, &afters, &hook_context, Published::Returned(returned));
+      let answer = self.run_after(&ctx, &afters, &hook_context, Published::Returned(returned));
       hook_context.borrow().expire();
       answer
     });
-    pump_jobs(rt, context, state.log.as_ref());
+    pump_jobs(rt, context, self.log.as_ref());
     answer.unwrap_or(Answer::Keep)
   }
 
@@ -703,47 +678,41 @@ impl XposedState {
     call: &Invocation,
     returned: &Returned,
   ) -> Answer {
-    let state = self;
     let answer = context.with(|ctx| -> JsResult<Answer> {
-      let afters = state.snapshot_afters(&ctx, site);
+      let afters = self.snapshot_afters(&ctx, site);
       if afters.is_empty() {
         return Ok(Answer::NotDispatched);
       }
-      let hook_context = create_hook_context(&state.jvm, call, state.hook_proto(&ctx)?)?;
-      let answer = state.run_after(&ctx, &afters, &hook_context, Published::Returned(returned));
+      let hook_context = create_hook_context(&self.jvm, call, self.hook_proto(&ctx)?)?;
+      let answer = self.run_after(&ctx, &afters, &hook_context, Published::Returned(returned));
       hook_context.borrow().expire();
       answer
     });
-    pump_jobs(rt, context, state.log.as_ref());
+    pump_jobs(rt, context, self.log.as_ref());
     answer.unwrap_or(Answer::Keep)
   }
 
   pub fn release_dispatch(self: &Rc<Self>, context: &Context, dispatch_id: i64) {
-    let state = self;
-    let Some(pending) = state.pending.borrow_mut().remove(&dispatch_id) else {
+    let Some(pending) = self.pending.borrow_mut().remove(&dispatch_id) else {
       return;
     };
-    context.with(|ctx| pending.release(&ctx));
+    context.with(|_| drop(pending));
   }
 }
 
 impl Dispose for XposedState {
   fn dispose(&self, context: &rquickjs::Context) {
-    let state = self;
     context.with(|ctx| {
-      let installed: Vec<(i64, Token)> = state
+      let installed: Vec<(i64, u32)> = self
         .sites
         .borrow()
         .iter()
         .flat_map(|(site, entry)| entry.hooks.iter().map(|hook| (*site, hook.token)))
         .collect();
-      state.release_tokens(&ctx, &installed);
-      for (_, pending) in state.pending.borrow_mut().drain() {
-        pending.release(&ctx);
-      }
-      if let Some(proto) = state.context_proto.borrow_mut().take() {
-        let _ = proto.restore(&ctx);
-      }
+      self.release_tokens(&ctx, &installed);
+      let pending = std::mem::take(&mut *self.pending.borrow_mut());
+      let proto = self.context_proto.take();
+      drop((pending, proto));
     });
   }
 }

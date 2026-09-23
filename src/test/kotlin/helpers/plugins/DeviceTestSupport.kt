@@ -3,34 +3,41 @@ package desu.inugram.helpers.plugins
 import androidx.test.platform.app.InstrumentationRegistry
 import desu.inugram.core.plugins.PluginManifest
 import desu.inugram.core.plugins.PluginWire
+import desu.inugram.helpers.plugins.io.PluginBlobs
 import desu.inugram.helpers.plugins.io.PluginFetch
 import desu.inugram.helpers.plugins.platform.PluginJvm
-import desu.inugram.helpers.plugins.platform.PluginXposed
 import desu.inugram.helpers.plugins.platform.PluginNotifications
+import desu.inugram.helpers.plugins.platform.PluginXposed
 import desu.inugram.helpers.plugins.telegram.PluginReads
 import desu.inugram.helpers.plugins.telegram.PluginRpc
 import desu.inugram.helpers.plugins.telegram.PluginSendHold
 import desu.inugram.helpers.plugins.telegram.PluginUpdates
 import desu.inugram.helpers.plugins.telegram.PluginWrites
-import desu.inugram.helpers.plugins.tl.TlFilter
 import desu.inugram.helpers.plugins.tl.TlHandles
 import desu.inugram.helpers.plugins.tl.TlReflect
 import desu.inugram.helpers.plugins.ui.PluginActions
+import desu.inugram.helpers.plugins.ui.PluginCanvas
+import desu.inugram.jvmfixture.JvmFixture
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import org.json.JSONObject
+import org.telegram.SQLite.SQLiteDatabase
 import org.telegram.messenger.ApplicationLoader
+import org.telegram.messenger.MessagesStorage
 import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.UserConfig
 import org.telegram.tgnet.ConnectionsManager
+import org.telegram.tgnet.RequestDelegate
 import org.telegram.tgnet.TLObject
 import org.telegram.tgnet.TLRPC
+import org.telegram.tgnet.tl.TL_update
 
-/**
- * Everything process-global the bridge reaches, put back to a known state. Unlike the JVM harness
- * none of this is a fake being re-created: it is the app's own singletons, so what a test changed
- * has to be changed back rather than dropped.
- */
+/** the app's own singletons, so what a test changed has to be changed back */
 fun resetBridge() {
     ApplicationLoader.applicationContext = deviceContext()
     goOffline()
@@ -40,9 +47,17 @@ fun resetBridge() {
         PluginJvm.detach(session)
         PluginActions.detach(session)
         PluginNotifications.detach(session)
+        PluginCanvas.detach(session)
         session.stopDispatching()
         session.tl.releaseAll()
+        if (session.engine !is RecordingQuickJs) closeEngine(plugin)
     }
+    JvmFixture.tag = "static"
+    JvmFixture.shared = null
+    JvmFixture.task = null
+    JvmFixture.callbackEntered = null
+    JvmFixture.callbackRelease = null
+    JvmFixture.sharedHookCalls.set(0)
     flushUi()
     clearPluginObservers()
     setInstalledPlugins(emptyList())
@@ -53,12 +68,8 @@ fun resetBridge() {
 }
 
 /**
- * The app's *native* connection threads are running around the test, and one of them aborts the
- * whole process: `libtmessages`'s `ConnectionsManager::select()` calls `JniAbort` on a response it
- * cannot parse (`can't parse magic ... in TL_config` under CheckJNI), which lands as an empty
- * failure on whichever test happened to be running. Nothing java-side can catch that, and the
- * queue and send filters cannot reach it - it never crosses either boundary. So native is told
- * there is no network at all, for every account, before anything else.
+ * stock's native `ConnectionsManager::select()` calls `JniAbort` on a response it cannot parse under
+ * CheckJNI, killing the process mid-test, so native networking is paused for every account
  */
 private fun goOffline() {
     for (account in 0 until UserConfig.MAX_ACCOUNT_COUNT) {
@@ -71,11 +82,7 @@ private fun goOffline() {
 
 private val nextInstallId = java.util.concurrent.atomic.AtomicLong(1)
 
-/**
- * A 32-hex install id nothing else in the process is using. Anything the bridge keys by install id
- * is *real* storage here (`localStorage`'s file, `inu.fs`'s directory) and outlives the test that
- * wrote it, which the JVM harness could not show: its `Context` was a fresh temp dir per test.
- */
+/** storage keyed by install id is real here and outlives the test */
 fun freshInstallId(): String = "%032x".format(nextInstallId.getAndIncrement() or (System.nanoTime() shl 16))
 
 private fun clearRpcState() {
@@ -94,15 +101,8 @@ private fun clearRpcState() {
             }
         }
     }
-    // Per-session handle tables are released in resetBridge before dropping the installed plugins.
-
 }
 
-/**
- * the real [PluginManager]'s published list, whose *order* is the chain order. Reflection because
- * the app has no reason to expose a setter, and because a test must not reach the installer that
- * would put real plugin files on the device.
- */
 private fun snapshotField() =
     PluginManager::class.java.getDeclaredField("snapshot").apply { isAccessible = true }
 
@@ -114,34 +114,21 @@ fun setInstalledPlugins(plugins: List<Plugin>) {
     PluginManager.refreshAnyRunning()
 }
 
-/** the app under test, which is this suite's own package: the bridge reads it through stock */
 fun deviceContext(): android.content.Context =
     InstrumentationRegistry.getInstrumentation().targetContext
 
-/**
- * runs everything already posted to the main looper. The bridge reaches the ui thread through
- * `AndroidUtilities.runOnUIThread`, which always posts, and a test runs on the instrumentation
- * thread - so a ui hop is genuinely deferred here rather than deferred by a flag.
- */
+/** stock `AndroidUtilities.runOnUIThread` always posts */
 fun flushUi() = InstrumentationRegistry.getInstrumentation().runOnMainSync {}
 
-/** posts on the ui thread, which is the only thread [NotificationCenter] may be touched from */
+/** [NotificationCenter] may only be touched from the ui thread */
 fun onUi(block: () -> Unit) = InstrumentationRegistry.getInstrumentation().runOnMainSync(block)
 
-/** stock throws outright on a post from anywhere but the ui thread, and a test is never on it */
 fun NotificationCenter.postOnUi(id: Int, vararg args: Any?) = onUi { postNotificationName(id, *args) }
 
-/** drives the dispatch queues the way the app's threads would */
 fun drain(): Int = TestQueues.drain()
 
-/**
- * drain plus the ui thread, until neither has anything left. A menu render crosses both - the
- * engine is asked on `globalQueue` and the answer is applied on the ui thread - so draining one of
- * them settles nothing on its own.
- */
 fun settle() {
-    // an empty drain is not idle on its own: the ui thread may still be holding the answer, and the
-    // flush that releases it posts back onto the queue that was just found empty
+    // a ui flush can post back onto a queue just found empty
     var idle = 0
     repeat(16) {
         val ran = drain()
@@ -151,40 +138,35 @@ fun settle() {
     }
 }
 
-/**
- * A real engine with the real rasterizer behind it, for a suite whose subject is what the platform
- * does rather than what the bridge records. The caller owns it and hands it to [closeCanvasEngine].
- */
-fun canvasEngine(name: String, onLog: (String) -> Unit = {}): Plugin {
-    val plugin = startPlugin(name)
-    plugin.session = PluginSession(plugin, QuickJs())
-    attachBridge(
-        plugin.session!!,
-        core = object : CoreListener {
-            override fun onConsole(level: Int, message: String) = onLog(message)
-            override fun onTimerSchedule(delayMs: Long) = Unit
-        },
-        canvas = desu.inugram.helpers.plugins.ui.PluginCanvas.listenerFor(plugin.session!!),
-        spillDir = desu.inugram.helpers.plugins.io.PluginBlobs.dirFor(plugin.id),
-    )
-    return plugin
+/** for work that hops through stock's own queues, which the harness does not drive */
+fun <T : Any> awaitValue(what: String, probe: () -> T?): T {
+    repeat(100) {
+        settle()
+        probe()?.let { return it }
+        Thread.sleep(20)
+    }
+    throw AssertionError(what)
 }
 
-/**
- * what `PluginManager.teardown` does for a [canvasEngine]: the session stops being current before
- * the engine closes, so a canvas answer still queued behind it is dropped instead of reaching a
- * closed engine in the next test
- */
-/** [startPlugin] on a real engine rather than a recorder, for a test that evaluates plugin code; pair it with [closeEngine] */
-fun startEngine(name: String, vararg grants: String, localStoragePath: String = "", onLog: (String) -> Unit = {}): Plugin {
+fun startEngine(
+    name: String,
+    vararg grants: String,
+    canvas: Boolean = false,
+    localStoragePath: String = "",
+    onLog: (String) -> Unit = {},
+): Plugin {
     val plugin = startPlugin(name, *grants)
-    plugin.session = PluginSession(plugin, QuickJs())
+    val session = PluginSession(plugin, QuickJs())
+    plugin.session = session
+    if (canvas) PluginCanvas.wipe(plugin.id)
     attachBridge(
-        plugin.session!!,
+        session,
         object : CoreListener {
             override fun onConsole(level: Int, message: String) = onLog(message)
             override fun onTimerSchedule(delayMs: Long) = Unit
         },
+        canvas = if (canvas) PluginCanvas.listenerFor(session) else DeviceMissing,
+        spillDir = if (canvas) PluginBlobs.dirFor(plugin.id) else "",
         localStoragePath = localStoragePath,
     )
     return plugin
@@ -193,24 +175,31 @@ fun startEngine(name: String, vararg grants: String, localStoragePath: String = 
 fun closeEngine(plugin: Plugin) {
     val session = plugin.session ?: return
     session.engine.stopCallbacks()
+    PluginXposed.detach(session)
+    PluginJvm.detach(session)
+    PluginCanvas.detach(session)
     session.stopDispatching()
     session.engine.close()
     plugin.session = null
     PluginManager.refreshAnyRunning()
 }
 
-fun closeCanvasEngine(plugin: Plugin) {
-    plugin.session?.let { desu.inugram.helpers.plugins.ui.PluginCanvas.detach(it) }
-    closeEngine(plugin)
+/** as an app thread calling into a plugin would */
+fun runOnCaller(task: Runnable, name: String = "caller"): Thread {
+    val worker = Thread(task, name)
+    worker.start()
+    worker.join(5000)
+    assertFalse(worker.isAlive, "$name never returned")
+    return worker
 }
 
 fun Plugin.js(code: String): String = engine!!.evaluate(code.trimIndent()) ?: "null"
 
-/** runs a promise-returning expression to settlement, failing the test with whatever it rejected with */
-fun Plugin.await(code: String, timeoutMillis: Long = 20_000, pollMillis: Long = 20) {
+/** the resolved value, as JSON */
+fun Plugin.await(code: String, timeoutMillis: Long = 20_000, pollMillis: Long = 20): String {
     js(
         "globalThis.done = false; globalThis.failure = null; ($code)"
-            + ".then(() => { globalThis.done = true })"
+            + ".then((value) => { globalThis.result = value; globalThis.done = true })"
             + ".catch((e) => { globalThis.failure = e && e.stack ? String(e) + '\\n' + e.stack : String(e); globalThis.done = true })",
     )
     val deadline = System.currentTimeMillis() + timeoutMillis
@@ -219,7 +208,7 @@ fun Plugin.await(code: String, timeoutMillis: Long = 20_000, pollMillis: Long = 
         if (js("String(globalThis.done)") == "true") {
             val failure = js("String(globalThis.failure)")
             if (failure != "null") error(failure)
-            return
+            return js("JSON.stringify(globalThis.result ?? null)")
         }
         Thread.sleep(pollMillis)
     }
@@ -228,13 +217,15 @@ fun Plugin.await(code: String, timeoutMillis: Long = 20_000, pollMillis: Long = 
 
 fun connections(account: Int = 0): RecordingConnectionsManager = RecordingConnectionsManager.forAccount(account)
 
-/** moves the queues' clock forward, so a test reaches a timeout without waiting for it */
 fun advanceBy(millis: Long) = TestQueues.advanceBy(millis)
 
-/**
- * what `inu.android.getCurrentFragment`/`getCurrentActivity` answer. No test here opens a real
- * screen, so a test that wants one puts an object of its own in.
- */
+fun sendThroughPlugins(
+    request: TLObject,
+    token: Int = 11,
+    account: Int = 0,
+    onDone: RequestDelegate? = RequestDelegate { _, _ -> },
+): Boolean = PluginRpc.maybeIntercept(connections(account), request, onDone, null, null, null, 0, 0, 0, false, token, account)
+
 object testAppScreen : PluginJvm.AppScreen {
     var fragment: Any? = null
     var activity: Any? = null
@@ -244,7 +235,6 @@ object testAppScreen : PluginJvm.AppScreen {
     override fun currentActivity(): Any? = activity
 }
 
-/** a running plugin with [grants], wired the way `PluginManager` does on start */
 fun startPlugin(name: String, vararg grants: String): Plugin =
     startPlugin(name, grants.toList()) {}
 
@@ -255,7 +245,7 @@ fun startPlugin(name: String, grants: List<String>, configureEngine: (RecordingQ
         id = "%032x".format(name.hashCode().toLong() and 0xffffffffL),
         file = File("/dev/null"),
         source = "",
-        manifest = manifestOf(name, grants),
+        manifest = createManifest(name, grants),
     )
     plugin.session = PluginSession(plugin, RecordingQuickJs().also(configureEngine))
     setInstalledPlugins(installedPlugins() + plugin)
@@ -263,22 +253,12 @@ fun startPlugin(name: String, grants: List<String>, configureEngine: (RecordingQ
     return plugin
 }
 
-/**
- * builds [session]'s [PluginBridge] and runs the installs, the way `PluginManager.start` does.
- *
- * Storage, ui, platform, and canvas come from [DeviceMissing] rather than their owners even
- * though both compile here: their installs reach an `Activity` and a real engine. Nothing under
- * test touches them, so they refuse loudly instead of recording.
- */
 fun attachBridge(
     session: PluginSession,
     core: CoreListener = DeviceMissing,
     canvas: CanvasListener = DeviceMissing,
     ui: UiListener = DeviceMissing,
-    // most of the suite drives the reads listener directly and never asks; a test that goes through
-    // `inu.account(n)` needs the slot list the app would answer with
     accountsJson: (() -> String)? = null,
-    // blobs and canvas sources spill to disk; a suite that stages one needs somewhere to put it
     spillDir: String = "",
     transferDir: String = "",
     localStoragePath: String = "",
@@ -323,46 +303,43 @@ fun attachBridge(
 }
 
 internal object DeviceMissing : CoreListener, UiListener, PlatformListener, CanvasListener {
-    private fun no(what: String): Nothing = throw UnsupportedOperationException("this suite has no $what")
+    override fun onConsole(level: Int, message: String) = throw UnsupportedOperationException("this suite has no console")
 
-    override fun onConsole(level: Int, message: String) = no("console")
+    override fun onTimerSchedule(delayMs: Long) = throw UnsupportedOperationException("this suite has no timer scheduler")
 
-    override fun onTimerSchedule(delayMs: Long) = no("timer scheduler")
+    override fun canvas(op: Int, id: Long, arg: String, bytes: ByteArray?) = throw UnsupportedOperationException("this suite has no canvas")
 
-    override fun canvas(op: Int, id: Long, arg: String, bytes: ByteArray?) = no("canvas")
+    override fun uiToast(text: String) = throw UnsupportedOperationException("this suite has no ui")
 
-    override fun uiToast(text: String) = no("ui")
+    override fun uiModal(op: Int, requestId: Long, optionsJson: String) = throw UnsupportedOperationException("this suite has no ui")
 
+    override fun uiCurrentScreen() = throw UnsupportedOperationException("this suite has no ui")
 
-    override fun uiModal(op: Int, requestId: Long, optionsJson: String) = no("ui")
+    override fun format(op: Int, value: Long) = throw UnsupportedOperationException("this suite has no formatting")
 
-    override fun uiCurrentScreen() = no("ui")
+    override fun openUrl(url: String) = throw UnsupportedOperationException("this suite has no ui")
 
-    override fun format(op: Int, value: Long) = no("formatting")
+    override fun clipboardRead() = throw UnsupportedOperationException("this suite has no clipboard")
 
-    override fun openUrl(url: String) = no("ui")
+    override fun clipboardWrite(text: String) = throw UnsupportedOperationException("this suite has no clipboard")
 
-    override fun clipboardRead() = no("clipboard")
+    override fun uiOpenPage(pageId: Long) = throw UnsupportedOperationException("this suite has no ui")
 
-    override fun clipboardWrite(text: String) = no("clipboard")
+    override fun uiOpenFragment(handle: Long) = throw UnsupportedOperationException("this suite has no ui")
 
-    override fun uiOpenPage(pageId: Long) = no("ui")
+    override fun uiOpenScreen(optionsJson: String) = throw UnsupportedOperationException("this suite has no ui")
 
-    override fun uiOpenFragment(handle: Long) = no("ui")
+    override fun uiRegisterSettings(pageId: Long) = throw UnsupportedOperationException("this suite has no ui")
 
-    override fun uiOpenScreen(optionsJson: String) = no("ui")
+    override fun uiUnregisterSettings(pageId: Long) = throw UnsupportedOperationException("this suite has no ui")
 
-    override fun uiRegisterSettings(pageId: Long) = no("ui")
+    override fun uiInvalidate(pageId: Long) = throw UnsupportedOperationException("this suite has no ui")
 
-    override fun uiUnregisterSettings(pageId: Long) = no("ui")
+    override fun uiOpenMenu(menuId: Long, pageId: Long, anchorKey: String, itemsJson: String) = throw UnsupportedOperationException("this suite has no ui")
 
-    override fun uiInvalidate(pageId: Long) = no("ui")
+    override fun iconResolves(kind: Int, value: String) = throw UnsupportedOperationException("this suite has no icons")
 
-    override fun uiOpenMenu(menuId: Long, pageId: Long, anchorKey: String, itemsJson: String) = no("ui")
-
-    override fun iconResolves(kind: Int, value: String) = no("icons")
-
-    override fun commonIcon(name: String) = no("icons")
+    override fun commonIcon(name: String) = throw UnsupportedOperationException("this suite has no icons")
 
     override fun actionRegister(
         kind: Int,
@@ -372,14 +349,14 @@ internal object DeviceMissing : CoreListener, UiListener, PlatformListener, Canv
         text: String?,
         icon: String?,
         dynamicFields: Int,
-    ) = no("actions")
+    ) = throw UnsupportedOperationException("this suite has no actions")
 
-    override fun actionUnregister(kind: Int, token: Int) = no("actions")
+    override fun actionUnregister(kind: Int, token: Int) = throw UnsupportedOperationException("this suite has no actions")
 
-    override fun actionEditor(op: Int, surface: Long, payloadJson: String) = no("actions")
+    override fun actionEditor(op: Int, surface: Long, payloadJson: String) = throw UnsupportedOperationException("this suite has no actions")
 }
 
-fun manifestOf(name: String, grants: List<String>): PluginManifest = PluginManifest(
+fun createManifest(name: String, grants: List<String>): PluginManifest = PluginManifest(
     name = name,
     author = null,
     declaredId = null,
@@ -395,14 +372,10 @@ fun manifestOf(name: String, grants: List<String>): PluginManifest = PluginManif
 
 val Plugin.js: RecordingQuickJs get() = engine as RecordingQuickJs
 
-/** the `inu.interceptRpc(methods)` a plugin's own JS would have called */
 fun Plugin.interceptRpc(vararg methods: String, callbackId: Int = 1, strict: Boolean = false): String? =
     js.listener!!.onRpcRegister(arrayOf(*methods), callbackId, "", strict, "")
 
-/**
- * what the engine registers for `inu.interceptSendMessage`: the fixed method list `rpc.rs` owns
- * (`SEND_METHODS`), plus the api's own grant scope rather than the four methods'.
- */
+/** mirrors `SEND_METHODS` in `rpc.rs` */
 val SEND_METHODS = arrayOf(
     "messages.sendMessage",
     "messages.sendMedia",
@@ -413,29 +386,22 @@ val SEND_METHODS = arrayOf(
 fun Plugin.interceptSendMessage(callbackId: Int = 1, filterJson: String = ""): String? =
     js.listener!!.onRpcRegister(SEND_METHODS, callbackId, "interceptSendMessage", true, filterJson)
 
-/** the `inu.interceptUpdate(types, cb)` a plugin's own JS would have called */
 fun Plugin.interceptUpdate(vararg types: String, callbackId: Int = 1): String? =
     js.listener!!.onInterceptUpdateRegister(callbackId, arrayOf(*types))
 
-/** the verdict a middleware handed back, delivered the way the engine delivers one */
 fun Plugin.updateVerdict(dispatchId: Long, deliver: Boolean) =
     js.listener!!.onUpdateVerdict(dispatchId, deliver)
 
-/** the `inu.onUpdate(types)` a plugin's own JS would have called */
 fun Plugin.onUpdate(vararg types: String, callbackId: Int = 1): String? =
     js.listener!!.onUpdateRegister(callbackId, arrayOf(*types), "")
 
-/**
- * what the engine registers for one of the demuxed events: the fixed constructor list `rpc.rs`
- * owns (`DEMUX_EVENTS`), plus the event's own grant scope rather than the constructors'.
- */
+/** mirrors `DEMUX_EVENTS` in `rpc.rs` */
 enum class DemuxedEvent(val scope: String, val types: Array<String>) {
     NEW_MESSAGE("new_message", arrayOf("updateNewMessage", "updateNewChannelMessage")),
     EDIT_MESSAGE("edit_message", arrayOf("updateEditMessage", "updateEditChannelMessage")),
     DELETE_MESSAGE("delete_message", arrayOf("updateDeleteMessages", "updateDeleteChannelMessages")),
 }
 
-/** the `inu.onNewMessage(cb)`/`onMessageEdited(cb)`/`onMessageDeleted(cb)` a plugin's own JS would have called */
 fun Plugin.onDemuxedEvent(event: DemuxedEvent, callbackId: Int = 1): String? =
     js.listener!!.onUpdateRegister(callbackId, event.types, event.scope)
 
@@ -447,13 +413,8 @@ fun Plugin.complete(dispatchId: Long, resultWire: String) =
 
 fun Plugin.tl(): TlListener = js.listener!!
 
-/** the handle table a plugin's materializations mint into, so a test can ask what a wire points at */
-fun tlTableOf(plugin: Plugin): TlHandles? = plugin.session?.tl
+fun getTlHandles(plugin: Plugin): TlHandles? = plugin.session?.tl
 
-/**
- * every observer the *bridge* is holding, on every centre a post could come from. The app's own
- * run into the hundreds here, so they are told apart by the package the delegate came from.
- */
 fun pluginObserverCount(): Int {
     var total = pluginObserverCount(NotificationCenter.getGlobalInstance())
     for (account in 0 until UserConfig.MAX_ACCOUNT_COUNT) {
@@ -462,11 +423,7 @@ fun pluginObserverCount(): Int {
     return total
 }
 
-/**
- * The centres are the app's, so an observer a test left behind is still there for the next one.
- * `detach` only reaches an engine a [Plugin] still points at, and dropping a plugin's engine is
- * itself something these tests do, so the sweep has to be by package rather than by owner.
- */
+/** tests drop engines without detaching, so the sweep is by package rather than by owner */
 @Suppress("UNCHECKED_CAST")
 fun clearPluginObservers() = onUi {
     val field = NotificationCenter::class.java.getDeclaredField("observers").apply { isAccessible = true }
@@ -485,7 +442,6 @@ fun clearPluginObservers() = onUi {
     }
 }
 
-/** the same count for one centre, which is what a transfer's own observer is registered on */
 @Suppress("UNCHECKED_CAST")
 fun pluginObserverCount(centre: NotificationCenter): Int {
     val field = NotificationCenter::class.java.getDeclaredField("observers").apply { isAccessible = true }
@@ -497,22 +453,15 @@ fun pluginObserverCount(centre: NotificationCenter): Int {
     return total
 }
 
-/** the `.d.ts` sources, bundled as test assets because a device has no repo to read */
-private fun contractAsset(name: String): String =
-    InstrumentationRegistry.getInstrumentation()
-        .context.assets.open("plugins/$name").bufferedReader().use { it.readText() }
-
-/** `sdk/types/common.d.ts`, the normative contract */
-fun contract(): String = contractAsset("common.d.ts")
-
-/** a bundled oracle's own source, a test asset for the same reason the contract is one */
-fun bundledPlugin(name: String): String =
-    InstrumentationRegistry.getInstrumentation()
-        .context.assets.open("inu_plugins/$name").bufferedReader().use { it.readText() }
+fun bundledPlugin(name: String): String {
+    val assets = InstrumentationRegistry.getInstrumentation().context.assets
+    return listOf("test-prelude.js", name).joinToString("") { file ->
+        assets.open("inu_plugins/$file").bufferedReader().use { it.readText() }
+    }
+}
 
 data class Oracle(val plugin: Plugin, val lines: List<String>)
 
-/** a bundled oracle evaluated on a real engine under its own manifest's grants, so a grant the header forgot fails here too */
 fun startOracle(name: String): Oracle {
     val source = bundledPlugin(name)
     val lines = java.util.Collections.synchronizedList(ArrayList<String>())
@@ -522,7 +471,6 @@ fun startOracle(name: String): Oracle {
     return Oracle(plugin, lines)
 }
 
-/** the device twin of rust's `assert_oracle_exact`: no failure, no skip, finished, and exactly [count] passes */
 fun assertOracleExact(lines: List<String>, done: String, count: Int) {
     val snapshot = synchronized(lines) { lines.toList() }
     kotlin.test.assertTrue(snapshot.none { it.startsWith("FAIL") || it.startsWith("SKIP") }, snapshot.joinToString("\n"))
@@ -530,25 +478,14 @@ fun assertOracleExact(lines: List<String>, done: String, count: Int) {
     kotlin.test.assertEquals(count, snapshot.count { it.startsWith("PASS") }, snapshot.joinToString("\n"))
 }
 
-/** `src/test/assets`, for what the suite needs as a file rather than as source */
 fun testAsset(name: String): ByteArray =
     InstrumentationRegistry.getInstrumentation().context.assets.open("inu/$name").use { it.readBytes() }
 
-/**
- * the app's `processUpdates` hook, driven the way stock drives it. `true` means the batch was taken
- * over: the app was handed nothing and gets it back later.
- */
 fun deliverUpdates(updates: TLRPC.Updates, account: Int = 0, fromQueue: Boolean = false): Boolean =
     PluginUpdates.onUpdates(TestApp.updatesController(account), updates, account, fromQueue)
 
-/** what the app was actually handed, in order */
 fun applied(account: Int = 0): List<TLRPC.Updates> = TestApp.updatesController(account).processed
 
-/**
- * one run of a difference's own stageQueue runnable: [applied] counts the times its body ran, which
- * is once for a difference nothing claimed and once more when a claimed one is handed back. The
- * lists are the runnable's own, so a drop is visible as their contents.
- */
 class DifferenceRun(
     val newMessages: MutableList<TLRPC.Message>,
     val otherUpdates: MutableList<TLRPC.Update>,
@@ -556,10 +493,6 @@ class DifferenceRun(
     var applied = 0
 }
 
-/**
- * the difference hook, driven the way stock's runnable drives it: the hook answers first and the
- * body runs only if it did not claim the walk.
- */
 fun deliverDifference(
     newMessages: List<TLRPC.Message> = emptyList(),
     otherUpdates: List<TLRPC.Update> = emptyList(),
@@ -579,14 +512,9 @@ fun peerUser(id: Long): TLRPC.TL_peerUser = TLRPC.TL_peerUser().apply { user_id 
 
 fun peerChannel(id: Long): TLRPC.TL_peerChannel = TLRPC.TL_peerChannel().apply { channel_id = id }
 
-/**
- * sets every flag bit from what the object currently holds, which is what `readParams` leaves behind
- * for anything that came off the wire. without it an optional field a test just assigned reads back
- * as absent, exactly as it would for the app.
- */
+/** stock `readParams` leaves flags in sync with fields; a hand-built object has to catch up */
 fun <T : TLObject> T.synced(): T = apply { TlReflect.syncFlags(this) }
 
-/** a message from Telegram's own service account, i.e. one login code redaction applies to */
 fun serviceMessage(text: String, id: Int = 1): TLRPC.TL_message = TLRPC.TL_message().apply {
     this.id = id
     message = text
@@ -594,11 +522,123 @@ fun serviceMessage(text: String, id: Int = 1): TLRPC.TL_message = TLRPC.TL_messa
     peer_id = peerUser(100L)
 }.synced()
 
+fun user(id: Long, username: String? = null): TLRPC.TL_user = TLRPC.TL_user().apply {
+    this.id = id
+    this.username = username
+    // stock writes the display name into a service message preview
+    first_name = username ?: "user$id"
+    access_hash = id * 10
+}
+
+fun broadcast(id: Long, username: String? = null): TLRPC.TL_channel = TLRPC.TL_channel().apply {
+    this.id = id
+    this.username = username
+    access_hash = id * 10
+    broadcast = true
+}
+
+fun basicGroup(id: Long): TLRPC.TL_chat = TLRPC.TL_chat().apply { this.id = id }
+
+fun withMedia(id: Int = 4242): TLRPC.TL_message = TLRPC.TL_message().apply {
+    this.id = id
+    message = ""
+    val document = TLRPC.TL_document().apply {
+        this.id = 99L
+        access_hash = 1L
+        dc_id = 2
+        size = 11L
+        mime_type = "text/plain"
+        attributes.add(TLRPC.TL_documentAttributeFilename().apply { file_name = "note.txt" })
+    }
+    // flag bits are per object, so the media needs its own sync
+    media = TLRPC.TL_messageMediaDocument().apply { this.document = document }.synced()
+}.synced()
+
+fun newMessage(id: Int, peer: TLRPC.Peer = peerUser(7L), text: String = "m$id"): TL_update.TL_updateNewMessage =
+    TL_update.TL_updateNewMessage().apply {
+        message = TLRPC.TL_message().apply {
+            this.id = id
+            peer_id = peer
+            message = text
+        }.synced()
+    }
+
+fun createUpdatesBatch(vararg updates: TLRPC.Update): TLRPC.TL_updates =
+    TLRPC.TL_updates().apply { this.updates = ArrayList(updates.toList()) }
+
+fun write(
+    plugin: Plugin,
+    op: Int,
+    arg: JSONObject,
+    values: Array<String> = emptyArray(),
+    requestId: Long = 1L,
+    account: Int = 0,
+): String? = plugin.js.listener!!.accountWrite(account, requestId, op, arg.toString(), values)
+
+/** the harness does not replace stock's storage queue */
+private fun onStorage(block: (SQLiteDatabase) -> Unit) {
+    val storage = MessagesStorage.getInstance(0)
+    val latch = CountDownLatch(1)
+    var failure: Throwable? = null
+    storage.storageQueue.postRunnable {
+        try {
+            block(assertNotNull(storage.getDatabase(), "the test process has no database"))
+        } catch (e: Throwable) {
+            failure = e
+        } finally {
+            latch.countDown()
+        }
+    }
+    assertTrue(latch.await(10, TimeUnit.SECONDS), "the storage queue never ran")
+    failure?.let { throw it }
+}
+
+fun storeMessageOnDisk(dialogId: Long, message: TLRPC.Message) = onStorage { database ->
+    val state = database.executeFast(
+        "REPLACE INTO messages_v2 (mid, uid, read_state, send_state, date, data, out, ttl, media, imp, " +
+            "mention, forwards, thread_reply_id, is_channel, reply_to_message_id, group_id, reply_to_story_id) " +
+            "VALUES(?, ?, 0, 0, 0, ?, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)",
+    )
+    state.bindInteger(1, message.id)
+    state.bindLong(2, dialogId)
+    state.bindTlObject(3, message)
+    state.step()
+    state.dispose()
+}
+
+fun deleteMessageOnDisk(id: Int) = onStorage { it.executeFast("DELETE FROM messages_v2 WHERE mid = $id").stepThis().dispose() }
+
 fun handleId(wire: String): Long = (PluginWire.decode(wire) as PluginWire.Value.Handle).id
 
-fun handleOf(wire: String): PluginWire.Value.Handle = PluginWire.decode(wire) as PluginWire.Value.Handle
+fun decodeHandle(wire: String): PluginWire.Value.Handle = PluginWire.decode(wire) as PluginWire.Value.Handle
 
-fun stringOf(wire: String): String = (PluginWire.decode(wire) as PluginWire.Value.Str).value
+fun decodeJson(wire: String): JSONObject = JSONObject((PluginWire.decode(wire) as PluginWire.Value.Json).json)
+
+fun readTlField(plugin: Plugin, wire: String, key: String): String = plugin.tl().tlGet(handleId(wire), key)
+
+fun decodeString(wire: String): String = (PluginWire.decode(wire) as PluginWire.Value.Str).value
+
+fun Plugin.jvm(op: Int, target: Long = 0, name: String = "", vararg args: String): String =
+    engine!!.listener!!.jvm(op, target, name, arrayOf(*args))
+
+fun Plugin.xposed(op: Int, target: Long, name: String = "", vararg args: String): String =
+    engine!!.listener!!.xposed(op, target, name, arrayOf(*args))
+
+fun jvmHandleId(wire: String): Long {
+    assertTrue(wire.length > 2 && wire[0] == 'G', "not a jvm handle: $wire")
+    return wire.substring(2).toLong()
+}
+
+fun Plugin.jvmHandle(value: Any): Long = jvmHandleId(PluginJvm.bridgeFor(engine!!)!!.encode(value))
+
+/** the wire a plugin hands back to name [value] */
+fun Plugin.jvmWire(value: Any): String = "G${jvmHandle(value)}"
+
+fun Plugin.hookWithBefore(member: Long): Long {
+    val site = decodeString(xposed(PluginXposed.OP_HOOK, member)).toLong()
+    xposed(PluginXposed.OP_JS_BEFORES, site, "1")
+    return site
+}
 
 fun assertPluginError(code: String, wire: String?) {
     val decoded = PluginWire.decode(wire ?: "N")
@@ -614,36 +654,10 @@ fun List<Any>.toJsonArray(): org.json.JSONArray {
     return array
 }
 
-/**
- * the tg half of `PluginManager.teardown`, whose own ordering `ForkWiringTest` lints: both chains
- * abandon before the handle table is released, or a stage rejecting inside this plugin finds every
- * field of its own request expired.
- */
+/** chains abandon before the handle table is released, as in `PluginManager.teardown` */
 fun detachPlugin(plugin: Plugin) {
     plugin.session!!.stopDispatching()
     PluginRpc.detach(plugin.session!!)
     PluginUpdates.detach(plugin.session!!)
     plugin.session!!.tl.releaseAll()
-}
-
-/**
- * A routine host that answers every java operation at once. The benchmarks measure the interpreter,
- * so the bridge behind it has to be a constant, not reflection.
- */
-internal open class ConstantRoutineHost(session: PluginSession) : PluginJvm.Session(session, testAppScreen) {
-    override fun getMember(target: Any, name: String): Any? = 1
-
-    override fun setMember(target: Any, name: String, value: Any?): Any? = 1
-
-    override fun callMember(target: Any, name: String, args: List<Any?>): Any? = 1
-
-    override fun newInstanceOf(target: Any, args: List<Any?>): Any? = 1
-
-    override fun getElement(target: Any, index: Int): Any? = 1
-
-    override fun setElement(target: Any, index: Int, value: Any?): Any? = 1
-
-    override fun getArrayLength(target: Any): Any? = 1
-
-    override fun iterate(target: Any): Iterator<*> = (target as List<*>).iterator()
 }

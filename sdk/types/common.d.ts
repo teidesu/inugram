@@ -5,7 +5,7 @@ Plugin lifecycle follows its grants. Network hooks can run with no activity afte
 
 Unknown grant names give no access. Unknown grant scopes reject installation.
 
-Sensitive plugin data is filtered. Takeover RPC methods are refused: `auth.*`, plus `account.`\{`getPasskeys`, `deletePasskey`, `registerPasskey`, `initPasskeyRegistration`, `registerDevice`, `unregisterDevice`, `deleteAccount`, `changePhone`, `getAuthorizations`, `resetAuthorization`, `acceptAuthorization`, `verifyPhone`, `verifyEmail`, `resetPassword`\}.
+Sensitive plugin data is filtered. Takeover RPC methods are refused: `auth.*`, plus some `account.* methods, and `messages.{requestUrlAuth,acceptUrlAuth}`.
 
 A plugin runs one JavaScript turn at a time. A callback has a time and memory limit.
 */

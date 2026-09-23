@@ -137,3 +137,36 @@ jobs:
           next=$((${{ needs.build.outputs.build-num }} + 1))
           gh variable set INU_BUILD --body "$next"
           gh variable set LAST_RELEASE_SHA --body "$GITHUB_SHA"
+
+  publish-sdk:
+    needs: [build, upload]
+    if: github.repository == 'teidesu/inugram'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: inugram-${{ github.sha }}-sdk
+          path: sdk/types
+
+      - name: publish sdk
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GH_TOKEN: ${{ secrets.INU_VARS_TOKEN }}
+          INU_BUILD: ${{ needs.build.outputs.build-num }}
+          SDK_TYPES_HASH: ${{ vars.SDK_TYPES_HASH }}
+          SDK_CLI_HASH: ${{ vars.SDK_CLI_HASH }}
+        run: pnpm tsx scripts/ci/publish-sdk.ts

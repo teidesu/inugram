@@ -2,7 +2,6 @@ package desu.inugram.helpers.plugins
 
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.telegram.PluginWrites
-import desu.inugram.helpers.plugins.tl.TlHandles
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.assertEquals
@@ -11,21 +10,9 @@ import kotlin.test.assertTrue
 import org.json.JSONObject
 import org.junit.Before
 import org.junit.Test
-import org.telegram.messenger.FileLoader
-import org.telegram.messenger.MessagesController
-import org.telegram.messenger.UserConfig
-import org.telegram.tgnet.ConnectionsManager
 import org.telegram.tgnet.TLObject
 import org.telegram.tgnet.TLRPC
 
-/**
- * The values a write takes that could not be json: a live handle into the plugin's own table.
- *
- * Two directions, and they are not the same rule. What a send *carries* becomes part of a request
- * the host then builds and syncs the flag words of, so a handle onto an object the app owns is
- * refused there like it is on every other request path. What a transfer *names* is only read, and
- * read-only is the normal shape for it: everything an `Account` hands over is.
- */
 class PluginWriteValuesTest {
     private val alice = 222L
 
@@ -47,20 +34,6 @@ class PluginWriteValuesTest {
         phone_number = "+100"
         first_name = "alice"
     }
-
-    private fun withMedia() = TLRPC.TL_message().apply {
-        id = 4242
-        media = TLRPC.TL_messageMediaDocument().apply {
-            document = TLRPC.TL_document().apply {
-                id = 99L
-                access_hash = 1L
-                dc_id = 2
-                size = 11L
-                mime_type = "text/plain"
-                attributes.add(TLRPC.TL_documentAttributeFilename().apply { file_name = "note.txt" })
-            }
-        }.synced()
-    }.synced()
 
     private fun sendMedia(plugin: Plugin, wire: String): String? = plugin.js.listener!!.accountWrite(
         0,

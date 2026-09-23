@@ -53,8 +53,6 @@ import {
 export interface CompileOptions {
   /** 'method' for inu.jvm.routine, 'hook' for inu.xposed.routine */
   mode: 'method' | 'hook'
-  /** source text of the whole file, for error locations */
-  file: string
 }
 
 export class RoutineCompileError extends Error {
@@ -96,16 +94,6 @@ type Binding
 
 type Scope = Map<string, Binding>
 
-/**
- * Read `this` and arguments at their use sites: each read costs a host bridge check,
- * so an early return should skip unused inputs. Only captures are read in the prologue.
- */
-interface PrologueEntry {
-  key: string
-  instruction: Instruction
-  capture: string
-}
-
 interface RegionEntry {
   finalizer: BlockStatement | null
   /** The try block's scope, used by its finalizer even when inlined at another exit site. */
@@ -131,12 +119,6 @@ interface ControlTarget {
 
 interface ChainState {
   exits: Patch[]
-}
-
-/** Restores the tuple type lost when spreading it into an array. */
-function cloneInstruction(node: Instruction): Instruction {
-  const [op, ...fields] = node
-  return [op, ...fields]
 }
 
 function fail(node: Spanned | null | undefined, message: string): never {
@@ -173,20 +155,6 @@ const BINARY_OPS: Record<string, OpName> = {
   '<=': 'le',
   '>': 'gt',
   '>=': 'ge',
-  '+': 'add',
-  '-': 'sub',
-  '*': 'mul',
-  '/': 'div',
-  '%': 'rem',
-  '&': 'bitAnd',
-  '|': 'bitOr',
-  '^': 'bitXor',
-  '<<': 'shl',
-  '>>': 'shr',
-  '>>>': 'ushr',
-}
-
-const COMPOUND_OPS: Record<string, OpName> = {
   '+': 'add',
   '-': 'sub',
   '*': 'mul',
@@ -249,7 +217,7 @@ export function isRoutineFunction(fn: { type: string } | null | undefined): fn i
  * A concise arrow body returns its expression in method mode. Hook mode uses the expression
  * as a statement because hooks set results through `ctx` and cannot return a value.
  */
-function statementsOf(fn: RoutineBody, mode: CompileOptions['mode']): Statement[] {
+function getBodyStatements(fn: RoutineBody, mode: CompileOptions['mode']): Statement[] {
   const body = fn.body
   if (body === null) return []
   if (body.type === 'BlockStatement') return body.body
@@ -263,9 +231,6 @@ function statementsOf(fn: RoutineBody, mode: CompileOptions['mode']): Statement[
 }
 
 function validateRoutineFunction(fn: RoutineBody, options: CompileOptions): BindingIdentifier[] {
-  if (!isRoutineFunction(fn)) {
-    fail(fn, 'a routine must be a function expression')
-  }
   if (fn.async) fail(fn, 'an async function cannot be a routine')
   if (fn.type !== 'ArrowFunctionExpression' && fn.generator) {
     fail(fn, 'a generator function cannot be a routine')
@@ -298,30 +263,26 @@ class RoutineCompiler {
   private scopes: Scope[] = []
   private regions: RegionEntry[] = []
   private targets: ControlTarget[] = []
-  private planned = new Map<string, number>()
-  private captureCount = 0
+  private captureRegisters = new Map<string, number>()
 
+  /**
+   * Read `this` and arguments at their use sites: each read costs a host bridge check,
+   * so an early return should skip unused inputs. Only captures are read in the prologue.
+   */
   constructor(
     private fn: RoutineBody,
     private source: string,
     private options: CompileOptions,
-    readonly plan: PrologueEntry[],
+    private captures: string[],
     private planning: boolean,
   ) {
-    if (!planning) {
-      let register = 0
-      for (const entry of plan) {
-        this.planned.set(entry.key, register++)
-      }
-    }
+    captures.forEach((name, register) => this.captureRegisters.set(name, register))
   }
 
   compile(): void {
     const params = validateRoutineFunction(this.fn, this.options)
     if (!this.planning) {
-      for (const entry of this.plan) {
-        this.code.push(cloneInstruction(entry.instruction))
-      }
+      for (let i = 0; i < this.captures.length; i++) this.emit('capture', i)
     }
 
     const outer: Scope = new Map()
@@ -331,7 +292,7 @@ class RoutineCompiler {
     this.scopes.push(outer)
 
     this.pushScope()
-    this.compileStatements(statementsOf(this.fn, this.options.mode))
+    this.compileStatements(getBodyStatements(this.fn, this.options.mode))
     this.popScope()
     this.scopes.pop()
   }
@@ -347,10 +308,7 @@ class RoutineCompiler {
       fail(this.fn, `a routine may hold at most ${MAX_TRIES} try regions, this one holds ${this.tries.length}`)
     }
 
-    const captures: string[] = []
-    for (const entry of this.plan) {
-      if (entry.capture !== null) captures.push(entry.capture)
-    }
+    const captures = this.captures
     if (captures.length > MAX_CAPTURES) {
       fail(this.fn, `a routine may take at most ${MAX_CAPTURES} captures, this one takes ${captures.length}`)
     }
@@ -411,20 +369,6 @@ class RoutineCompiler {
     this.freeTemps.push(slot)
   }
 
-  private requestPrologue(key: string, build: (captureIndex: number) => Instruction, capture: string): number {
-    const known = this.planned.get(key)
-    if (known !== undefined) return known
-
-    if (!this.planning) {
-      throw new Error(`routine prologue is missing \`${key}\``)
-    }
-    const register = this.plan.length
-    this.plan.push({ key, instruction: build(this.captureCount), capture })
-    this.captureCount++
-    this.planned.set(key, register)
-    return register
-  }
-
   private argRegister(index: number): number {
     return this.emit('arg', literalOperand(index))
   }
@@ -440,7 +384,15 @@ class RoutineCompiler {
     if (name === 'arguments') {
       fail(node, '`arguments` is not available inside a routine')
     }
-    return this.requestPrologue(`capture:${name}`, index => ['capture', index], name)
+    const known = this.captureRegisters.get(name)
+    if (known !== undefined) return known
+    if (!this.planning) {
+      throw new Error(`routine prologue is missing capture \`${name}\``)
+    }
+    const register = this.captures.length
+    this.captures.push(name)
+    this.captureRegisters.set(name, register)
+    return register
   }
 
   private pushScope(): void {
@@ -1022,9 +974,6 @@ class RoutineCompiler {
   }
 
   private compileTemplateLiteral(node: TemplateLiteral): Operand {
-    if (node.expressions.length === 0) {
-      return literalOperand(node.quasis[0].value.cooked ?? node.quasis[0].value.raw)
-    }
     let value: Operand = literalOperand(node.quasis[0].value.cooked ?? node.quasis[0].value.raw)
     for (let i = 0; i < node.expressions.length; i++) {
       value = this.emit('add', value, this.compileExpression(node.expressions[i]))
@@ -1268,15 +1217,16 @@ class RoutineCompiler {
     if (operator === '&&=' || operator === '||=' || operator === '??=') {
       fail(node, `\`${operator}\` is not supported in a routine`)
     }
-    const op = COMPOUND_OPS[operator.slice(0, -1)]
+    const op = BINARY_OPS[operator.slice(0, -1)]
     if (!op) fail(node, `\`${operator}\` is not supported in a routine`)
     return op
   }
 
-  private compileAssignmentExpression(node: AssignmentExpression): Operand {
-    const combine = this.combineOperator(node)
-    const target = unwrap(node.left)
-
+  private resolveAssignTarget(node: AssignmentExpression['left'] | UpdateExpression['argument']): {
+    read: () => Operand
+    write: (value: Operand) => void
+  } {
+    const target = unwrap(node)
     if (target.type === 'Identifier') {
       const binding = this.lookup(target.name)
       if (!binding) fail(target, `\`${target.name}\` is a capture and cannot be assigned`)
@@ -1284,80 +1234,15 @@ class RoutineCompiler {
       if (binding.kind !== 'let') {
         fail(target, `\`${target.name}\` is not a \`let\` binding and cannot be assigned`)
       }
-      if (combine === null) {
-        const right = this.compileExpression(node.right)
-        this.emit('setSlot', binding.slot, right)
-        return right
+      return {
+        read: () => this.emit('getSlot', binding.slot),
+        write: value => this.emit('setSlot', binding.slot, value),
       }
-      const current = this.emit('getSlot', binding.slot)
-      const value = this.emit(combine, current, this.compileExpression(node.right))
-      this.emit('setSlot', binding.slot, value)
-      return value
     }
 
     if (target.type !== 'MemberExpression') {
       fail(target, `${target.type} is not an assignment target in a routine`)
     }
-    if (hasOptionalChain(target)) {
-      fail(target, 'an optional chain is not an assignment target')
-    }
-
-    if (this.options.mode === 'hook') {
-      const hooked = this.compileHookWrite(target, combine, node)
-      if (hooked !== null) return hooked
-    }
-
-    const object = this.compileExpression(target.object)
-    const key = this.compileMemberKey(target)
-    if (combine === null) {
-      const right = this.compileExpression(node.right)
-      this.emit('set', object, key, right)
-      return right
-    }
-    const current = this.emit('get', object, key)
-    const value = this.emit(combine, current, this.compileExpression(node.right))
-    this.emit('set', object, key, value)
-    return value
-  }
-
-  private compileHookWrite(target: MemberExpression, combine: OpName | null, node: AssignmentExpression): Operand | null {
-    if (this.isCtx(target.object)) {
-      fail(target, 'the hook context is read-only, use `ctx.setReturnValue(...)` or `ctx.setThrowable(...)`')
-    }
-    if (!this.isCtxArgs(target.object)) return null
-    if (!target.computed) {
-      fail(target, 'only `ctx.args[i]` can be assigned')
-    }
-    const index = this.compileExpression(target.property)
-    if (combine === null) {
-      const right = this.compileExpression(node.right)
-      this.emit('setArg', index, right)
-      return right
-    }
-    const current = this.emit('arg', index)
-    const value = this.emit(combine, current, this.compileExpression(node.right))
-    this.emit('setArg', index, value)
-    return value
-  }
-
-  private compileUpdateExpression(node: UpdateExpression): Operand {
-    const op: OpName = node.operator === '++' ? 'add' : 'sub'
-    const target = unwrap(node.argument)
-    const one = literalOperand(1)
-
-    if (target.type === 'Identifier') {
-      const binding = this.lookup(target.name)
-      if (!binding) fail(target, `\`${target.name}\` is a capture and cannot be assigned`)
-      if (binding.kind === 'pending') fail(target, `\`${target.name}\` is used before its declaration`)
-      if (binding.kind !== 'let') {
-        fail(target, `\`${target.name}\` is not a \`let\` binding and cannot be assigned`)
-      }
-      const old = this.emit('getSlot', binding.slot)
-      const next = this.emit(op, old, one)
-      this.emit('setSlot', binding.slot, next)
-      return node.prefix ? next : old
-    }
-
     if (hasOptionalChain(target)) {
       fail(target, 'an optional chain is not an assignment target')
     }
@@ -1369,27 +1254,45 @@ class RoutineCompiler {
       if (this.isCtxArgs(target.object)) {
         if (!target.computed) fail(target, 'only `ctx.args[i]` can be assigned')
         const index = this.compileExpression(target.property)
-        const old = this.emit('arg', index)
-        const next = this.emit(op, old, one)
-        this.emit('setArg', index, next)
-        return node.prefix ? next : old
+        return {
+          read: () => this.emit('arg', index),
+          write: value => this.emit('setArg', index, value),
+        }
       }
     }
 
     const object = this.compileExpression(target.object)
     const key = this.compileMemberKey(target)
-    const old = this.emit('get', object, key)
-    const next = this.emit(op, old, one)
-    this.emit('set', object, key, next)
+    return {
+      read: () => this.emit('get', object, key),
+      write: value => this.emit('set', object, key, value),
+    }
+  }
+
+  private compileAssignmentExpression(node: AssignmentExpression): Operand {
+    const combine = this.combineOperator(node)
+    const target = this.resolveAssignTarget(node.left)
+    const value = combine === null
+      ? this.compileExpression(node.right)
+      : this.emit(combine, target.read(), this.compileExpression(node.right))
+    target.write(value)
+    return value
+  }
+
+  private compileUpdateExpression(node: UpdateExpression): Operand {
+    const target = this.resolveAssignTarget(node.argument)
+    const old = target.read()
+    const next = this.emit(node.operator === '++' ? 'add' : 'sub', old, literalOperand(1))
+    target.write(next)
     return node.prefix ? next : old
   }
 }
 
 /** `source` is the full file text; the body's `start`/`end` are offsets into it. */
 export function compileRoutine(fn: RoutineBody, source: string, options: CompileOptions): RoutineProgram {
-  const plan: PrologueEntry[] = []
-  new RoutineCompiler(fn, source, options, plan, true).compile()
-  const compiler = new RoutineCompiler(fn, source, options, plan, false)
+  const captures: string[] = []
+  new RoutineCompiler(fn, source, options, captures, true).compile()
+  const compiler = new RoutineCompiler(fn, source, options, captures, false)
   compiler.compile()
   const program = compiler.buildProgram()
   assertWrittenRegisters(program)

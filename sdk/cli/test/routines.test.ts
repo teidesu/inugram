@@ -15,7 +15,7 @@ import { verifyProgram } from './verifier.js'
 type Mode = 'method' | 'hook'
 
 /** Runs the same pre-compile checks as the esbuild hook. */
-function bodyOf(call: RoutineCall): RoutineBody {
+function requireFunctionBody(call: RoutineCall): RoutineBody {
   const body = call.body
   if (body?.type !== 'FunctionExpression' && body?.type !== 'ArrowFunctionExpression') {
     throw new RoutineCompileError('a routine must be a function expression', call.start, call.end)
@@ -28,7 +28,7 @@ function compileBody(text: string, mode: Mode = 'method'): RoutineProgram {
   const parsed = parseFile('routine.ts', wrapped)
   if (parsed.errors.length > 0) throw new RoutineCompileError(parsed.errors[0].message, 0, 1)
   const call = findRoutineCalls(parsed.program)[0]
-  return compileRoutine(bodyOf(call), wrapped, { mode, file: 'routine.ts' })
+  return compileRoutine(requireFunctionBody(call), wrapped, { mode })
 }
 
 /** Checks host verification, wire schema, and deterministic compilation. */
@@ -46,7 +46,7 @@ function refuses(text: string, mode: Mode = 'method') {
 }
 
 /** Reads a named plain property from the emitted program. */
-function propertyOf(object: ObjectExpression, name: string): Expression {
+function findPropertyValue(object: ObjectExpression, name: string): Expression {
   for (const property of object.properties) {
     if (property.type !== 'Property') continue
     if (property.key.type !== 'Identifier' || property.key.name !== name) continue
@@ -61,7 +61,7 @@ function captureProblems(file: string): string[] {
   expect(parsed.errors).toEqual([])
   const calls = findRoutineCalls(parsed.program).map(call => ({
     call,
-    names: compileRoutine(bodyOf(call), file, { mode: call.mode, file: 'plugin.ts' }).captures,
+    names: compileRoutine(requireFunctionBody(call), file, { mode: call.mode }).captures,
   }))
   return [...checkCaptures(parsed.program, calls).values()].flat().map(it => it.name)
 }
@@ -492,9 +492,9 @@ describe('the routine compiler', () => {
         const parsed = parseFile('built.ts', emitted)
         expect(parsed.errors).toEqual([])
         const call = findRoutineCalls(parsed.program)[0]
-        const emittedProgram = call.argument
+        const emittedProgram = call.body
         if (emittedProgram?.type !== 'ObjectExpression') throw new Error('the emitted call carries no program')
-        const recorded = propertyOf(emittedProgram, 'source')
+        const recorded = findPropertyValue(emittedProgram, 'source')
         if (recorded.type !== 'TemplateLiteral') throw new Error('the recorded source is not a template literal')
         const cooked = recorded.quasis[0].value.cooked ?? ''
         const restored = dedentRoutineSource(cooked)

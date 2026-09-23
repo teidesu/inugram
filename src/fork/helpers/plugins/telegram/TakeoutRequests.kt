@@ -6,18 +6,11 @@ import org.telegram.tgnet.TLObject
 import org.telegram.tgnet.TLRPC
 
 /**
- * The takeout corner of the schema, which stock android does not implement: it never exports, so
- * `TLRPC.java` declares no class for any of these and the generated tables cannot name them either.
- * Written by hand rather than generated, and deliberately kept out of [desu.inugram.helpers.plugins.tl.TlReflect]'s
- * class index: a plugin reaches takeout through `account.initTakeoutSession()` and the session
- * object it answers, never by naming one of these constructors in `invokeRpc`.
- *
- * Ids and layouts are layer 230's, from `TMessagesProj_AppTests/tlscheme/230.json`. They have not
- * moved since layer 100 and the wrapper cannot change without breaking every exporting client, so
- * a rebase has nothing to do here.
- *
- * Flags are computed in [TLObject.serializeToStream] instead of riding on a `flags` field, because
- * `tl_tables.txt` only covers classes the generator found in stock's tree.
+ * Stock android never exports, so `TLRPC.java` has no class for these and the generated tables cannot
+ * name them. Kept out of [desu.inugram.helpers.plugins.tl.TlReflect]: plugins reach takeout only through
+ * `account.initTakeoutSession()`.
+ * Layer 230's ids and layouts, unchanged since layer 100. Flags are computed in serializeToStream since
+ * `tl_tables.txt` only covers stock classes.
  */
 class TakeoutInitRequest : TLObject() {
     @JvmField var contacts = false
@@ -27,7 +20,7 @@ class TakeoutInitRequest : TLObject() {
     @JvmField var messageChannels = false
     @JvmField var files = false
 
-    /** only written when [files] is set - the schema gates both on flags.5 */
+    /** flags.5 gates both */
     @JvmField var fileMaxSize = 0L
 
     override fun serializeToStream(stream: OutputSerializedData) {
@@ -58,7 +51,7 @@ class TakeoutInitRequest : TLObject() {
     }
 }
 
-/** `account.takeout#4dba4501 id:long = account.Takeout` - the id is all a session is */
+/** `account.takeout#4dba4501 id:long = account.Takeout` */
 class TakeoutSession : TLObject() {
     @JvmField var id = 0L
 
@@ -74,7 +67,7 @@ class TakeoutSession : TLObject() {
     }
 }
 
-/** must itself be sent inside [TakeoutWrapper], which is what closes the session it names */
+/** must be sent inside [TakeoutWrapper], which is what closes the session */
 class TakeoutFinishRequest(private val success: Boolean) : TLObject() {
     override fun serializeToStream(stream: OutputSerializedData) {
         stream.writeInt32(CONSTRUCTOR)
@@ -91,10 +84,7 @@ class TakeoutFinishRequest(private val success: Boolean) : TLObject() {
     }
 }
 
-/**
- * `invokeWithTakeout#aca9fd2e {X:Type} takeout_id:long query:!X = X` - an envelope, so it answers
- * whatever [query] would have answered and frees whatever [query] holds.
- */
+/** `invokeWithTakeout#aca9fd2e {X:Type} takeout_id:long query:!X = X`: answers and frees whatever [query] would */
 class TakeoutWrapper(private val takeoutId: Long, @JvmField val query: TLObject) : TLObject() {
     override fun serializeToStream(stream: OutputSerializedData) {
         stream.writeInt32(CONSTRUCTOR)

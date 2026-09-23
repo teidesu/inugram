@@ -5,44 +5,41 @@ edition = "2021"
 publish = false
 
 [workspace]
-members = ["crates/tgtext"]
+members = [ "crates/tgtext" ]
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = [ "cdylib" ]
 
 [dependencies]
 adler = "1.0"
 sha1 = "0.10"
 base64 = "0.23"
 cap-std = "4.0.3"
-# the canvas colour vocabulary. android's own `Color.parseColor` covers hex and ~140 names and
-# nothing else, so `rgb()`/`hsl()`/`hwb()`/`lab()` and the modern space-separated syntax would be a
-# parser of our own; the font shorthand still is one, there being no crate for it.
-csscolorparser = { version = "0.8", default-features = false, features = ["named-colors"] }
+csscolorparser = { version = "0.8", default-features = false, features = [ "named-colors" ] }
 hex = "0.4.3"
 jni = "0.22"
+kurbo = "0.13.1"
 leb128 = "0.2.7"
-# libart.so's real symtab ships xz-compressed in `.gnu_debugdata` on modern android, and the
-# prefix resolver lsplant demands has to read it. pure rust, so `elf.rs` stays unit-testable.
+libc = "0.2"
 lzma-rs = "0.3"
-object = { version = "0.40.0", default-features = false, features = ["read_core", "elf", "unaligned"] }
-# rquickjs bundles quickjs-ng; `bindgen` is required because it ships no prebuilt Android bindings.
-rquickjs = { version = "0.14", default-features = true, features = ["bindgen", "parallel"] }
+object = { version = "0.40.0", default-features = false, features = [
+  "read_core",
+  "elf",
+  "unaligned"
+] }
+rquickjs = { version = "0.14", default-features = true, features = [
+  "bindgen",
+  "macro",
+  "parallel"
+] }
+serde_json = "1.0.151"
 slotmap = "1.1.1"
 tgtext = { path = "crates/tgtext" }
 url = "2.5.8"
-# the encoder's rgba to yuv conversion. its default features are x86 simd; `rdm` picks the faster
-# neon kernels at runtime on cores that have the extension.
-yuv = { version = "0.8.18", default-features = false, features = ["rdm"] }
-
-[dev-dependencies]
-serde_json = "1.0.151"
+yuv = { version = "0.8.18", default-features = false, features = [ "rdm" ] }
 
 [build-dependencies]
-# the same quickjs the cdylib links, resolved from the same lockfile, so `build.rs` cannot emit
-# bytecode a different interpreter would read. `bindgen` is not asked for here: rquickjs ships
-# prebuilt bindings for every host anyone builds this on, and only android has none.
-rquickjs = { version = "0.14", features = ["loader"] }
+rquickjs = { version = "0.14", features = [ "loader" ] }
 
 [profile.release]
 opt-level = "z"
@@ -55,11 +52,8 @@ strip = true
 inherits = "release"
 strip = false
 
-# the one hot loop: a frame's colour conversion, which size-optimized code runs several times slower
 [profile.release.package.yuv]
 opt-level = 3
 
-# the interpreter every plugin instruction runs through: `cc` hands cargo's level to clang, so the
-# engine's `z` would build quickjs at `-Oz`
 [profile.release.package.rquickjs-sys]
 opt-level = 3

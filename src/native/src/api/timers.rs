@@ -9,7 +9,7 @@ use rquickjs::{Coerced, Ctx, Exception, Function, Persistent, Result as JsResult
 
 use crate::api::error::{call_callback, PluginErrorCode};
 use crate::runtime::pump_jobs;
-use crate::sandbox::registry::{Lifecycle, Registry, Token};
+use crate::sandbox::registry::{Lifecycle, Registry};
 
 pub const CANCEL_WAKE: i64 = -1;
 
@@ -38,7 +38,7 @@ pub(crate) fn monotonic_now_ms() -> u64 {
 }
 
 struct Timer {
-  id: Token,
+  id: u32,
   callback: RefCell<Option<Persistent<Function<'static>>>>,
   interval_ms: Option<u64>,
   due: Cell<u64>,
@@ -129,7 +129,7 @@ impl TimerState {
     callback: Value<'js>,
     delay: Option<f64>,
     repeats: bool,
-  ) -> JsResult<Token> {
+  ) -> JsResult<u32> {
     let Some(callback) = callback.into_function() else {
       return Err(Exception::throw_type(ctx, &format!("{what}: callback must be a function")));
     };
@@ -161,10 +161,10 @@ impl TimerState {
 
   fn clear_timer(self: &Rc<Self>, ctx: &Ctx<'_>, id: Option<f64>) {
     let Some(id) = id else { return };
-    if !(id.is_finite() && id >= 1.0 && id <= Token::MAX as f64) {
+    if !(id.is_finite() && id >= 1.0 && id <= u32::MAX as f64) {
       return;
     }
-    if let Some(timer) = self.timers.remove(id as Token) {
+    if let Some(timer) = self.timers.remove(id as u32) {
       timer.release(ctx);
       self.sync_wake();
     }
@@ -213,65 +213,57 @@ impl TimerState {
 
 impl TimerState {
   pub fn set_visible(self: &Rc<Self>, visible: bool) {
-    let state = self;
-    if state.visible.replace(visible) == visible {
+    if self.visible.replace(visible) == visible {
       return;
     }
     if !visible {
-      state.hidden_since.set(state.host.now_ms());
+      self.hidden_since.set(self.host.now_ms());
     }
-    state.sync_wake();
+    self.sync_wake();
   }
 
   pub fn run_due(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context) {
-    let state = self;
-    state.armed.set(None);
+    self.armed.set(None);
     context.with(|ctx| {
-      if state.lifecycle.is_unloading() {
-        state.release_all(&ctx);
+      if self.lifecycle.is_unloading() {
+        self.release_all(&ctx);
         return;
       }
-      let now = state.host.now_ms();
-      state.last_tick.set(now);
-      let mut due: Vec<Rc<Timer>> = state.timers.values().into_iter().filter(|t| t.due.get() <= now).collect();
+      let now = self.host.now_ms();
+      self.last_tick.set(now);
+      let mut due: Vec<Rc<Timer>> = self.timers.values().into_iter().filter(|t| t.due.get() <= now).collect();
       due.sort_by_key(|t| (t.due.get(), t.seq.get()));
 
       for timer in due {
-        if !state.timers.contains(timer.id) || timer.due.get() > now {
+        if !self.timers.contains(timer.id) || timer.due.get() > now {
           continue;
         }
         let saved = timer.callback.borrow().clone();
         match timer.interval_ms {
           Some(period) => {
             timer.due.set(now.saturating_add(period));
-            timer.seq.set(state.next_seq());
+            timer.seq.set(self.next_seq());
           }
           None => {
-            state.timers.remove(timer.id);
+            self.timers.remove(timer.id);
             timer.release(&ctx);
           }
         }
         let Some(callback) = saved.and_then(|p| p.restore(&ctx).ok()) else {
           continue;
         };
-        call_callback(&ctx, &state.log, "timer callback", &callback, ());
+        call_callback(&ctx, &self.log, "timer callback", &callback, ());
       }
     });
-    state.sync_wake();
-    pump_jobs(rt, context, state.log.as_ref());
-  }
-
-  pub fn notify_unload(self: &Rc<Self>, context: &rquickjs::Context) {
-    let state = self;
-    state.dispose(context);
+    self.sync_wake();
+    pump_jobs(rt, context, self.log.as_ref());
   }
 }
 
 impl Dispose for TimerState {
   fn dispose(&self, context: &rquickjs::Context) {
-    let state = self;
-    context.with(|ctx| state.release_all(&ctx));
-    state.sync_wake();
+    context.with(|ctx| self.release_all(&ctx));
+    self.sync_wake();
   }
 }
 

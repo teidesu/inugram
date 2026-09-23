@@ -1,19 +1,19 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use rquickjs::class::{JsClass, Readable, Trace, Tracer};
-use rquickjs::function::This;
-use rquickjs::{Array, Class, Constructor, Ctx, Function, JsLifetime, Object, Result as JsResult, Value};
+use rquickjs::class::{Trace, Tracer};
+use rquickjs::{Array, Class, Ctx, JsLifetime, Object, Result as JsResult, Value};
 
 use super::{Invocation, JavaValues, Returned, FIRST_ARG_INDEX, KEEP_ARGUMENT};
 use crate::api::error::PluginErrorCode;
 use crate::api::platform::jvm::JvmState;
 use crate::utils::arguments::array_values;
-use crate::utils::shape::{define_accessor, define_method, get_class_prototype};
 
 const METHOD_INDEX: usize = 0;
 const THIS_INDEX: usize = 1;
 
+#[derive(JsLifetime)]
+#[rquickjs::class(rename = "XposedHookContext", frozen)]
 pub(super) struct HookContext<'js> {
   jvm: Rc<JvmState>,
   invocation: RefCell<Rc<dyn JavaValues>>,
@@ -41,22 +41,6 @@ impl<'js> Trace<'js> for HookContext<'js> {
     }
   }
 }
-
-// SAFETY: every JavaScript-lifetime-bound field uses the struct's `'js` lifetime.
-unsafe impl<'js> JsLifetime<'js> for HookContext<'js> {
-  type Changed<'to> = HookContext<'to>;
-}
-
-impl<'js> JsClass<'js> for HookContext<'js> {
-  const NAME: &'static str = "XposedHookContext";
-  type Mutable = Readable;
-
-  fn constructor(_ctx: &Ctx<'js>) -> JsResult<Option<Constructor<'js>>> {
-    Ok(None)
-  }
-}
-
-type Me<'js> = This<Class<'js, HookContext<'js>>>;
 
 pub(super) fn create_hook_context<'js>(
   jvm: &Rc<JvmState>,
@@ -90,7 +74,6 @@ impl<'js> HookContext<'js> {
     self.live.set(false);
   }
 
-  /// the same call's later phase, with the values it was handed this time
   pub(super) fn revive(&self, call: &Invocation) {
     *self.invocation.borrow_mut() = call.values.clone();
     self.live.set(true);
@@ -212,62 +195,63 @@ impl<'js> HookContext<'js> {
   }
 }
 
-/// Returns the prototype for caching, avoiding a class-registry type-ID lookup on every dispatch.
-pub(super) fn install_hook_context<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
-  let proto = get_class_prototype::<HookContext>(ctx)?;
-  define_accessor(
-    &proto,
-    "method",
-    |ctx: Ctx<'js>, this: Me<'js>| {
-      let context = this.0.borrow();
-      context.read_invocation(&ctx, &context.method, METHOD_INDEX)
-    },
-    |this: Me<'js>, value: Value<'js>| *this.0.borrow().method.borrow_mut() = Some(value),
-  )?;
-  define_accessor(
-    &proto,
-    "thisObject",
-    |ctx: Ctx<'js>, this: Me<'js>| {
-      let context = this.0.borrow();
-      context.read_invocation(&ctx, &context.this_object, THIS_INDEX)
-    },
-    |this: Me<'js>, value: Value<'js>| *this.0.borrow().this_object.borrow_mut() = Some(value),
-  )?;
-  define_accessor(
-    &proto,
-    "args",
-    |ctx: Ctx<'js>, this: Me<'js>| this.0.borrow().read_args(&ctx),
-    |ctx: Ctx<'js>, this: Me<'js>, value: Value<'js>| this.0.borrow().replace_args(&ctx, value),
-  )?;
-  define_accessor(
-    &proto,
-    "returnValue",
-    |ctx: Ctx<'js>, this: Me<'js>| {
-      let context = this.0.borrow();
-      context.read_result(&ctx, &context.return_value, false)
-    },
-    |this: Me<'js>, value: Value<'js>| *this.0.borrow().return_value.borrow_mut() = Some(value),
-  )?;
-  define_accessor(
-    &proto,
-    "throwable",
-    |ctx: Ctx<'js>, this: Me<'js>| {
-      let context = this.0.borrow();
-      context.read_result(&ctx, &context.throwable, true)
-    },
-    |this: Me<'js>, value: Value<'js>| *this.0.borrow().throwable.borrow_mut() = Some(value),
-  )?;
-  define_method(
-    &proto,
-    "setReturnValue",
-    Function::new(ctx.clone(), |this: Me<'js>, value: Value<'js>| this.0.borrow().answer_with(value, None))?,
-  )?;
-  define_method(
-    &proto,
-    "setThrowable",
-    Function::new(ctx.clone(), |ctx: Ctx<'js>, this: Me<'js>, value: Value<'js>| {
-      this.0.borrow().answer_with(Value::new_null(ctx), Some(value))
-    })?,
-  )?;
-  Ok(proto)
+#[rquickjs::methods(rename_all = "camelCase")]
+impl<'js> HookContext<'js> {
+  #[qjs(get, enumerable, configurable, rename = "method")]
+  fn get_method(&self, ctx: Ctx<'js>) -> JsResult<Value<'js>> {
+    self.read_invocation(&ctx, &self.method, METHOD_INDEX)
+  }
+
+  #[qjs(set, rename = "method")]
+  fn set_method(&self, value: Value<'js>) {
+    *self.method.borrow_mut() = Some(value);
+  }
+
+  #[qjs(get, enumerable, configurable, rename = "thisObject")]
+  fn get_this_object(&self, ctx: Ctx<'js>) -> JsResult<Value<'js>> {
+    self.read_invocation(&ctx, &self.this_object, THIS_INDEX)
+  }
+
+  #[qjs(set, rename = "thisObject")]
+  fn set_this_object(&self, value: Value<'js>) {
+    *self.this_object.borrow_mut() = Some(value);
+  }
+
+  #[qjs(get, enumerable, configurable, rename = "args")]
+  fn get_args(&self, ctx: Ctx<'js>) -> JsResult<Value<'js>> {
+    self.read_args(&ctx)
+  }
+
+  #[qjs(set, rename = "args")]
+  fn set_args(&self, ctx: Ctx<'js>, value: Value<'js>) -> JsResult<()> {
+    self.replace_args(&ctx, value)
+  }
+
+  #[qjs(get, enumerable, configurable, rename = "returnValue")]
+  fn get_return_value(&self, ctx: Ctx<'js>) -> JsResult<Value<'js>> {
+    self.read_result(&ctx, &self.return_value, false)
+  }
+
+  #[qjs(set, rename = "returnValue")]
+  fn set_return_value_property(&self, value: Value<'js>) {
+    *self.return_value.borrow_mut() = Some(value);
+  }
+
+  #[qjs(get, enumerable, configurable, rename = "throwable")]
+  fn get_throwable(&self, ctx: Ctx<'js>) -> JsResult<Value<'js>> {
+    self.read_result(&ctx, &self.throwable, true)
+  }
+
+  #[qjs(set, rename = "throwable")]
+  fn set_throwable_property(&self, value: Value<'js>) {
+    *self.throwable.borrow_mut() = Some(value);
+  }
+
+  fn set_return_value(&self, value: Value<'js>) {
+    self.answer_with(value, None)
+  }
+
+  fn set_throwable(&self, ctx: Ctx<'js>, value: Value<'js>) {
+    self.answer_with(Value::new_null(ctx), Some(value))
+  }
 }

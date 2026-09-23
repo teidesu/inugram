@@ -1,7 +1,6 @@
 pub mod html;
 pub mod markdown;
 
-/// What a `messageEntityFormattedDate` displays, as the flags the app carries.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DateFormat {
   pub relative: bool,
@@ -143,8 +142,7 @@ pub struct TextWithEntities {
   pub entities: Vec<Entity>,
 }
 
-/// An interpolated template value: plain text, text with entities, or an omitted value. Numbers and
-/// int64s become [`Sub::Text`] before reaching this crate.
+/// Numbers and int64s become [`Sub::Text`] before reaching this crate.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Sub {
   Skip,

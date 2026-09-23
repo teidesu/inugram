@@ -1,12 +1,12 @@
 import { defineCommand, deviceArgs } from '../utils/args.js'
-import { createDevice } from '../utils/device.js'
+import { Device } from '../utils/device.js'
 import { color } from '../utils/log.js'
 
 export const listCmd = defineCommand({
   meta: { name: 'list', description: 'list the installed plugins' },
   args: deviceArgs,
   run: async ({ args }) => {
-    const device = createDevice(args)
+    const device = new Device(args)
     await device.requireRunning()
 
     const plugins = await device.list()

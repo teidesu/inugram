@@ -9,14 +9,12 @@ export interface RoutineCall {
   start: number
   end: number
   body: Argument | undefined
-  /** The first argument, before validating its type. */
-  argument: Argument | undefined
   arguments: Argument[]
 }
 
 const NAMESPACES: Record<string, 'method' | 'hook'> = { jvm: 'method', xposed: 'hook' }
 
-export function languageOf(file: string): 'ts' | 'tsx' | 'js' | 'jsx' {
+export function detectLanguage(file: string): 'ts' | 'tsx' | 'js' | 'jsx' {
   if (file.endsWith('.tsx')) return 'tsx'
   if (file.endsWith('.jsx')) return 'jsx'
   if (file.endsWith('.ts') || file.endsWith('.mts') || file.endsWith('.cts')) return 'ts'
@@ -24,10 +22,10 @@ export function languageOf(file: string): 'ts' | 'tsx' | 'js' | 'jsx' {
 }
 
 export function parseFile(file: string, source: string) {
-  return parseSync(file, source, { lang: languageOf(file), sourceType: 'module' })
+  return parseSync(file, source, { lang: detectLanguage(file), sourceType: 'module' })
 }
 
-function namespaceOf(node: CallExpression): 'method' | 'hook' | null {
+function getRoutineNamespace(node: CallExpression): 'method' | 'hook' | null {
   const callee = node.callee
   if (callee.type !== 'MemberExpression' || callee.computed) return null
   if (callee.property.type !== 'Identifier' || callee.property.name !== 'routine') return null
@@ -44,7 +42,7 @@ export function findRoutineCalls(program: Program): RoutineCall[] {
 
   new Visitor({
     CallExpression(node) {
-      const mode = namespaceOf(node)
+      const mode = getRoutineNamespace(node)
       if (mode === null) return
       if (depth === 0) {
         found.push({
@@ -53,14 +51,13 @@ export function findRoutineCalls(program: Program): RoutineCall[] {
           start: node.start,
           end: node.end,
           body: node.arguments[0],
-          argument: node.arguments[0],
           arguments: node.arguments,
         })
       }
       depth++
     },
     'CallExpression:exit': (node) => {
-      if (namespaceOf(node) !== null) depth--
+      if (getRoutineNamespace(node) !== null) depth--
     },
   }).visit(program)
 

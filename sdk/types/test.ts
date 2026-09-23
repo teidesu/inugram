@@ -1,12 +1,3 @@
-// ==InuPlugin==
-// @name         settings test
-// @author       teidesu
-// @version      1.0
-// @description  settings ui test
-// @grant        none
-// @plugin-api   1
-// @platform   android
-// ==/InuPlugin==
 /// <reference path="./index.d.ts" />
 
 const { ui } = inu
@@ -240,30 +231,20 @@ inu.xposed.hookMethod(inu.jvm.cls('android.view.Window').getDeclaredMethod('setF
     }
   },
 })
-inu.xposed.hookMethod(inu.jvm.cls('android.view.Window').getDeclaredMethod('setAttributes'), {
-  before: (ctx) => {
-    const params = ctx.args[0] as JavaObject & { flags: number }
-    if (params.flags & FLAG_SECURE) {
-      params.flags = params.flags & ~FLAG_SECURE
-    }
-  },
-})
-inu.xposed.hookMethod(inu.jvm.cls('android.view.WindowManagerImpl').getDeclaredMethod('addView'), {
-  before: (ctx) => {
-    const params = ctx.args[1] as JavaObject & { flags: number }
-    if (params.flags & FLAG_SECURE) {
-      params.flags = params.flags & ~FLAG_SECURE
-    }
-  },
-})
-inu.xposed.hookMethod(inu.jvm.cls('android.view.WindowManagerImpl').getDeclaredMethod('updateViewLayout'), {
-  before: (ctx) => {
-    const params = ctx.args[1] as JavaObject & { flags: number }
-    if (params.flags & FLAG_SECURE) {
-      params.flags = params.flags & ~FLAG_SECURE
-    }
-  },
-})
+for (const [cls, method, index] of [
+  ['android.view.Window', 'setAttributes', 0],
+  ['android.view.WindowManagerImpl', 'addView', 1],
+  ['android.view.WindowManagerImpl', 'updateViewLayout', 1],
+] as const) {
+  inu.xposed.hookMethod(inu.jvm.cls(cls).getDeclaredMethod(method), {
+    before: (ctx) => {
+      const params = ctx.args[index] as JavaObject & { flags: number }
+      if (params.flags & FLAG_SECURE) {
+        params.flags = params.flags & ~FLAG_SECURE
+      }
+    },
+  })
+}
 inu.xposed.hookMethod(
   inu.jvm.cls('org.telegram.messenger.FlagSecureReason').getDeclaredMethod('attach'),
   { before: ctx => ctx.setReturnValue(null) },

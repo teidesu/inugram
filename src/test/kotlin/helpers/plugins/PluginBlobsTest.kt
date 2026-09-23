@@ -9,7 +9,6 @@ import kotlin.test.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/** the spill directory: an install id names a path here, so a bad one must never reach the fs. */
 class PluginBlobsTest {
     @Before
     fun setUp() = resetBridge()
@@ -54,8 +53,6 @@ class PluginBlobsTest {
         assertTrue(stale.mkdirs())
 
         PluginBlobs.scheduleSweep()
-        // the sweep is an unbounded recursive delete moved off ApplicationLoader.onCreate, so the
-        // test has to run the queue it was handed to rather than expecting it inline
         drain()
 
         assertTrue(mine.isDirectory)

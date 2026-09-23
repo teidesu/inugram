@@ -1,49 +1,12 @@
 // ==InuPlugin==
 // @name         jvm test
-// @author       teidesu
-// @version      1.0
 // @description  asserts inu.jvm: the class namespace scope, what values cross, handles, runnables and what refuses
 // @grant        unsafe.jvm
-// @plugin-api   1
-// @platform     android
 // ==/InuPlugin==
 
-// the grant reaches every class the app can, so nothing below refuses for want of reach: what it
-// asserts is what crosses, what a handle is, and what the engine itself will not hand over.
+// the grant reaches every class the app can, so nothing below refuses for want of reach
 
-let ran = 0
-
-function pass(label, detail) {
-  ran++
-  console.log(detail === undefined ? `PASS ${label}` : `PASS ${label}: ${detail}`)
-}
-
-function fail(label, detail) {
-  ran++
-  console.error(`FAIL ${label}: ${detail}`)
-}
-
-function check(label, ok, detail) {
-  if (ok) pass(label, detail)
-  else fail(label, detail)
-}
-
-function expectPluginError(label, code, grant, fn) {
-  let error
-  try {
-    fn()
-  } catch (e) {
-    error = e
-  }
-  if (error === undefined) return fail(label, 'did not throw')
-  if (!(error instanceof inu.PluginError)) return fail(label, `${error.name}: ${error.message}`)
-  if (error.code !== code) return fail(label, `code = ${error.code}, want ${code}`)
-  if (grant !== null && error.grant !== grant) return fail(label, `grant = ${error.grant}, want ${grant}`)
-  pass(label, `${error.code} ${error.message}`)
-}
-
-// exact, not a floor: most of what follows is a refusal, and a member that stopped existing refuses
-// too - so the surface is asserted positively first and the count is what catches the rest
+// exact: a vanished member refuses too, so the surface is asserted positively and the count catches the rest
 const EXPECTED = 31
 const before = ran
 
@@ -56,20 +19,15 @@ check(
     typeof inu.jvm.callSuper === 'function',
 )
 
-// -- the entry point --
-
 const ArrayList = inu.jvm.cls('java.util.ArrayList')
 const Integer = inu.jvm.cls('java.lang.Integer')
 const Long = inu.jvm.cls('java.lang.Long')
 check('a class resolves', typeof ArrayList === 'function')
 
-// a class is callable because `new cls(...)` is how the contract builds one
 const list = new ArrayList()
 check('new gives a java object', typeof list === 'object' && typeof list.call === 'function')
 
-expectPluginError('cls takes a name', 'invalid-argument', null, () => inu.jvm.cls(''))
-
-// -- values on their way out --
+expectThrow('cls takes a name', 'invalid-argument', () => inu.jvm.cls(''))
 
 list.call('add', 1)
 list.call('add', 2)
@@ -77,15 +35,11 @@ check('a java int reads as a number', list.getField('size') === 2, `${list.getFi
 check('a java boolean reads as a boolean', list.call('add', 'x') === true)
 check('a java String return reads as a string', list.call('toString') === '[1, 2, x]')
 
-// a java long is 64 bits wide; the alternative to a bigint here is a number that is quietly not
-// the one java holds
 const big = Long.getStaticField('MAX_VALUE')
 check('a java long reads as a bigint', typeof big === 'bigint' && big === 9223372036854775807n, `${big}`)
 
 const clone = list.call('clone')
 check('a java object return is a handle of its own', typeof clone === 'object' && clone !== list)
-
-// -- values on their way in --
 
 /** @type {[string, any][]} */
 const unconvertible = [
@@ -96,14 +50,12 @@ const unconvertible = [
 ]
 
 for (const [what, value] of unconvertible) {
-  expectPluginError(`${what} cannot be handed to java`, 'invalid-argument', null, () => list.call('add', value))
+  expectThrow(`${what} cannot be handed to java`, 'invalid-argument', () => list.call('add', value))
 }
 
-expectPluginError('a string past the value bound is refused', 'quota-exceeded', null, () =>
+expectThrow('a string past the value bound is refused', 'quota-exceeded', () =>
   list.call('add', 'x'.repeat(1024 * 1024 + 1)),
 )
-
-// -- the pinned forms --
 
 const add = ArrayList.getDeclaredMethod('add(Ljava/lang/Object;)Z')
 check('getDeclaredMethod gives something invocable', typeof add.invoke === 'function')
@@ -121,14 +73,12 @@ check(
   Object.keys(Object.getPrototypeOf(sizedCtor)).join() === 'newInstance' &&
     Object.keys(Object.getPrototypeOf(add)).join() === 'invoke',
 )
-expectPluginError('getDeclaredConstructor takes a descriptor', 'invalid-argument', null, () =>
+expectThrow('getDeclaredConstructor takes a descriptor', 'invalid-argument', () =>
   ArrayList.getDeclaredConstructor('add'),
 )
 
 check('a static field reads', Integer.getStaticField('MAX_VALUE') === 2147483647)
 check('a static method answers', Integer.callStatic('valueOf', 1) === 1)
-
-// -- what a java throw looks like --
 
 let thrown
 try {
@@ -153,24 +103,22 @@ const Listish = inu.jvm.defineClass({
   superclass: inu.jvm.cls('java.util.AbstractList'),
   methods: { size: () => 0, get: () => null },
 })
-expectPluginError('callSuper refuses an abstract super member', 'invalid-argument', null, () =>
+expectThrow('callSuper refuses an abstract super member', 'invalid-argument', () =>
   inu.jvm.callSuper(Listish, new Listish(), 'size'),
 )
-expectPluginError('callSuper refuses a receiver of another class', 'invalid-argument', null, () =>
+expectThrow('callSuper refuses a receiver of another class', 'invalid-argument', () =>
   inu.jvm.callSuper(Sized, list, 'size'),
 )
-expectPluginError('callSuper refuses a class with no superclass', 'invalid-argument', null, () =>
+expectThrow('callSuper refuses a class with no superclass', 'invalid-argument', () =>
   inu.jvm.callSuper(inu.jvm.cls('java.lang.Object'), list, 'hashCode'),
 )
-
-// -- callbacks --
 
 let clicks = 0
 const onClick = inu.jvm.runnable(() => {
   clicks++
 })
 check('runnable gives a java object', typeof onClick === 'object' && typeof onClick.call === 'function')
-expectPluginError('runnable takes a function', 'invalid-argument', null, () =>
+expectThrow('runnable takes a function', 'invalid-argument', () =>
   // @ts-expect-error - the contract says a function, and the engine says so at runtime too
   inu.jvm.runnable('later'),
 )
@@ -180,10 +128,7 @@ if (ran - before !== EXPECTED) {
   console.error(`FAIL oracle: ${ran - before} load-time assertions ran, expected exactly ${EXPECTED}`)
 }
 
-// -- the half something else has to drive --
-
-// a callback never runs inside the call that handed the object over: java runs it whenever it
-// likes, and the engine is only ever entered from its own queue
+// java runs a callback whenever it likes; the engine is only entered from its own queue
 function jvmDone() {
   check('the callback ran once java ran it', clicks === 1, `${clicks}`)
   console.log('jvm test done')
@@ -191,11 +136,9 @@ function jvmDone() {
 
 globalThis.__jvmDone = jvmDone
 
-// a device reaches the same function through a button; the harness runs the runnable itself.
-// java is what runs a runnable, and the plugin cannot: every member of the object this api mints
-// lives in the engine's own package and is refused. So the button hands it to a real `Thread` and
-// waits, which is also the only way to see that a callback arriving from another thread lands on
-// the engine's queue rather than in it
+// the harness runs the runnable itself; a device hands it to a real `Thread` via a button, since every
+// member of the minted object is in the engine's package and refused to the plugin. it also shows a
+// callback from another thread lands on the engine's queue
 if (typeof inu.ui?.settingsPage === 'function') {
   inu.registerSettings(
     inu.ui.settingsPage({
@@ -206,11 +149,8 @@ if (typeof inu.ui?.settingsPage === 'function') {
           text: 'Run it',
           onClick: () => {
             const Thread = inu.jvm.cls('java.lang.Thread')
-            check(
-              'a real java call answers',
-              typeof inu.jvm.cls('java.util.Locale').callStatic('getDefault') === 'object',
-            )
-            expectPluginError('the runnable itself cannot be reached into', 'forbidden', null, () =>
+            check('a real java call answers', typeof inu.jvm.cls('java.util.Locale').callStatic('getDefault') === 'object')
+            expectThrow('the runnable itself cannot be reached into', 'forbidden', () =>
               onClick.call('run'),
             )
             new Thread(onClick).call('start')

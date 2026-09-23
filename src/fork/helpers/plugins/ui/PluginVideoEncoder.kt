@@ -15,11 +15,8 @@ import java.util.ArrayDeque
 import java.util.concurrent.Executor
 
 /**
- * Encodes canvas frames into silent MP4 using the device's H.264 encoder.
- *
- * [snapshot] copies bitmap memory on the engine thread into a borrowed encoder buffer.
- * [addFrame] processes and returns the buffer on [queue]. MediaCodec requires serialized
- * access, and plugins may submit another frame before awaiting the previous one.
+ * [snapshot] copies pixels on the engine thread into a borrowed encoder buffer; [addFrame] encodes and
+ * returns it on [queue]. MediaCodec needs serialized access, and plugins may submit before awaiting.
  */
 internal class PluginVideoEncoder private constructor(
     private val output: File,
@@ -44,14 +41,10 @@ internal class PluginVideoEncoder private constructor(
     @Volatile
     private var closed = false
 
-    /** engine thread only: the one bitmap a source of another size is drawn into */
+    /** engine thread only */
     private var scaled: Bitmap? = null
 
-    /**
-     * Copies the current pixels so the source can be drawn on again. Uses memcpy rather than
-     * `getPixels`, which would unpremultiply them. Keeps one buffer per in-flight frame,
-     * plus one for the plugin to fill.
-     */
+    /** memcpy, not `getPixels`, which would unpremultiply */
     fun snapshot(source: Bitmap): ByteBuffer {
         val buffer = synchronized(spare) { spare.poll() }
             ?: ByteBuffer.allocateDirect(width * height * 4)
@@ -110,10 +103,7 @@ internal class PluginVideoEncoder private constructor(
         return output
     }
 
-    /**
-     * Cancels encoding and deletes the output. May be called from any thread, so cleanup
-     * runs on [queue] after pending frames, which check `closed` and stop.
-     */
+    /** any thread: cleanup runs on [queue] after pending frames, which see `closed` and stop */
     fun close() {
         if (closed) return
         closed = true
@@ -122,10 +112,7 @@ internal class PluginVideoEncoder private constructor(
         if (runCatching { queue.execute { discard() } }.isFailure) discard()
     }
 
-    /**
-     * Decide whether to delete output on [queue], not in [close]'s caller thread.
-     * A concurrent [finish] may have returned the file; deleting it would invalidate its blob.
-     */
+    /** on [queue]: a concurrent [finish] may have handed out the file, and deleting it would break its blob */
     private fun discard() {
         if (finished) return
         runCatching { codec.stop() }
@@ -135,7 +122,6 @@ internal class PluginVideoEncoder private constructor(
         output.delete()
     }
 
-    /** a source that is not the encoder's size is drawn into it whole, centred, on black */
     private fun fit(source: Bitmap): Bitmap {
         if (source.width == width && source.height == height) return source
         val into = scaled ?: Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { scaled = it }
@@ -153,7 +139,6 @@ internal class PluginVideoEncoder private constructor(
         return into
     }
 
-    /** fills the encoder's buffer and answers how many of its bytes the frame reached */
     private fun write(index: Int, pixels: ByteBuffer): Int {
         val image = codec.getInputImage(index)
         val written = if (image != null) {
@@ -194,15 +179,13 @@ internal class PluginVideoEncoder private constructor(
 
     private class Plane(val buffer: ByteBuffer, val offset: Int, val rowStride: Int, val pixelStride: Int)
 
-    /** an `Image` plane is a slice of the input buffer; an additional position is relative to that slice */
+    /** an `Image` plane is a slice of the input buffer; positions are relative to that slice */
     private fun plane(buffer: ByteBuffer, rowStride: Int, pixelStride: Int) =
         Plane(buffer, buffer.position(), rowStride, pixelStride)
 
     /**
-     * BT.601 limited range, which is what an h264 encoder takes unless it is told otherwise, done
-     * in native code: see `jni/pixels.rs`. Answers the extent the three planes reach, which is the
-     * length the frame was written at - not `w * h * 3 / 2`, since a plane the device gave us may
-     * be padded to a stride of its own - or `-1`.
+     * BT.601 limited range, what an h264 encoder takes by default. Answers the extent the planes reach, not
+     * `w * h * 3 / 2` since device planes may be padded, or `-1`.
      */
     private fun convert(pixels: ByteBuffer, y: Plane, u: Plane, v: Plane): Int = NativePixels.rgbaToYuv420(
         pixels, width, height,
@@ -247,18 +230,13 @@ internal class PluginVideoEncoder private constructor(
     companion object {
         private const val TIMEOUT_US = 10_000L
         private const val INPUT_ATTEMPTS = 200
-        /**
-         * How many frames may be queued behind the encoder before `addFrame` stops resolving on
-         * arrival: enough that decoding, drawing and encoding overlap, few enough that a plugin
-         * awaiting each frame holds about three frames' worth of pixels.
-         */
+        /** enough to overlap decode, draw and encode; a plugin awaiting each frame holds about three frames of pixels */
         const val FRAMES_IN_FLIGHT = 2
 
-        /** the host's frames in flight, plus the one being taken */
         private const val SPARE_BUFFERS = FRAMES_IN_FLIGHT + 1
         private const val DRAIN_DEADLINE_MILLIS = 10_000L
 
-        /** roughly what telegram's own converter asks for at these sizes */
+        /** roughly what telegram's own converter asks for */
         private const val BITS_PER_PIXEL_PER_SECOND = 0.14
 
         fun open(shared: Executor, output: File, width: Int, height: Int, fps: Int, bitrate: Long): PluginVideoEncoder {

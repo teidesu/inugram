@@ -26,7 +26,7 @@ class PluginManifestParserTest {
     """.trimIndent()
 
     @Test
-    fun parsesAllDescriptiveFields() {
+    fun parses_all_descriptive_fields() {
         val m = PluginManifestParser.parse(full)
         assertEquals("My awesome plugin", m.name)
         assertEquals("teidesu", m.author)
@@ -35,9 +35,11 @@ class PluginManifestParserTest {
         assertEquals("tg://addstickers?set=my_set&idx=0", m.icon)
         assertEquals(1, m.pluginApi)
         assertEquals("android", m.platform)
+        assertEquals(listOf("http://example.com"), m.raw["namespace"])
+        assertTrue("@grant none is no grants", m.grants.isEmpty())
     }
 
-    private fun idOf(declared: String): String? = PluginManifestParser.parse(
+    private fun parseDeclaredId(declared: String): String? = PluginManifestParser.parse(
         buildString {
             appendLine("// ==InuPlugin==")
             appendLine("// @name My Plugin")
@@ -47,7 +49,7 @@ class PluginManifestParserTest {
         },
     ).id
 
-    private fun manifestOf(name: String, author: String?): PluginManifest = PluginManifestParser.parse(
+    private fun parseManifest(name: String, author: String?): PluginManifest = PluginManifestParser.parse(
         buildString {
             appendLine("// ==InuPlugin==")
             appendLine("// @name $name")
@@ -57,68 +59,42 @@ class PluginManifestParserTest {
     )
 
     @Test
-    fun derivedIdIgnoresCaseAndSpacing() {
-        assertEquals("teidesu.my-plugin", manifestOf("My Plugin", "teidesu").id)
-        assertEquals(
-            manifestOf("My Plugin", "teidesu").id,
-            manifestOf("my   plugin", "  TEIDESU ").id,
-        )
-    }
-
-    @Test
-    fun derivedIdDistinguishesNameAndAuthor() {
-        assertNotEquals(manifestOf("a", "b").id, manifestOf("b", "a").id)
-        assertNotEquals(manifestOf("plugin", "one").id, manifestOf("plugin", "two").id)
+    fun a_derived_id_slugs_the_author_and_name_and_needs_both() {
+        assertEquals("teidesu.my-plugin", parseManifest("My Plugin", "teidesu").id)
+        assertEquals(parseManifest("My Plugin", "teidesu").id, parseManifest("my   plugin", "  TEIDESU ").id)
+        assertNotEquals(parseManifest("a", "b").id, parseManifest("b", "a").id)
+        assertNotEquals(parseManifest("plugin", "one").id, parseManifest("plugin", "two").id)
+        assertNull("no author is no derived id", parseManifest("nameless", null).id)
     }
 
     /** a name nothing can be seen in is a name of its own, so it installs beside what it apes */
     @Test
-    fun derivedIdDoesNotLetAnInvisibleCharacterApeAnotherPlugin() {
+    fun derived_id_does_not_let_an_invisible_character_ape_another_plugin() {
         assertNotEquals(
-            manifestOf("plugin", "teidesu").id,
-            manifestOf("plu\u0000gin", "teide\u0007su").id,
+            parseManifest("plugin", "teidesu").id,
+            parseManifest("plu\u0000gin", "teide\u0007su").id,
         )
     }
 
     @Test
-    fun derivedIdNeedsAnAuthor() {
-        assertNull(manifestOf("nameless", null).id)
+    fun a_declared_id_wins_over_the_derived_one() {
+        assertEquals("com.github.teidesu.my-plugin", parseDeclaredId("com.github.teidesu.my-plugin"))
     }
 
     @Test
-    fun aDeclaredIdWinsOverTheDerivedOne() {
-        val m = PluginManifestParser.parse(
-            """
-            // ==InuPlugin==
-            // @name   My Plugin
-            // @author teidesu
-            // @id     com.github.teidesu.my-plugin
-            // ==/InuPlugin==
-            """.trimIndent(),
-        )
-        assertEquals("com.github.teidesu.my-plugin", m.id)
+    fun a_declared_id_is_compared_verbatim() {
+        assertNotEquals(parseDeclaredId("Hello.World"), parseDeclaredId("hello.world"))
     }
 
     @Test
-    fun aDeclaredIdIsComparedVerbatim() {
-        assertNotEquals(idOf("Hello.World"), idOf("hello.world"))
+    fun an_id_nothing_can_be_seen_in_falls_back_to_the_derived_one() {
+        assertEquals("teidesu.my-plugin", parseDeclaredId("two tokens"))
+        assertEquals("teidesu.my-plugin", parseDeclaredId("bell\u0007id"))
+        assertEquals("teidesu.my-plugin", parseDeclaredId(""))
     }
 
     @Test
-    fun anIdNothingCanBeSeenInFallsBackToTheDerivedOne() {
-        assertEquals("teidesu.my-plugin", idOf("two tokens"))
-        assertEquals("teidesu.my-plugin", idOf("bell\u0007id"))
-        assertEquals("teidesu.my-plugin", idOf(""))
-    }
-
-    @Test
-    fun namespaceIsJustAnotherHeaderLine() {
-        val m = PluginManifestParser.parse(full)
-        assertEquals(listOf("http://example.com"), m.raw["namespace"])
-    }
-
-    @Test
-    fun localizedDescriptionFallback() {
+    fun localized_description_fallback() {
         val m = PluginManifestParser.parse(full)
         assertEquals("这个脚本很棒！", m.description("zh-CN"))
         assertEquals("这个脚本很棒！", m.description("zh")) // primary subtag
@@ -127,12 +103,7 @@ class PluginManifestParserTest {
     }
 
     @Test
-    fun grantNoneIsEmpty() {
-        assertTrue(PluginManifestParser.parse(full).grants.isEmpty())
-    }
-
-    @Test
-    fun grantsParsedAndDeduped() {
+    fun grants_parsed_and_deduped() {
         val m = PluginManifestParser.parse(
             """
             // ==InuPlugin==
@@ -147,7 +118,7 @@ class PluginManifestParserTest {
     }
 
     @Test
-    fun scopedGrantsKeepParenthesizedCommas() {
+    fun scoped_grants_keep_parenthesized_commas() {
         val m = PluginManifestParser.parse(
             """
             // ==InuPlugin==
@@ -164,45 +135,22 @@ class PluginManifestParserTest {
     }
 
     @Test
-    fun missingNameThrows() {
-        assertFailsWith<PluginManifestException> {
-            PluginManifestParser.parse(
-                """
-                // ==InuPlugin==
-                // @author nobody
-                // ==/InuPlugin==
-                """.trimIndent(),
-            )
-        }
+    fun a_header_that_does_not_parse_throws() {
+        val bad = listOf(
+            "// ==InuPlugin==\n// @author nobody\n// ==/InuPlugin==",
+            "console.log('no header')",
+            "// ==InuPlugin==\n// @name x\nconsole.log('unterminated')",
+        )
+        for (source in bad) assertFailsWith<PluginManifestException>(source) { PluginManifestParser.parse(source) }
     }
 
     @Test
-    fun missingBlockThrows() {
-        assertFailsWith<PluginManifestException> {
-            PluginManifestParser.parse("console.log('no header')")
-        }
-    }
-
-    @Test
-    fun unterminatedBlockThrows() {
-        assertFailsWith<PluginManifestException> {
-            PluginManifestParser.parse(
-                """
-                // ==InuPlugin==
-                // @name x
-                console.log('oops')
-                """.trimIndent(),
-            )
-        }
-    }
-
-    @Test
-    fun parseOrNullSwallowsErrors() {
+    fun parse_or_null_swallows_errors() {
         assertNull(PluginManifestParser.parseOrNull("nope"))
     }
 
     @Test
-    fun directiveKeysAreCaseInsensitive() {
+    fun directive_keys_are_case_insensitive() {
         val m = PluginManifestParser.parse(
             """
             // ==InuPlugin==
@@ -216,7 +164,7 @@ class PluginManifestParserTest {
     }
 
     @Test
-    fun toleratesWhitespaceAndBlankCommentLines() {
+    fun tolerates_whitespace_and_blank_comment_lines() {
         val m = PluginManifestParser.parse(
             """
               // ==InuPlugin==

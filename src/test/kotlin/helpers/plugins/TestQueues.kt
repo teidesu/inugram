@@ -4,15 +4,8 @@ import org.telegram.messenger.DispatchQueue
 import org.telegram.messenger.Utilities
 
 /**
- * The app's two dispatch queues, made deterministic for the length of a test.
- *
- * [Utilities.globalQueue]/[Utilities.stageQueue] are `volatile` and not `final`, so a test swaps its
- * own in. Both share one ordering - (due time, then post order),
- * which is what a `Handler` gives a single queue and the only cross-queue property the bridge may
- * depend on - and nothing runs until [drain].
- *
- * Time is the device's real clock plus an offset [advanceBy] moves. EngineDispatch's scheduler
- * reads this same clock, so suspending and resuming a chain budget uses the elapsed test time.
+ * Both queues share one (due time, post order) ordering, which is what a `Handler` gives and the
+ * only cross-queue property the bridge may depend on. EngineDispatch reads the same clock.
  */
 object TestQueues {
     private class Task(val runnable: Runnable, val due: Long, val seq: Long)
@@ -39,15 +32,9 @@ object TestQueues {
     private fun now(): Long = android.os.SystemClock.uptimeMillis() + offset
 
     /**
-     * The app's own networking is **live in this process**: the real tgnet library is loaded, and
-     * its `onUpdate` callback posts `MessagesController.updateTimerProc` here from stock's own
-     * thread. Drained like anything else, that sends `help.getPromoData` and friends into the
-     * recording [org.telegram.tgnet.ConnectionsManager] partway through whichever test is running,
-     * where `lastSent()` then answers the app's request instead of the plugin's.
-     *
-     * So work stock posts from stock's own threads is dropped. Both halves of that are needed: the
-     * bridge itself can post here from threads a test does not run on, and a test drives the ui thread
-     * deliberately through `runOnMainSync`, so neither of those may be dropped.
+     * stock tgnet's `onUpdate` posts `updateTimerProc` here from its own threads, which would send
+     * `help.getPromoData` and friends mid-test, so stock-thread posts are dropped. Bridge threads
+     * and the ui thread still post.
      */
     @Synchronized
     private fun post(runnable: Runnable, delay: Long) {
@@ -65,10 +52,6 @@ object TestQueues {
         offset += target - now()
     }
 
-    /**
-     * steps to each due time in turn rather than jumping the whole way, so a timer armed by a
-     * runnable that itself came due fires in the order the app would have seen it.
-     */
     fun advanceBy(millis: Long) {
         val target = synchronized(this) { now() + millis }
         while (true) {
@@ -112,12 +95,9 @@ object TestQueues {
         }
         Utilities.globalQueue = Recording("globalQueue")
         Utilities.stageQueue = Recording("stageQueue")
-        // `PluginBlobs.scheduleSweep` posts here rather than to globalQueue: the sweep is an
-        // unbounded recursive delete. Left real, it would race the assertion off another thread.
         Utilities.cacheClearQueue = Recording("cacheClearQueue")
     }
 
-    /** runs everything already due, including what those runnables post, without waiting */
     fun drain(): Int {
         var ran = 0
         while (true) {

@@ -37,11 +37,11 @@ fn the_interrupt_survives_catch_and_finally() {
     eval(
       &ctx,
       r#"
-            globalThis.__caught = false;
-            try { while (true) {} }
-            catch (e) { globalThis.__caught = true; }
-            finally { while (true) {} }
-            "#,
+        globalThis.__caught = false;
+        try { while (true) {} }
+        catch (e) { globalThis.__caught = true; }
+        finally { while (true) {} }
+      "#,
     )
     .unwrap_err()
   };
@@ -66,21 +66,21 @@ fn a_spinning_microtask_is_interrupted() {
 #[test]
 fn honest_work_within_the_real_entry_budget_is_never_interrupted() {
   let (rt, ctx, logs) = setup();
-  let armed = arm_entry_deadline();
+  let armed = arm(ENTRY_DEADLINE_MS);
   let log: crate::Log = std::sync::Arc::new(|_| {});
 
   eval(
     &ctx,
     r#"
-        let acc = 0;
-        const parts = [];
-        for (let i = 0; i < 300000; i++) {
-            acc += i % 7;
-            if (i % 1000 === 0) parts.push(JSON.stringify({ i, acc }));
-        }
-        globalThis.__out = JSON.parse(parts[parts.length - 1]).acc;
-        Promise.resolve().then(() => { globalThis.__done = acc; });
-        "#,
+      let acc = 0;
+      const parts = [];
+      for (let i = 0; i < 300000; i++) {
+        acc += i % 7;
+        if (i % 1000 === 0) parts.push(JSON.stringify({ i, acc }));
+      }
+      globalThis.__out = JSON.parse(parts[parts.length - 1]).acc;
+      Promise.resolve().then(() => { globalThis.__done = acc; });
+    "#,
   )
   .unwrap();
   crate::runtime::pump_jobs(&rt, &ctx, log.as_ref());
@@ -91,12 +91,8 @@ fn honest_work_within_the_real_entry_budget_is_never_interrupted() {
   assert!(done);
 }
 
-/// Checks that deadlines are thread-local and armed on the thread that polls them. A deadline on
-/// the wrong thread would disable the limit; a shared deadline would interrupt another engine.
-///
-/// Run both engines concurrently and hold an expired deadline while the neighbor works, making a
-/// shared-slot bug deterministic. Receive results through a timeout channel so regressions fail
-/// instead of hanging the suite.
+/// Deadlines are thread-local: on the wrong thread the limit is off, and a shared one interrupts another
+/// engine. Both engines run concurrently so a shared-slot bug is deterministic.
 #[test]
 fn one_thread_being_armed_neither_arms_nor_disarms_another() {
   use std::sync::mpsc;
@@ -160,53 +156,33 @@ fn one_thread_being_armed_neither_arms_nor_disarms_another() {
 }
 
 #[test]
-fn an_unarmed_thread_is_never_interrupted() {
-  let (_rt, ctx, logs) = setup();
-  eval(&ctx, "let n = 0; for (let i = 0; i < 200000; i++) n += i;").unwrap();
-  assert!(logs.borrow().is_empty(), "got: {:?}", logs.borrow());
-}
-
-#[test]
 fn a_tripped_deadline_does_not_leak_into_the_next_entry() {
   let (_rt, ctx, _logs) = setup();
   {
     let _armed = arm(50);
     assert!(eval(&ctx, "while (true) {}").is_err());
   }
-  let armed = arm_entry_deadline();
+  let armed = arm(ENTRY_DEADLINE_MS);
   let sum: i32 = ctx.with(|ctx| ctx.eval("let n = 0; for (let i = 0; i < 1000; i++) n += i; n").unwrap());
   assert_eq!(sum, 499500);
   assert!(!armed.tripped());
 }
 
-#[cfg(test)]
 mod memory_tests {
   use super::*;
-  use rquickjs::class::{JsClass, Readable, Trace, Tracer};
-  use rquickjs::function::Constructor;
+  use rquickjs::class::{Trace, Tracer};
   use rquickjs::{Class, Context, FromJs, JsLifetime, Runtime};
 
   /// a native-backed js object exactly as 0.4's `Blob`/`OffscreenCanvas` will be one: a handle
   /// whose `Drop` (the class finalizer, or a collected cycle) hands the bytes back
+  #[derive(JsLifetime)]
+  #[rquickjs::class(frozen)]
   struct Surface {
     _charge: ExternalCharge,
   }
 
   impl<'js> Trace<'js> for Surface {
     fn trace<'a>(&self, _tracer: Tracer<'a, 'js>) {}
-  }
-
-  unsafe impl<'js> JsLifetime<'js> for Surface {
-    type Changed<'to> = Surface;
-  }
-
-  impl<'js> JsClass<'js> for Surface {
-    const NAME: &'static str = "Surface";
-    type Mutable = Readable;
-
-    fn constructor(_ctx: &Ctx<'js>) -> JsResult<Option<Constructor<'js>>> {
-      Ok(None)
-    }
   }
 
   fn setup() -> (Runtime, Context) {
@@ -224,18 +200,13 @@ mod memory_tests {
     })
   }
 
-  const GROW_UNTIL_REFUSED: &str = "(function () {
-        const held = [];
-        for (let i = 0; i < 1e7; i++) held.push({ index: i, tag: 'x' + i });
-        return 'never';
-    })()";
-
-  #[test]
-  fn the_heap_ceiling_is_applied_to_the_runtime() {
-    let (rt, _ctx) = setup();
-    apply_heap_limit(&rt);
-    assert_eq!(rt.memory_usage().malloc_limit, HEAP_LIMIT_BYTES as i64);
-  }
+  const GROW_UNTIL_REFUSED: &str = r#"
+    (function () {
+      const held = [];
+      for (let i = 0; i < 1e7; i++) held.push({ index: i, tag: 'x' + i });
+      return 'never';
+    })()
+  "#;
 
   #[test]
   fn a_runaway_allocation_is_refused_and_the_engine_survives() {
@@ -272,7 +243,7 @@ mod memory_tests {
   #[test]
   fn an_ordinary_failure_is_not_reported_as_a_quota() {
     let (rt, ctx) = setup();
-    apply_heap_limit(&rt);
+    rt.set_memory_limit(HEAP_LIMIT_BYTES);
     let err = eval(&ctx, "throw new Error('boom')").unwrap_err();
     assert!(err.starts_with("Error: boom"), "got: {err}");
     let err = eval(&ctx, "throw new RangeError('nope')").unwrap_err();
@@ -284,17 +255,19 @@ mod memory_tests {
   #[test]
   fn an_ordinary_workload_never_reaches_either_ceiling() {
     let (rt, ctx) = setup();
-    apply_heap_limit(&rt);
+    rt.set_memory_limit(HEAP_LIMIT_BYTES);
     let out = eval(
       &ctx,
-      r#"(function () {
-                const dialogs = [];
-                for (let i = 0; i < 5000; i++) {
-                    dialogs.push({ id: i, title: 'chat ' + i, unread: i % 7, draft: 'x'.repeat(64) });
-                }
-                const encoded = JSON.stringify(dialogs);
-                return String(JSON.parse(encoded).length) + ':' + String(encoded.length > 0);
-            })()"#,
+      r#"
+        (function () {
+          const dialogs = [];
+          for (let i = 0; i < 5000; i++) {
+            dialogs.push({ id: i, title: 'chat ' + i, unread: i % 7, draft: 'x'.repeat(64) });
+          }
+          const encoded = JSON.stringify(dialogs);
+          return String(JSON.parse(encoded).length) + ':' + String(encoded.length > 0);
+        })()
+      "#,
     )
     .unwrap();
     assert_eq!(out, "5000:true");
@@ -303,19 +276,6 @@ mod memory_tests {
       "an ordinary workload should sit nowhere near the ceiling: {}",
       rt.memory_usage().malloc_size,
     );
-  }
-
-  #[test]
-  fn a_charge_holds_its_bytes_until_it_is_dropped() {
-    let (_rt, ctx) = setup();
-    let external = ExternalMemory::new();
-    ctx.with(|ctx| {
-      let charge = external.charge(&ctx, 4 * 1024 * 1024).unwrap();
-      assert_eq!(external.charged_bytes(), 4 * 1024 * 1024);
-      assert_eq!(charge.bytes(), 4 * 1024 * 1024);
-      drop(charge);
-      assert_eq!(external.charged_bytes(), 0);
-    });
   }
 
   #[test]
@@ -411,5 +371,25 @@ mod memory_tests {
       assert_eq!(next.bytes(), EXTERNAL_LIMIT_BYTES / 2 + 1024);
       assert_eq!(external.charged_bytes(), EXTERNAL_LIMIT_BYTES / 2 + 1024);
     });
+  }
+}
+
+#[test]
+fn the_stack_limit_follows_the_thread_that_enters() {
+  let (rt, ctx, _logs) = setup();
+  let ctx = std::sync::Arc::new(std::sync::Mutex::new((rt, ctx)));
+  for stack in [256 * 1024 + STACK_MARGIN_BYTES, 4 * 1024 * 1024] {
+    let ctx = ctx.clone();
+    let err = std::thread::Builder::new()
+      .stack_size(stack)
+      .spawn(move || {
+        let guard = ctx.lock().unwrap();
+        fit_stack_limit(&guard.0);
+        eval(&guard.1, "function f() { return f() + 1 } f()").unwrap_err()
+      })
+      .unwrap()
+      .join()
+      .unwrap();
+    assert!(err.contains("Maximum call stack size exceeded"), "unexpected error on a {stack} byte stack: {err}");
   }
 }

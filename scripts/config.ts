@@ -58,12 +58,6 @@ export const forkSyncFiles: ForkSyncFile[] = [
     target: 'TMessagesProj/src/androidTest/kotlin/desu/inugram',
     directory: true,
   },
-  // the normative contract, as a test asset: a ceiling is pinned to the sentence stating it, and
-  // there is no repo to read on a device
-  {
-    source: 'sdk/types/*.d.ts',
-    target: 'TMessagesProj/src/androidTest/assets/plugins',
-  },
   // the js oracles, for the suites that run one rather than restating what it asserts. Test assets
   // only - the app itself ships none of them, so a debug build starts with no plugins installed
   {

@@ -25,7 +25,6 @@ import desu.inugram.helpers.font.FontId
 import desu.inugram.helpers.font.FontLibrary
 import desu.inugram.helpers.plugins.CanvasListener
 import desu.inugram.helpers.plugins.EngineDispatch
-import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.io.PluginBlobs
@@ -40,19 +39,14 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Rasterizes `inu.canvas` commands (Rust: `canvas/mod.rs`), per `sdk/types/canvas.d.ts`.
+ * Rust validates api rules before sending a buffer. Each command carries its own transform and paint;
+ * no drawing state is shared between commands.
  *
- * Rust validates API rules before sending a command buffer. Each move/line/cubic/close command
- * contains its transform and paint, with no shared drawing state between commands. Strokes,
- * gradients, and patterns use the command's user-space coordinates.
+ * Composites other than `source-over` use `saveLayer`. Refused: separable blend modes below API 29,
+ * non-concentric radial gradients (no two-point conical shader), and patterns not repeating both ways
+ * below API 31 (`TileMode.DECAL`; `CLAMP` would smear edges).
  *
- * Composite modes other than `source-over` use `saveLayer` because they affect the whole
- * destination. Reject unsupported operations: separable blend modes below API 29,
- * non-concentric radial gradients (no two-point conical shader), and patterns that do not
- * repeat in both directions below API 31 (`TileMode.DECAL`; `CLAMP` would smear edge pixels).
- *
- * JNI upcalls run on the engine queue. Bitmap encoding, decoding, and font-file reads run
- * on [work] and settle through [QuickJs.settle] on the plugin queue.
+ * Bitmap encode/decode and font reads run on [work] and settle on the plugin queue.
  */
 object PluginCanvas : SessionResource {
     // keep in sync with rust `canvas::OP_*`
@@ -100,11 +94,7 @@ object PluginCanvas : SessionResource {
 
     private const val ENCODED_DIR = "canvas"
 
-    /**
-     * The platform's shadow radius is a blur-mask radius and the spec's `shadowBlur` is twice the
-     * gaussian sigma, so one is not the other. `BlurMaskFilter` uses `sigma = radius * 0.57735 +
-     * 0.5`, which inverts to this.
-     */
+    /** `shadowBlur` is twice the gaussian sigma; `BlurMaskFilter` uses `sigma = radius * 0.57735 + 0.5` */
     private const val BLUR_SIGMA_PER_RADIUS = 0.57735f
 
     private val work by lazy {
@@ -115,12 +105,11 @@ object PluginCanvas : SessionResource {
 
     fun listenerFor(session: PluginSession): CanvasListener = Session(session)
 
-    /** call on the plugin queue as the engine stops: every bitmap it holds is native memory */
+    /** every bitmap it holds is native memory */
     override fun detach(session: PluginSession) {
         (session.engine.listener?.canvas as? Session)?.close()
     }
 
-    /** deletes whatever `convertToBlob` wrote for a plugin being uninstalled */
     fun wipe(installId: String) {
         val root = PluginBlobs.dirFor(installId)
         if (root.isEmpty()) return
@@ -135,11 +124,8 @@ object PluginCanvas : SessionResource {
         private val encoders = HashMap<Long, Pipeline>()
 
         /**
-         * An encoder and the frames the plugin has handed it that are not yet encoded. `addFrame`
-         * resolves when the encoder has room for the next frame rather than when this one is
-         * done, which is what lets a plugin that awaits each frame keep the decoder, the drawing
-         * and the encoder all busy at once; a frame that fails to encode fails the next thing the
-         * plugin asks of the encoder, since the frame's own promise may already be gone.
+         * `addFrame` resolves when the encoder has room, not when the frame is done, so decode, draw and encode
+         * overlap. A failed frame fails the plugin's next encoder call, since its own promise may be gone.
          */
         private class Pipeline(val encoder: PluginVideoEncoder) {
             var inFlight = 0
@@ -162,10 +148,8 @@ object PluginCanvas : SessionResource {
             run(op, id, arg, bytes)
         } catch (e: PluginRefusal) {
             e.wire
-        } catch (e: OutOfMemoryError) {
-            PluginWire.encodePluginError("quota-exceeded", "canvas: out of memory")
         } catch (e: Throwable) {
-            PluginWire.encodePluginError("internal", "canvas: ${e.javaClass.simpleName}: ${e.message}")
+            encodeFailure(e)
         }
 
         private fun run(op: Int, id: Long, arg: String, bytes: ByteArray?): String {
@@ -216,40 +200,35 @@ object PluginCanvas : SessionResource {
             return ""
         }
 
-        private fun destroy(id: Long): String {
+        private fun destroy(id: Long) {
             canvases.remove(id)?.bitmap?.recycle()
-            return ""
         }
 
-        private fun surfaceOf(id: Long): Surface =
+        private fun getSurface(id: Long): Surface =
             canvases[id] ?: refuse("handle-expired", "canvas: that canvas is gone")
 
-        private fun imageOf(id: Long): Bitmap =
+        private fun getImage(id: Long): Bitmap =
             images[id] ?: refuse("handle-expired", "canvas: that image was disposed")
 
-        private fun animationOf(id: Long): PluginAnimationDecoder =
+        private fun getAnimation(id: Long): PluginAnimationDecoder =
             animations[id] ?: refuse("handle-expired", "canvas: that animation is gone")
 
-        /** a pipeline that already failed refuses here rather than on the queue it failed on */
-        private fun pipelineOf(id: Long): Pipeline {
+        private fun getPipeline(id: Long): Pipeline {
             val pipeline = encoders[id] ?: refuse("handle-expired", "canvas: that encoder is gone")
             pipeline.failure?.let { throw PluginRefusal(it) }
             return pipeline
         }
 
-        private fun releaseImage(id: Long): String {
+        private fun releaseImage(id: Long) {
             images.remove(id)?.recycle()
-            return ""
         }
 
-
         private fun replay(id: Long, reader: Reader): String {
-            val surface = surfaceOf(id)
+            val surface = getSurface(id)
             while (reader.has()) {
                 when (val command = reader.u8()) {
                     CMD_SAVE -> surface.canvas.save()
-                    // a buffer is replayed in pieces, so a restore may belong to a save from an
-                    // earlier one; `restoreToCount(1)` is the floor the reset re-establishes
+                    // a buffer replays in pieces, so a restore may pair with an earlier save; `restoreToCount(1)` is the reset floor
                     CMD_RESTORE -> if (surface.canvas.saveCount > 1) surface.canvas.restore()
                     CMD_RESET -> {
                         surface.canvas.restoreToCount(1)
@@ -271,10 +250,8 @@ object PluginCanvas : SessionResource {
             val matrix = reader.matrix()
             val rule = reader.u8()
             val path = reader.path(rule)
-            // no save/restore around it: a clip belongs to whichever `save()` the plugin itself
-            // opened, and one wrapped in a save of ours would be discarded a line later. The matrix
-            // is identity between commands (every draw restores its own), so putting it back is
-            // setting it rather than unwinding it.
+            // a clip belongs to the plugin's own `save()`, so no save of ours around it. The matrix is identity
+            // between commands, so this sets it rather than unwinding.
             canvas.concat(matrix)
             canvas.clipPath(path)
             canvas.setMatrix(null)
@@ -349,13 +326,12 @@ object PluginCanvas : SessionResource {
             dst.bottom = dst.top + reader.f()
 
             val bitmap = when (kind) {
-                SOURCE_IMAGE -> imageOf(id)
-                SOURCE_CANVAS -> surfaceOf(id).bitmap
+                SOURCE_IMAGE -> getImage(id)
+                SOURCE_CANVAS -> getSurface(id).bitmap
                 else -> refuse("internal", "canvas: unknown image source")
             }
-            // drawing a canvas onto itself reads and writes the same pixels; the copy is what makes
-            // the snapshot the spec promises
-            val source = if (bitmap === canvasBitmapOf(canvas)) bitmap.copy(bitmap.config ?: Bitmap.Config.ARGB_8888, false) else bitmap
+            // drawing a canvas onto itself would read and write the same pixels
+            val source = if (bitmap === getCanvasBitmap(canvas)) bitmap.copy(bitmap.config ?: Bitmap.Config.ARGB_8888, false) else bitmap
             val brush = Paint(Paint.FILTER_BITMAP_FLAG)
             brush.alpha = (paint.alpha * 255f).toInt().coerceIn(0, 255)
             applyShadow(brush, paint)
@@ -369,13 +345,9 @@ object PluginCanvas : SessionResource {
             if (source !== bitmap) source.recycle()
         }
 
-        private fun canvasBitmapOf(canvas: Canvas): Bitmap? =
+        private fun getCanvasBitmap(canvas: Canvas): Bitmap? =
             canvases.values.firstOrNull { it.canvas === canvas }?.bitmap
 
-        /**
-         * The layer dance the module doc describes. `source-over` is the platform's own default and
-         * needs none of it, which is the case every drawing is mostly made of.
-         */
         private fun drawComposited(canvas: Canvas, matrix: Matrix, composite: Int, draw: (Canvas) -> Unit) {
             canvas.save()
             if (composite != 0) {
@@ -459,12 +431,7 @@ object PluginCanvas : SessionResource {
             else -> patternShader(spec)
         }
 
-        /**
-         * The concentric case is exact: the inner radius is folded into the stop positions, so
-         * `createRadialGradient(x, y, r0, x, y, r1)` renders as the spec draws it. The focal case
-         * needs a two-point conical shader, which the platform does not have at all - and is refused
-         * rather than drawn as something else.
-         */
+        /** inner radius folds into stop positions, which is exact for concentric circles only */
         private fun radialShader(spec: PaintSpec): Shader {
             val (x0, y0, r0) = Triple(spec.coords[0], spec.coords[1], spec.coords[2])
             val (x1, y1, r1) = Triple(spec.coords[3], spec.coords[4], spec.coords[5])
@@ -479,8 +446,8 @@ object PluginCanvas : SessionResource {
 
         private fun patternShader(spec: PaintSpec): Shader {
             val bitmap = when (spec.patternSource) {
-                SOURCE_IMAGE -> imageOf(spec.patternId)
-                else -> surfaceOf(spec.patternId).bitmap
+                SOURCE_IMAGE -> getImage(spec.patternId)
+                else -> getSurface(spec.patternId).bitmap
             }
             val decal = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 Shader.TileMode.DECAL
@@ -496,10 +463,7 @@ object PluginCanvas : SessionResource {
             return shader
         }
 
-        /**
-         * The platform needs at least two stops and this may be handed none: a gradient with no
-         * stops paints nothing, and one with a single stop paints that colour flat.
-         */
+        /** the platform needs at least two stops: none paints nothing, one paints flat */
         private fun expandStops(spec: PaintSpec): Pair<IntArray, FloatArray> = when (spec.stops.size) {
             0 -> Pair(intArrayOf(0, 0), floatArrayOf(0f, 1f))
             1 -> Pair(intArrayOf(spec.stops[0].second, spec.stops[0].second), floatArrayOf(0f, 1f))
@@ -523,8 +487,7 @@ object PluginCanvas : SessionResource {
                 typefaces.clear()
                 typefaceRoster = FontLibrary.rosterGeneration
             }
-            // every measure and every text command carries the same font, and resolving one reaches
-            // the font roster, whose entries answer their name through the localized strings
+            // resolving reaches the font roster, whose names go through localized strings
             paint.typeface = typefaces.getOrPut(wire.substring(sizeEnd + 1)) {
                 val fields = wire.split(FIELD)
                 val weight = fields.getOrNull(1)?.toIntOrNull() ?: 400
@@ -540,8 +503,7 @@ object PluginCanvas : SessionResource {
                     return createStyledTypeface(it, weight, italic)
                 }
                 FontLibrary.getTypefaceByName(family, weight, italic)?.let { return it }
-                // `Typeface.create` never fails, so a family the device does not have comes back
-                // as the default and there is nothing to tell it from a real match.
+                // `Typeface.create` falls back to the default for an unknown family
                 Typeface.create(family, Typeface.NORMAL).takeIf { it != Typeface.DEFAULT }?.let {
                     return createStyledTypeface(it, weight, italic)
                 }
@@ -602,7 +564,7 @@ object PluginCanvas : SessionResource {
         }
 
         private fun average(id: Long, reader: Reader): String {
-            val surface = surfaceOf(id)
+            val surface = getSurface(id)
             val parts = FloatArray(4) { reader.f() }
             var left = parts[0]
             var top = parts[1]
@@ -626,7 +588,7 @@ object PluginCanvas : SessionResource {
             for (pixel in pixels) {
                 val a = (pixel ushr 24) and 0xff
                 alpha += a
-                // alpha-weighted, so a transparent area does not drag the colour toward black
+                // alpha-weighted, so transparency does not drag toward black
                 red += ((pixel ushr 16) and 0xff).toLong() * a
                 green += ((pixel ushr 8) and 0xff).toLong() * a
                 blue += (pixel and 0xff).toLong() * a
@@ -644,7 +606,7 @@ object PluginCanvas : SessionResource {
         }
 
         private fun encode(id: Long, reader: Reader): String {
-            val surface = surfaceOf(id)
+            val surface = getSurface(id)
             val requestId = reader.i64()
             val mime = reader.text()
             val quality = reader.f()
@@ -654,7 +616,7 @@ object PluginCanvas : SessionResource {
                 "image/webp" -> webpFormat()
                 else -> Bitmap.CompressFormat.PNG
             }
-            // a copy, because the plugin keeps drawing on the original while this runs
+            // the plugin keeps drawing on the original while this runs
             val snapshot = surface.bitmap.copy(surface.bitmap.config ?: Bitmap.Config.ARGB_8888, false)
             val file = File(dir, "out-${++nextFile}.bin")
             submit(requestId) {
@@ -707,12 +669,7 @@ object PluginCanvas : SessionResource {
             return ""
         }
 
-        /**
-         * The families a `ctx.font` resolves to: whatever this plugin loaded for itself, then the
-         * app's own roster, whose entries answer their name through the localized strings. The roster
-         * carries the device's own families only while the app is set to include them, which is the
-         * app's setting and not this one's. Off the engine's queue, the roster being read from disk.
-         */
+        /** off the engine queue: the roster is read from disk. It lists device families only while the app setting includes them */
         private fun listFonts(reader: Reader): String {
             val requestId = reader.i64()
             val own = fonts.keys.toList()
@@ -723,8 +680,7 @@ object PluginCanvas : SessionResource {
                 }
                 for (font in FontLibrary.getCachedRoster()) {
                     val name = FontLibrary.getFontName(font)
-                    // a name this plugin loaded is that font, since that is the one `typefaceFor`
-                    // picks, so listing the roster's too would be two entries nothing can tell apart
+                    // a font this plugin loaded shadows the roster's same-named one in `typefaceFor`
                     if (own.any { it.equals(name, ignoreCase = true) }) continue
                     val source = when (font) {
                         is FontId.Builtin -> "builtin"
@@ -743,7 +699,6 @@ object PluginCanvas : SessionResource {
             return ""
         }
 
-        /** the decode half of [submit]: the bitmap has to land in this session's table, not in js */
         private fun submitBitmap(requestId: Long, imageId: Long, produce: () -> Bitmap) {
             submitOwned(requestId, work, produce, discard = Bitmap::recycle) { bitmap ->
                 images[imageId] = bitmap
@@ -751,11 +706,7 @@ object PluginCanvas : SessionResource {
             }
         }
 
-        /**
-         * [submit] for a request that answers with something this session then owns - a bitmap, a
-         * decoder, an encoder. It is built off the engine queue and registered on it, and a session
-         * that stopped in between frees it rather than leaking it.
-         */
+        /** a session that stopped before registration frees the object rather than leaking it */
         private fun <T> submitOwned(
             requestId: Long,
             on: Executor,
@@ -777,7 +728,7 @@ object PluginCanvas : SessionResource {
 
         private fun submit(requestId: Long, on: Executor = work, produce: () -> String) {
             on.execute {
-                val wire = runCatching(produce).getOrElse(::wireOf)
+                val wire = runCatching(produce).getOrElse(::encodeFailure)
                 EngineDispatch.onEngine(session) { session.engine.settle(QuickJs.SETTLE_CANVAS, requestId, wire) }
             }
         }
@@ -809,7 +760,7 @@ object PluginCanvas : SessionResource {
             val requestId = reader.i64()
             val imageId = reader.i64()
             val index = reader.i32()
-            val decoder = animationOf(id)
+            val decoder = getAnimation(id)
             submitFrame(requestId, imageId, decoder) { decoder.frame(index) }
             return ""
         }
@@ -817,12 +768,11 @@ object PluginCanvas : SessionResource {
         private fun animationNext(id: Long, reader: Reader): String {
             val requestId = reader.i64()
             val imageId = reader.i64()
-            val decoder = animationOf(id)
+            val decoder = getAnimation(id)
             submitFrame(requestId, imageId, decoder) { decoder.next() }
             return ""
         }
 
-        /** [submitBitmap] for a decoder's frame, which carries its timestamp and may be the end of the source */
         private fun submitFrame(
             requestId: Long,
             imageId: Long,
@@ -840,9 +790,8 @@ object PluginCanvas : SessionResource {
             }
         }
 
-        private fun releaseAnimation(id: Long): String {
+        private fun releaseAnimation(id: Long) {
             animations.remove(id)?.close()
-            return ""
         }
 
         private fun createEncoder(id: Long, reader: Reader): String {
@@ -872,11 +821,11 @@ object PluginCanvas : SessionResource {
             val kind = reader.u8()
             val sourceId = reader.i64()
             val duration = reader.f().toDouble()
-            val pipeline = pipelineOf(id)
+            val pipeline = getPipeline(id)
             val source = if (kind == SOURCE_CANVAS) {
-                surfaceOf(sourceId).bitmap
+                getSurface(sourceId).bitmap
             } else {
-                images[sourceId] ?: refuse("handle-expired", "canvas: that image is gone")
+                getImage(sourceId)
             }
             val encoder = pipeline.encoder
             val pixels = encoder.snapshot(source)
@@ -886,7 +835,7 @@ object PluginCanvas : SessionResource {
                 EngineDispatch.onEngine(session) {
                     pipeline.inFlight--
                     result.exceptionOrNull()?.let { failed ->
-                        if (pipeline.failure == null) pipeline.failure = wireOf(failed)
+                        if (pipeline.failure == null) pipeline.failure = encodeFailure(failed)
                     }
                     session.engine.settle(QuickJs.SETTLE_CANVAS, requestId, pipeline.failure ?: "")
                     pipeline.waiting.poll()?.let { answerFrame(pipeline, it) }
@@ -900,19 +849,18 @@ object PluginCanvas : SessionResource {
             return ""
         }
 
-        /** a frame's promise settles with whatever the encoder has to say by then, or with nothing */
         private fun answerFrame(pipeline: Pipeline, requestId: Long) {
             session.engine.settle(QuickJs.SETTLE_CANVAS, requestId, "A" + (pipeline.failure ?: ""))
         }
 
-        private fun wireOf(failed: Throwable): String = when (failed) {
+        private fun encodeFailure(failed: Throwable): String = when (failed) {
             is OutOfMemoryError -> PluginWire.encodePluginError("quota-exceeded", "canvas: out of memory")
             else -> PluginWire.encodePluginError("internal", "canvas: ${failed.message ?: failed.toString()}")
         }
 
         private fun encoderFinish(id: Long, reader: Reader): String {
             val requestId = reader.i64()
-            val pipeline = pipelineOf(id)
+            val pipeline = getPipeline(id)
             submit(requestId, pipeline.encoder.queue) {
                 val file = pipeline.encoder.finish()
                 "J" + JSONObject().put("path", file.absolutePath).put("type", "video/mp4").toString()
@@ -920,9 +868,8 @@ object PluginCanvas : SessionResource {
             return ""
         }
 
-        private fun releaseEncoder(id: Long): String {
+        private fun releaseEncoder(id: Long) {
             encoders.remove(id)?.encoder?.close()
-            return ""
         }
 
         private fun encodedDir(): File {
@@ -974,11 +921,7 @@ object PluginCanvas : SessionResource {
         val dash: FloatArray,
     )
 
-    /**
-     * The replay wire's string table, `<length>ITEM<content>` per entry. Length-prefixed
-     * because an entry is text a plugin chose - a `fillText` argument, a css family name - so
-     * there is no separator it cannot contain.
-     */
+    /** length-prefixed: entries are plugin text, so no separator is safe */
     internal fun decodeTable(strings: String): List<String> {
         val out = ArrayList<String>()
         var at = 0
@@ -996,17 +939,16 @@ object PluginCanvas : SessionResource {
 
     private val NO_BYTES = ByteArray(0)
 
-    /** a replay or a side request: fields in little-endian order, strings as indices into [strings]' table */
+    /** fields little-endian, strings as indices into [strings]' table */
     private class Reader(bytes: ByteArray, private val strings: String = "") {
         private val buffer: ByteBuffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
         private val table: List<String> by lazy { decodeTable(strings) }
 
-        fun text(): String = table.getOrNull(u32()) ?: refuse("internal", "canvas: no such entry in the string table")
+        fun text(): String = table.getOrNull(i32()) ?: refuse("internal", "canvas: no such entry in the string table")
 
         fun has(): Boolean = buffer.hasRemaining()
         fun u8(): Int = buffer.get().toInt() and 0xff
         fun i32(): Int = buffer.int
-        fun u32(): Int = buffer.int
         fun i64(): Long = buffer.long
         fun f(): Float = buffer.float
 
@@ -1041,7 +983,7 @@ object PluginCanvas : SessionResource {
                         else -> 3
                     }
                     for (i in 0 until count) spec.coords[i] = f()
-                    val n = u32()
+                    val n = i32()
                     val stops = ArrayList<Pair<Float, Int>>(n)
                     for (i in 0 until n) stops.add(Pair(f(), i32()))
                     spec.stops = stops
@@ -1056,7 +998,7 @@ object PluginCanvas : SessionResource {
             val join = u8()
             val miter = f()
             val dashOffset = f()
-            val n = u32()
+            val n = i32()
             val dash = FloatArray(n)
             for (i in 0 until n) dash[i] = f()
             return StrokeSpec(width, cap, join, miter, dashOffset, dash)
@@ -1065,12 +1007,13 @@ object PluginCanvas : SessionResource {
         fun path(rule: Int): Path {
             val path = Path()
             path.fillType = if (rule == 1) Path.FillType.EVEN_ODD else Path.FillType.WINDING
-            val n = u32()
+            val n = i32()
             for (i in 0 until n) {
                 when (u8()) {
                     0 -> path.moveTo(f(), f())
                     1 -> path.lineTo(f(), f())
                     2 -> path.cubicTo(f(), f(), f(), f(), f(), f())
+                    4 -> path.quadTo(f(), f(), f(), f())
                     else -> path.close()
                 }
             }
@@ -1078,7 +1021,7 @@ object PluginCanvas : SessionResource {
         }
     }
 
-    /** indexed by the engine's composite code, which is `GlobalCompositeOperation`'s own order */
+    /** indexed by `GlobalCompositeOperation`'s order, as the engine codes it */
     private val BLEND_MODES: Array<BlendMode> by lazy {
         arrayOf(
             BlendMode.SRC_OVER, BlendMode.SRC_IN, BlendMode.SRC_OUT, BlendMode.SRC_ATOP,
@@ -1091,7 +1034,7 @@ object PluginCanvas : SessionResource {
         )
     }
 
-    /** the porter-duff set only; the separable blend modes have no equivalent below api 29 */
+    /** the separable blend modes have no porter-duff equivalent below api 29 */
     private val PORTER_DUFF: Array<PorterDuff.Mode?> = arrayOf(
         PorterDuff.Mode.SRC_OVER, PorterDuff.Mode.SRC_IN, PorterDuff.Mode.SRC_OUT, PorterDuff.Mode.SRC_ATOP,
         PorterDuff.Mode.DST_OVER, PorterDuff.Mode.DST_IN, PorterDuff.Mode.DST_OUT, PorterDuff.Mode.DST_ATOP,

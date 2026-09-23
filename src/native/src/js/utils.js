@@ -1,5 +1,4 @@
 (utils, PluginError, text) => {
-  const invalid = message => new PluginError('invalid-argument', message)
 
   const toSub = (value) => {
     if (typeof value === 'boolean' || !value) return null
@@ -17,23 +16,19 @@
   const makeFormatter = (format) => {
     const parse = (strings, ...values) => {
       if (typeof strings === 'string') return text.parse(format, [strings], [])
-      if (!Array.isArray(strings)) throw invalid('expected a string or a template literal')
+      if (!Array.isArray(strings)) throw new PluginError('invalid-argument', 'expected a string or a template literal')
       return text.parse(format, [...strings], values.map(toSub))
     }
     parse.escape = (value, quote = false) => {
-      if (typeof value !== 'string') throw invalid('escape: expected a string')
+      if (typeof value !== 'string') throw new PluginError('invalid-argument', 'escape: expected a string')
       return text.escape(format, value, quote === true)
     }
     parse.unparse = (input) => {
       if (typeof input === 'string') return text.unparse(format, input, [])
       if (input === null || typeof input !== 'object' || typeof input.text !== 'string') {
-        throw invalid('unparse: expected a string or { text, entities }')
+        throw new PluginError('invalid-argument', 'unparse: expected a string or { text, entities }')
       }
-      const entities = input.entities
-      if (entities !== undefined && entities !== null && !Array.isArray(entities)) {
-        throw invalid('unparse: entities must be an array')
-      }
-      return text.unparse(format, input.text, entities ?? [])
+      return text.unparse(format, input.text, input.entities)
     }
     return Object.freeze(parse)
   }
@@ -47,15 +42,15 @@
     if (value !== null && typeof value === 'object' && typeof value.text === 'string') {
       const entities = value.entities
       if (entities !== undefined && entities !== null && !Array.isArray(entities)) {
-        throw invalid(`${what}: entities must be an array`)
+        throw new PluginError('invalid-argument', `${what}: entities must be an array`)
       }
       return { text: value.text, entities: entities ?? null }
     }
-    throw invalid(`${what}: expected a string or { text, entities }`)
+    throw new PluginError('invalid-argument', `${what}: expected a string or { text, entities }`)
   }
 
   utils.joinTextWithEntities = (parts, delim = '') => {
-    if (!Array.isArray(parts)) throw invalid('joinTextWithEntities: expected an array of texts')
+    if (!Array.isArray(parts)) throw new PluginError('invalid-argument', 'joinTextWithEntities: expected an array of texts')
     const separator = toTextPart(delim, 'joinTextWithEntities')
     const texts = []
     const entities = []
@@ -137,11 +132,8 @@
     return described !== null && described.kind === 'user' ? described.id : null
   }
 
-  //
-  // `reads.js` and `writes.js` share this one copy rather than each normalizing a peer its own way:
-  // what a peer *is* is decided here, above the bridge, and only `S`/`D<id>`/`U<name>` ever crosses.
-  // so a host parses no TL, a batch of peers is one crossing, and a write api is an op that passes
-  // the same spec rather than a second resolver.
+  // the one peer normalizer for reads and writes: only `S`/`D<id>`/`U<name>` crosses, so a host parses
+  // no TL and a batch of peers is one crossing
 
   const SEPARATOR = '\n'
 
@@ -156,7 +148,7 @@
 
   const toSpec = (peer) => {
     if (typeof peer === 'number') {
-      if (!Number.isInteger(peer)) throw invalid(`not a dialog id: ${peer}`)
+      if (!Number.isInteger(peer)) throw new PluginError('invalid-argument', `not a dialog id: ${peer}`)
       return `D${peer}`
     }
     if (typeof peer === 'string') {
@@ -165,7 +157,7 @@
       // one path where an id could arrive past 2^53 (int64 fields are strings on a TL snapshot)
       if (DIGITS.test(peer)) return `D${peer}`
       const username = peer.charCodeAt(0) === 64 ? peer.slice(1) : peer
-      if (!USERNAME.test(username)) throw invalid(`not a username: ${peer}`)
+      if (!USERNAME.test(username)) throw new PluginError('invalid-argument', `not a username: ${peer}`)
       return `U${username.toLowerCase()}`
     }
     if (peer !== null && typeof peer === 'object') {
@@ -175,11 +167,11 @@
       const id = peerDialogId(peer)
       if (id !== null && id !== 0) return `D${id}`
     }
-    throw invalid(`not a peer: ${describe(peer)}`)
+    throw new PluginError('invalid-argument', `not a peer: ${describe(peer)}`)
   }
 
   const toSpecList = (peers, what) => {
-    if (!Array.isArray(peers)) throw invalid(`${what}: expected an array of peers`)
+    if (!Array.isArray(peers)) throw new PluginError('invalid-argument', `${what}: expected an array of peers`)
     return peers.map(peer => toSpec(peer)).join(SEPARATOR)
   }
 
@@ -189,13 +181,13 @@
   const toMessageId = (id, what) => {
     const value = toNumber(id)
     if (value === null || !Number.isInteger(value) || Math.abs(value) > INT32_MAX) {
-      throw invalid(`${what}: message id must be a 32-bit integer`)
+      throw new PluginError('invalid-argument', `${what}: message id must be a 32-bit integer`)
     }
     return value
   }
 
   const toMessageIds = (ids, what) => {
-    if (!Array.isArray(ids)) throw invalid(`${what}: expected an array of message ids`)
+    if (!Array.isArray(ids)) throw new PluginError('invalid-argument', `${what}: expected an array of message ids`)
     return ids.map(id => toMessageId(id, what))
   }
 
@@ -205,10 +197,10 @@
 
   const toFieldNames = (value, what) => {
     if (value === undefined || value === null) return null
-    if (!Array.isArray(value)) throw invalid(`${what}: fields must be an array of field names`)
+    if (!Array.isArray(value)) throw new PluginError('invalid-argument', `${what}: fields must be an array of field names`)
     for (const name of value) {
-      if (typeof name !== 'string') throw invalid(`${what}: fields must be strings`)
-      if (!FIELD_NAME.test(name)) throw invalid(`${what}: not a field name: ${name}`)
+      if (typeof name !== 'string') throw new PluginError('invalid-argument', `${what}: fields must be strings`)
+      if (!FIELD_NAME.test(name)) throw new PluginError('invalid-argument', `${what}: not a field name: ${name}`)
     }
     return [...value]
   }
@@ -217,7 +209,7 @@
 
   const toOptions = (options, what) => {
     if (options === undefined || options === null) return NO_OPTIONS
-    if (typeof options !== 'object') throw invalid(`${what}: options must be an object`)
+    if (typeof options !== 'object') throw new PluginError('invalid-argument', `${what}: options must be an object`)
     return options
   }
 
@@ -227,17 +219,17 @@
     if (value === undefined || value === null) return 0
     const count = toNumber(value)
     if (count === null || !Number.isInteger(count) || count < 0 || count > INT32_MAX) {
-      throw invalid(`${what}: ${field} must be a non-negative 32-bit integer`)
+      throw new PluginError('invalid-argument', `${what}: ${field} must be a non-negative 32-bit integer`)
     }
     return count
   }
 
   // the account a method acts on is the handle it was called through, never anything captured: one
   // prototype serves every slot
-  const slotOf = (account, what) => {
+  const readAccountSlot = (account, what) => {
     const id = account === null || account === undefined ? undefined : account.id
     if (typeof id !== 'number' || !Number.isInteger(id)) {
-      throw invalid(`${what}: not called on an account handle; use inu.account().${what}(...)`)
+      throw new PluginError('invalid-argument', `${what}: not called on an account handle; use inu.account().${what}(...)`)
     }
     return id
   }
@@ -249,13 +241,13 @@
   utils.peers = Object.freeze({
     toDialogId(peer) {
       const id = peerDialogId(peer)
-      if (id === null) throw invalid(`toDialogId: not a peer: ${baseName(peer) || typeof peer}`)
+      if (id === null) throw new PluginError('invalid-argument', `toDialogId: not a peer: ${baseName(peer) || typeof peer}`)
       return id
     },
 
     parseDialogId(id) {
       const value = toNumber(id)
-      if (value === null || value === 0) throw invalid(`parseDialogId: not a dialog id: ${id}`)
+      if (value === null || value === 0) throw new PluginError('invalid-argument', `parseDialogId: not a dialog id: ${id}`)
       return { type: value > 0 ? 'user' : 'chat', id: Math.abs(value) }
     },
 
@@ -263,9 +255,8 @@
       const name = baseName(userOrChat)
       if (name === 'user' && userOrChat.self === true) return { _: 'inputPeerSelf' }
       if (!ENTITIES.has(name) || describePeer(userOrChat) === null) {
-        throw invalid(`toInputPeer: expected a user or a chat: ${name || typeof userOrChat}`)
+        throw new PluginError('invalid-argument', `toInputPeer: expected a user or a chat: ${name || typeof userOrChat}`)
       }
-      // the id keeps whatever form it arrived in: a number on a snapshot, or a decimal string a plugin wrote
       const id = userOrChat.id
       const hash = userOrChat.access_hash ?? '0'
       if (name === 'user') return { _: 'inputPeerUser', user_id: id, access_hash: hash }
@@ -275,7 +266,7 @@
 
     toBotApiId(peer) {
       const described = describePeer(peer)
-      if (described === null) throw invalid(`toBotApiId: not a peer: ${baseName(peer) || typeof peer}`)
+      if (described === null) throw new PluginError('invalid-argument', `toBotApiId: not a peer: ${baseName(peer) || typeof peer}`)
       if (described.kind === 'user') return described.id
       if (described.kind === 'chat') return -described.id
       return BOT_API_CHANNEL_BASE - described.id
@@ -283,7 +274,7 @@
 
     fromBotApiId(id) {
       const value = toNumber(id)
-      if (value === null || value === 0) throw invalid(`fromBotApiId: not a bot api id: ${id}`)
+      if (value === null || value === 0) throw new PluginError('invalid-argument', `fromBotApiId: not a bot api id: ${id}`)
       // a basic group is -id in both schemes, so only the offset branch has anything to undo
       return value < BOT_API_CHANNEL_BASE ? value - BOT_API_CHANNEL_BASE : value
     },
@@ -297,14 +288,14 @@
     peerDialogId,
     peerUserId,
     SEPARATOR,
-    invalid,
     toSpec,
     toSpecList,
+    toTextPart,
     toMessageId,
     toMessageIds,
     toOptions,
     toCount,
     toFieldNames,
-    slotOf,
+    readAccountSlot,
   }
 }

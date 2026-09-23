@@ -61,7 +61,7 @@
   const signalBrand = Symbol('AbortSignal')
   const signalState = new WeakMap()
 
-  const stateOf = (signal) => {
+  const getSignalState = (signal) => {
     const state = signalState.get(signal)
     if (state === undefined) throw new TypeError('not an AbortSignal')
     return state
@@ -74,21 +74,21 @@
     }
 
     get aborted() {
-      return stateOf(this).aborted
+      return getSignalState(this).aborted
     }
 
     get reason() {
-      return stateOf(this).reason
+      return getSignalState(this).reason
     }
 
     addEventListener(type, listener) {
-      const state = stateOf(this)
+      const state = getSignalState(this)
       if (type !== 'abort' || typeof listener !== 'function' || state.aborted) return
       if (!state.listeners.includes(listener)) state.listeners.push(listener)
     }
 
     removeEventListener(type, listener) {
-      const state = stateOf(this)
+      const state = getSignalState(this)
       if (type !== 'abort') return
       const at = state.listeners.indexOf(listener)
       if (at !== -1) state.listeners.splice(at, 1)
@@ -101,7 +101,7 @@
     }
 
     abort(reason) {
-      const state = stateOf(this.signal)
+      const state = getSignalState(this.signal)
       if (state.aborted) return
       state.aborted = true
       state.reason = reason !== undefined
@@ -122,12 +122,9 @@
 
   // Native Blob classes from `blob.rs` need explicit brands for `Object.prototype.toString`. File
   // needs its own brand because its prototype is a plain object inheriting from `Blob.prototype`.
-  const brand = (ctor, name) => {
-    if (ctor === undefined) return
+  for (const [ctor, name] of [[Blob, 'Blob'], [File, 'File']]) {
     Object.defineProperty(ctor.prototype, Symbol.toStringTag, { value: name, configurable: true })
   }
-  brand(globalThis.Blob, 'Blob')
-  brand(globalThis.File, 'File')
 
   const handleMarker = Symbol.for('inu.tl.handle')
   // Use a null-prototype table because plugins choose `error.name`. Inherited `constructor` would
@@ -142,10 +139,7 @@
     TypeError,
     URIError,
   })
-  // Capture globals once so later replacements cannot change which values use blob cloning.
-  const BlobCtor = globalThis.Blob
 
-  const uncloneable = what => new DOMException(`${what} could not be cloned`, 'DataCloneError')
 
   // Record every clone to preserve shared references, not just cycles. Repeated references clone to
   // one object, and views over the same buffer keep sharing a buffer.
@@ -156,17 +150,17 @@
 
   const cloneValue = (value, seen) => {
     const type = typeof value
-    if (type === 'function') throw uncloneable('a function')
-    if (type === 'symbol') throw uncloneable('a symbol')
+    if (type === 'function') throw new DOMException('a function could not be cloned', 'DataCloneError')
+    if (type === 'symbol') throw new DOMException('a symbol could not be cloned', 'DataCloneError')
     if (value === null || type !== 'object') return value
     if (seen.has(value)) return seen.get(value)
-    if (value[handleMarker] !== undefined) throw uncloneable('a TL view (toJSON() detaches one)')
+    if (value[handleMarker] !== undefined) throw new DOMException('a TL view (toJSON() detaches one) could not be cloned', 'DataCloneError')
 
     // a blob clones by reference, as on the web: the clone is a second handle over the same
     // content, so disposing either one is the parent/slice relation the type already explains
-    if (BlobCtor !== undefined && value instanceof BlobCtor) {
+    if (value instanceof Blob) {
       const clone = native.cloneBlob(value)
-      if (clone === undefined) throw uncloneable('an object pretending to be a Blob')
+      if (clone === undefined) throw new DOMException('an object pretending to be a Blob could not be cloned', 'DataCloneError')
       return remember(seen, value, clone)
     }
 
@@ -179,9 +173,9 @@
         ? new DataView(buffer, value.byteOffset, value.byteLength)
         : new value.constructor(buffer, value.byteOffset, value.length))
     }
-    if (value instanceof Promise) throw uncloneable('a promise')
+    if (value instanceof Promise) throw new DOMException('a promise could not be cloned', 'DataCloneError')
     if (value instanceof WeakMap || value instanceof WeakSet || value instanceof WeakRef) {
-      throw uncloneable('a weak collection')
+      throw new DOMException('a weak collection could not be cloned', 'DataCloneError')
     }
 
     if (value instanceof Error) {

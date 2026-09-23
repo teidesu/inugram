@@ -1,7 +1,8 @@
-use std::ffi::{c_char, c_int, c_void, CString};
+use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::ptr;
 use std::sync::{Mutex, OnceLock};
 
+use jni::objects::JObject;
 use jni::strings::JNIString;
 use jni::sys::{jclass, jobject, jobjectArray, JNIEnv as RawJNIEnv};
 use jni::Env;
@@ -56,9 +57,6 @@ struct Native {
   art_handle: usize,
 }
 
-unsafe impl Send for Native {}
-unsafe impl Sync for Native {}
-
 static NATIVE: OnceLock<Option<Native>> = OnceLock::new();
 
 static INITIALIZED: OnceLock<bool> = OnceLock::new();
@@ -68,31 +66,28 @@ fn native() -> Option<&'static Native> {
   NATIVE.get().and_then(|slot| slot.as_ref())
 }
 
-unsafe fn dlopen(name: &str) -> *mut c_void {
-  let Ok(name) = CString::new(name) else {
-    return ptr::null_mut();
-  };
-  libc_dlopen(name.as_ptr(), RTLD_NOW)
-}
-
-unsafe fn dlsym<T>(handle: *mut c_void, name: &str) -> Option<T> {
-  let Ok(name) = CString::new(name) else {
-    return None;
-  };
-  let symbol = libc_dlsym(handle, name.as_ptr());
-  if symbol.is_null() {
-    return None;
+impl Native {
+  fn find_art_export(&self, name: &str) -> *mut c_void {
+    let Ok(name) = CString::new(name) else { return ptr::null_mut() };
+    if self.art_handle == 0 {
+      return ptr::null_mut();
+    }
+    // SAFETY: `art_handle` came from `shadowhook_dlopen` and is never closed
+    unsafe { (self.shadowhook.dlsym)(self.art_handle as *mut c_void, name.as_ptr()) }
   }
-  Some(std::mem::transmute_copy(&symbol))
 }
 
-const RTLD_NOW: c_int = 2;
+fn dlopen(name: &CStr) -> Option<*mut c_void> {
+  // SAFETY: a valid C string naming one of the app's own libraries, whose constructors need nothing
+  let handle = unsafe { libc::dlopen(name.as_ptr(), libc::RTLD_NOW) };
+  (!handle.is_null()).then_some(handle)
+}
 
-extern "C" {
-  #[link_name = "dlopen"]
-  fn libc_dlopen(name: *const c_char, flags: c_int) -> *mut c_void;
-  #[link_name = "dlsym"]
-  fn libc_dlsym(handle: *mut c_void, name: *const c_char) -> *mut c_void;
+/// # Safety
+/// `T` must be a function pointer type matching the C declaration of `name`.
+unsafe fn dlsym<T: Copy>(handle: *mut c_void, name: &CStr) -> Option<T> {
+  let symbol = libc::dlsym(handle, name.as_ptr());
+  (!symbol.is_null()).then(|| std::mem::transmute_copy(&symbol))
 }
 
 #[cfg(target_os = "android")]
@@ -105,16 +100,17 @@ extern "C" {
 fn log_init_failure(message: &str) {
   #[cfg(target_os = "android")]
   {
-    let Ok(tag) = CString::new("InuPluginHost") else { return };
     let Ok(message) = CString::new(format!("[xposed] {message}")) else { return };
-    unsafe { __android_log_write(6, tag.as_ptr(), message.as_ptr()) };
+    // SAFETY: both arguments are valid C strings for the duration of the call
+    unsafe { __android_log_write(6, c"InuPluginHost".as_ptr(), message.as_ptr()) };
   }
 }
 
-fn name_of(name: *const c_char, length: usize) -> &'static str {
+fn read_symbol_name(name: *const c_char, length: usize) -> &'static str {
   if name.is_null() {
     return "";
   }
+  // SAFETY: lsplant passes a pointer to `length` bytes of a symbol name it keeps alive for the call
   let bytes = unsafe { std::slice::from_raw_parts(name as *const u8, length) };
   std::str::from_utf8(bytes).unwrap_or("")
 }
@@ -123,17 +119,13 @@ extern "C" fn resolve_exact(name: *const c_char, length: usize) -> *mut c_void {
   let Some(native) = native() else {
     return ptr::null_mut();
   };
-  let name = name_of(name, length);
+  let name = read_symbol_name(name, length);
   if name.is_empty() {
     return ptr::null_mut();
   }
-  if native.art_handle != 0 {
-    if let Ok(owned) = CString::new(name) {
-      let found = unsafe { (native.shadowhook.dlsym)(native.art_handle as *mut c_void, owned.as_ptr()) };
-      if !found.is_null() {
-        return found;
-      }
-    }
+  let found = native.find_art_export(name);
+  if !found.is_null() {
+    return found;
   }
   match native.art.lock() {
     Ok(mut art) => art.exact(name),
@@ -145,7 +137,7 @@ extern "C" fn resolve_prefix(prefix: *const c_char, length: usize) -> *mut c_voi
   let Some(native) = native() else {
     return ptr::null_mut();
   };
-  let prefix = name_of(prefix, length);
+  let prefix = read_symbol_name(prefix, length);
   if prefix.is_empty() {
     return ptr::null_mut();
   }
@@ -160,6 +152,7 @@ extern "C" fn inline_hooker(target: *mut c_void, hooker: *mut c_void) -> *mut c_
     return ptr::null_mut();
   };
   let mut original: *mut c_void = ptr::null_mut();
+  // SAFETY: lsplant hands over a function entry in libart and its replacement
   let stub = unsafe { (native.shadowhook.hook_addr)(target, hooker, &mut original) };
   if stub.is_null() {
     return ptr::null_mut();
@@ -169,6 +162,7 @@ extern "C" fn inline_hooker(target: *mut c_void, hooker: *mut c_void) -> *mut c_
 
 extern "C" fn inline_unhooker(func: *mut c_void) -> bool {
   let Some(native) = native() else { return false };
+  // SAFETY: lsplant only unhooks stubs `inline_hooker` returned
   unsafe { (native.shadowhook.unhook)(func) == 0 }
 }
 
@@ -176,12 +170,7 @@ const SHADOWHOOK_MODE_UNIQUE: c_int = 1;
 const SET_HIDDEN_API_EXEMPTIONS: &str = "_ZN3artL32VMRuntime_setHiddenApiExemptionsEP7_JNIEnvP7_jclassP13_jobjectArray";
 
 fn disable_hidden_api(env: &mut Env, native: &Native) -> bool {
-  let mut address = ptr::null_mut();
-  if native.art_handle != 0 {
-    if let Ok(name) = CString::new(SET_HIDDEN_API_EXEMPTIONS) {
-      address = unsafe { (native.shadowhook.dlsym)(native.art_handle as *mut c_void, name.as_ptr()) };
-    }
-  }
+  let mut address = native.find_art_export(SET_HIDDEN_API_EXEMPTIONS);
   if address.is_null() {
     address = match native.art.lock() {
       Ok(mut art) => art.prefix(SET_HIDDEN_API_EXEMPTIONS),
@@ -209,8 +198,12 @@ fn disable_hidden_api(env: &mut Env, native: &Native) -> bool {
     return false;
   };
 
-  let set_exemptions: SetHiddenApiExemptions = unsafe { std::mem::transmute(address) };
-  unsafe { set_exemptions(env.get_raw(), string_class.as_raw(), exemptions.as_raw()) };
+  // SAFETY: the mangled name pins the C++ signature `SetHiddenApiExemptions` mirrors, and both
+  // references are live locals of this env
+  unsafe {
+    let set_exemptions: SetHiddenApiExemptions = std::mem::transmute(address);
+    set_exemptions(env.get_raw(), string_class.as_raw(), exemptions.as_raw());
+  }
   if clear_exception(env) {
     log_init_failure("VMRuntime_setHiddenApiExemptions threw");
     return false;
@@ -219,34 +212,32 @@ fn disable_hidden_api(env: &mut Env, native: &Native) -> bool {
 }
 
 fn load() -> Option<Native> {
-  let shadowhook_lib = unsafe { dlopen("libshadowhook.so") };
-  if shadowhook_lib.is_null() {
-    return None;
-  }
-  let init: ShadowhookInit = unsafe { dlsym(shadowhook_lib, "shadowhook_init")? };
-  if unsafe { init(SHADOWHOOK_MODE_UNIQUE, false) } != 0 {
-    return None;
-  }
-  let shadowhook = Shadowhook {
-    dlopen: unsafe { dlsym(shadowhook_lib, "shadowhook_dlopen")? },
-    dlsym: unsafe { dlsym(shadowhook_lib, "shadowhook_dlsym")? },
-    hook_addr: unsafe { dlsym(shadowhook_lib, "shadowhook_hook_func_addr")? },
-    unhook: unsafe { dlsym(shadowhook_lib, "shadowhook_unhook")? },
+  let shadowhook_lib = dlopen(c"libshadowhook.so")?;
+  // SAFETY: each field's type alias mirrors the C declaration of the symbol read into it
+  // (shadowhook.h, and the LSPlant*C wrappers in patches-native/lsplant-c-abi.patch)
+  let (shadowhook, lsplant) = unsafe {
+    let init: ShadowhookInit = dlsym(shadowhook_lib, c"shadowhook_init")?;
+    if init(SHADOWHOOK_MODE_UNIQUE, false) != 0 {
+      return None;
+    }
+    let shadowhook = Shadowhook {
+      dlopen: dlsym(shadowhook_lib, c"shadowhook_dlopen")?,
+      dlsym: dlsym(shadowhook_lib, c"shadowhook_dlsym")?,
+      hook_addr: dlsym(shadowhook_lib, c"shadowhook_hook_func_addr")?,
+      unhook: dlsym(shadowhook_lib, c"shadowhook_unhook")?,
+    };
+    let lsplant_lib = dlopen(c"liblsplant.so")?;
+    let lsplant = LSPlant {
+      init: dlsym(lsplant_lib, c"LSPlantInitC")?,
+      hook: dlsym(lsplant_lib, c"LSPlantHookC")?,
+      unhook: dlsym(lsplant_lib, c"LSPlantUnHookC")?,
+      is_hooked: dlsym(lsplant_lib, c"LSPlantIsHookedC")?,
+    };
+    (shadowhook, lsplant)
   };
 
-  let lsplant_lib = unsafe { dlopen("liblsplant.so") };
-  if lsplant_lib.is_null() {
-    return None;
-  }
-  let lsplant = LSPlant {
-    init: unsafe { dlsym(lsplant_lib, "LSPlantInitC")? },
-    hook: unsafe { dlsym(lsplant_lib, "LSPlantHookC")? },
-    unhook: unsafe { dlsym(lsplant_lib, "LSPlantUnHookC")? },
-    is_hooked: unsafe { dlsym(lsplant_lib, "LSPlantIsHookedC")? },
-  };
-
-  let art_name = CString::new("libart.so").ok()?;
-  let art_handle = unsafe { (shadowhook.dlopen)(art_name.as_ptr()) } as usize;
+  // SAFETY: a valid C string; the handle is kept for the process lifetime
+  let art_handle = unsafe { (shadowhook.dlopen)(c"libart.so".as_ptr()) } as usize;
 
   Some(Native {
     shadowhook,
@@ -277,6 +268,7 @@ pub fn init(env: &mut Env) -> bool {
       generated_field_name: ptr::null(),
       generated_method_name: ptr::null(),
     };
+    // SAFETY: `info` outlives the call, and every callback in it is valid for the process lifetime
     let initialized = unsafe { (native.lsplant.init)(env.get_raw(), &info) };
     if !initialized {
       log_init_failure("LSPlantInitC failed");
@@ -285,21 +277,22 @@ pub fn init(env: &mut Env) -> bool {
   })
 }
 
-pub unsafe fn hook(env: &mut Env, target: jobject, hooker: jobject, callback: jobject) -> jobject {
+// SAFETY (all three): lsplant takes local or global references the caller keeps alive for the call
+pub fn hook(env: &mut Env, target: &JObject, hooker: &JObject, callback: &JObject) -> jobject {
   let Some(native) = native() else {
     return ptr::null_mut();
   };
-  (native.lsplant.hook)(env.get_raw(), target, hooker, callback)
+  unsafe { (native.lsplant.hook)(env.get_raw(), target.as_raw(), hooker.as_raw(), callback.as_raw()) }
 }
 
-pub unsafe fn unhook(env: &mut Env, target: jobject) -> bool {
+pub fn unhook(env: &mut Env, target: &JObject) -> bool {
   let Some(native) = native() else { return false };
-  (native.lsplant.unhook)(env.get_raw(), target)
+  unsafe { (native.lsplant.unhook)(env.get_raw(), target.as_raw()) }
 }
 
-pub unsafe fn is_hooked(env: &mut Env, target: jobject) -> bool {
+pub fn is_hooked(env: &mut Env, target: &JObject) -> bool {
   let Some(native) = native() else { return false };
-  (native.lsplant.is_hooked)(env.get_raw(), target)
+  unsafe { (native.lsplant.is_hooked)(env.get_raw(), target.as_raw()) }
 }
 
 extern "C" fn ignore_profile_saver() -> bool {
@@ -324,6 +317,8 @@ pub fn disable_profile_saver() -> bool {
       return false;
     };
     let mut original = ptr::null_mut();
+    // SAFETY: `address` is ProcessProfilingInfo's entry in libart, and the replacement takes no
+    // arguments it would need to read
     let hook = unsafe {
       (native.shadowhook.hook_addr)(address, ignore_profile_saver as *const () as *mut c_void, &mut original)
     };

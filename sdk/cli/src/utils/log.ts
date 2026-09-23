@@ -27,16 +27,14 @@ export function messageAt(file: string, source: string, text: string, start: num
  * Uses esbuild's error renderer for the source line, column, and underline,
  * so CLI errors use the same format as build errors.
  */
-export async function renderMessages(
-  messages: (Message | PartialMessage)[],
-  kind: 'error' | 'warning',
-): Promise<string[]> {
-  if (messages.length === 0) return []
-  return esbuild.formatMessages(messages, {
+export async function printMessages(messages: (Message | PartialMessage)[], kind: 'error' | 'warning') {
+  if (messages.length === 0) return
+  const frames = await esbuild.formatMessages(messages, {
     kind,
     color: pc.isColorSupported,
     terminalWidth: process.stdout.columns ?? 100,
   })
+  for (const frame of frames) process.stdout.write(frame)
 }
 
 export function step(message: string) {

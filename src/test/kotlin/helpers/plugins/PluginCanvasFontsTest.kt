@@ -2,45 +2,25 @@ package desu.inugram.helpers.plugins
 
 import android.util.Log
 import desu.inugram.helpers.font.FontLibrary
-import desu.inugram.helpers.plugins.ui.PluginCanvas
 import java.io.File
 import org.json.JSONArray
-import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-/**
- * `inu.canvas.listFonts` against the app's real font roster, which is the only place it exists: the
- * names it answers are what a `ctx.font` resolves against, so a list that disagreed with the roster
- * would be a list of names that draw as the default face.
- */
 class PluginCanvasFontsTest {
-    private val plugins = ArrayList<Plugin>()
-
     @Before
     fun setUp() = resetBridge()
 
-    @After
-    fun tearDown() {
-        plugins.forEach(::closeCanvasEngine)
-        plugins.clear()
-    }
-
-    /** a name of its own per engine: the install id is the name's, and wiping one live store would take another's */
     private fun engineFor(name: String = "canvas-fonts"): Plugin =
-        canvasEngine(name) { Log.d(TAG, it) }.also {
-            PluginCanvas.wipe(it.id)
-            plugins.add(it)
-        }
+        startEngine(name, canvas = true) { Log.d(TAG, it) }
 
     @Test
     fun the_list_is_the_app_s_own_roster_and_says_where_each_family_came_from() {
         val plugin = engineFor()
-        // the roster is read on both sides of the call: the app loads the device's families in the
-        // background at startup, so the only claim that holds is that the list is one of the two
+        // stock loads device fonts in the background, so the roster may change during the call
         val before = rosterNames()
         plugin.await("inu.canvas.listFonts().then(list => { globalThis.fonts = list })")
         val after = rosterNames()
@@ -61,11 +41,9 @@ class PluginCanvasFontsTest {
         }
     }
 
-    /** what the plugin loaded for itself is a family it can name too, and nobody else can */
     @Test
     fun a_font_the_plugin_loaded_is_listed_as_its_own() {
         val plugin = engineFor()
-        // bytes rather than a path: the suite installs no `inu.fs`, and a font is a font either way
         val bytes = smallestSystemFont().joinToString(",") { (it.toInt() and 0xff).toString() }
         plugin.js("globalThis.face = new Uint8Array([$bytes])")
         plugin.await(
@@ -92,7 +70,6 @@ class PluginCanvasFontsTest {
 
     private fun rosterNames(): List<String> = FontLibrary.getCachedRoster().map { FontLibrary.getFontName(it) }
 
-    /** any real font will do, and the smallest keeps the array literal it is handed over as small */
     private fun smallestSystemFont(): ByteArray {
         val fonts = File("/system/fonts").listFiles()?.filter { it.isFile && it.name.endsWith(".ttf") }.orEmpty()
         val font = assertNotNull(fonts.minByOrNull { it.length() }, "this device has no system fonts to load")

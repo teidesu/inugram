@@ -35,9 +35,9 @@ class PluginHookContext internal constructor(
         checkActive()
         require(index in arguments.indices) { "xposed: argument index out of range" }
         val type = (method as Executable).parameterTypes[index]
-        val converted = PluginJvm.convertArguments(arrayOf(type), listOf(value))
+        val converted = PluginJvm.convert(value, type)
             ?: throw IllegalArgumentException("xposed: invalid argument for ${type.name}")
-        arguments[index] = converted[0]
+        arguments[index] = converted.value
     }
     fun getReturnValue(): Any? {
         checkActive()
@@ -50,12 +50,7 @@ class PluginHookContext internal constructor(
     fun setReturnValue(value: Any?) {
         checkActive()
         val type = (method as? Method)?.returnType ?: Void.TYPE
-        val converted = if (type == Void.TYPE) null else {
-            val values = PluginJvm.convertArguments(arrayOf(type), listOf(value))
-                ?: throw IllegalArgumentException("xposed: invalid result for ${type.name}")
-            values[0]
-        }
-        outcome = Result.success(converted)
+        outcome = Result.success(convertReturnValue(method, value))
         answered = true
     }
     fun setThrowable(value: Throwable) {
@@ -68,4 +63,10 @@ class PluginHookContext internal constructor(
 
 internal class PluginXposedRoutine(private val program: PluginJvmRoutine) : java.util.function.Consumer<PluginHookContext> {
     override fun accept(context: PluginHookContext) { program.execute(context) }
+}
+
+internal fun convertReturnValue(member: Member, value: Any?): Any? {
+    val type = (member as? Method)?.returnType ?: return null
+    if (type == Void.TYPE) return null
+    return (PluginJvm.convert(value, type) ?: throw IllegalArgumentException("xposed: invalid result for ${type.name}")).value
 }

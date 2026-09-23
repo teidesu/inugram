@@ -1,6 +1,5 @@
 package desu.inugram.helpers.plugins
 
-import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.telegram.PluginWrites
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -9,14 +8,9 @@ import org.json.JSONObject
 import org.junit.Before
 import org.junit.Test
 import org.telegram.messenger.MessagesController
-import org.telegram.messenger.UserConfig
 import org.telegram.tgnet.TLRPC
 import org.telegram.tgnet.tl.TL_update
 
-/**
- * The host half of the `Account` write surface: the two rules every write carries, what each one
- * builds, and what it answers with.
- */
 class PluginWritesTest {
     private val self = 100L
     private val alice = 222L
@@ -33,19 +27,6 @@ class PluginWritesTest {
         TestApp.putChat(basicGroup(group))
     }
 
-    private fun user(id: Long) = TLRPC.TL_user().apply {
-        this.id = id
-        access_hash = id * 10
-    }
-
-    private fun broadcast(id: Long) = TLRPC.TL_channel().apply {
-        this.id = id
-        access_hash = id * 10
-        broadcast = true
-    }
-
-    private fun basicGroup(id: Long) = TLRPC.TL_chat().apply { this.id = id }
-
     private fun granted(vararg extra: String) = startPlugin(
         "writes",
         "account.write(send,edit,delete,forward,react,read,typing,draft)",
@@ -53,33 +34,17 @@ class PluginWritesTest {
         *extra,
     )
 
-    private fun write(
-        plugin: Plugin,
-        op: Int,
-        arg: JSONObject,
-        values: Array<String> = emptyArray(),
-        requestId: Long = 1L,
-        account: Int = 0,
-    ): String? = plugin.js.listener!!.accountWrite(account, requestId, op, arg.toString(), values)
-
-    // this suite is about the request the write surface builds, which is the `optimistic: false`
-    // half; the composer half has its own
     private fun send(peer: String, text: String = "hi") = JSONObject()
         .put("peer", peer)
         .put("text", text)
         .put("optimistic", false)
 
-    /** the wire the engine was settled with, once the queues have run */
     private fun settled(plugin: Plugin): String {
         drain()
         return plugin.js.writeResults.last().resultWire
     }
 
-    /**
-     * counts what the real [org.telegram.tgnet.TLObject] does not: how often it was freed. The base
-     * `freeResources` is empty and the `disableFree` check lives in whichever subclass owns a
-     * `NativeByteBuffer`, so the shape below is that subclass's, not the base class's.
-     */
+    // mirrors the `disableFree` check of a stock subclass owning a `NativeByteBuffer`
     class CountingUpdates : TLRPC.TL_updates() {
         var freeCount = 0
 
@@ -105,7 +70,6 @@ class PluginWritesTest {
 
     @Test
     fun a_plugin_s_own_send_never_re_enters_the_interceptor_chains() {
-        // the loop this exists to prevent: one plugin rewrites every sendMessage, another sends one
         val watcher = startPlugin("watcher", "interceptRpc(messages.sendMessage)")
         assertNull(watcher.interceptRpc("messages.sendMessage"))
         val plugin = granted()
@@ -117,16 +81,11 @@ class PluginWritesTest {
         assertEquals(1, connections().sent.size, "the request did not go out")
         assertEquals(
             "messages.sendMessage",
-            desu.inugram.core.plugins.TlNames.classNameToTlName(connections().lastSent()!!.request.javaClass),
+            desu.inugram.helpers.plugins.tl.TlNames.classNameToTlName(connections().lastSent()!!.request.javaClass),
         )
     }
 
-    /**
-     * the scenario the lease exists for: on CONNECTION_NOT_INITED stock re-sends the very request
-     * instance it was handed, with a fresh token and without invoking the delegate. A lease the
-     * first send consumed would let that retry walk into a chain over a request the write is still
-     * holding.
-     */
+    // on CONNECTION_NOT_INITED stock re-sends the same instance with a fresh token, without the delegate
     @Test
     fun the_lease_outlives_the_first_send_and_ends_with_the_delegate() {
         val plugin = granted()
@@ -136,7 +95,6 @@ class PluginWritesTest {
 
         val watcher = startPlugin("watcher", "interceptRpc(messages.sendMessage)")
         assertNull(watcher.interceptRpc("messages.sendMessage"))
-        // still in flight: stock's own re-send of this instance is ours, not an app request
         connections().inu_retryNotInited(sent, 5)
         drain()
         assertTrue(watcher.js.dispatches.isEmpty(), "the retry of a plugin's own send walked into a chain")
@@ -144,8 +102,6 @@ class PluginWritesTest {
         sent.answer(updatesWith(sentMessage(7, "hi")), null, 0L)
         drain()
 
-        // answered, so nothing further can be a re-send of it: the same instance is now an ordinary
-        // app request and the interceptor sees it
         connections().sendRequestInternal(sent.request, null, null, null, null, 0, 0, 0, false, 6)
         drain()
         assertEquals(1, watcher.js.dispatches.size, "the lease outlived the flight")
@@ -168,7 +124,6 @@ class PluginWritesTest {
         for ((op, arg) in ops) {
             assertPluginError("forbidden", write(plugin, op, arg))
         }
-        // and one *into* a secret chat, where the source resolves perfectly well
         assertPluginError(
             "forbidden",
             write(
@@ -253,13 +208,8 @@ class PluginWritesTest {
         assertEquals(listOf(3, 4), plain.id)
     }
 
-    /**
-     * a channel the app only ever saw quoted in someone else's message is a `min` chat: stock gives
-     * it no `access_hash` and addresses it as `inputPeerChannelFromMessage`, a sibling of
-     * `TL_inputPeerChannel`. Taking the peerless `messages.deleteMessages` branch for one does not
-     * fail: those ids address the user's *own* message-id space, so the server deletes whatever
-     * message carries that id in a private chat, revoked for the other party too.
-     */
+    // stock addresses a min channel as `inputPeerChannelFromMessage`, not `TL_inputPeerChannel`, and
+    // the peerless `messages.deleteMessages` would delete that id in the user's own id space
     @Test
     fun a_min_channel_still_deletes_and_reads_through_the_channel_rpcs() {
         val plugin = granted()
@@ -351,7 +301,7 @@ class PluginWritesTest {
         short.date = 1700
         connections().lastSent()!!.answer(short, null, 0L)
 
-        val handle = handleOf(settled(plugin))
+        val handle = decodeHandle(settled(plugin))
         assertEquals("I909", plugin.tl().tlGet(handle.id, "id"))
         assertEquals("Srebuild me", plugin.tl().tlGet(handle.id, "message"))
         assertEquals("I1700", plugin.tl().tlGet(handle.id, "date"))
@@ -359,9 +309,6 @@ class PluginWritesTest {
 
     @Test
     fun a_write_may_name_you_and_what_it_answers_names_you_back_under_the_write_scope_alone() {
-        // the read side gates naming yourself behind `account.read(self)`; the write side does not,
-        // and the contract says why - a send to yourself is Saved Messages rather than a lookup of
-        // who you are, and every send's answer carries you as its sender whatever the bridge does
         val plugin = startPlugin("writes", "account.write(send)")
         assertNull(write(plugin, PluginWrites.OP_SEND_MESSAGE, send("S", "note to self")))
         drain()
@@ -369,9 +316,9 @@ class PluginWritesTest {
         short.id = 5
         connections().lastSent()!!.answer(short, null, 0L)
 
-        val handle = handleOf(settled(plugin))
+        val handle = decodeHandle(settled(plugin))
         assertEquals("I100", plugin.tl().tlGet(handle.id, "from_id").let {
-            plugin.tl().tlGet(handleOf(it).id, "user_id")
+            plugin.tl().tlGet(decodeHandle(it).id, "user_id")
         })
     }
 
@@ -400,18 +347,13 @@ class PluginWritesTest {
         assertNull(write(plugin, PluginWrites.OP_SEND_MESSAGE, send("D$alice")))
         drain()
         connections().lastSent()!!.answer(updatesWith(sentMessage(1, "hi")), null, 0L)
-        // the delegate has run, but the engine is only entered from a globalQueue runnable: settling
-        // from inside the upcall is the same-engine re-entry that aborts the process
+        // settling inside the upcall is a same-engine re-entry, which aborts the process
         assertTrue(plugin.js.writeResults.isEmpty(), "the write settled before the queue ran")
         drain()
         assertEquals(1, plugin.js.writeResults.size)
     }
 
-    /**
-     * stock frees a response's buffers the moment the delegate returns, on stageQueue - and the
-     * settle reads that response a globalQueue hop later. Every sibling crossing takes the response
-     * over for the hop and performs the one free itself; this one is no different.
-     */
+    // stock frees a response when the delegate returns, and the settle reads it a queue hop later
     @Test
     fun the_response_outlives_the_queue_hop_the_settle_takes_and_is_freed_exactly_once() {
         val plugin = granted()
@@ -435,7 +377,6 @@ class PluginWritesTest {
         drain()
         val stale = plugin.js
         connections().lastSent()!!.answer(updatesWith(sentMessage(1, "hi")), null, 0L)
-        // a reload between the answer and the settle: request ids restart on the new engine
         plugin.session = PluginSession(plugin, RecordingQuickJs())
         drain()
         assertTrue(stale.writeResults.isEmpty(), "a stale settle reached a dead engine")
@@ -447,26 +388,9 @@ class PluginWritesTest {
         assertPluginError("internal", write(plugin, 99, send("D$alice")))
     }
 
+    // stock `processUpdates` removes the entries it applied from `updates.updates`
     @Test
-    fun a_send_answers_with_the_message_the_server_made_read_only() {
-        val plugin = granted()
-        assertNull(write(plugin, PluginWrites.OP_SEND_MESSAGE, send("D$alice")))
-        settle()
-        connections().lastSent()!!.answer(updatesWith(sentMessage(77, "hi")), null, 0L)
-
-        val handle = handleOf(settled(plugin))
-        assertTrue(handle.readOnly, "a sent message is app state and must not be writable")
-        assertEquals("I77", plugin.tl().tlGet(handle.id, "id"))
-        assertEquals("Shi", plugin.tl().tlGet(handle.id, "message"))
-    }
-
-    /**
-     * the real `processUpdates` **removes the entries it applied from `updates.updates`**, and the
-     * answer above is built out of that same list - so the emptied list is what proves the app was
-     * handed the batch, and the answer surviving it is what the snapshot in `PluginWrites.send` buys
-     */
-    @Test
-    fun the_app_applies_what_the_plugin_sent_and_the_answer_outlives_it() {
+    fun the_app_applies_what_the_plugin_sent_and_the_read_only_answer_outlives_it() {
         val plugin = granted()
         assertNull(write(plugin, PluginWrites.OP_SEND_MESSAGE, send("D$alice")))
         settle()
@@ -476,6 +400,9 @@ class PluginWritesTest {
         settle()
 
         assertTrue(carried.isEmpty(), "the app never applied the batch: $carried")
-        assertEquals("I77", plugin.tl().tlGet(handleOf(settled(plugin)).id, "id"))
+        val handle = decodeHandle(settled(plugin))
+        assertTrue(handle.readOnly, "a sent message is app state and must not be writable")
+        assertEquals("I77", plugin.tl().tlGet(handle.id, "id"))
+        assertEquals("Shi", plugin.tl().tlGet(handle.id, "message"))
     }
 }

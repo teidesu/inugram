@@ -4,15 +4,16 @@ use std::rc::Rc;
 
 use base64::engine::general_purpose::STANDARD;
 use rquickjs::atom::PredefinedAtom;
-use rquickjs::class::{JsClass, Readable, Trace, Tracer};
+use rquickjs::class::{Trace, Tracer};
 use rquickjs::function::This;
 use rquickjs::proxy::ProxyHandler;
 use rquickjs::{
-  Array, Class, Constructor, Ctx, Exception, Filter, Function, IntoJs, JsLifetime, Object, Proxy, Result as JsResult,
-  Symbol, TypedArray, Value,
+  Array, Class, Ctx, Exception, Filter, Function, IntoJs, JsLifetime, Object, Proxy, Result as JsResult, Symbol,
+  TypedArray, Value,
 };
 
 use crate::api::error::PluginErrorCode;
+use crate::utils::qjs::qjs_read_typed_bytes;
 
 const BYTES_MARKER_KEY: &str = "$inuBytes";
 
@@ -36,7 +37,6 @@ mod tag {
 pub trait TlHost {
   fn tl_get(&self, handle: i64, key: &str) -> String;
 
-  /// the ordinal [`Self::tl_read_field`] takes for this field, or [`ORDINAL_FALLBACK`]
   fn tl_resolve_field(&self, _class_id: i32, _key: &str) -> i32 {
     ORDINAL_FALLBACK
   }
@@ -51,8 +51,7 @@ pub trait TlHost {
     &[]
   }
   fn tl_set(&self, handle: i64, key: &str, value_wire: &str) -> Option<String>;
-  /// the write half of `TAG_BYTES`: a `Uint8Array` assignment goes over as a java `byte[]` rather
-  /// than base64 in [`Self::tl_set`]'s wire, which is what reads have always done
+  /// `TAG_BYTES` for writes: a `Uint8Array` crosses as a java `byte[]`, not as base64 in [`Self::tl_set`]'s wire
   fn tl_set_bytes(&self, handle: i64, key: &str, value: &[u8]) -> Option<String>;
   fn tl_has(&self, handle: i64, key: &str) -> i32;
   fn tl_own_keys(&self, handle: i64) -> Option<String>;
@@ -60,16 +59,15 @@ pub trait TlHost {
   fn tl_release(&self, handle: i64);
 }
 
-/// Stores each view's state and cache on its proxy target. All views in a context share one handler
-/// ([`TlShared`]), which reads state from the target instead of a per-view closure. Each handle
-/// allocates a target and a proxy.
+/// Every view in a context shares one handler ([`TlShared`]), so per-view state lives on the proxy target.
+#[derive(JsLifetime)]
+#[rquickjs::class(rename = "TlHandle", frozen)]
 struct HandleBox<'js> {
   views: Rc<TlViews>,
   handle: i64,
   is_vector: bool,
   read_only: bool,
   life: ViewLife,
-  /// what the handle's wire named, or [`ORDINAL_FALLBACK`] when it named nothing
   class_id: i32,
   stamp: Cell<u64>,
   /// what survives a write anywhere: the type name and the `toJSON` function
@@ -95,29 +93,10 @@ impl<'js> Trace<'js> for HandleBox<'js> {
   }
 }
 
-// SAFETY: every JavaScript-lifetime-bound field uses the struct's `'js` lifetime.
-unsafe impl<'js> JsLifetime<'js> for HandleBox<'js> {
-  type Changed<'to> = HandleBox<'to>;
-}
-
-impl<'js> JsClass<'js> for HandleBox<'js> {
-  const NAME: &'static str = "TlHandle";
-  type Mutable = Readable;
-
-  fn constructor(_ctx: &Ctx<'js>) -> JsResult<Option<Constructor<'js>>> {
-    Ok(None)
-  }
-}
-
-/// per context: the one handler every view shares, and the symbols the traps compare against
+#[derive(JsLifetime)]
 struct TlShared<'js> {
   handler: Object<'js>,
   marker: Symbol<'js>,
-}
-
-// SAFETY: every JavaScript-lifetime-bound field uses the struct's `'js` lifetime.
-unsafe impl<'js> JsLifetime<'js> for TlShared<'js> {
-  type Changed<'to> = TlShared<'to>;
 }
 
 /// Release the handler and marker before freeing the context. They are JS values in runtime
@@ -140,7 +119,7 @@ impl<'js> TlShared<'js> {
       })
       .is_err()
     {
-      return throw_tl(ctx, "tl proxy: the shared handler could not be installed");
+      return Err(Exception::throw_message(ctx, "tl proxy: the shared handler could not be installed"));
     }
     Ok((handler, marker))
   }
@@ -170,7 +149,7 @@ impl TlViews {
     self.epoch.get()
   }
 
-  fn ordinal_of(&self, host: &dyn TlHost, class_id: i32, key: &str) -> i32 {
+  fn resolve_field_ordinal(&self, host: &dyn TlHost, class_id: i32, key: &str) -> i32 {
     if let Some(known) = self.ordinals.borrow().get(&class_id).and_then(|fields| fields.get(key)) {
       return *known;
     }
@@ -179,11 +158,6 @@ impl TlViews {
     ordinal
   }
 
-  fn bump(&self) {
-    self.epoch.set(self.epoch.get() + 1);
-  }
-
-  /// every element of a `\n`-joined list wire, each read as [`Self::wire_to_js_value`] reads one
   pub fn wire_to_js_list<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, wire: &str, life: ViewLife) -> JsResult<Array<'js>> {
     let array = Array::new(ctx.clone())?;
     if wire.is_empty() {
@@ -196,12 +170,10 @@ impl TlViews {
   }
 
   pub fn wire_to_js_value<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, wire: &str, life: ViewLife) -> JsResult<Value<'js>> {
-    if let Some(built) = crate::api::error::wire_error_to_js(ctx, wire) {
-      return Err(ctx.throw(built?));
-    }
+    crate::api::error::throw_wire_error(ctx, wire)?;
     let mut chars = wire.chars();
     let Some(tag) = chars.next() else {
-      return throw_tl(ctx, "tl wire: empty value");
+      return Err(Exception::throw_message(ctx, "tl wire: empty value"));
     };
     let payload = chars.as_str();
     if let Some(scalar) = scalar_wire_to_js(ctx, tag, payload) {
@@ -214,7 +186,7 @@ impl TlViews {
         build_view(ctx, self.clone(), is_vector, read_only, life, id, class_id, projection)?.into_js(ctx)
       }
       'J' => json_parse_tl(ctx, payload),
-      other => throw_tl(ctx, &format!("tl wire: unknown tag '{other}'")),
+      other => Err(Exception::throw_message(ctx, &format!("tl wire: unknown tag '{other}'"))),
     }
   }
 }
@@ -258,7 +230,7 @@ const THEN_KEY: &str = "then";
 /// bridge calls. Kotlin writes this with `PluginWire.encodeHandle`.
 const PROJECTION_SEPARATOR: char = '|';
 
-/// mirrored by `PluginWire.CLASS_SEPARATOR`
+/// `HOR12.34` names the handle's class for ordinal reads; also written by `PluginWire.encodeHandle`
 const CLASS_SEPARATOR: char = '.';
 
 fn encode_handle(is_vector: bool, read_only: bool, id: i64) -> String {
@@ -282,8 +254,7 @@ fn parse_handle(payload: &str) -> Option<(bool, bool, i64, i32, Option<&str>)> {
     Some((id, projection)) => (id, Some(projection)),
     None => (rest, None),
   };
-  // the class id is written after the id, so a wire from a minter that names no class parses here
-  // exactly as it did before there was one
+  // a wire from a minter that names no class still parses
   let (id, class_id) = match id.split_once(CLASS_SEPARATOR) {
     Some((id, class_id)) => (id, class_id.parse().ok()?),
     None => (id, ORDINAL_FALLBACK),
@@ -371,10 +342,6 @@ pub fn wire_rpc_error(wire: &str) -> Option<(i32, &str)> {
   Some((code.parse().ok()?, text))
 }
 
-fn throw_tl<'js, T>(ctx: &Ctx<'js>, message: &str) -> JsResult<T> {
-  Err(Exception::throw_message(ctx, message))
-}
-
 fn descriptor_value<'js>(ctx: &Ctx<'js>, descriptor: &Value<'js>) -> JsResult<Value<'js>> {
   let Some(obj) = descriptor.as_object() else {
     return PluginErrorCode::Unsupported.throw(ctx, DESCRIPTOR_MESSAGE);
@@ -394,10 +361,6 @@ fn descriptor_value<'js>(ctx: &Ctx<'js>, descriptor: &Value<'js>) -> JsResult<Va
   }
 }
 
-fn base64_decode(s: &str) -> Option<Vec<u8>> {
-  base64::Engine::decode(&STANDARD, s).ok()
-}
-
 /// Generate base64 from `this` only when `toJSON` is called. Eagerly encoding an `invokeRaw`
 /// response would scan all bytes and retain a string 4/3 the array's size.
 pub(crate) fn make_bytes_value<'js>(ctx: &Ctx<'js>, bytes: &[u8]) -> JsResult<Value<'js>> {
@@ -405,11 +368,9 @@ pub(crate) fn make_bytes_value<'js>(ctx: &Ctx<'js>, bytes: &[u8]) -> JsResult<Va
   let to_json =
     Function::new(ctx.clone(), |ctx: Ctx<'js>, this: This<TypedArray<'js, u8>>| -> JsResult<Object<'js>> {
       let wrapper = Object::new(ctx.clone())?;
-      // SAFETY: no javascript runs while the slice is borrowed
-      let Some(bytes) = (unsafe { this.0.as_bytes() }) else {
+      let Some(b64) = qjs_read_typed_bytes(&this.0, |bytes| base64::Engine::encode(&STANDARD, bytes)) else {
         return Err(Exception::throw_type(&ctx, "these bytes are gone: their buffer was detached"));
       };
-      let b64 = base64::Engine::encode(&STANDARD, bytes);
       wrapper.set(BYTES_MARKER_KEY, b64.as_str())?;
       Ok(wrapper)
     })?;
@@ -431,7 +392,11 @@ fn revive_bytes<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Value<'js>> 
   }
   let keys: Vec<String> = obj.own_keys(Filter::new().string().enum_only()).collect::<JsResult<_>>()?;
   if keys.iter().any(|k| k == BYTES_MARKER_KEY) {
-    return match obj.get::<_, Option<String>>(BYTES_MARKER_KEY)?.as_deref().and_then(base64_decode) {
+    return match obj
+      .get::<_, Option<String>>(BYTES_MARKER_KEY)?
+      .as_deref()
+      .and_then(|s| base64::Engine::decode(&STANDARD, s).ok())
+    {
       Some(bytes) => make_bytes_value(ctx, &bytes),
       None => Ok(value),
     };
@@ -453,9 +418,7 @@ pub(crate) fn json_stringify_tl<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsRes
   let replacer =
     Function::new(ctx.clone(), |ctx: Ctx<'js>, _key: Value<'js>, value: Value<'js>| -> JsResult<Value<'js>> {
       if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
-        // SAFETY: no javascript runs while the slice is borrowed
-        if let Some(bytes) = unsafe { typed.as_bytes() } {
-          let b64 = base64::Engine::encode(&STANDARD, bytes);
+        if let Some(b64) = qjs_read_typed_bytes(&typed, |bytes| base64::Engine::encode(&STANDARD, bytes)) {
           let wrapper = Object::new(ctx.clone())?;
           wrapper.set(BYTES_MARKER_KEY, b64)?;
           return wrapper.into_js(&ctx);
@@ -469,7 +432,6 @@ pub(crate) fn json_stringify_tl<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsRes
   }
 }
 
-/// a value wire that names no handle: a scalar, or `J` and its json
 pub(crate) fn plain_wire_to_js<'js>(ctx: &Ctx<'js>, wire: &str) -> JsResult<Value<'js>> {
   let Some(tag) = wire.chars().next() else {
     return Err(Exception::throw_message(ctx, "wire: empty value"));
@@ -516,9 +478,8 @@ pub fn js_value_to_wire<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Stri
     return Ok(handle_wire);
   }
   if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
-    // SAFETY: no javascript runs while the slice is borrowed
-    if let Some(bytes) = unsafe { typed.as_bytes() } {
-      return Ok(encode_bytes_wire(bytes));
+    if let Some(wire) = qjs_read_typed_bytes(&typed, encode_bytes_wire) {
+      return Ok(wire);
     }
   }
   let json = json_stringify_tl(ctx, value)?;
@@ -536,15 +497,11 @@ fn try_read_marker<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<Option<S
   }
 }
 
-fn new_section<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
-  Object::new_proto(ctx.clone(), None)
-}
-
 fn open_section<'js>(ctx: &Ctx<'js>, section: &RefCell<Option<Object<'js>>>) -> JsResult<Object<'js>> {
   if let Some(open) = section.borrow().as_ref() {
     return Ok(open.clone());
   }
-  let open = new_section(ctx)?;
+  let open = Object::new_proto(ctx.clone(), None)?;
   *section.borrow_mut() = Some(open.clone());
   Ok(open)
 }
@@ -599,10 +556,10 @@ impl<'js> HandleBox<'js> {
   fn adopt_projection(&self, ctx: &Ctx<'js>, json: &str) -> JsResult<()> {
     let parsed = ctx.json_parse(json)?;
     if parsed.is_array() {
-      return throw_tl(ctx, "tl wire: bad projection");
+      return Err(Exception::throw_message(ctx, "tl wire: bad projection"));
     }
     let Some(fields) = parsed.into_object() else {
-      return throw_tl(ctx, "tl wire: bad projection");
+      return Err(Exception::throw_message(ctx, "tl wire: bad projection"));
     };
     self.adopt_fields(ctx, fields)
   }
@@ -645,12 +602,11 @@ impl<'js> HandleBox<'js> {
     Ok(value)
   }
 
-  /// `None` when the host will not serve this field by ordinal and it has to be read by name
   fn read_by_ordinal(&self, ctx: &Ctx<'js>, key: &str) -> JsResult<Option<Value<'js>>> {
     if self.class_id == ORDINAL_FALLBACK {
       return Ok(None);
     }
-    let ordinal = self.views.ordinal_of(self.host(), self.class_id, key);
+    let ordinal = self.views.resolve_field_ordinal(self.host(), self.class_id, key);
     if ordinal == ORDINAL_FALLBACK {
       return Ok(None);
     }
@@ -696,7 +652,7 @@ impl<'js> HandleBox<'js> {
   }
 
   fn finish_write(&self, ctx: &Ctx<'js>, result: Option<String>) -> JsResult<bool> {
-    self.views.bump();
+    self.views.epoch.set(self.views.epoch.get() + 1);
     self.sync_epoch();
     match result {
       None => Ok(true),
@@ -708,8 +664,7 @@ impl<'js> HandleBox<'js> {
     let key = property_key_string(ctx, prop)?;
     if let Some(bytes) = TypedArray::<u8>::from_value(value.clone())
       .ok()
-      // SAFETY: the slice is copied before anything else runs
-      .and_then(|array| unsafe { array.as_bytes() }.map(<[u8]>::to_vec))
+      .and_then(|array| qjs_read_typed_bytes(&array, <[u8]>::to_vec))
     {
       let result = self.host().tl_set_bytes(self.handle, &key, &bytes);
       return self.finish_write(ctx, result);
@@ -781,7 +736,7 @@ fn check_writable<'js>(ctx: &Ctx<'js>, view: &HandleBox<'js>) -> JsResult<()> {
   Ok(())
 }
 
-fn box_of<'js>(ctx: &Ctx<'js>, target: &Value<'js>) -> JsResult<Class<'js, HandleBox<'js>>> {
+fn get_handle_box<'js>(ctx: &Ctx<'js>, target: &Value<'js>) -> JsResult<Class<'js, HandleBox<'js>>> {
   target
     .as_object()
     .and_then(Class::<HandleBox>::from_object)
@@ -796,7 +751,7 @@ fn build_handler<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
     Function::new(
       ctx.clone(),
       |ctx: Ctx<'js>, target: Value<'js>, prop: Value<'js>, _receiver: Value<'js>| -> JsResult<Value<'js>> {
-        let handle = box_of(&ctx, &target)?;
+        let handle = get_handle_box(&ctx, &target)?;
         let view = handle.borrow();
         if let Some(sym) = prop.as_symbol() {
           if sym == &TlShared::marker(&ctx)? {
@@ -830,10 +785,10 @@ fn build_handler<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
        value: Value<'js>,
        _receiver: Value<'js>|
        -> JsResult<bool> {
-        let handle = box_of(&ctx, &target)?;
+        let handle = get_handle_box(&ctx, &target)?;
         let view = handle.borrow();
         if prop.as_symbol().is_some() {
-          return throw_tl(&ctx, "tl proxy: cannot set a symbol-keyed property");
+          return Err(Exception::throw_message(&ctx, "tl proxy: cannot set a symbol-keyed property"));
         }
         check_writable(&ctx, &view)?;
         view.assign_property(&ctx, &prop, value)
@@ -846,11 +801,11 @@ fn build_handler<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
     Function::new(
       ctx.clone(),
       |ctx: Ctx<'js>, target: Value<'js>, prop: Value<'js>, descriptor: Value<'js>| -> JsResult<bool> {
-        let handle = box_of(&ctx, &target)?;
+        let handle = get_handle_box(&ctx, &target)?;
         let view = handle.borrow();
         check_writable(&ctx, &view)?;
         if prop.as_symbol().is_some() {
-          return throw_tl(&ctx, "tl proxy: cannot define a symbol-keyed property");
+          return Err(Exception::throw_message(&ctx, "tl proxy: cannot define a symbol-keyed property"));
         }
         let value = descriptor_value(&ctx, &descriptor)?;
         view.assign_property(&ctx, &prop, value)
@@ -861,7 +816,7 @@ fn build_handler<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
   handler.set(
     PredefinedAtom::Has,
     Function::new(ctx.clone(), |ctx: Ctx<'js>, target: Value<'js>, prop: Value<'js>| -> JsResult<bool> {
-      let handle = box_of(&ctx, &target)?;
+      let handle = get_handle_box(&ctx, &target)?;
       let view = handle.borrow();
       if let Some(sym) = prop.as_symbol() {
         if sym == &TlShared::marker(&ctx)? {
@@ -880,11 +835,11 @@ fn build_handler<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
   handler.set(
     PredefinedAtom::DeleteProperty,
     Function::new(ctx.clone(), |ctx: Ctx<'js>, target: Value<'js>, prop: Value<'js>| -> JsResult<bool> {
-      let handle = box_of(&ctx, &target)?;
+      let handle = get_handle_box(&ctx, &target)?;
       let view = handle.borrow();
       check_writable(&ctx, &view)?;
       if prop.as_symbol().is_some() {
-        return throw_tl(&ctx, "tl proxy: cannot delete a symbol-keyed property");
+        return Err(Exception::throw_message(&ctx, "tl proxy: cannot delete a symbol-keyed property"));
       }
       let key = property_key_string(&ctx, &prop)?;
       view.write_field(&ctx, &key, "N")
@@ -894,7 +849,7 @@ fn build_handler<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
   handler.set(
     PredefinedAtom::OwnKeys,
     Function::new(ctx.clone(), |ctx: Ctx<'js>, target: Value<'js>| -> JsResult<Array<'js>> {
-      let handle = box_of(&ctx, &target)?;
+      let handle = get_handle_box(&ctx, &target)?;
       let view = handle.borrow();
       view.own_keys(&ctx)
     })?,
@@ -903,7 +858,7 @@ fn build_handler<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
   handler.set(
     PredefinedAtom::GetOwnPropertyDescriptor,
     Function::new(ctx.clone(), |ctx: Ctx<'js>, target: Value<'js>, prop: Value<'js>| -> JsResult<Value<'js>> {
-      let handle = box_of(&ctx, &target)?;
+      let handle = get_handle_box(&ctx, &target)?;
       let view = handle.borrow();
       if prop.as_symbol().is_some() {
         return Ok(Value::new_undefined(ctx.clone()));
@@ -979,7 +934,7 @@ fn property_key_string<'js>(ctx: &Ctx<'js>, prop: &Value<'js>) -> JsResult<Strin
   if let Some(sym) = prop.as_symbol() {
     return sym.as_atom().to_string();
   }
-  throw_tl(ctx, "tl proxy: unsupported property key")
+  Err(Exception::throw_message(ctx, "tl proxy: unsupported property key"))
 }
 
 fn vector_length<'js>(ctx: &Ctx<'js>, host: &dyn TlHost, handle: i64) -> JsResult<i64> {
@@ -987,10 +942,8 @@ fn vector_length<'js>(ctx: &Ctx<'js>, host: &dyn TlHost, handle: i64) -> JsResul
   if let Some(n) = wire.strip_prefix('I').and_then(|p| p.parse().ok()) {
     return Ok(n);
   }
-  match crate::api::error::wire_error_to_js(ctx, &wire) {
-    Some(built) => Err(ctx.throw(built?)),
-    None => throw_tl(ctx, "tl vector: bad length"),
-  }
+  crate::api::error::throw_wire_error(ctx, &wire)?;
+  Err(Exception::throw_message(ctx, "tl vector: bad length"))
 }
 
 /// Retain the proxy target, not just its ID. `for (const x of view.vec)` can release the iterable

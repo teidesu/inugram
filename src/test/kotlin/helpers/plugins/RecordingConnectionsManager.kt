@@ -86,11 +86,7 @@ class RecordingConnectionsManager : ConnectionsManager {
         return requestToken
     }
 
-    /**
-     * the hook and the request free are stock's, in stock's order. `StockHooksTest` is what keeps
-     * this honest: it reads the worktree and fails if `sendRequestInternal` stops opening with this
-     * call, which a device has no repo to do.
-     */
+    /** the hook and the request free are stock's, in stock's order */
     override fun sendRequestInternal(
         request: TLObject,
         onComplete: RequestDelegate?,
@@ -133,7 +129,6 @@ class RecordingConnectionsManager : ConnectionsManager {
     fun lastSent(): Sent? = sent.lastOrNull()
 
     companion object {
-        private val originals = HashMap<Int, ConnectionsManager?>()
         private val current = HashMap<Int, RecordingConnectionsManager>()
 
         /**
@@ -159,21 +154,12 @@ class RecordingConnectionsManager : ConnectionsManager {
 
         /**
          * `Instance` is `private static final`, but the *array* is not: only the reference to it is,
-         * so a slot can be written. The app's own manager is put back by [uninstall].
+         * so a slot can be written
          */
         private fun install(account: Int): RecordingConnectionsManager {
             val recorder = allocate(account)
-            val array = instanceArray
-            if (!originals.containsKey(account)) originals[account] = array[account]
-            array[account] = recorder
+            instanceArray[account] = recorder
             return recorder
-        }
-
-        fun uninstall() {
-            val array = instanceArray
-            for ((account, original) in originals) array[account] = original
-            originals.clear()
-            current.clear()
         }
 
         private fun allocate(account: Int): RecordingConnectionsManager {

@@ -445,11 +445,11 @@ object ChatActionsHelper {
         private val enterView: ChatActivityEnterView,
     ) : PluginActions.EditorSurface {
         override fun replaceDraft(text: String, entitiesJson: String?) {
-            enterView.setFieldText(fieldTextOf(text, entitiesJson))
+            enterView.setFieldText(buildFieldText(text, entitiesJson))
         }
 
         override fun sendDraft(text: String, entitiesJson: String?) {
-            enterView.setFieldText(fieldTextOf(text, entitiesJson))
+            enterView.setFieldText(buildFieldText(text, entitiesJson))
             enterView.sendMessage()
         }
 
@@ -461,7 +461,7 @@ object ChatActionsHelper {
          * The paint fallback is stock's own ([ChatActivityEnterView.setEditingBusinessLink]): the
          * edit field is created lazily, and a custom emoji cannot size itself without one.
          */
-        private fun fieldTextOf(text: String, entitiesJson: String?): CharSequence {
+        private fun buildFieldText(text: String, entitiesJson: String?): CharSequence {
             val paint = enterView.editField?.paint ?: TextPaint().apply { textSize = AndroidUtilities.dp(18f).toFloat() }
             return ChatActivityEnterView.applyMessageEntities(
                 PluginText.parseEntities(entitiesJson),

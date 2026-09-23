@@ -1,36 +1,11 @@
 // ==InuPlugin==
 // @name         lazy tl test
-// @author       teidesu
-// @version      1.0
 // @description  asserts onUpdate payloads are read-only views and invokeRpc results are writable ones
 // @grant        onUpdate
 // @grant        invokeRpc(help.getConfig)
-// @plugin-api   1
-// @platform     android
 // ==/InuPlugin==
 
-function pass(label, detail) {
-  console.log(detail === undefined ? `PASS ${label}` : `PASS ${label}: ${detail}`)
-}
-
-function fail(label, detail) {
-  console.error(`FAIL ${label}: ${detail}`)
-}
-
-function expectForbidden(label, fn) {
-  let error
-  try {
-    fn()
-  } catch (e) {
-    error = e
-  }
-  if (error === undefined) return fail(label, 'did not throw')
-  if (!(error instanceof inu.PluginError)) return fail(label, `not an inu.PluginError (${error})`)
-  if (error.code !== 'forbidden') return fail(label, `code = ${error.code}, want forbidden`)
-  pass(label, error.message)
-}
-
-// a vector view throws on `_`, so probing has to be guarded rather than shape-tested
+// a vector view throws on `_`
 function firstNestedObject(view, keys) {
   for (const key of keys) {
     const value = view[key]
@@ -47,15 +22,13 @@ function firstNestedObject(view, keys) {
 let sawUpdate = false
 let writable = null
 
-// both halves are asynchronous and neither one's report is the whole file's, so "done" is what
-// says every assertion ran rather than the last line of the source
+// both halves are async, so "done" prints once both reported
 let halvesLeft = 2
 function halfDone() {
   if (--halvesLeft === 0) console.log('lazy tl test done')
 }
 
-// a spread of field-carrying types, since the assertions below need an update with fields and any
-// one type may not arrive during a test session
+// any one type may not arrive during a test session
 inu.onUpdate([
   'updateNewMessage',
   'updateNewChannelMessage',
@@ -67,11 +40,8 @@ inu.onUpdate([
 ], (update) => {
   if (sawUpdate) return
 
-  // Object.keys goes through ownKeys + a descriptor per key: on a read-only view those come back
-  // writable:false, which must not trip quickjs's proxy invariants
+  // Object.keys on a read-only view yields writable:false descriptors, which must not trip quickjs's proxy invariants
   const fields = Object.keys(update).filter((k) => k !== '_')
-  // a fieldless update (updateContactsReset and friends) can't exercise the field assertions below,
-  // so let it through and wait for one that can rather than latching on it
   if (fields.length === 0) return
   sawUpdate = true
 
@@ -85,24 +55,23 @@ inu.onUpdate([
   else pass('onUpdate view is not frozen')
 
   const field = fields[0]
-  // a literal rhs on purpose: reading the field back would throw on its own if it went missing,
-  // and that error would read as a failed refusal
-  expectForbidden(`onUpdate view refuses '${field}' assignment`, () => {
+  // a literal rhs: reading the field back would throw by itself and read as a failed refusal
+  expectThrow(`onUpdate view refuses '${field}' assignment`, 'forbidden', () => {
     update[field] = null
   })
-  expectForbidden(`onUpdate view refuses '${field}' delete`, () => {
+  expectThrow(`onUpdate view refuses '${field}' delete`, 'forbidden', () => {
     delete update[field]
   })
 
   const nested = firstNestedObject(update, fields)
   if (nested === undefined) pass('no nested object on this update to check inheritance with')
   else {
-    expectForbidden(`nested '${nested._}' view inherits read-only`, () => {
+    expectThrow(`nested '${nested._}' view inherits read-only`, 'forbidden', () => {
       nested.inu_not_a_field = 1
     })
   }
 
-  // `toJSON` is on every view the bridge hands over, but the generated tl typings don't carry it
+  // the generated tl typings lack `toJSON`
   const copy = /** @type {any} */ (update).toJSON()
   if (copy === null || typeof copy !== 'object') return fail('toJSON() detaches', `got ${copy}`)
   if (copy._ !== type) return fail('toJSON() detaches', `copy._ = ${copy._}, want ${type}`)
@@ -111,8 +80,7 @@ inu.onUpdate([
   if (update._ !== type) return fail('toJSON() copy is detached', `view._ became ${update._}`)
   pass('toJSON() is a plain mutable copy')
 
-  // storing a read-only view into a writable one would launder it: re-reading that field mints a
-  // writable child of an object the app owns
+  // storing a read-only view into a writable one would launder it into a writable child
   const label = 'read-only view refused as a field value'
   if (writable === null) pass(`${label} (skipped: no writable view yet)`)
   else {
@@ -121,7 +89,7 @@ inu.onUpdate([
       return value !== null && typeof value === 'object'
     })
     if (slot === undefined) pass(`${label} (skipped: no object-typed field on ${writable._})`)
-    else expectForbidden(`${label} '${slot}'`, () => {
+    else expectThrow(`${label} '${slot}'`, 'forbidden', () => {
       writable[slot] = update
     })
   }

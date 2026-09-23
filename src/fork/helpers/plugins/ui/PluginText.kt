@@ -13,20 +13,11 @@ import org.telegram.ui.Components.FormattedDateSpan
 import org.telegram.ui.Components.TextStyleSpan
 import org.telegram.ui.Components.URLSpanMono
 
-/**
- * Converts `InputText` and its entities to stock spans (Rust: `arguments::read_input_text`).
- * Drops malformed or unsupported entities while keeping their text. Custom emoji use the
- * target view's [fontMetrics] for sizing; without metrics, they remain plain text.
- */
+/** malformed or unsupported entities are dropped, keeping their text. Custom emoji need [fontMetrics] */
 object PluginText {
-
-    @JvmStatic
-    @JvmOverloads
     fun formatted(text: String, entitiesJson: String?, fontMetrics: Paint.FontMetricsInt? = null): CharSequence =
         formatted(text, parseArray(entitiesJson), fontMetrics)
 
-    @JvmStatic
-    @JvmOverloads
     fun formatted(text: String, entities: JSONArray?, fontMetrics: Paint.FontMetricsInt? = null): CharSequence {
         val parsed = parseEntities(entities)
         val out = SpannableStringBuilder(text)
@@ -41,7 +32,6 @@ object PluginText {
         return Emoji.replaceEmoji(result, fontMetrics, false)
     }
 
-    @JvmStatic
     fun parseEntities(entitiesJson: String?): ArrayList<TLRPC.MessageEntity> = parseEntities(parseArray(entitiesJson))
 
     private fun parseArray(entitiesJson: String?): JSONArray? =
@@ -64,13 +54,9 @@ object PluginText {
     }
 
     /**
-     * `<tg-time unix=...></tg-time>` says "the app writes the date here", and so covers no text for
-     * [MessageObject.addEntitiesToText] to span - it skips `length <= 0`, and the date renders as
-     * nothing. Marking the spot is all that is missing: stock's own substitution pass replaces a
-     * span's range with the date, and an empty range makes that replacement an insertion.
-     *
-     * The mark is `SPAN_INCLUSIVE_EXCLUSIVE` because a `SpannableStringBuilder` drops an empty
-     * `SPAN_EXCLUSIVE_EXCLUSIVE` span outright.
+     * `<tg-time>` covers no text, and [MessageObject.addEntitiesToText] skips `length <= 0`. Stock's substitution
+     * replaces a span's range with the date, so an empty marked range becomes an insertion.
+     * `SPAN_INCLUSIVE_EXCLUSIVE` because `SpannableStringBuilder` drops an empty `SPAN_EXCLUSIVE_EXCLUSIVE` span.
      */
     private fun markEmptyDates(out: SpannableStringBuilder, parsed: List<TLRPC.MessageEntity>) {
         for (one in parsed) {
@@ -81,10 +67,7 @@ object PluginText {
         }
     }
 
-    /**
-     * Stock code spans force chat text color and size, making them unsuitable for other views,
-     * such as dark bulletins. Use a monospace style span that inherits the view's color and size.
-     */
+    /** stock code spans force chat text color and size, wrong in e.g. dark bulletins */
     private fun inheritCodeColor(text: SpannableStringBuilder) {
         for (span in text.getSpans(0, text.length, URLSpanMono::class.java)) {
             replaceWithMono(text, span)

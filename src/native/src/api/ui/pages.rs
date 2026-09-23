@@ -10,8 +10,8 @@ use crate::api::ui::icons::{opt_icon, Icon, RETAINED_VALUE_TAG};
 use crate::runtime::pump_jobs;
 use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry, RequestIds};
 use crate::utils::arguments::{
-  field, opt_bool, opt_bool_or, opt_fn, opt_num, opt_str, opt_text, read_index, read_input_text, req_bool, req_fn,
-  req_num, req_str, req_text, stringify_json, write_input_text,
+  field, opt_bool, opt_fn, opt_num, opt_str, opt_text, read_index, read_input_text, req_bool, req_fn, req_num, req_str,
+  req_text, stringify_json, write_input_text,
 };
 
 const MAX_SLIDER_LABELS: usize = 501;
@@ -63,32 +63,12 @@ struct UiPageDef {
   next_slot: Cell<u32>,
 }
 
-impl UiPageDef {
-  fn release(self, ctx: &Ctx<'_>) {
-    let _ = self.items_fn.restore(ctx);
-    if let Some(p) = self.on_close {
-      let _ = p.restore(ctx);
-    }
-    if let Some(p) = self.bottom_on_click {
-      let _ = p.restore(ctx);
-    }
-    for (_, entry) in self.callbacks.into_inner() {
-      let _ = entry.func.restore(ctx);
-    }
-    for value in self.retained_icon_values.into_inner() {
-      let _ = value.restore(ctx);
-    }
-  }
-}
-
 impl UiState {
-  fn dispose_page(&self, ctx: &Ctx<'_>, page_id: i64) {
-    let state = self;
-    if let Some(def) = state.pages.borrow_mut().remove(&page_id) {
-      def.release(ctx);
-    }
-    for registered in state.settings.remove_matching(|id| *id == page_id) {
-      state.host.ui_unregister_settings(registered);
+  fn dispose_page(&self, _ctx: &Ctx<'_>, page_id: i64) {
+    let def = self.pages.borrow_mut().remove(&page_id);
+    drop(def);
+    for registered in self.settings.remove_matching(|id| *id == page_id) {
+      self.host.ui_unregister_settings(registered);
     }
   }
 }
@@ -161,7 +141,7 @@ fn make_button<'js>(
   if let Some(value) = opt_text(ctx, &opts, "button", "value")? {
     write_input_text(&out, "value", value)?;
   }
-  out.set("danger", opt_bool(ctx, &opts, "button", "danger")?)?;
+  out.set("danger", opt_bool(ctx, &opts, "button", "danger")?.unwrap_or_default())?;
   out.set("onClick", req_fn(ctx, &opts, "button", "onClick")?)?;
   set_opt(&out, "onSecondaryClick", opt_fn(ctx, &opts, "button", "onSecondaryClick")?)?;
   Ok(out)
@@ -204,7 +184,7 @@ fn make_select<'js>(
 
   let selected = read_index(ctx, &field(ctx, &opts, "select", "selected")?, "select", len)?;
   out.set("selected", selected)?;
-  out.set("dialog", opt_bool_or(ctx, &opts, "select", "dialog", has_subtitle)?)?;
+  out.set("dialog", opt_bool(ctx, &opts, "select", "dialog")?.unwrap_or(has_subtitle))?;
   out.set("onChange", req_fn(ctx, &opts, "select", "onChange")?)?;
   set_opt(&out, "onSecondaryClick", opt_fn(ctx, &opts, "select", "onSecondaryClick")?)?;
   Ok(out)
@@ -312,7 +292,7 @@ pub fn install_ui<'js>(
   ui.set(
     "openPage",
     Function::new(ctx.clone(), move |ctx: Ctx<'js>, page: Value<'js>| {
-      if let Some(handle) = state2.java_handle(&ctx, &page)? {
+      if let Some(handle) = state2.java_handle(&page) {
         if let Some(err) = state2.host.ui_open_fragment(handle) {
           return Err(ctx.throw(host_error_to_js(&ctx, &err)?));
         }
@@ -359,7 +339,7 @@ pub fn install_ui<'js>(
           return Ok(());
         }
       }
-      let page_id = state2.page_id_of(&ctx, &page, "openPage")?;
+      let page_id = state2.resolve_page_id(&ctx, &page, "openPage")?;
       if let Some(err) = state2.host.ui_open_page(page_id) {
         return Err(ctx.throw(host_error_to_js(&ctx, &err)?));
       }
@@ -373,7 +353,7 @@ pub fn install_ui<'js>(
   android.set(
     "nativeView",
     Function::new(ctx.clone(), move |ctx: Ctx<'js>, view: Value<'js>| {
-      let Some(handle) = state2.java_handle(&ctx, &view)? else {
+      let Some(handle) = state2.java_handle(&view) else {
         return Err(Exception::throw_type(&ctx, "nativeView: expected a java object from inu.jvm"));
       };
       let out = new_element(&ctx, "native")?;
@@ -397,7 +377,7 @@ impl UiState {
     if state.lifecycle.is_unloading() {
       return noop_disposer(ctx);
     }
-    let page_id = state.page_id_of(ctx, &page, "registerSettings")?;
+    let page_id = state.resolve_page_id(ctx, &page, "registerSettings")?;
     if !state.settings.is_empty() {
       return Err(Exception::throw_message(
         ctx,
@@ -416,15 +396,11 @@ impl UiState {
     })
   }
 
-  fn java_handle<'js>(&self, ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<Option<i64>> {
-    let Some(jvm) = self.jvm.as_ref() else {
-      return Ok(None);
-    };
-    let id = jvm.handle_id(ctx, value)?;
-    Ok(if id < 0 { None } else { Some(id) })
+  fn java_handle(&self, value: &Value<'_>) -> Option<i64> {
+    self.jvm.as_ref()?.handle_id(value)
   }
 
-  fn page_id_of<'js>(&self, ctx: &Ctx<'js>, page: &Value<'js>, what: &str) -> JsResult<i64> {
+  fn resolve_page_id<'js>(&self, ctx: &Ctx<'js>, page: &Value<'js>, what: &str) -> JsResult<i64> {
     let id = page
       .as_object()
       .and_then(|o| o.get::<_, Option<f64>>(PAGE_ID_KEY).ok().flatten())
@@ -445,9 +421,8 @@ impl UiState {
   }
 
   fn js_settings_page<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, opts: Object<'js>) -> JsResult<Object<'js>> {
-    let state = self;
     let title = req_str(ctx, &opts, "settingsPage", "title")?;
-    let transient = opt_bool(ctx, &opts, "settingsPage", "transient")?;
+    let transient = opt_bool(ctx, &opts, "settingsPage", "transient")?.unwrap_or_default();
     let items_fn = req_fn(ctx, &opts, "settingsPage", "items")?;
     let on_close = opt_fn(ctx, &opts, "settingsPage", "onClose")?;
 
@@ -461,9 +436,9 @@ impl UiState {
       (Some(req_str(ctx, obj, "bottomButton", "text")?), Some(req_fn(ctx, obj, "bottomButton", "onClick")?))
     };
 
-    let page_id = state.next_id.alloc();
-    if !state.lifecycle.is_unloading() {
-      state.pages.borrow_mut().insert(
+    let page_id = self.next_id.alloc();
+    if !self.lifecycle.is_unloading() {
+      self.pages.borrow_mut().insert(
         page_id,
         UiPageDef {
           title,
@@ -484,14 +459,14 @@ impl UiState {
     if transient {
       page.set(PAGE_TRANSIENT_KEY, true)?;
     }
-    let state2 = state.clone();
+    let state2 = self.clone();
     page.set(
       "invalidate",
       Function::new(ctx.clone(), move || {
         state2.host.ui_invalidate(page_id);
       })?,
     )?;
-    let state2 = state.clone();
+    let state2 = self.clone();
     page.set(
       "dispose",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>| {
@@ -533,9 +508,8 @@ fn alloc_row_key(counts: &mut HashMap<String, u32>, ty: &str, id: Option<&str>, 
 
 impl UiState {
   fn try_render<'js>(&self, ctx: &Ctx<'js>, page_id: i64) -> JsResult<String> {
-    let state = self;
     let (items_fn, title, bottom_text, bottom_on_click, mut next_slot) = {
-      let pages = state.pages.borrow();
+      let pages = self.pages.borrow();
       let def = pages.get(&page_id).ok_or_else(|| Exception::throw_message(ctx, "render: unknown page"))?;
       (
         def.items_fn.clone().restore(ctx)?,
@@ -662,7 +636,7 @@ impl UiState {
     }
 
     {
-      let pages = state.pages.borrow();
+      let pages = self.pages.borrow();
       if let Some(def) = pages.get(&page_id) {
         let mut cbs = def.callbacks.borrow_mut();
         for (_, entry) in cbs.drain() {
@@ -697,8 +671,7 @@ impl UiState {
   }
 
   fn js_open_menu<'js>(&self, ctx: &Ctx<'js>, page_id: i64, row: &str, items: Value<'js>) -> JsResult<()> {
-    let state = self;
-    if !state.pages.borrow().contains_key(&page_id) {
+    if !self.pages.borrow().contains_key(&page_id) {
       return PluginErrorCode::HandleExpired.throw(ctx, "openMenu: the page this anchor came from has been disposed");
     }
     let arr = items.as_array().ok_or_else(|| Exception::throw_type(ctx, "openMenu: expected an array of items"))?;
@@ -720,17 +693,17 @@ impl UiState {
           .ok_or_else(|| Exception::throw_type(ctx, "openMenu item: 'checked' must be a boolean"))?;
         entry.set("checked", checked)?;
       }
-      entry.set("danger", opt_bool(ctx, obj, "openMenu item", "danger")?)?;
+      entry.set("danger", opt_bool(ctx, obj, "openMenu item", "danger")?.unwrap_or_default())?;
       callbacks.push(req_fn(ctx, obj, "openMenu item", "onClick")?);
       out.set(i, entry)?;
     }
     let json = stringify_json(ctx, out.into_value(), "openMenu: serialization failed")?;
 
-    let menu_id = state.next_id.alloc();
-    if let Some(err) = state.host.ui_open_menu(menu_id, page_id, row, &json) {
+    let menu_id = self.next_id.alloc();
+    if let Some(err) = self.host.ui_open_menu(menu_id, page_id, row, &json) {
       return Err(ctx.throw(host_error_to_js(ctx, &err)?));
     }
-    state
+    self
       .menus
       .borrow_mut()
       .insert(menu_id, callbacks.into_iter().map(|f| Persistent::save(ctx, f)).collect());
@@ -740,23 +713,22 @@ impl UiState {
 
 impl UiState {
   pub fn render(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, page_id: i64) -> Option<String> {
-    let state = self;
-    if !state.pages.borrow().contains_key(&page_id) {
-      (state.log)(&format!("ui: render({page_id}): no such page (already disposed?)"));
+    if !self.pages.borrow().contains_key(&page_id) {
+      (self.log)(&format!("ui: render({page_id}): no such page (already disposed?)"));
       return None;
     }
-    let out = context.with(|ctx| match state.try_render(&ctx, page_id) {
+    let out = context.with(|ctx| match self.try_render(&ctx, page_id) {
       Ok(json) => Some(json),
       Err(rquickjs::Error::Exception) => {
-        (state.log)(&crate::fault(format_args!("ui: render failed: {}", format_exception(&ctx))));
+        (self.log)(&crate::fault(format_args!("ui: render failed: {}", format_exception(&ctx))));
         None
       }
       Err(e) => {
-        (state.log)(&format!("ui: render failed: {e:?}"));
+        (self.log)(&format!("ui: render failed: {e:?}"));
         None
       }
     });
-    pump_jobs(rt, context, state.log.as_ref());
+    pump_jobs(rt, context, self.log.as_ref());
     out
   }
 
@@ -768,13 +740,12 @@ impl UiState {
     slot: u32,
     arg_json: &str,
   ) {
-    let state = self;
-    if state.lifecycle.is_unloading() {
+    if self.lifecycle.is_unloading() {
       return;
     }
     context.with(|ctx| {
       let found = {
-        let pages = state.pages.borrow();
+        let pages = self.pages.borrow();
         pages
           .get(&page_id)
           .and_then(|def| def.callbacks.borrow().get(&slot).map(|entry| (entry.func.clone(), entry.row.clone())))
@@ -783,14 +754,14 @@ impl UiState {
       let f = match cb.restore(&ctx) {
         Ok(f) => f,
         Err(e) => {
-          (state.log)(&format!("ui: failed to restore callback: {e:?}"));
+          (self.log)(&format!("ui: failed to restore callback: {e:?}"));
           return;
         }
       };
-      let anchor = match state.make_anchor(&ctx, page_id, row) {
+      let anchor = match self.make_anchor(&ctx, page_id, row) {
         Ok(a) => a,
         Err(e) => {
-          (state.log)(&format!("ui: failed to build the anchor: {e:?}"));
+          (self.log)(&format!("ui: failed to build the anchor: {e:?}"));
           return;
         }
       };
@@ -800,23 +771,22 @@ impl UiState {
         match ctx.json_parse(arg_json) {
           Ok(arg) => f.call::<_, Value>((arg, anchor)),
           Err(e) => {
-            (state.log)(&format!("ui: bad event arg: {e:?}"));
+            (self.log)(&format!("ui: bad event arg: {e:?}"));
             return;
           }
         }
       };
       if let Err(e) = result {
-        report_callback_error(&state.log, &ctx, "ui callback", e);
+        report_callback_error(&self.log, &ctx, "ui callback", e);
       }
     });
-    pump_jobs(rt, context, state.log.as_ref());
+    pump_jobs(rt, context, self.log.as_ref());
   }
 
   pub fn dispatch_menu_click(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, menu_id: i64, slot: i32) {
-    let state = self;
     context.with(|ctx| {
-      let Some(callbacks) = state.menus.borrow_mut().remove(&menu_id) else {
-        (state.log)(&format!("menuClick({menu_id}, {slot}): no such menu (already settled?)"));
+      let Some(callbacks) = self.menus.borrow_mut().remove(&menu_id) else {
+        (self.log)(&format!("menuClick({menu_id}, {slot}): no such menu (already settled?)"));
         return;
       };
       for (i, persistent) in callbacks.into_iter().enumerate() {
@@ -825,18 +795,17 @@ impl UiState {
           Err(_) => continue,
         };
         if i as i32 == slot {
-          call_callback(&ctx, &state.log, "menu item callback", &f, ());
+          call_callback(&ctx, &self.log, "menu item callback", &f, ());
         }
       }
     });
-    pump_jobs(rt, context, state.log.as_ref());
+    pump_jobs(rt, context, self.log.as_ref());
   }
 
   pub fn close_page(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, page_id: i64) {
-    let state = self;
     context.with(|ctx| {
       let (on_close, transient) = {
-        let pages = state.pages.borrow();
+        let pages = self.pages.borrow();
         let Some(def) = pages.get(&page_id) else {
           return;
         };
@@ -848,31 +817,26 @@ impl UiState {
       if let Some(persistent) = on_close {
         match persistent.restore(&ctx) {
           Ok(f) => {
-            call_callback(&ctx, &state.log, "onClose callback", &f, ());
+            call_callback(&ctx, &self.log, "onClose callback", &f, ());
           }
-          Err(e) => (state.log)(&format!("onClose: failed to restore callback: {e:?}")),
+          Err(e) => (self.log)(&format!("onClose: failed to restore callback: {e:?}")),
         }
       }
       if transient {
-        state.dispose_page(&ctx, page_id);
+        self.dispose_page(&ctx, page_id);
       }
     });
-    pump_jobs(rt, context, state.log.as_ref());
+    pump_jobs(rt, context, self.log.as_ref());
   }
 }
 
 impl Dispose for UiState {
   fn dispose(&self, context: &rquickjs::Context) {
-    let state = self;
-    context.with(|ctx| {
-      for (_, def) in state.pages.borrow_mut().drain() {
-        def.release(&ctx);
-      }
-      for (_, callbacks) in state.menus.borrow_mut().drain() {
-        for p in callbacks {
-          let _ = p.restore(&ctx);
-        }
-      }
+    context.with(|_| {
+      let pages = std::mem::take(&mut *self.pages.borrow_mut());
+      drop(pages);
+      let menus = std::mem::take(&mut *self.menus.borrow_mut());
+      drop(menus);
     });
   }
 }

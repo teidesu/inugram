@@ -84,7 +84,7 @@ function collectPatternNames(node: Bindable, into: string[]): void {
   }
 }
 
-function declarationOf(statement: Statement): Statement {
+function unwrapExport(statement: Statement): Statement {
   if (statement.type === 'ExportNamedDeclaration' && statement.declaration !== null) {
     return statement.declaration
   }
@@ -95,7 +95,7 @@ function declarationOf(statement: Statement): Statement {
   return statement
 }
 
-function kindOf(declaration: VariableDeclaration): Kind {
+function getDeclarationKind(declaration: VariableDeclaration): Kind {
   if (declaration.kind === 'var') return 'var'
   return declaration.kind === 'const' ? 'const' : 'let'
 }
@@ -135,14 +135,14 @@ class FileScopes {
   }
 
   private declareVariables(declaration: VariableDeclaration): void {
-    const kind = kindOf(declaration)
+    const kind = getDeclarationKind(declaration)
     for (const declarator of declaration.declarations) this.declarePattern(declarator.id, kind)
   }
 
   /** Collects declarations visible throughout a block, regardless of their position. */
   private declareStatements(statements: readonly Statement[]): void {
     for (const raw of statements) {
-      const statement = declarationOf(raw)
+      const statement = unwrapExport(raw)
       switch (statement.type) {
         case 'VariableDeclaration':
           if (statement.kind !== 'var') this.declareVariables(statement)
@@ -163,7 +163,7 @@ class FileScopes {
   /** Scan for `var` declarations before visiting a function body, including those in nested blocks. */
   private hoistVars(statements: readonly Statement[]): void {
     const walk = (statement: Statement): void => {
-      const it = declarationOf(statement)
+      const it = unwrapExport(statement)
       switch (it.type) {
         case 'VariableDeclaration':
           if (it.kind === 'var') this.declareVariables(it)
@@ -225,8 +225,6 @@ class FileScopes {
   }
 
   read(program: Program): void {
-    const openFunction = (params: readonly ParamPattern[], body: Statement | null) =>
-      this.enterFunction(params, body)
     const openBlock = (body: readonly Statement[]) => {
       this.enter(false)
       this.declareStatements(body)
@@ -249,11 +247,11 @@ class FileScopes {
       },
       'Program:exit': () => this.leave(),
 
-      'FunctionDeclaration': node => openFunction(node.params, node.body),
+      'FunctionDeclaration': node => this.enterFunction(node.params, node.body),
       'FunctionDeclaration:exit': () => this.leave(),
-      'FunctionExpression': node => openFunction(node.params, node.body),
+      'FunctionExpression': node => this.enterFunction(node.params, node.body),
       'FunctionExpression:exit': () => this.leave(),
-      'ArrowFunctionExpression': node => openFunction(node.params, node.body.type === 'BlockStatement' ? node.body : null),
+      'ArrowFunctionExpression': node => this.enterFunction(node.params, node.body.type === 'BlockStatement' ? node.body : null),
       'ArrowFunctionExpression:exit': () => this.leave(),
 
       'BlockStatement': node => openBlock(node.body),
@@ -298,7 +296,7 @@ class FileScopes {
   }
 
   /** The name's first source occurrence, or none for compiler-generated names. */
-  siteOf(start: number, name: string): Site | null {
+  findFirstUse(start: number, name: string): Site | null {
     return this.uses.get(start)?.get(name) ?? null
   }
 
@@ -337,7 +335,7 @@ export function checkCaptures(
     for (const name of names) {
       const message = scopes.describe(call.start, name)
       if (message === null) continue
-      const at = scopes.siteOf(call.start, name) ?? { start: call.start, end: call.end }
+      const at = scopes.findFirstUse(call.start, name) ?? { start: call.start, end: call.end }
       found.push({ name, message, start: at.start, end: at.end })
     }
     if (found.length > 0) problems.set(call.start, found)

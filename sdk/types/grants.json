@@ -6,7 +6,7 @@
     "fsSize": "(\\d+)(kb|mb|gb)"
   },
   "takeoverMethods": {
-    "$comment": "refused in invokeRpc/interceptRpc under every grant but unsafe.disableApiFiltering, because holding them is a complete account takeover. mirrored in sdk/types/common.d.ts, 'account-takeover surfaces are filtered'",
+    "$comment": "refused in invokeRpc/interceptRpc under every grant but unsafe.disableApiFiltering, because holding them is a complete account takeover.",
     "prefixes": [
       "auth."
     ],
@@ -24,7 +24,10 @@
       "account.acceptAuthorization",
       "account.verifyPhone",
       "account.verifyEmail",
-      "account.resetPassword"
+      "account.resetPassword",
+      "account.updatePasswordSettings",
+      "messages.requestUrlAuth",
+      "messages.acceptUrlAuth"
     ]
   },
   "undeliverableUpdates": {

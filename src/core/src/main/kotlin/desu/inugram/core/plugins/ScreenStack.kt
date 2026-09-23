@@ -16,15 +16,6 @@ data class ScreenRef(
 
 enum class ScreenChangeAction { PUSH, POP, REPLACE }
 
-/**
- * Derives navigation changes because `INavigationLayout.setFragmentStackChangedListener`
- * provides no payload. An unchanged top emits nothing, including activity rebuilds and
- * removal of buried fragments.
- *
- * An old stack that prefixes the new one is a push, including the first screen. A new stack
- * that prefixes the old one is a pop. Equal depth means replace; other changes use the action
- * matching their depth change.
- */
 object ScreenStack {
     fun diff(previous: List<ScreenRef>, next: List<ScreenRef>): ScreenChangeAction? {
         if (previous.lastOrNull() == next.lastOrNull()) return null

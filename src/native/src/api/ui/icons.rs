@@ -29,12 +29,10 @@ pub(crate) struct Icon<'js> {
 pub trait IconHost {
   fn icon_resolves(&self, kind: i32, value: &str) -> bool;
 
-  /// the curated name -> drawable table lives in the host (`CommonIcons.kt`): None = unknown name
+  /// the curated name -> drawable table lives in the host (`PluginIcons.COMMON_ICONS`): None = unknown name
   fn common_icon(&self, name: &str) -> Option<String>;
 }
 
-/// a name in the shape both a drawable and a sticker-set slug take: word characters, not leading
-/// with a digit, within that api's length
 fn is_bare_name(value: &str, limit: usize) -> bool {
   !value.is_empty()
     && value.len() <= limit
@@ -69,27 +67,15 @@ fn check_svg(source: &str) -> Result<(), SvgReject> {
   Ok(())
 }
 
-fn resource_spec(name: &str) -> String {
-  format!("r{name}")
-}
-
-fn svg_spec(source: &str) -> String {
-  format!("s{source}")
-}
-
 fn is_positive_id(value: &str) -> bool {
   value.parse::<i64>().is_ok_and(|id| id > 0)
-}
-
-fn is_sticker_slug(value: &str) -> bool {
-  is_bare_name(value, STICKER_SLUG_LIMIT)
 }
 
 fn is_sticker_spec(spec: &str) -> bool {
   let Some((selector, slug)) = spec.split_once('\n') else {
     return false;
   };
-  if !is_sticker_slug(slug) || selector.len() < 2 {
+  if !is_bare_name(slug, STICKER_SLUG_LIMIT) || selector.len() < 2 {
     return false;
   }
   match selector.as_bytes()[0] {
@@ -159,7 +145,7 @@ pub(crate) fn icon_from_value<'js>(
     let Ok(expected) = handle.parse::<i64>() else {
       return Err(not_ours());
     };
-    if jvm.handle_id(ctx, &retained_value)? != expected {
+    if jvm.handle_id(&retained_value) != Some(expected) {
       return Err(not_ours());
     }
     return Ok(Some(Icon {
@@ -192,7 +178,7 @@ fn js_common<'js>(ctx: &Ctx<'js>, host: &Rc<dyn IconHost>, name: Value<'js>) -> 
   if !host.icon_resolves(KIND_RESOURCE, &resource) {
     return PluginErrorCode::NotFound.throw(ctx, &format!("icons.common: this app ships no '{resource}' for '{name}'"));
   }
-  new_icon(ctx, resource_spec(&resource))
+  new_icon(ctx, format!("r{resource}"))
 }
 
 fn js_resource_icon<'js>(ctx: &Ctx<'js>, host: &Rc<dyn IconHost>, name: Value<'js>) -> JsResult<Object<'js>> {
@@ -204,7 +190,7 @@ fn js_resource_icon<'js>(ctx: &Ctx<'js>, host: &Rc<dyn IconHost>, name: Value<'j
   if !host.icon_resolves(KIND_RESOURCE, &name) {
     return PluginErrorCode::NotFound.throw(ctx, &format!("android.resourceIcon: no drawable named '{name}'"));
   }
-  new_icon(ctx, resource_spec(&name))
+  new_icon(ctx, format!("r{name}"))
 }
 
 fn js_svg<'js>(ctx: &Ctx<'js>, host: &Rc<dyn IconHost>, source: Value<'js>) -> JsResult<Object<'js>> {
@@ -226,7 +212,7 @@ fn js_svg<'js>(ctx: &Ctx<'js>, host: &Rc<dyn IconHost>, source: Value<'js>) -> J
   if !host.icon_resolves(KIND_SVG, &source) {
     return PluginErrorCode::InvalidArgument.throw(ctx, "icons.svg: the source did not parse");
   }
-  new_icon(ctx, svg_spec(&source))
+  new_icon(ctx, format!("s{source}"))
 }
 
 #[derive(Clone, Copy)]
@@ -349,7 +335,7 @@ fn js_sticker<'js>(ctx: &Ctx<'js>, options: Value<'js>) -> JsResult<Object<'js>>
   let slug: String = options
     .get("slug")
     .map_err(|_| Exception::throw_type(ctx, "icons.sticker: 'slug' must be a string"))?;
-  if !is_sticker_slug(&slug) {
+  if !is_bare_name(&slug, STICKER_SLUG_LIMIT) {
     return PluginErrorCode::InvalidArgument.throw(ctx, "icons.sticker: invalid sticker-set slug");
   }
   let index: Value = options.get("index")?;
@@ -386,10 +372,9 @@ fn js_sticker<'js>(ctx: &Ctx<'js>, options: Value<'js>) -> JsResult<Object<'js>>
 }
 
 fn js_drawable_icon<'js>(ctx: &Ctx<'js>, jvm: &Rc<JvmState>, drawable: Value<'js>) -> JsResult<Object<'js>> {
-  let handle = jvm.handle_id(ctx, &drawable)?;
-  if handle < 0 {
+  let Some(handle) = jvm.handle_id(&drawable) else {
     return Err(Exception::throw_type(ctx, "android.drawableIcon: expected a java object from inu.jvm"));
-  }
+  };
   let icon = new_icon(ctx, format!("j{handle}"))?;
   icon.set(RETAINED_VALUE_TAG, drawable)?;
   Ok(icon)
@@ -402,20 +387,10 @@ pub fn install_icons<'js>(
   globals: &crate::api::Globals<'js>,
 ) -> JsResult<()> {
   let icons = Object::new(ctx.clone())?;
-  {
-    let host = host.clone();
-    icons.set(
-      "common",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, name: Value<'js>| js_common(&ctx, &host, name))?,
-    )?;
-  }
-  {
-    let host = host.clone();
-    icons.set(
-      "animation",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, name: Value<'js>| js_animation(&ctx, &host, name))?,
-    )?;
-  }
+  set_fn!(icons, "common", ctx, host, move |ctx: Ctx<'js>, name: Value<'js>| js_common(&ctx, &host, name));
+  set_fn!(icons, "animation", ctx, host, move |ctx: Ctx<'js>, name: Value<'js>| js_animation(
+    &ctx, &host, name
+  ));
   icons.set(
     "customEmoji",
     Function::new(ctx.clone(), move |ctx: Ctx<'js>, id: Value<'js>, options: Opt<Value<'js>>| {
@@ -426,32 +401,22 @@ pub fn install_icons<'js>(
     "sticker",
     Function::new(ctx.clone(), move |ctx: Ctx<'js>, options: Value<'js>| js_sticker(&ctx, options))?,
   )?;
-  {
-    let host = host.clone();
-    icons.set(
-      "svg",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, source: Value<'js>| js_svg(&ctx, &host, source))?,
-    )?;
-  }
+  set_fn!(icons, "svg", ctx, host, move |ctx: Ctx<'js>, source: Value<'js>| js_svg(&ctx, &host, source));
   globals.inu.set("icons", icons)?;
 
   let android = globals.get_namespace(ctx, "android")?;
-  {
-    let host = host.clone();
-    android.set(
-      "resourceIcon",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, name: Value<'js>| js_resource_icon(&ctx, &host, name))?,
-    )?;
-  }
-  {
-    let host = host.clone();
-    android.set(
-      "rawAnimation",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, name: Value<'js>, options: Opt<Value<'js>>| {
-        js_raw_animation(&ctx, &host, name, options, "android.rawAnimation", false)
-      })?,
-    )?;
-  }
+  set_fn!(android, "resourceIcon", ctx, host, move |ctx: Ctx<'js>, name: Value<'js>| js_resource_icon(
+    &ctx, &host, name
+  ));
+  set_fn!(
+    android,
+    "rawAnimation",
+    ctx,
+    host,
+    move |ctx: Ctx<'js>, name: Value<'js>, options: Opt<Value<'js>>| {
+      js_raw_animation(&ctx, &host, name, options, "android.rawAnimation", false)
+    }
+  );
   android.set(
     "drawableIcon",
     Function::new(ctx.clone(), move |ctx: Ctx<'js>, drawable: Value<'js>| match jvm.as_ref() {

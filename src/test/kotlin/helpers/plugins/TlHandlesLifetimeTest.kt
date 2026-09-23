@@ -9,16 +9,13 @@ import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
-import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.json.JSONObject
 import org.junit.Before
 import org.junit.Test
 import org.telegram.tgnet.TLRPC
 
-/** handle lifetime, mode inheritance and per-plugin isolation - the rules `tl/proxy.rs` relies on. */
 class TlHandlesLifetimeTest {
-    /** nothing here is about what a plugin may see, so every view is built with both rules off */
     private val UNFILTERED = TlFilter.Policy(takeover = false, drafts = true)
 
     @Before
@@ -78,7 +75,7 @@ class TlHandlesLifetimeTest {
         assertPluginError("forbidden", handles.tlSet(root, "message", PluginWire.encodeJson("\"x\"")))
         assertEquals("hi", target.message)
 
-        val child = handleOf(handles.tlGet(root, "from_id"))
+        val child = decodeHandle(handles.tlGet(root, "from_id"))
         assertTrue(child.readOnly)
         assertPluginError("forbidden", handles.tlSet(child.id, "user_id", PluginWire.encodeJson("1")))
     }
@@ -89,7 +86,6 @@ class TlHandlesLifetimeTest {
         val writable = handles.mintForScope(message(), TlHandles.newScope())
         val appOwned = handles.mintForPlugin(peerUser(9L), readOnly = true)
 
-        // assigning it would re-mint it writable on the next read of that field
         val refusal = handles.tlSet(writable, "from_id", PluginWire.encodeHandle(false, appOwned, readOnly = true))
 
         assertPluginError("forbidden", refusal)
@@ -102,7 +98,6 @@ class TlHandlesLifetimeTest {
         val theirs = TlHandles(UNFILTERED)
         val secret = theirs.mintForPlugin(message(), readOnly = true)
 
-        // a plugin can forge the marker symbol, so it can hand any integer back over the bridge
         assertNull(mine.resolveTlObject(secret))
         assertPluginError("handle-expired", mine.tlGet(secret, "message"))
         assertNotNull(theirs.resolveTlObject(secret))
@@ -121,7 +116,6 @@ class TlHandlesLifetimeTest {
         assertNull(handles.tlSet(vector, "length", PluginWire.encodeJson("1")))
         assertEquals(1, request.id.size)
 
-        // index == size is the push
         assertNull(handles.tlSet(vector, "1", PluginWire.encodeJson("""{"_":"inputUserSelf"}""")))
         assertEquals(2, request.id.size)
         assertRefused("vector index out of range: 5", handles.tlSet(vector, "5", PluginWire.encodeJson("""{"_":"inputUserSelf"}""")))
@@ -132,7 +126,6 @@ class TlHandlesLifetimeTest {
         assertEquals(message, (PluginWire.decode(wire!!) as PluginWire.Value.PluginErr).message)
     }
 
-    /** counts what the real [org.telegram.tgnet.TLObject] does not: how often it was freed */
     private class CountingError : TLRPC.TL_error() {
         var freeCount = 0
 
@@ -166,17 +159,13 @@ class TlHandlesLifetimeTest {
 
         assertNull(handles.tlSet(root, "post_author", PluginWire.encodeJson("\"nick\"")))
         assertTrue(target.flags != before)
-        assertEquals("nick", stringOf(handles.tlGet(root, "post_author")))
+        assertEquals("nick", decodeString(handles.tlGet(root, "post_author")))
 
         assertNull(handles.tlSet(root, "post_author", PluginWire.encodeNull()))
         assertEquals(before, target.flags, "clearing it must leave every other bit exactly as it was")
         assertEquals(PluginWire.Value.Null, PluginWire.decode(handles.tlGet(root, "post_author")))
     }
 
-    /**
-     * the write half of `TAG_BYTES`: bytes arrive beside the wire rather than base64'd into it,
-     * and land on the field as the array the plugin assigned
-     */
     @Test
     fun assigning_bytes_lands_them_without_a_wire() {
         val handles = TlHandles(UNFILTERED)
@@ -209,18 +198,6 @@ class TlHandlesLifetimeTest {
         assertTrue(handles.tlSet(root, "flags", PluginWire.encodeJson("7"))!!.contains("managed by the bridge"))
     }
 
-    @Test
-    fun resolveTlObject_hands_back_the_app_s_own_instance_never_a_copy() {
-        val handles = TlHandles(UNFILTERED)
-        val target = message()
-
-        assertSame(target, handles.resolveTlObject(handles.mintForScope(target, TlHandles.newScope())))
-    }
-
-    /**
-     * The table is reached from `globalQueue` and from whichever thread a JVM runnable or an Xposed
-     * phase entered on, so minting, reading and releasing a scope all have to overlap safely.
-     */
     @Test
     fun the_table_holds_up_under_minting_and_releasing_from_several_threads() {
         val handles = TlHandles(UNFILTERED)

@@ -1,5 +1,5 @@
 import { defineCommand, deviceArgs } from '../utils/args.js'
-import { createDevice } from '../utils/device.js'
+import { Device } from '../utils/device.js'
 import { reportPluginAction } from './dev.js'
 
 export const removeCmd = defineCommand({
@@ -13,7 +13,7 @@ export const removeCmd = defineCommand({
     },
   },
   run: async ({ args }) => {
-    const device = createDevice(args)
+    const device = new Device(args)
     await device.requireRunning()
     const removed = await device.remove(args.file)
     reportPluginAction(removed.action, removed.plugin)

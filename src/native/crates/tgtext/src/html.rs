@@ -79,7 +79,6 @@ const NAMED: &[(&str, char)] = &[
   ("nbsp", '\u{a0}')
 ];
 
-/// A numeric or named character reference, without its `&` and `;`.
 fn decode_reference(body: &str) -> Option<char> {
   if let Some(digits) = body.strip_prefix('#') {
     let code = match digits.strip_prefix(['x', 'X']) {
@@ -680,7 +679,6 @@ fn link_kind(url: String) -> EntityKind {
   EntityKind::TextUrl { url }
 }
 
-/// Strip the indentation every line shares, so a `thtml` template can be written indented.
 fn dedent(parts: &[&str]) -> Vec<String> {
   // a line spanning an interpolation is one line, and its indent is measured up to the
   // interpolation when nothing but whitespace precedes it
@@ -736,8 +734,6 @@ fn dedent(parts: &[&str]) -> Vec<String> {
   result
 }
 
-/// Render text and its entities back to html. `keep_whitespace` writes newlines and spaces as they
-/// are, where the default turns them into `<br>` and `&nbsp;`.
 pub fn unparse(keep_whitespace: bool, text: &str, entities: &[Entity]) -> String {
   let map = utf16_map(text);
   let length = (map.len() - 1) as i64;
@@ -857,8 +853,6 @@ fn unparse_inner(
   write_text(out, keep_whitespace, substring(full, map, offset + last_offset, (offset + length).min(bound)));
 }
 
-/// Write the opening tag of a kind that has one and return its closing tag; a kind html has no
-/// markup for writes nothing.
 fn write_open_tag(out: &mut String, kind: &EntityKind) -> Option<&'static str> {
   let close = match kind {
     EntityKind::Bold => {
@@ -918,8 +912,6 @@ fn write_open_tag(out: &mut String, kind: &EntityKind) -> Option<&'static str> {
   Some(close)
 }
 
-/// Text as it goes out: escaped, and with the newlines and space runs that html would collapse
-/// written as `<br>` and `&nbsp;` unless the whitespace is being kept as it is.
 fn write_text(out: &mut String, keep_whitespace: bool, text: &str) {
   if keep_whitespace {
     escape_into(out, text, false);

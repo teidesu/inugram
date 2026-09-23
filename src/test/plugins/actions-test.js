@@ -1,66 +1,27 @@
 // ==InuPlugin==
 // @name         actions test
-// @author       teidesu
-// @version      1.0
 // @description  registers one row of every action kind and asserts the context each one is handed
 // @grant        account.read(draft)
-// @plugin-api   1
-// @platform     android
 // ==/InuPlugin==
 /* eslint-disable eslint-comments/no-unlimited-disable */
 /* eslint-disable */
 
-function pass(label, detail) {
-  console.log(detail === undefined ? `PASS ${label}` : `PASS ${label}: ${detail}`)
-}
-
-function fail(label, detail) {
-  console.error(`FAIL ${label}: ${detail}`)
-}
-
-function check(label, ok, detail) {
-  if (ok) pass(label, detail)
-  else fail(label, detail)
-}
-
-function expectTypeError(label, fn) {
-  let error
-  try {
-    fn()
-  } catch (e) {
-    error = e
-  }
-  if (error === undefined) return fail(label, 'did not throw')
-  check(label, error instanceof TypeError, `${error.name}: ${error.message}`)
-}
-
-function expectThrow(label, code, fn) {
-  let error
-  try {
-    fn()
-  } catch (e) {
-    error = e
-  }
-  if (error === undefined) return fail(label, 'did not throw')
-  check(label, error instanceof inu.PluginError && error.code === code, `${error.name}: ${error.code}`)
-}
-
-expectTypeError('a row without an id is refused', () => {
+expectThrow('a row without an id is refused', TypeError, () => {
   // @ts-expect-error
   inu.registerChatAction({ text: 'no id', callback: () => {} })
 })
 
-expectTypeError('a row without text is refused', () => {
+expectThrow('a row without text is refused', TypeError, () => {
   // @ts-expect-error
   inu.registerChatAction({ id: 'no-text', callback: () => {} })
 })
 
-expectTypeError('a row without a callback is refused', () => {
+expectThrow('a row without a callback is refused', TypeError, () => {
   // @ts-expect-error
   inu.registerChatAction({ id: 'no-callback', text: 'no callback' })
 })
 
-expectTypeError('an icon not minted by inu.icons is refused', () => {
+expectThrow('an icon not minted by inu.icons is refused', TypeError, () => {
   // @ts-expect-error
   inu.registerChatAction({ id: 'iconed', text: 'iconed', icon: 'settings', callback: () => {} })
 })
@@ -92,8 +53,7 @@ inu.registerChatAction({
   callback: () => {},
 })
 
-// a throwing predicate drops its own row and nothing else - the plugin stays on, which is what
-// makes the rest of this file keep working. logs one error per chat menu, deliberately
+// a throwing predicate drops only its own row. logs one error per chat menu, deliberately
 inu.registerChatAction({
   id: 'thrower',
   text: 'never drawn either',
@@ -154,13 +114,12 @@ inu.registerMessageEditorAction({
     check('an editor action is handed the draft', ctx.draft.text === 'hello', ctx.draft.text)
     ctx.replace('replaced')
     pass('replace crosses to the composer')
-    ctx.send({ text: 'sent', entities: [] })
+    ctx.send({ text: 'sent', entities: [{ _: 'messageEntityBold', offset: 0, length: 4 }] })
     pass('send crosses to the composer')
   },
 })
 
-// the row cap. counted at registration and never at draw, so the filler hides itself and the send
-// menu on a device stays readable. the editor row above is already the first of the eight
+// counted at registration, never at draw. the editor row above is the first of the eight
 const CAP = 8
 for (let i = 1; i < CAP; i++) {
   inu.registerMessageEditorAction({
@@ -174,7 +133,6 @@ expectThrow('a ninth row of one menu is refused', 'quota-exceeded', () => {
   inu.registerMessageEditorAction({ id: 'one-too-many', text: 'nope', callback: () => {} })
 })
 
-// re-registering an id is how a row is updated, so it has to be a replacement rather than a ninth
 let replaced = 'no-throw'
 try {
   inu.registerMessageEditorAction({

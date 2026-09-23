@@ -17,7 +17,6 @@ fn is_escapable(c: char) -> bool {
   matches!(c, '*' | '_' | '-' | '~' | '`' | '[' | ']' | '|' | '\\')
 }
 
-/// Escape text so markdown parsing gives it back unchanged.
 pub fn escape(text: &str) -> String {
   let mut out = String::with_capacity(text.len());
   for c in text.chars() {
@@ -29,7 +28,6 @@ pub fn escape(text: &str) -> String {
   out
 }
 
-/// Render text and its entities back to markdown.
 pub fn unparse(text: &str, entities: &[Entity]) -> String {
   let mut escaped = Vec::new();
   let mut out = String::with_capacity(text.len());
@@ -587,7 +585,6 @@ fn split_digits(rest: &str) -> (&str, &str) {
   rest.split_at(rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len()))
 }
 
-/// Split off a run of `digit` bytes that may start with a `-`.
 fn split_signed(rest: &str, digit: fn(&u8) -> bool) -> (&str, &str) {
   let len = rest
     .bytes()
@@ -666,11 +663,6 @@ fn parse_hex_i64(value: &str) -> i64 {
   }
   let result = result as i64;
   if negative { result.wrapping_neg() } else { result }
-}
-
-/// Whether the last character of the text is whitespace, for hosts that assemble several parses.
-pub fn ends_with_whitespace(text: &str) -> bool {
-  text.chars().last().is_some_and(char::is_whitespace)
 }
 
 #[cfg(test)]

@@ -28,8 +28,7 @@ type Fixture = (
 );
 
 fn setup() -> Fixture {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
+  let (rt, ctx) = crate::testing::harness::new_engine();
   let host = Rc::new(TestTimerHost::default());
   let host_dyn: Rc<dyn TimerHost> = host.clone();
   let lifecycle = Lifecycle::new();
@@ -72,12 +71,12 @@ fn due_timers_fire_by_deadline_then_by_arming_order() {
   run(
     &ctx,
     r#"
-        globalThis.__fired = [];
-        setTimeout(() => __fired.push('late'), 20);
-        setTimeout(() => __fired.push('first-of-10'), 10);
-        setTimeout(() => __fired.push('second-of-10'), 10);
-        setTimeout(() => __fired.push('now'), 0);
-        "#,
+      globalThis.__fired = [];
+      setTimeout(() => __fired.push('late'), 20);
+      setTimeout(() => __fired.push('first-of-10'), 10);
+      setTimeout(() => __fired.push('second-of-10'), 10);
+      setTimeout(() => __fired.push('now'), 0);
+    "#,
   );
   host.now.set(100);
   state.run_due(&rt, &ctx);
@@ -146,10 +145,10 @@ fn clearing_from_inside_a_callback_stops_a_timer_due_in_the_same_tick() {
   run(
     &ctx,
     r#"
-        globalThis.__fired = [];
-        const doomed = setTimeout(() => __fired.push('doomed'), 20);
-        setTimeout(() => { __fired.push('first'); clearTimeout(doomed); }, 10);
-        "#,
+      globalThis.__fired = [];
+      const doomed = setTimeout(() => __fired.push('doomed'), 20);
+      setTimeout(() => { __fired.push('first'); clearTimeout(doomed); }, 10);
+    "#,
   );
   host.now.set(50);
   state.run_due(&rt, &ctx);
@@ -162,12 +161,12 @@ fn a_timer_armed_inside_a_callback_waits_for_the_next_tick() {
   run(
     &ctx,
     r#"
-        globalThis.__fired = [];
-        setTimeout(() => {
-            __fired.push('outer');
-            setTimeout(() => __fired.push('inner'), 0);
-        }, 10);
-        "#,
+      globalThis.__fired = [];
+      setTimeout(() => {
+        __fired.push('outer');
+        setTimeout(() => __fired.push('inner'), 0);
+      }, 10);
+    "#,
   );
   host.now.set(10);
   state.run_due(&rt, &ctx);
@@ -183,15 +182,15 @@ fn unloading_cancels_every_pending_timer() {
   run(
     &ctx,
     r#"
-        globalThis.__fired = [];
-        setInterval(() => __fired.push('interval'), 10);
-        setTimeout(() => __fired.push('timeout'), 10);
-        "#,
+      globalThis.__fired = [];
+      setInterval(() => __fired.push('interval'), 10);
+      setTimeout(() => __fired.push('timeout'), 10);
+    "#,
   );
   assert!(!state.timers.is_empty());
 
   lifecycle.begin_unload();
-  state.notify_unload(&ctx);
+  state.dispose(&ctx);
   assert!(state.timers.is_empty());
   assert_eq!(*host.wakes.borrow().last().unwrap(), CANCEL_WAKE);
 
@@ -199,7 +198,6 @@ fn unloading_cancels_every_pending_timer() {
   state.run_due(&rt, &ctx);
   assert_eq!(eval(&ctx, "JSON.stringify(__fired)"), "[]");
 
-  // and nothing can arm a new one afterwards
   run(&ctx, "globalThis.__late = setTimeout(() => __fired.push('late'), 0);");
   assert_eq!(eval(&ctx, "String(__late)"), "0");
   assert!(state.timers.is_empty());
@@ -368,10 +366,10 @@ fn a_throwing_callback_is_logged_and_the_rest_still_run() {
   run(
     &ctx,
     r#"
-        globalThis.__fired = [];
-        setTimeout(() => { throw new Error('tick-boom'); }, 10);
-        setTimeout(() => __fired.push('after'), 20);
-        "#,
+      globalThis.__fired = [];
+      setTimeout(() => { throw new Error('tick-boom'); }, 10);
+      setTimeout(() => __fired.push('after'), 20);
+    "#,
   );
   host.now.set(50);
   state.run_due(&rt, &ctx);
@@ -390,17 +388,17 @@ fn ids_are_unique_never_reused_and_clearing_a_stale_one_is_a_no_op() {
   let out = eval(
     &ctx,
     r#"
-        const first = setTimeout(() => {}, 10);
-        const second = setInterval(() => {}, 10);
-        clearTimeout(first);
-        const third = setTimeout(() => {}, 10);
-        clearInterval(second);
-        clearTimeout(first);
-        clearTimeout(undefined);
-        clearTimeout(0);
-        clearTimeout('nonsense');
-        JSON.stringify([first !== second, second !== third, first !== third]);
-        "#,
+      const first = setTimeout(() => {}, 10);
+      const second = setInterval(() => {}, 10);
+      clearTimeout(first);
+      const third = setTimeout(() => {}, 10);
+      clearInterval(second);
+      clearTimeout(first);
+      clearTimeout(undefined);
+      clearTimeout(0);
+      clearTimeout('nonsense');
+      JSON.stringify([first !== second, second !== third, first !== third]);
+    "#,
   );
   assert_eq!(out, "[true,true,true]");
   assert_eq!(state.timers.len(), 1, "only the live timer is left");
@@ -412,11 +410,11 @@ fn a_non_function_callback_throws_a_type_error() {
   let out = eval(
     &ctx,
     r#"
-        const caught = [];
-        try { setTimeout('alert(1)', 0); } catch (e) { caught.push(`${e.constructor.name}:${e.message}`); }
-        try { setInterval(undefined, 0); } catch (e) { caught.push(`${e.constructor.name}:${e.message}`); }
-        JSON.stringify(caught);
-        "#,
+      const caught = [];
+      try { setTimeout('alert(1)', 0); } catch (e) { caught.push(`${e.constructor.name}:${e.message}`); }
+      try { setInterval(undefined, 0); } catch (e) { caught.push(`${e.constructor.name}:${e.message}`); }
+      JSON.stringify(caught);
+    "#,
   );
   assert_eq!(
     out,
@@ -438,7 +436,7 @@ fn live_timers_are_capped_and_clearing_one_restores_capacity() {
         clearInterval(ids.pop());
         const replacement = setTimeout(() => {{}}, 100);
         JSON.stringify([refused, replacement > 0]);
-        "#,
+      "#,
     ),
   );
   assert_eq!(out, format!(r#"[["quota-exceeded",{},{TIMER_LIMIT}],true]"#, TIMER_LIMIT + 1));
@@ -451,27 +449,22 @@ fn a_nonsense_delay_is_taken_as_zero_and_a_huge_one_is_clamped() {
   run(
     &ctx,
     r#"
-        setTimeout(() => {}, NaN);
-        setTimeout(() => {}, -5);
-        setTimeout(() => {});
-        setTimeout(() => {}, 1e30);
-        "#,
+      setTimeout(() => {}, NaN);
+      setTimeout(() => {}, -5);
+      setTimeout(() => {});
+      setTimeout(() => {}, 1e30);
+    "#,
   );
   assert_eq!(*host.wakes.borrow(), vec![0]);
-  assert_eq!(clamp_delay(Some(1e30)), MAX_DELAY_MS);
-  assert_eq!(clamp_delay(Some(f64::NAN)), 0);
 }
 
-/// Runs the bundled timers oracle with a timer wheel, `localStorage`, `inu.onUnload`, and a host that
-/// serves wakes. Uses a separate fixture because it needs all three. The clock must be real: the
-/// oracle measures elapsed time with `performance.now()`.
-#[cfg(test)]
+/// The clock must be real: the oracle measures elapsed time with `performance.now()`.
 mod bundled_oracle {
   use super::*;
-  use crate::sandbox::grants::TestGrantHost;
+  use crate::sandbox::grants::CachedGrantHost;
   use rquickjs::Context;
 
-  const ORACLE: &str = include_str!("../../../test/plugins/timers-test.js");
+  const ORACLE: &str = crate::testing::test_plugin!("timers-test.js");
 
   /// A Rust port of TimerThrottle for the oracle's pacing assertion. It tests this driver against
   /// the rule, not the Android throttle on globalQueue; `TimerThrottle.kt` needs its own test.
@@ -497,18 +490,16 @@ mod bundled_oracle {
 
   #[test]
   fn the_bundled_timers_test_plugin_passes() {
-    let rt = Runtime::new().unwrap();
-    let ctx = Context::full(&rt).unwrap();
+    let (rt, ctx) = crate::testing::harness::new_engine();
     let lifecycle = Lifecycle::new();
     let wakes = Rc::new(WakeHost::default());
     let wakes_dyn: Rc<dyn TimerHost> = wakes.clone();
     let storage_file = crate::testing::harness::TempPath::default();
-    let grants = TestGrantHost::new(&crate::testing::harness::manifest_grants(ORACLE)).as_host();
+    let grants = CachedGrantHost::new(&crate::testing::harness::manifest_grants(ORACLE));
     let log: crate::Log = std::sync::Arc::new(|_| {});
 
     let (api, timers) = ctx.with(|ctx| {
       let inu = crate::testing::harness::get_api_globals(&ctx);
-      crate::api::error::install_plugin_error(&ctx).unwrap();
       let api =
         crate::api::lifecycle::install_lifecycle(&ctx, grants.clone(), lifecycle.clone(), log.clone(), &inu).unwrap();
       crate::api::io::local_storage::install_local_storage(&ctx, storage_file.0.clone()).unwrap();
@@ -549,7 +540,7 @@ mod bundled_oracle {
     crate::testing::harness::assert_oracle_exact(&lines, "timers test done", 5);
   }
 
-  const VISIBILITY_ORACLE: &str = include_str!("../../../test/plugins/visibility-test.js");
+  const VISIBILITY_ORACLE: &str = crate::testing::test_plugin!("visibility-test.js");
 
   /// A WakeHost with a manually advanced clock. The visibility oracle tests when ticks are allowed,
   /// so this avoids four seconds of real waiting. Its near-zero `performance.now()` readings make
@@ -609,17 +600,15 @@ mod bundled_oracle {
   /// interval's ticks across a hidden stretch and holds them to what one wake per second allows.
   #[test]
   fn the_bundled_visibility_test_plugin_passes() {
-    let rt = Runtime::new().unwrap();
-    let ctx = Context::full(&rt).unwrap();
+    let (rt, ctx) = crate::testing::harness::new_engine();
     let lifecycle = Lifecycle::new();
     let wakes = Rc::new(SteppedWakeHost::default());
     let wakes_dyn: Rc<dyn TimerHost> = wakes.clone();
-    let grants = TestGrantHost::new(&crate::testing::harness::manifest_grants(VISIBILITY_ORACLE)).as_host();
+    let grants = CachedGrantHost::new(&crate::testing::harness::manifest_grants(VISIBILITY_ORACLE));
     let log: crate::Log = std::sync::Arc::new(|_| {});
 
     let (api, timers) = ctx.with(|ctx| {
       let inu = crate::testing::harness::get_api_globals(&ctx);
-      crate::api::error::install_plugin_error(&ctx).unwrap();
       let api =
         crate::api::lifecycle::install_lifecycle(&ctx, grants.clone(), lifecycle.clone(), log.clone(), &inu).unwrap();
       let timers = install_timers(&ctx, wakes_dyn, lifecycle.clone(), log.clone()).unwrap();

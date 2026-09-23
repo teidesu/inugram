@@ -6,7 +6,7 @@ import * as esbuild from 'esbuild'
 import { compileRoutines } from '../routines/plugin.js'
 import { configArgs, defineCommand } from '../utils/args.js'
 import { readFileSize } from '../utils/fs.js'
-import { color, fail, renderMessages, step, warn } from '../utils/log.js'
+import { color, fail, printMessages, step, warn } from '../utils/log.js'
 import { collectManifestWarnings, renderManifestHeader } from '../utils/manifest.js'
 import { untilInterrupted } from '../utils/process.js'
 import { loadProject } from '../utils/project.js'
@@ -82,8 +82,8 @@ export async function buildOnce(
 export async function reportOutcome(config: ResolvedCliConfig, outcome: BuildOutcome) {
   const name = color.bold(outcome.plugin.slug)
   if (outcome.problems.length > 0) fail(`${name} did not build`)
-  for (const frame of await renderMessages(outcome.problems, 'error')) process.stdout.write(frame)
-  for (const frame of await renderMessages(outcome.warnings, 'warning')) process.stdout.write(frame)
+  await printMessages(outcome.problems, 'error')
+  await printMessages(outcome.warnings, 'warning')
   for (const note of outcome.notes) warn(`${name} ${note}`)
   if (!outcome.ok) return
   const where = relative(config.root, outcome.plugin.outFile)

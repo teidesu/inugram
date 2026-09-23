@@ -3,12 +3,10 @@ package desu.inugram.helpers.plugins
 import android.util.Log
 import desu.inugram.helpers.plugins.io.PluginBlobs
 import desu.inugram.helpers.plugins.telegram.PluginMedia
-import desu.inugram.helpers.plugins.ui.PluginCanvas
 import desu.inugram.helpers.plugins.ui.NativePixels
 import java.io.File
 import java.nio.ByteBuffer
 import org.json.JSONObject
-import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.telegram.tgnet.TLRPC
@@ -16,40 +14,19 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-/**
- * `inu.canvas.decodeAnimation` and `inu.canvas.createEncoder` against the device's own decoders and
- * encoder, which is the only place they can be tested: rlottie, the app's ffmpeg bridge and
- * `MediaCodec` are all real here and none of them has a fake worth trusting.
- *
- * The mp4 the encoder writes is the source the decoder reads back, so the two halves check each
- * other; what the platform says about that file is asserted separately, since that is what the send
- * path reads to describe it as an animation rather than as a file.
- */
 class PluginCanvasAnimationTest {
-    private val plugins = ArrayList<Plugin>()
-
     @Before
     fun setUp() {
         resetBridge()
     }
 
-    @After
-    fun tearDown() {
-        plugins.forEach(::closeCanvasEngine)
-        plugins.clear()
-    }
-
-    /** the store is named after the plugin, so a run starts with whatever the last one wrote gone */
     private fun engineFor(): Plugin =
-        canvasEngine("canvas-animation") { Log.d(TAG, it) }.also {
-            PluginCanvas.wipe(it.id)
-            plugins.add(it)
-        }
+        startEngine("canvas-animation", canvas = true) { Log.d(TAG, it) }
 
     private fun encodedFiles(plugin: Plugin): List<File> =
         File(PluginBlobs.dirFor(plugin.id), "canvas").listFiles()?.filter { it.name.endsWith(".mp4") } ?: emptyList()
 
-    /** a lottie source needs no asset: rlottie reads plain json as happily as a gzipped `.tgs` */
+    /** rlottie reads plain json as well as gzipped `.tgs` */
     private fun lottieJson(frames: Int, fps: Int): String =
         """
         {"v":"5.5.7","fr":$fps,"ip":0,"op":$frames,"w":64,"h":64,"nm":"t","ddd":0,"assets":[],"layers":[
@@ -69,10 +46,10 @@ class PluginCanvasAnimationTest {
     @Test
     fun an_encoded_mp4_reads_back_as_the_animation_it_was_written_from() {
         val plugin = engineFor()
-        plugin.await(
+        val t = JSONObject(plugin.await(
             """
             (async () => {
-              globalThis.t = {}
+              const t = {}
               using canvas = inu.canvas.create(160, 120)
               const ctx = canvas.getContext('2d')
               using encoder = await inu.canvas.createEncoder({ type: 'video/mp4', width: 160, height: 120, fps: 10 })
@@ -95,7 +72,6 @@ class PluginCanvasAnimationTest {
               t.frameCount = animation.frameCount
               t.duration = animation.duration
               t.fps = animation.fps
-              // every frame, in order, which is the path the sequential decode is for
               let read = 0
               let painted = 0
               let ordered = true
@@ -113,14 +89,12 @@ class PluginCanvasAnimationTest {
               t.painted = painted
               t.ordered = ordered
               t.last = last
-              // and by index, from the start again, which is a seek
               using third = await animation.frame(2)
               t.thirdAt = third.timestamp
+              return t
             })()
             """,
-        )
-        val t = JSONObject(plugin.js("JSON.stringify(t)"))
-        Log.i(TAG, "mp4 round trip: $t")
+        ))
 
         assertEquals("video/mp4", t.getString("type"))
         assertTrue(t.getInt("bytes") > 0, "the encoder wrote nothing")
@@ -135,14 +109,13 @@ class PluginCanvasAnimationTest {
         assertTrue(t.getInt("duration") in 500..1500, "a one-second video read back as ${t.getInt("duration")}ms")
     }
 
-    /** ffmpeg scales into the bitmap it is handed, which is what lets a video be decoded at the size asked for */
     @Test
     fun a_video_is_decoded_at_the_size_it_was_asked_for() {
         val plugin = engineFor()
-        plugin.await(
+        val t = JSONObject(plugin.await(
             """
             (async () => {
-              globalThis.t = {}
+              const t = {}
               using canvas = inu.canvas.create(160, 128)
               const ctx = canvas.getContext('2d')
               using encoder = await inu.canvas.createEncoder({ width: 160, height: 128, fps: 10 })
@@ -169,11 +142,10 @@ class PluginCanvasAnimationTest {
               t.frames = frames
               t.sized = sized
               t.lit = lit
+              return t
             })()
             """,
-        )
-        val t = JSONObject(plugin.js("JSON.stringify(t)"))
-        Log.i(TAG, "scaled decode: $t")
+        ))
         assertEquals(40, t.getInt("width"))
         assertEquals(40, t.getInt("height"))
         assertTrue(t.getInt("frames") > 0, "nothing was read")
@@ -181,7 +153,6 @@ class PluginCanvasAnimationTest {
         assertEquals(t.getInt("frames"), t.getInt("lit"), "a scaled frame lost its content")
     }
 
-    /** what the send path reads off the file to call it an animation rather than a document */
     @Test
     fun the_platform_reads_the_written_file_as_a_silent_video() {
         val plugin = engineFor()
@@ -194,9 +165,8 @@ class PluginCanvasAnimationTest {
               for (let i = 0; i < 5; i++) {
                 ctx.fillStyle = i % 2 === 0 ? '#ff0000' : '#0000ff'
                 ctx.fillRect(0, 0, 120, 80)
-                await encoder.addFrame(canvas)
+                await encoder.addFrame(canvas, i === 4 ? 1000 : 100)
               }
-              // kept, so the file it is minted over is still there to be read
               globalThis.kept = await encoder.finish()
             })()
             """,
@@ -206,7 +176,6 @@ class PluginCanvasAnimationTest {
 
         val described = PluginMedia.describeLocalDocument(written[0], "video/mp4", asDocument = false)
         val attributes = described.attributes
-        Log.i(TAG, "described as: ${attributes.map { it.javaClass.simpleName }}")
         val video = assertNotNull(
             attributes.filterIsInstance<TLRPC.TL_documentAttributeVideo>().singleOrNull(),
             "nothing described the file as a video",
@@ -214,12 +183,12 @@ class PluginCanvasAnimationTest {
         assertEquals(120, video.w)
         assertEquals(80, video.h)
         assertTrue(video.supports_streaming, "the composer marks every video it sends as streamable")
-        assertTrue(video.duration in 0.5..1.5, "the file claims ${video.duration}s")
+        assertTrue(video.duration in 1.35..1.45, "4 x 100ms + 1000ms became ${video.duration}s")
         assertTrue(
             attributes.any { it is TLRPC.TL_documentAttributeAnimated },
             "a silent video was not described as an animation, so it would arrive as a video",
         )
-        // without one the bubble a send draws has nothing in it until the chat is reopened
+        // stock draws an empty bubble until reopen without one
         val thumb = assertNotNull(described.thumb, "nothing covered the file with a thumbnail")
         assertTrue(thumb.w > 0 && thumb.h > 0, "the thumbnail is ${thumb.w}x${thumb.h}")
         assertTrue(thumb.size > 0, "the thumbnail was saved empty")
@@ -235,10 +204,10 @@ class PluginCanvasAnimationTest {
     fun a_lottie_source_answers_its_own_frames_and_renders_at_the_size_it_was_asked_for() {
         val plugin = engineFor()
         plugin.js("globalThis.lottie = ${JSONObject.quote(lottieJson(30, 30))}")
-        plugin.await(
+        val t = JSONObject(plugin.await(
             """
             (async () => {
-              globalThis.t = {}
+              const t = {}
               using animation = await inu.canvas.decodeAnimation(new TextEncoder().encode(lottie), { width: 128, height: 128 })
               t.width = animation.width
               t.height = animation.height
@@ -251,16 +220,14 @@ class PluginCanvasAnimationTest {
               t.frameAt = frame.timestamp
               using unsized = await inu.canvas.decodeAnimation(new TextEncoder().encode(lottie))
               t.defaultSide = unsized.width
-              // and it is drawn, since a renderer answering a blank bitmap would pass every size check
               using canvas = inu.canvas.create(128, 128)
               const ctx = canvas.getContext('2d')
               ctx.drawImage(frame, 0, 0)
               t.alpha = ctx.getAverageColor().a
+              return t
             })()
             """,
-        )
-        val t = JSONObject(plugin.js("JSON.stringify(t)"))
-        Log.i(TAG, "lottie: $t")
+        ))
         assertEquals(128, t.getInt("width"))
         assertEquals(128, t.getInt("height"))
         assertEquals(128, t.getInt("frameWidth"))
@@ -276,10 +243,10 @@ class PluginCanvasAnimationTest {
     @Test
     fun a_source_with_one_frame_is_an_animation_of_one_frame() {
         val plugin = engineFor()
-        plugin.await(
+        val t = JSONObject(plugin.await(
             """
             (async () => {
-              globalThis.t = {}
+              const t = {}
               using canvas = inu.canvas.create(32, 32)
               const ctx = canvas.getContext('2d')
               ctx.fillStyle = '#00ff00'
@@ -296,11 +263,10 @@ class PluginCanvasAnimationTest {
               let more = 0
               for await (using again of animation) more++
               t.more = more
+              return t
             })()
             """,
-        )
-        val t = JSONObject(plugin.js("JSON.stringify(t)"))
-        Log.i(TAG, "still: $t")
+        ))
         assertEquals(1, t.getInt("frameCount"))
         assertEquals(32, t.getInt("width"))
         assertEquals(32, t.getInt("frameWidth"))
@@ -313,10 +279,10 @@ class PluginCanvasAnimationTest {
     @Test
     fun what_the_device_cannot_take_is_refused_rather_than_written_badly() {
         val plugin = engineFor()
-        plugin.await(
+        val t = JSONObject(plugin.await(
             """
             (async () => {
-              globalThis.t = {}
+              const t = {}
               const refused = async (label, body) => {
                 try {
                   await body()
@@ -333,11 +299,10 @@ class PluginCanvasAnimationTest {
               using still = inu.canvas.create(8, 8)
               using animation = await inu.canvas.decodeAnimation(await still.convertToBlob())
               await refused('pastTheEnd', () => animation.frame(9))
+              return t
             })()
             """,
-        )
-        val t = JSONObject(plugin.js("JSON.stringify(t)"))
-        Log.i(TAG, "refusals: $t")
+        ))
         for (key in listOf("odd", "notAnEncoding", "notAnAnimation", "empty", "pastTheEnd")) {
             assertEquals("invalid-argument", t.getString(key), key)
         }
@@ -394,32 +359,13 @@ class PluginCanvasAnimationTest {
     }
 
     @Test
-    fun the_last_frame_keeps_its_requested_duration() {
-        val plugin = engineFor()
-        plugin.await(
-            """
-            (async () => {
-              using canvas = inu.canvas.create(64, 64)
-              using encoder = await inu.canvas.createEncoder({ width: 64, height: 64, fps: 10 })
-              await encoder.addFrame(canvas, 100)
-              await encoder.addFrame(canvas, 1000)
-              globalThis.kept = await encoder.finish()
-            })()
-            """,
-        )
-        val described = PluginMedia.describeLocalDocument(encodedFiles(plugin).single(), "video/mp4", false, withThumb = false)
-        val video = described.attributes.filterIsInstance<TLRPC.TL_documentAttributeVideo>().single()
-        assertTrue(video.duration in 1.05..1.15, "100ms + 1000ms became ${video.duration}s")
-    }
-
-    @Test
     fun variable_delay_gif_indices_match_sequential_frames_and_reject_the_real_end() {
         val plugin = engineFor()
         val gif = testAsset("canvas-variable-delay.gif").joinToString(",") { (it.toInt() and 0xff).toString() }
-        plugin.await(
+        val t = JSONObject(plugin.await(
             """
             (async () => {
-              globalThis.t = {}
+              const t = {}
               using animation = await inu.canvas.decodeAnimation(new Uint8Array([$gif]))
               using canvas = inu.canvas.create(16, 16)
               const ctx = canvas.getContext('2d')
@@ -438,10 +384,10 @@ class PluginCanvasAnimationTest {
               using first = await animation.frame(0)
               try { await animation.frame(3); t.pastEnd = 'accepted' }
               catch (e) { t.pastEnd = e.code }
+              return t
             })()
             """,
-        )
-        val t = JSONObject(plugin.js("JSON.stringify(t)"))
+        ))
         assertEquals("[0,900,1000]", t.getJSONArray("times").toString())
         assertTrue(t.getBoolean("same"), "indexed reads differed from decoded frames")
         assertEquals("invalid-argument", t.getString("pastEnd"))

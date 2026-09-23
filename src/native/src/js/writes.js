@@ -1,5 +1,5 @@
 (natives, shared, Message, PluginError, readsPrototype, ops) => {
-  const { invalid, toSpec, toOptions, toCount, toMessageId, toMessageIds, slotOf } = shared
+  const { toSpec, toTextPart, toOptions, toCount, toMessageId, toMessageIds, readAccountSlot } = shared
 
   const INT64 = /^-?\d+$/
 
@@ -16,35 +16,15 @@
     'chooseContact',
   ])
 
-  // `InputText`: a bare string is unformatted text, per `common.d.ts`. entities stay whatever the
-  // plugin handed over - a live view included, which stringifies through its own `toJSON`
-  const toText = (value, what) => {
-    if (typeof value === 'string') return { text: value, entities: null }
-    if (value !== null && typeof value === 'object' && typeof value.text === 'string') {
-      const entities = value.entities
-      if (entities !== undefined && entities !== null && !Array.isArray(entities)) {
-        throw invalid(`${what}: entities must be an array`)
-      }
-      return { text: value.text, entities: entities === undefined ? null : entities }
-    }
-    throw invalid(`${what}: expected a string or { text, entities }`)
-  }
-
-  const toFlag = (value, what, field) => {
-    if (value === undefined || value === null) return false
-    if (typeof value !== 'boolean') throw invalid(`${what}: ${field} must be a boolean`)
-    return value
-  }
-
-  const toOptedIn = (value, what, field) => {
-    if (value === undefined || value === null) return true
-    if (typeof value !== 'boolean') throw invalid(`${what}: ${field} must be a boolean`)
+  const toFlag = (value, what, field, fallback = false) => {
+    if (value === undefined || value === null) return fallback
+    if (typeof value !== 'boolean') throw new PluginError('invalid-argument', `${what}: ${field} must be a boolean`)
     return value
   }
 
   const toName = (value, what, field) => {
     if (value === undefined || value === null) return ''
-    if (typeof value !== 'string') throw invalid(`${what}: ${field} must be a string`)
+    if (typeof value !== 'string') throw new PluginError('invalid-argument', `${what}: ${field} must be a string`)
     return value
   }
 
@@ -52,22 +32,22 @@
 
   const toProgress = (value, what) => {
     if (value === undefined || value === null) return null
-    if (typeof value !== 'function') throw invalid(`${what}: onProgress must be a function`)
+    if (typeof value !== 'function') throw new PluginError('invalid-argument', `${what}: onProgress must be a function`)
     return value
   }
 
   const toReactions = (list, what) => {
-    if (!Array.isArray(list)) throw invalid(`${what}: expected an array of reactions`)
+    if (!Array.isArray(list)) throw new PluginError('invalid-argument', `${what}: expected an array of reactions`)
     return list.map((reaction) => {
       if (typeof reaction === 'string') {
-        if (reaction.length === 0) throw invalid(`${what}: an empty string is not an emoji`)
+        if (reaction.length === 0) throw new PluginError('invalid-argument', `${what}: an empty string is not an emoji`)
         return { emoji: reaction }
       }
       if (reaction !== null && typeof reaction === 'object') {
         const id = reaction.customEmojiId
         if (id !== undefined && id !== null && INT64.test(String(id))) return { customEmojiId: String(id) }
       }
-      throw invalid(`${what}: expected an emoji or { customEmojiId }`)
+      throw new PluginError('invalid-argument', `${what}: expected an emoji or { customEmojiId }`)
     })
   }
 
@@ -76,7 +56,7 @@
   // their parent message.
   const toRawMessage = (message, what) => {
     const raw = message instanceof Message ? message.raw : message
-    if (raw === null || typeof raw !== 'object') throw invalid(`${what}: expected a message`)
+    if (raw === null || typeof raw !== 'object') throw new PluginError('invalid-argument', `${what}: expected a message`)
     return raw
   }
 
@@ -85,13 +65,13 @@
   // key, which is how the encoder tells it from a TL object literal without guessing
   const toFile = (file, what) => {
     if (file === null || typeof file !== 'object') {
-      throw invalid(`${what}: expected a Blob, bytes, an InputFile/InputMedia or { path }`)
+      throw new PluginError('invalid-argument', `${what}: expected a Blob, bytes, an InputFile/InputMedia or { path }`)
     }
     if (file._ !== undefined) return file
     // A `path` property selects the path variant and must be a string. Do not fall through to TL
     // encoding, which would report the wrong error.
     if (file.path !== undefined) {
-      if (typeof file.path !== 'string') throw invalid(`${what}: path must be a string`)
+      if (typeof file.path !== 'string') throw new PluginError('invalid-argument', `${what}: path must be a string`)
       return { path: file.path }
     }
     return file
@@ -99,12 +79,11 @@
 
   const startWrite = (account, op, what, build) => {
     try {
-      const slot = slotOf(account, what)
+      const slot = readAccountSlot(account, what)
       const [arg, values, onProgress] = build()
       return natives.write(slot, op, JSON.stringify(arg), values, onProgress)
     } catch (e) {
-      // every write fails asynchronously, whatever went wrong - a bad argument, a missing grant, a
-      // peer that turned out to be a secret chat
+      // every write rejects rather than throws
       return Promise.reject(e)
     }
   }
@@ -132,7 +111,6 @@
       ]
     }))
 
-  /** the options every send shares, so one shape reaches the host however it was called */
   const sendOptions = (opts, what) => ({
     replyTo: toCount(opts.replyToMessageId, what, 'replyToMessageId'),
     topicId: toCount(opts.topicId, what, 'topicId'),
@@ -145,13 +123,13 @@
     sendMessage(peer, text, options) {
       return startWrite(this, ops.sendMessage, 'sendMessage', () => {
         const opts = toOptions(options, 'sendMessage')
-        const body = toText(text, 'sendMessage')
+        const body = toTextPart(text, 'sendMessage')
         return [
           {
             peer: toSpec(peer),
             ...body,
             ...sendOptions(opts, 'sendMessage'),
-            optimistic: toOptedIn(opts.optimistic, 'sendMessage', 'optimistic'),
+            optimistic: toFlag(opts.optimistic, 'sendMessage', 'optimistic', true),
             noWebpage: toFlag(opts.noWebpage, 'sendMessage', 'noWebpage'),
             clearDraft: toFlag(opts.clearDraft, 'sendMessage', 'clearDraft'),
           },
@@ -166,13 +144,13 @@
         const opts = toOptions(options, 'sendMedia')
         const caption = opts.caption === undefined || opts.caption === null
           ? { text: '', entities: null }
-          : toText(opts.caption, 'sendMedia')
+          : toTextPart(opts.caption, 'sendMedia')
         return [
           {
             peer: toSpec(peer),
             ...caption,
             ...sendOptions(opts, 'sendMedia'),
-            optimistic: toOptedIn(opts.optimistic, 'sendMedia', 'optimistic'),
+            optimistic: toFlag(opts.optimistic, 'sendMedia', 'optimistic', true),
             asDocument: toFlag(opts.asDocument, 'sendMedia', 'asDocument'),
             fileName: toName(opts.fileName, 'sendMedia', 'fileName'),
           },
@@ -185,7 +163,7 @@
     sendMultiMedia(peer, items, options) {
       return startWrite(this, ops.sendMultiMedia, 'sendMultiMedia', () => {
         if (!Array.isArray(items) || items.length === 0) {
-          throw invalid('sendMultiMedia: expected a non-empty array of items')
+          throw new PluginError('invalid-argument', 'sendMultiMedia: expected a non-empty array of items')
         }
         const opts = toOptions(options, 'sendMultiMedia')
         const files = []
@@ -194,7 +172,7 @@
           files.push(toFile(one.file, 'sendMultiMedia'))
           const caption = one.caption === undefined || one.caption === null
             ? { text: '', entities: null }
-            : toText(one.caption, 'sendMultiMedia')
+            : toTextPart(one.caption, 'sendMultiMedia')
           return {
             ...caption,
             asDocument: toFlag(one.asDocument, 'sendMultiMedia', 'asDocument'),
@@ -216,7 +194,7 @@
           {
             peer: toSpec(peer),
             id: toMessageId(messageId, 'editMessage'),
-            ...toText(text, 'editMessage'),
+            ...toTextPart(text, 'editMessage'),
             noWebpage: toFlag(opts.noWebpage, 'editMessage', 'noWebpage'),
           },
           [],
@@ -295,7 +273,7 @@
       return voidly(startWrite(this, ops.sendTyping, 'sendTyping', () => {
         const opts = toOptions(options, 'sendTyping')
         const what = action ?? 'typing'
-        if (!TYPING_ACTIONS.has(what)) throw invalid(`sendTyping: unknown action '${what}'`)
+        if (!TYPING_ACTIONS.has(what)) throw new PluginError('invalid-argument', `sendTyping: unknown action '${what}'`)
         return [
           { peer: toSpec(peer), action: what, topicId: toCount(opts.topicId, 'sendTyping', 'topicId') },
           [],
@@ -308,7 +286,7 @@
       return voidly(startWrite(this, ops.setDraft, 'setDraft', () => {
         const opts = toOptions(options, 'setDraft')
         // null clears it, which is a different call from setting an empty one
-        const body = draft === null || draft === undefined ? { text: null, entities: null } : toText(draft, 'setDraft')
+        const body = draft === null || draft === undefined ? { text: null, entities: null } : toTextPart(draft, 'setDraft')
         return [
           {
             peer: toSpec(peer),
@@ -323,7 +301,7 @@
     },
 
     getMessageFile(message) {
-      const slot = slotOf(this, 'getMessageFile')
+      const slot = readAccountSlot(this, 'getMessageFile')
       return natives.messageFile(slot, toRawMessage(message, 'getMessageFile'))
     },
 

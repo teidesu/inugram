@@ -13,17 +13,9 @@ use crate::LEVEL_ERROR;
 
 use super::env::{clear_exception, with_current_env};
 
-/// Hosts callable from synchronous caller-thread callbacks. Other hosts keep queue-confined state,
-/// such as plain HashMaps.
-///
-/// Each allowed host is stateless, synchronizes its state, or uses
-/// `EngineDispatch.createHostDispatcher` to reach the plugin queue. Stock reads must be
-/// thread-safe; UI work posts to the UI thread. Return values and errors still reach the calling
-/// thread.
-///
-/// The check applies only to calls returning values. `call_void` cannot report a refusal, so its
-/// hosts must arrange their own queue handoff in Kotlin. Void names remain listed to document that
-/// contract.
+/// Hosts callable from caller-thread callbacks: each is stateless, synchronized, or reaches the plugin
+/// queue through `EngineDispatch.createHostDispatcher`. Only value calls are checked: `call_void`
+/// cannot report a refusal, so its hosts (listed anyway) hand off to their queue in Kotlin.
 const CALLER_THREAD_HOSTS: &[&str] = &[
   "jvm",
   "xposed",
@@ -135,7 +127,7 @@ impl JniBridge {
     }
     let buffer = buffer.and_then(|value| value.l()).ok()?;
     let read_buffer_ref = env.new_global_ref(&buffer).ok()?;
-    let buffer = unsafe { JByteBuffer::from_raw(env, buffer.into_raw()) }.auto();
+    let buffer = env.cast_local::<JByteBuffer>(buffer).ok()?.auto();
     let read_buffer = env.get_direct_buffer_address(&buffer).ok()?;
     let read_buffer_len = env.get_direct_buffer_capacity(&buffer).ok()?;
 
@@ -249,6 +241,19 @@ impl JniBridge {
     unsafe { std::slice::from_raw_parts(self.read_buffer, self.read_buffer_len) }
   }
 
+  /// Every `JMethodID` a caller passes must be one `new` looked up on `target`'s class, with `ret`
+  /// and `args` as its signature declares.
+  pub(crate) fn call_target<'l>(
+    &self,
+    env: &mut Env<'l>,
+    method: JMethodID,
+    ret: ReturnType,
+    args: &[jvalue],
+  ) -> jni::errors::Result<jni::objects::JValueOwned<'l>> {
+    // SAFETY: the contract above; the ids are cached so the hot path skips a lookup per call
+    unsafe { env.call_method_unchecked(&self.target, method, ret, args) }
+  }
+
   /// a failed jni call leaves its throw pending, and the next call on this thread would abort on it
   fn describe_failure(env: &mut Env, what: &str, error: impl std::fmt::Display) -> String {
     clear_exception(env);
@@ -290,30 +295,23 @@ impl JniBridge {
   }
 
   pub(crate) fn call_string(&self, what: &str, method: JMethodID, args: &[Arg<'_>]) -> Result<Option<String>, String> {
-    with_current_env(|env| self.call_string_in(env, what, method, args))
-      .unwrap_or_else(|| Err(format!("{what}: JNI env unavailable")))
-  }
-
-  pub(crate) fn call_string_in(
-    &self,
-    env: &mut Env,
-    what: &str,
-    method: JMethodID,
-    args: &[Arg<'_>],
-  ) -> Result<Option<String>, String> {
     self.check_host_thread(what)?;
-    let marshalled = self.marshal(env, what, args)?;
-    let jargs = jvalues(&marshalled);
-    let result = unsafe { env.call_method_unchecked(&self.target, method, ReturnType::Object, &jargs) };
-    if clear_exception(env) {
-      return Err(format!("{what}: host callback threw"));
-    }
-    let obj = result.and_then(|v| v.l()).map_err(|e| format!("{what}: {e}"))?;
-    if obj.is_null() {
-      return Ok(None);
-    }
-    let obj = unsafe { JString::from_raw(env, obj.into_raw()) }.auto();
-    obj.try_to_string(env).map(Some).map_err(|e| format!("{what}: {e}"))
+    with_current_env(|env| {
+      let marshalled = self.marshal(env, what, args)?;
+      let jargs = jvalues(&marshalled);
+      let result = self.call_target(env, method, ReturnType::Object, &jargs);
+      if clear_exception(env) {
+        return Err(format!("{what}: host callback threw"));
+      }
+      let obj = result.and_then(|v| v.l()).map_err(|e| format!("{what}: {e}"))?;
+      if obj.is_null() {
+        return Ok(None);
+      }
+      // SAFETY: every method reaching here is declared to return a String; skips an IsInstanceOf per call
+      let obj = unsafe { JString::from_raw(env, obj.into_raw()) }.auto();
+      obj.try_to_string(env).map(Some).map_err(|e| format!("{what}: {e}"))
+    })
+    .unwrap_or_else(|| Err(format!("{what}: JNI env unavailable")))
   }
 
   pub(crate) fn call_wire(&self, what: &str, method: JMethodID, args: &[Arg<'_>]) -> String {
@@ -329,7 +327,6 @@ impl JniBridge {
     self.call_string(what, method, args).ok().flatten()
   }
 
-  /// [`Self::call_string_opt`] where the caller has nothing but the empty string to say either way
   pub(crate) fn call_string_or_empty(&self, what: &str, method: JMethodID, args: &[Arg<'_>]) -> String {
     self.call_string_opt(what, method, args).unwrap_or_default()
   }
@@ -344,15 +341,11 @@ impl JniBridge {
         return;
       };
       let jargs = jvalues(&marshalled);
-      let _ =
-        unsafe { env.call_method_unchecked(&self.target, method, ReturnType::Primitive(Primitive::Void), &jargs) };
+      let _ = self.call_target(env, method, ReturnType::Primitive(Primitive::Void), &jargs);
       clear_exception(env);
     });
   }
 
-  /// Shared implementation for [`Self::call_bool`], [`Self::call_int`], and [`Self::call_bytes`]:
-  /// check the thread, marshal arguments, call once, and use `fallback` on failure. `report` logs
-  /// failures that would otherwise be hidden.
   fn call_answering<T>(
     &self,
     what: &str,
@@ -377,7 +370,7 @@ impl JniBridge {
         }
       };
       let jargs = jvalues(&marshalled);
-      let result = unsafe { env.call_method_unchecked(&self.target, method, ret, &jargs) };
+      let result = self.call_target(env, method, ret, &jargs);
       // a pending exception aborts the process at the next jni call, so this is never skipped
       if clear_exception(env) {
         if report {
@@ -405,15 +398,12 @@ impl JniBridge {
     })
   }
 
-  /// Like [`Self::call_int`], with prebuilt JNI arguments. Skips [`Self::marshal`] and both vectors
-  /// it and [`jvalues`] allocate, reducing per-field read overhead.
   pub(crate) fn call_int_prims(&self, what: &str, method: JMethodID, args: &[jvalue], fallback: i32) -> i32 {
     if self.check_host_thread(what).is_err() {
       return fallback;
     }
     with_current_env(|env| {
-      let result =
-        unsafe { env.call_method_unchecked(&self.target, method, ReturnType::Primitive(Primitive::Int), args) };
+      let result = self.call_target(env, method, ReturnType::Primitive(Primitive::Int), args);
       // a pending exception aborts the process at the next jni call, so this is never skipped
       if clear_exception(env) {
         return fallback;
@@ -437,7 +427,11 @@ impl JniBridge {
       if array.is_null() {
         return false;
       }
-      let array = unsafe { JByteArray::from_raw(env, array.into_raw()) }.auto();
+      let Ok(array) = env.cast_local::<JByteArray>(array) else {
+        clear_exception(env);
+        return false;
+      };
+      let array = array.auto();
       let Ok(bytes) = env.convert_byte_array(&array) else {
         clear_exception(env);
         return false;

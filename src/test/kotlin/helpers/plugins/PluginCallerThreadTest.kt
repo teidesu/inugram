@@ -2,9 +2,7 @@ package desu.inugram.helpers.plugins
 
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicReference
-import desu.inugram.helpers.plugins.api.PluginLocalStorage
-import desu.inugram.helpers.plugins.platform.PluginJvm
-import desu.inugram.helpers.plugins.platform.PluginXposed
+import desu.inugram.helpers.plugins.io.PluginLocalStorage
 import desu.inugram.jvmfixture.JvmFixture
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -15,14 +13,9 @@ class PluginCallerThreadTest {
     @Before fun setUp() = resetBridge()
 
     @Test fun real_js_runnable_keeps_its_closure_and_executes_on_the_caller() {
-        val plugin = startPlugin("caller-thread", "unsafe.jvm", "unsafe.xposed")
-        val engine = QuickJs()
-        plugin.session = PluginSession(plugin, engine)
         val logs = CopyOnWriteArrayList<String>()
-        attachBridge(plugin.session!!, object : CoreListener {
-            override fun onConsole(level: Int, message: String) { logs.add(message) }
-            override fun onTimerSchedule(delayMs: Long) = Unit
-        })
+        val plugin = startEngine("caller-thread", "unsafe.jvm", "unsafe.xposed") { logs.add(it) }
+        val engine = plugin.engine!!
         logs.clear()
         try {
             engine.evaluate("""
@@ -36,10 +29,7 @@ class PluginCallerThreadTest {
             """.trimIndent())
             val task = JvmFixture.task!!
             for (index in 1..3) {
-                val worker = Thread(task, "caller-$index")
-                worker.start()
-                worker.join(5000)
-                assertTrue(!worker.isAlive)
+                runOnCaller(task, "caller-$index")
                 assertEquals("$index:caller-$index", JvmFixture.tag)
             }
             engine.evaluate("""
@@ -57,12 +47,9 @@ class PluginCallerThreadTest {
                 });
             """.trimIndent())
             val hookResult = AtomicReference<Any?>()
-            val hookCaller = Thread({
+            runOnCaller({
                 hookResult.set(JvmFixture::class.java.getDeclaredMethod("sum", Int::class.java, Int::class.java).invoke(null, 1, 2))
             }, "hook-caller")
-            hookCaller.start()
-            hookCaller.join(5000)
-            assertTrue(!hookCaller.isAlive)
             assertEquals("hook-caller", JvmFixture.tag)
             assertEquals(17, hookResult.get())
             engine.evaluate("""
@@ -70,10 +57,7 @@ class PluginCallerThreadTest {
                     Promise.resolve().then(() => fixture.setStaticField('tag', 'microtask'));
                 }));
             """.trimIndent())
-            val promiseCaller = Thread(JvmFixture.task!!)
-            promiseCaller.start()
-            promiseCaller.join(5000)
-            assertTrue(!promiseCaller.isAlive)
+            runOnCaller(JvmFixture.task!!)
             assertEquals("hook-caller", JvmFixture.tag)
             drain()
             assertEquals("microtask", JvmFixture.tag)
@@ -82,19 +66,10 @@ class PluginCallerThreadTest {
             assertEquals("microtask", JvmFixture.tag)
             assertTrue(logs.isEmpty(), logs.toString())
         } finally {
-            engine.stopCallbacks()
-            PluginXposed.detach(plugin.session!!)
-            PluginJvm.detach(plugin.session!!)
-            engine.close()
-            JvmFixture.task = null
-            plugin.session = null
+            closeEngine(plugin)
         }
     }
 
-    /**
-     * What a caller thread may reach without a hop: each of these holds no host state, guards its
-     * own, or hands it to the dispatcher that posts to globalQueue. Everything else still refuses.
-     */
     @Test fun the_calls_a_caller_thread_may_make_answer_on_it() {
         val plugin = startPlugin("caller-ui", "unsafe.jvm")
         val engine = QuickJs()
@@ -118,7 +93,6 @@ class PluginCallerThreadTest {
         )
         logs.clear()
         try {
-            // `localStorage` is engine state reached under the caller's lease; `toast` is a void host call
             engine.evaluate("""
                 const fixture = inu.jvm.cls('desu.inugram.jvmfixture.JvmFixture');
                 fixture.setStaticField('task', inu.jvm.runnable(() => {
@@ -127,18 +101,17 @@ class PluginCallerThreadTest {
                     fixture.setStaticField('tag', localStorage.getItem('caller') ?? 'missing');
                 }));
             """.trimIndent())
-            runOnCaller("ui-caller")
+            runOnCaller(JvmFixture.task!!, "ui-caller")
             assertEquals(listOf("shown@ui-caller"), toasts.toList())
             assertEquals("written", JvmFixture.tag)
 
-            // the wake is armed from the caller thread; the callback still runs on globalQueue
             engine.evaluate("""
                 fixture.setStaticField('tag', 'not yet');
                 fixture.setStaticField('task', inu.jvm.runnable(() => {
                     setTimeout(() => fixture.setStaticField('tag', 'timer'), 0);
                 }));
             """.trimIndent())
-            runOnCaller("timer-caller")
+            runOnCaller(JvmFixture.task!!, "timer-caller")
             assertEquals("not yet", JvmFixture.tag, "the callback must not run on the caller thread")
             awaitTag("timer")
             assertEquals("timer", JvmFixture.tag)
@@ -147,31 +120,20 @@ class PluginCallerThreadTest {
             engine.evaluate("""
                 fixture.setStaticField('task', inu.jvm.runnable(() => { inu.ui.getCurrentScreen(); }));
             """.trimIndent())
-            runOnCaller("screen-caller")
+            runOnCaller(JvmFixture.task!!, "screen-caller")
             assertTrue(logs.any { it.contains("getCurrentScreen: this API requires the plugin queue") }, logs.toString())
         } finally {
-            engine.stopCallbacks()
-            PluginJvm.detach(plugin.session!!)
-            engine.close()
+            closeEngine(plugin)
             PluginLocalStorage.wipe(plugin.id)
-            JvmFixture.task = null
-            plugin.session = null
         }
     }
 
-    /** the wheel runs on real time: [TestQueues.advanceBy] moves the queue's clock and not rust's */
+    /** rust's timer wheel runs on real time, not the queue clock */
     private fun awaitTag(expected: String) {
         val until = System.currentTimeMillis() + 5000
         while (System.currentTimeMillis() < until && JvmFixture.tag != expected) {
             drain()
             Thread.sleep(5)
         }
-    }
-
-    private fun runOnCaller(name: String) {
-        val worker = Thread(JvmFixture.task!!, name)
-        worker.start()
-        worker.join(5000)
-        assertTrue(!worker.isAlive)
     }
 }

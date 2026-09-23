@@ -22,32 +22,27 @@ import org.telegram.messenger.Utilities
 import org.telegram.ui.LaunchActivity
 
 /**
- * Implements `inu.ui.pickFile` and `inu.ui.saveFile` using Android's document picker
- * (Rust: `api/ui/files.rs`). The user's selection grants access to that file; no plugin
- * grant is required, and the source path is not exposed.
- *
- * Copies content into plugin storage because the returned `File` can outlive the URI permission.
+ * The user's pick grants access to that file; no plugin grant is needed. Content is copied into plugin
+ * storage because the `File` can outlive the uri permission.
  */
 internal object PluginFilePicker : SessionResource {
 
-    /** what the app's cache can reasonably take a copy of, and what a plugin may be handed at once */
     internal const val MAX_PICK_BYTES = 256L * 1024 * 1024
 
     private const val COPY_CHUNK_BYTES = 256 * 1024
 
-    /** stock passes the code straight through [NotificationCenter.onActivityResultReceived], and it must fit 16 bits */
+    /** stock passes the code through [NotificationCenter.onActivityResultReceived]; it must fit 16 bits */
     private const val REQUEST_BASE = 0x7100
     private const val REQUEST_SPAN = 0x80
 
     private var nextRequest = 0
 
-    /** the result observers a plugin is still waiting on */
     private val waiting = OwnerRegistry<PluginSession, NotificationCenter.NotificationCenterDelegate>()
 
-    /** a copy made for a plugin nobody is waiting for any more is deleted rather than left in its spill directory */
+    /** copies for a plugin nobody waits on any more are deleted */
     internal class Picked(val wire: String, val copies: List<File> = emptyList())
 
-    /** on the ui thread: a picker [launch] posted before this teardown registers its observer there first */
+    /** ui thread: a picker [launch] posted before this teardown registers its observer there first */
     override fun detach(session: PluginSession) {
         AndroidUtilities.runOnUIThread {
             val center = NotificationCenter.getGlobalInstance()
@@ -70,7 +65,7 @@ internal object PluginFilePicker : SessionResource {
                 if (types.size > 1) putExtra(Intent.EXTRA_MIME_TYPES, types.toTypedArray())
                 if (multiple) putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
             }
-        }) { data -> copyIn(session, urisOf(data), multiple) }
+        }) { data -> copyIn(session, collectUris(data), multiple) }
     }
 
     fun save(session: PluginSession, requestId: Long, optionsJson: String): String? {
@@ -95,12 +90,7 @@ internal object PluginFilePicker : SessionResource {
         }
     }
 
-    /**
-     * Launches the picker on the UI thread and receives its result through
-     * [NotificationCenter.onActivityResultReceived], stock's callback for non-fragment consumers.
-     * Copies files and prepares the response off the UI thread. Drops responses after teardown,
-     * when the plugin's promises no longer exist.
-     */
+    /** [NotificationCenter.onActivityResultReceived] is stock's callback for non-fragment consumers */
     private fun launch(
         session: PluginSession,
         requestId: Long,
@@ -150,7 +140,6 @@ internal object PluginFilePicker : SessionResource {
         return null
     }
 
-    /** the two halves of a registration always come off together: the centre's and the session's */
     private fun unwatch(session: PluginSession, observer: NotificationCenter.NotificationCenterDelegate) {
         NotificationCenter.getGlobalInstance().removeObserver(observer, NotificationCenter.onActivityResultReceived)
         waiting.remove(session) { it === observer }
@@ -162,17 +151,14 @@ internal object PluginFilePicker : SessionResource {
         }
     }
 
-    private fun urisOf(data: Intent?): List<Uri> {
+    private fun collectUris(data: Intent?): List<Uri> {
         if (data == null) return emptyList()
         val clip = data.clipData
         if (clip != null) return (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).uri }
         return listOfNotNull(data.data)
     }
 
-    /**
-     * The copies the plugin is handed, or nothing at all: a pick that fails halfway leaves no file
-     * behind, and neither does a picker that answered with more files than were asked for.
-     */
+    /** all or nothing: a half-failed pick, or a picker answering with more files than asked, leaves no file */
     internal fun copyIn(session: PluginSession, uris: List<Uri>, multiple: Boolean): Picked {
         val wanted = if (multiple) uris else uris.take(1)
         if (wanted.isEmpty()) return Picked(PluginWire.encodeJson("[]"))
@@ -214,13 +200,15 @@ internal object PluginFilePicker : SessionResource {
         return Picked(PluginWire.encodeJson(out.toString()), copies)
     }
 
-    /**
-     * Counts bytes while copying because providers, including cloud providers, may omit size.
-     * Returns an error wire on failure, null on success.
-     */
+    /** providers (cloud ones especially) may omit size. null on success */
     private fun copy(uri: Uri, target: File, described: Described, log: PluginLog): String? {
         val resolver = ApplicationLoader.applicationContext.contentResolver
-        if (described.size > MAX_PICK_BYTES) return tooBig(described.name, described.size)
+        if (described.size > MAX_PICK_BYTES) {
+            return PluginWire.encodePluginError(
+                "quota-exceeded",
+                "pickFile: '${described.name}' is ${described.size} bytes, over the $MAX_PICK_BYTES that may be picked at once",
+            )
+        }
         var written = 0L
         try {
             val input = resolver.openInputStream(uri) ?: return PluginWire.encodePluginError(
@@ -234,7 +222,12 @@ internal object PluginFilePicker : SessionResource {
                         val read = source.read(buffer)
                         if (read < 0) break
                         written += read
-                        if (written > MAX_PICK_BYTES) return tooBig(described.name, written)
+                        if (written > MAX_PICK_BYTES) {
+                            return PluginWire.encodePluginError(
+                                "quota-exceeded",
+                                "pickFile: '${described.name}' is over the $MAX_PICK_BYTES bytes that may be picked at once",
+                            )
+                        }
                         sink.write(buffer, 0, read)
                     }
                 }
@@ -246,11 +239,6 @@ internal object PluginFilePicker : SessionResource {
         return null
     }
 
-    private fun tooBig(name: String, size: Long): String = PluginWire.encodePluginError(
-        "quota-exceeded",
-        "pickFile: '$name' is over $MAX_PICK_BYTES bytes ($size so far), which is more than may be picked at once",
-    )
-
     private fun copyOut(source: File, target: Uri): String {
         val resolver = ApplicationLoader.applicationContext.contentResolver
         val stream = resolver.openOutputStream(target)
@@ -261,7 +249,6 @@ internal object PluginFilePicker : SessionResource {
 
     private class Described(val name: String, val mime: String, val size: Long)
 
-    /** what the provider says about the file, the uri itself saying nothing a name can be read off */
     private fun describe(uri: Uri): Described {
         val resolver = ApplicationLoader.applicationContext.contentResolver
         val mime = resolver.getType(uri).orEmpty()

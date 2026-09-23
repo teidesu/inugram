@@ -1,8 +1,7 @@
 (natives, PluginError, ops) => {
-  const invalid = message => new PluginError('invalid-argument', message)
 
   const named = (what, value) => {
-    if (typeof value !== 'string' || value.length === 0) throw invalid(`${what}: expected a name`)
+    if (typeof value !== 'string' || value.length === 0) throw new PluginError('invalid-argument', `${what}: expected a name`)
     return value
   }
 
@@ -26,7 +25,7 @@
     },
     getDeclaredConstructor(descriptor) {
       if (typeof descriptor !== 'string' || !/^\([^)]*\)V$/.test(descriptor)) {
-        throw invalid('getDeclaredConstructor: expected a JVM constructor descriptor')
+        throw new PluginError('invalid-argument', 'getDeclaredConstructor: expected a JVM constructor descriptor')
       }
       return natives.method(this, `<init>${descriptor}`)
     },
@@ -94,12 +93,12 @@
    */
   const flattenCapture = (value, flat, what) => {
     if (Array.isArray(value)) return value.map(item => flattenCapture(item, flat, what))
-    if (flat.length >= MAX_FLAT_CAPTURES) throw invalid('routine: too many captured values')
+    if (flat.length >= MAX_FLAT_CAPTURES) throw new PluginError('invalid-argument', 'routine: too many captured values')
     const type = typeof value
     const scalar = value === null || value === undefined
       || type === 'boolean' || type === 'number' || type === 'bigint' || type === 'string'
     if (!scalar && !natives.isRef(value) && !(value instanceof Uint8Array)) {
-      throw invalid(`routine: ${what} must be a scalar, bytes, a java handle, or an array of those`)
+      throw new PluginError('invalid-argument', `routine: ${what} must be a scalar, bytes, a java handle, or an array of those`)
     }
     flat.push(value)
     return -1
@@ -107,17 +106,17 @@
 
   const buildRoutine = (program, captures, hookMode = false) => {
     if (typeof program === 'function') {
-      throw invalid('routine: a routine body is compiled by @inugram/cli, so build the plugin with it')
+      throw new PluginError('invalid-argument', 'routine: a routine body is compiled by @inugram/cli, so build the plugin with it')
     }
     if (!program || typeof program !== 'object' || Array.isArray(program)) {
-      throw invalid('routine: expected a compiled routine')
+      throw new PluginError('invalid-argument', 'routine: expected a compiled routine')
     }
-    if (program.v !== 1) throw invalid('routine: unsupported routine version')
-    if (!Array.isArray(program.code)) throw invalid('routine: expected an instruction list')
+    if (program.v !== 1) throw new PluginError('invalid-argument', 'routine: unsupported routine version')
+    if (!Array.isArray(program.code)) throw new PluginError('invalid-argument', 'routine: expected an instruction list')
     const names = Array.isArray(program.captures) ? program.captures : []
     const given = captures === undefined ? [] : captures
-    if (!Array.isArray(given)) throw invalid('routine: expected an array of captured values')
-    if (given.length !== names.length) throw invalid('routine: the captured values do not match the routine')
+    if (!Array.isArray(given)) throw new PluginError('invalid-argument', 'routine: expected an array of captured values')
+    if (given.length !== names.length) throw new PluginError('invalid-argument', 'routine: the captured values do not match the routine')
 
     const flat = []
     const layout = given.map((value, index) => flattenCapture(value, flat, `capture '${names[index]}'`))
@@ -137,7 +136,7 @@
     },
 
     fromTl(value) {
-      if (value === null || typeof value !== 'object') throw invalid('fromTl: expected a TL object')
+      if (value === null || typeof value !== 'object') throw new PluginError('invalid-argument', 'fromTl: expected a TL object')
       return natives.fromTl(value)
     },
     toTl(handle) {
@@ -145,7 +144,7 @@
     },
 
     runnable(callback) {
-      if (typeof callback !== 'function') throw invalid('runnable: expected a function')
+      if (typeof callback !== 'function') throw new PluginError('invalid-argument', 'runnable: expected a function')
       return natives.runnable(callback)
     },
 
@@ -162,54 +161,54 @@
       } else {
         named('defineClass', name)
       }
-      if (!spec || typeof spec !== 'object' || Array.isArray(spec)) throw invalid('defineClass: expected a class specification')
+      if (!spec || typeof spec !== 'object' || Array.isArray(spec)) throw new PluginError('invalid-argument', 'defineClass: expected a class specification')
       for (const key of Object.keys(spec)) {
-        if (!['superclass', 'interfaces', 'fields', 'staticFields', 'methods', 'staticMethods', 'constructors'].includes(key)) throw invalid(`defineClass: unknown option ${key}`)
+        if (!['superclass', 'interfaces', 'fields', 'staticFields', 'methods', 'staticMethods', 'constructors'].includes(key)) throw new PluginError('invalid-argument', `defineClass: unknown option ${key}`)
       }
 
       const values = []
       const capture = (value) => { values.push(value); return values.length - 1 }
       const typeList = (value) => {
         if (value === undefined) return null
-        if (!Array.isArray(value) || value.some(type => typeof type !== 'string' || !type)) throw invalid('defineClass: params must be type names')
+        if (!Array.isArray(value) || value.some(type => typeof type !== 'string' || !type)) throw new PluginError('invalid-argument', 'defineClass: params must be type names')
         return value
       }
 
       const body = (value) => {
         if (typeof value === 'function') return ['js', capture(value)]
         if (natives.isRef(value)) return ['routine', capture(value)]
-        throw invalid('defineClass: expected a JS function or JVM routine body')
+        throw new PluginError('invalid-argument', 'defineClass: expected a JS function or JVM routine body')
       }
       const definition = { name, superclass: null, interfaces: [], fields: [], methods: [] }
       const handle = (value, what) => {
-        if (!natives.isRef(value)) throw invalid(`${what}: expected a java class, object, method or field`)
+        if (!natives.isRef(value)) throw new PluginError('invalid-argument', `${what}: expected a java class, object, method or field`)
         return value
       }
       if (spec.superclass !== undefined) {
         definition.superclass = capture(handle(spec.superclass, 'defineClass superclass'))
       }
       if (spec.interfaces !== undefined) {
-        if (!Array.isArray(spec.interfaces)) throw invalid('defineClass: interfaces must be an array')
+        if (!Array.isArray(spec.interfaces)) throw new PluginError('invalid-argument', 'defineClass: interfaces must be an array')
         definition.interfaces = spec.interfaces.map(value => capture(handle(value, 'defineClass interface')))
       }
 
       for (const [key, isStatic] of [['fields', false], ['staticFields', true]]) {
         if (spec[key] === undefined) continue
-        if (!spec[key] || typeof spec[key] !== 'object' || Array.isArray(spec[key])) throw invalid(`defineClass: invalid ${key}`)
+        if (!spec[key] || typeof spec[key] !== 'object' || Array.isArray(spec[key])) throw new PluginError('invalid-argument', `defineClass: invalid ${key}`)
         for (const [field, type] of Object.entries(spec[key])) definition.fields.push([field, named('defineClass field type', type), isStatic])
       }
 
       for (const [key, isStatic] of [['methods', false], ['staticMethods', true]]) {
         if (spec[key] === undefined) continue
-        if (!spec[key] || typeof spec[key] !== 'object' || Array.isArray(spec[key])) throw invalid(`defineClass: invalid ${key}`)
+        if (!spec[key] || typeof spec[key] !== 'object' || Array.isArray(spec[key])) throw new PluginError('invalid-argument', `defineClass: invalid ${key}`)
         for (const [method, value] of Object.entries(spec[key])) {
           const items = Array.isArray(value) ? value : [typeof value === 'function' ? { body: value } : value]
           for (const item of items) {
-            if (!item || typeof item !== 'object' || Array.isArray(item)) throw invalid('defineClass: invalid method specification')
+            if (!item || typeof item !== 'object' || Array.isArray(item)) throw new PluginError('invalid-argument', 'defineClass: invalid method specification')
             for (const key of Object.keys(item)) {
-              if (!['params', 'returns', 'body'].includes(key)) throw invalid(`defineClass: unknown method option ${key}`)
+              if (!['params', 'returns', 'body'].includes(key)) throw new PluginError('invalid-argument', `defineClass: unknown method option ${key}`)
             }
-            if (Array.isArray(value) && item.params === undefined) throw invalid(`defineClass: overloads of ${method} need explicit params`)
+            if (Array.isArray(value) && item.params === undefined) throw new PluginError('invalid-argument', `defineClass: overloads of ${method} need explicit params`)
             definition.methods.push({
               name: method,
               params: typeList(item.params),
@@ -223,21 +222,21 @@
       }
 
       const constructors = spec.constructors === undefined ? [{}] : spec.constructors
-      if (!Array.isArray(constructors)) throw invalid('defineClass: constructors must be an array')
+      if (!Array.isArray(constructors)) throw new PluginError('invalid-argument', 'defineClass: constructors must be an array')
       for (const item of constructors) {
-        if (!item || typeof item !== 'object' || Array.isArray(item)) throw invalid('defineClass: invalid constructor specification')
+        if (!item || typeof item !== 'object' || Array.isArray(item)) throw new PluginError('invalid-argument', 'defineClass: invalid constructor specification')
         for (const key of Object.keys(item)) {
-          if (!['params', 'super', 'superParams', 'init'].includes(key)) throw invalid(`defineClass: unknown constructor option ${key}`)
+          if (!['params', 'super', 'superParams', 'init'].includes(key)) throw new PluginError('invalid-argument', `defineClass: unknown constructor option ${key}`)
         }
         const computed = typeof item.super === 'function' || natives.isRef(item.super)
-        if (!computed && item.superParams !== undefined) throw invalid('defineClass: superParams go with a super function')
+        if (!computed && item.superParams !== undefined) throw new PluginError('invalid-argument', 'defineClass: superParams go with a super function')
         const args = item.super === undefined || computed ? [] : item.super
-        if (!Array.isArray(args)) throw invalid('defineClass: super must be an array, a function or a JVM routine')
+        if (!Array.isArray(args)) throw new PluginError('invalid-argument', 'defineClass: super must be an array, a function or a JVM routine')
         const superArgs = args.map((value) => {
-          if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length !== 1) throw invalid('defineClass: invalid super argument')
+          if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length !== 1) throw new PluginError('invalid-argument', 'defineClass: invalid super argument')
           if (Object.hasOwn(value, 'arg') && Number.isInteger(value.arg) && value.arg >= 0) return { arg: value.arg }
           if (Object.hasOwn(value, 'value') && typeof value.value !== 'function') return { value: capture(value.value) }
-          throw invalid('defineClass: expected super arg index or constant value')
+          throw new PluginError('invalid-argument', 'defineClass: expected super arg index or constant value')
         })
         const superFunction = item.super
         // a constructor's own `this` does not exist yet, so the super function takes the arguments alone
@@ -255,14 +254,13 @@
         })
       }
 
-      if (definition.methods.length > 256 || definition.fields.length > 256 || definition.interfaces.length > 64) throw invalid('defineClass: too many members or interfaces')
       const [type, fqn] = natives.defineClass(JSON.stringify(definition), values)
       Object.defineProperty(type, 'name', { value: fqn, configurable: true })
       return type
     },
 
     superOf() {
-      throw invalid('inu.jvm.superOf only works inside an inu.jvm.routine body, as inu.jvm.superOf(this).method(...)')
+      throw new PluginError('invalid-argument', 'inu.jvm.superOf only works inside an inu.jvm.routine body, as inu.jvm.superOf(this).method(...)')
     },
 
     callSuper(cls, self, method, ...args) {

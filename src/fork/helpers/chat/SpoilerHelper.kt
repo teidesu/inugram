@@ -39,7 +39,7 @@ object SpoilerHelper {
 
     // UI-thread only; weak so released effects don't pin entries.
     private val states = WeakHashMap<SpoilerEffect, State>()
-    private fun stateOf(e: SpoilerEffect) = states.getOrPut(e) { State() }
+    private fun getState(e: SpoilerEffect) = states.getOrPut(e) { State() }
 
     private val solidPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val tempPath = Path()
@@ -61,7 +61,7 @@ object SpoilerHelper {
 
         if (mode == InuConfig.TextSpoilerModeItem.EPSTEIN) {
             solidPaint.color = Color.BLACK
-            solidPaint.alpha = (mAlpha * stateOf(effect).drawAlphaMultiplier).toInt().coerceIn(0, 0xFF)
+            solidPaint.alpha = (mAlpha * getState(effect).drawAlphaMultiplier).toInt().coerceIn(0, 0xFF)
             canvas.drawRect(bounds, solidPaint)
             return true
         }
@@ -73,7 +73,7 @@ object SpoilerHelper {
         // mAlpha to 0 — both would visibly change the overlay. We pin a constant color
         // (captured pre-reveal) and constant alpha, letting the ripple-path PorterDuff.CLEAR
         // be the only visible change.
-        val state = stateOf(effect)
+        val state = getState(effect)
         if (effect.rippleProgress < 0) state.baseColor = lastColor
         val alphaScale = if (isOutgoingBubble(parent)) 0.45f else 0.25f
         solidPaint.color = state.baseColor
@@ -105,7 +105,7 @@ object SpoilerHelper {
 
     @JvmStatic
     fun setDrawAlphaMultiplier(effect: SpoilerEffect, alpha: Float) {
-        stateOf(effect).drawAlphaMultiplier = alpha.coerceIn(0f, 1f)
+        getState(effect).drawAlphaMultiplier = alpha.coerceIn(0f, 1f)
     }
 
     @JvmStatic
@@ -270,7 +270,7 @@ object SpoilerHelper {
         }
         for (s in spoilers) {
             if (!s.inu_isTextSpoiler || s.bounds.isEmpty) continue
-            stateOf(s).apply {
+            getState(s).apply {
                 prevLeft = Float.NaN; prevRight = Float.NaN
                 nextLeft = Float.NaN; nextRight = Float.NaN
             }
@@ -278,7 +278,7 @@ object SpoilerHelper {
         for (i in spoilers.indices) {
             val a = spoilers[i]
             if (!a.inu_isTextSpoiler || a.bounds.isEmpty) continue
-            val ast = stateOf(a)
+            val ast = getState(a)
             val ab = a.bounds
             for (j in spoilers.indices) {
                 if (i == j) continue

@@ -34,7 +34,7 @@ class PluginActionsTest {
     private val chat = ActionSurface.chat(0, 4242L, null)
 
     @Test
-    fun rowsFollowThePluginListRatherThanTheOrderRegistrationsArrived() {
+    fun rows_follow_the_plugin_list_rather_than_the_order_registrations_arrived() {
         val second = startPlugin("second")
         val first = startPlugin("first")
         PluginActions.register(second.session!!, PluginActions.KIND_CHAT, 1, "b")
@@ -49,7 +49,7 @@ class PluginActionsTest {
     }
 
     @Test
-    fun aSecretChatIsNeverRenderedAndNoEngineIsEvenAsked() {
+    fun a_secret_chat_is_never_rendered_and_no_engine_is_even_asked() {
         val plugin = startPlugin("p")
         PluginActions.register(plugin.session!!, PluginActions.KIND_CHAT, 1, "a")
         plugin.answers(1 to "row")
@@ -139,7 +139,7 @@ class PluginActionsTest {
     }
 
     @Test
-    fun aRowWhoseEngineIsNoLongerListedDoesNothingWhenTapped() {
+    fun a_row_whose_engine_is_no_longer_listed_does_nothing_when_tapped() {
         val plugin = startPlugin("p")
         PluginActions.register(plugin.session!!, PluginActions.KIND_CHAT, 7, "a")
         plugin.answers(7 to "row")
@@ -216,7 +216,7 @@ class PluginActionsTest {
     }
 
     @Test
-    fun anEngineThatCouldNotAnswerContributesNothingAndTheRestStillDraw() {
+    fun an_engine_that_could_not_answer_contributes_nothing_and_the_rest_still_draw() {
         val broken = startPlugin("broken")
         val fine = startPlugin("fine")
         PluginActions.register(broken.session!!, PluginActions.KIND_CHAT, 1, "a")
@@ -228,14 +228,16 @@ class PluginActionsTest {
     }
 
     @Test
-    fun theRowCountIsAnswerableWithoutEnteringAnyEngineAndFollowsRegistrations() {
+    fun the_row_count_is_answerable_without_entering_any_engine_and_follows_registrations() {
         val plugin = startPlugin("p")
         assertEquals(0, PluginActions.rowCount(PluginActions.KIND_CHAT))
 
         assertNull(PluginActions.register(plugin.session!!, PluginActions.KIND_CHAT, 1, "a"))
         assertNull(PluginActions.register(plugin.session!!, PluginActions.KIND_CHAT, 2, "b"))
         assertEquals(2, PluginActions.rowCount(PluginActions.KIND_CHAT))
+        assertNull(PluginActions.register(plugin.session!!, PluginActions.KIND_MESSAGE, 3, "c", PluginActions.MESSAGE_PLACEMENT_SELECTION))
         assertEquals(0, PluginActions.rowCount(PluginActions.KIND_MESSAGE))
+        assertEquals(1, PluginActions.rowCount(PluginActions.KIND_MESSAGE, PluginActions.MESSAGE_PLACEMENT_SELECTION))
         assertTrue(plugin.js.actionRenders.isEmpty())
 
         PluginActions.unregister(plugin.js, PluginActions.KIND_CHAT, 1)
@@ -243,24 +245,6 @@ class PluginActionsTest {
 
         PluginActions.detach(plugin.session!!)
         assertEquals(0, PluginActions.rowCount(PluginActions.KIND_CHAT))
-    }
-
-    @Test
-    fun message_placements_have_independent_counts() {
-        val plugin = startPlugin("p")
-        PluginActions.register(
-            plugin.session!!,
-            PluginActions.KIND_MESSAGE,
-            1,
-            "selection",
-            PluginActions.MESSAGE_PLACEMENT_SELECTION,
-        )
-
-        assertEquals(0, PluginActions.rowCount(PluginActions.KIND_MESSAGE))
-        assertEquals(
-            1,
-            PluginActions.rowCount(PluginActions.KIND_MESSAGE, PluginActions.MESSAGE_PLACEMENT_SELECTION),
-        )
     }
 
     @Test
@@ -283,18 +267,7 @@ class PluginActionsTest {
     }
 
     @Test
-    fun the_action_row_cap_is_enforced() {
-        val cap = 8
-        val plugin = startPlugin("p")
-        for (token in 1..cap) {
-            assertNull(PluginActions.register(plugin.session!!, PluginActions.KIND_CHAT, token, "row$token"))
-        }
-        assertNotNull(PluginActions.register(plugin.session!!, PluginActions.KIND_CHAT, cap + 1, "over"))
-        assertEquals(cap, PluginActions.rowCount(PluginActions.KIND_CHAT))
-    }
-
-    @Test
-    fun theNinthRowIsRefusedButUpdatingOneOfTheEightIsNot() {
+    fun the_ninth_row_is_refused_but_updating_one_of_the_eight_is_not() {
         val plugin = startPlugin("p")
         for (token in 1..8) {
             assertNull(PluginActions.register(plugin.session!!, PluginActions.KIND_CHAT, token, "row$token"))
@@ -302,15 +275,14 @@ class PluginActionsTest {
         assertNotNull(PluginActions.register(plugin.session!!, PluginActions.KIND_CHAT, 9, "row9"))
         assertEquals(8, PluginActions.rowCount(PluginActions.KIND_CHAT))
 
-        // the engine allocates the replacement's token first and retires the displaced one after,
-        // which is what a count-only cap would refuse
+        // the engine mints the replacement's token before retiring the old one
         assertNull(PluginActions.register(plugin.session!!, PluginActions.KIND_CHAT, 10, "row1"))
         PluginActions.unregister(plugin.js, PluginActions.KIND_CHAT, 1)
         assertEquals(8, PluginActions.rowCount(PluginActions.KIND_CHAT))
     }
 
     @Test
-    fun aDetachedEngineIsNeitherCountedNorAskedNorDispatchedTo() {
+    fun a_detached_engine_is_neither_counted_nor_asked_nor_dispatched_to() {
         val plugin = startPlugin("p")
         PluginActions.register(plugin.session!!, PluginActions.KIND_CHAT, 1, "a")
         plugin.answers(1 to "row")
@@ -321,7 +293,7 @@ class PluginActionsTest {
     }
 
     @Test
-    fun anEditorOpNamingAComposerThatIsGoneIsRefusedRatherThanDroppedSilently() {
+    fun an_editor_op_naming_a_composer_that_is_gone_is_refused_rather_than_dropped_silently() {
         val refusal = PluginActions.editorOp(PluginActions.EDITOR_REPLACE, 404L, """{"text":"hi"}""")
         assertPluginError("handle-expired", refusal)
     }

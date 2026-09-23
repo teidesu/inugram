@@ -54,7 +54,7 @@ object LinkPreviewSpoilerHelper {
     private const val BLUR_SCALE = 0.2f
 
     private val states = WeakHashMap<ChatMessageCell, State>()
-    private fun stateOf(cell: ChatMessageCell) = states.getOrPut(cell) { State() }
+    private fun getState(cell: ChatMessageCell) = states.getOrPut(cell) { State() }
 
     private val backingPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val bitmapPaint = Paint(Paint.FILTER_BITMAP_FLAG)
@@ -101,7 +101,7 @@ object LinkPreviewSpoilerHelper {
 
     @JvmStatic
     fun onMessageContent(cell: ChatMessageCell, hasLinkPreview: Boolean) {
-        val state = stateOf(cell)
+        val state = getState(cell)
         if (state.rebinding) return
         val msg = cell.messageObject
         state.spoilered = hasLinkPreview && hasLinkPreviewSpoiler(msg)

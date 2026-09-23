@@ -1,3 +1,4 @@
+use crate::api::url;
 use crate::runtime::Dispose;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -6,10 +7,10 @@ use rquickjs::convert::Coerced;
 use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, Runtime, TypedArray, Value};
 
 use crate::api::error::PluginErrorCode;
-use crate::api::io::blob::{mint_app_file_at, BlobState, BUILD_LIMIT_BYTES};
-use crate::runtime::{pump_jobs, PendingTable};
+use crate::api::io::blob::{self, mint_app_file_at, BlobHandle, BUILD_LIMIT_BYTES};
+use crate::runtime::PendingTable;
 use crate::sandbox::grants::{GrantHost, MATCH_DOMAIN};
-use crate::utils::prelude;
+use crate::utils::qjs::{qjs_load_prelude, qjs_read_typed_bytes};
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/fetch.qbc"));
 
@@ -29,13 +30,8 @@ pub trait FetchHost {
 pub struct FetchState {
   host: Rc<dyn FetchHost>,
   grants: Rc<dyn GrantHost>,
-  blobs: Rc<BlobState>,
   log: crate::Log,
   pending: PendingTable<()>,
-}
-
-fn parse_target(url: &str) -> Result<String, String> {
-  crate::api::url::parse_http_url("fetch", url)
 }
 
 /// rfc7230's token, which is what a header name and a method are allowed to be
@@ -61,6 +57,10 @@ fn coerce_string<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<String> {
 
 const HTTP_WHITESPACE: [char; 4] = ['\t', '\n', '\r', ' '];
 
+fn is_header_value(value: &str) -> bool {
+  !value.chars().any(|c| (c < ' ' && c != '\t') || c == '\u{7f}' || c > '\u{ff}')
+}
+
 fn normalize_header_name<'js>(ctx: &Ctx<'js>, name: &str) -> JsResult<String> {
   if !is_token(name) {
     return Err(Exception::throw_type(ctx, &format!("'{name}' is not a header name")));
@@ -68,10 +68,9 @@ fn normalize_header_name<'js>(ctx: &Ctx<'js>, name: &str) -> JsResult<String> {
   Ok(name.to_ascii_lowercase())
 }
 
-/// what `Headers` accepts, per WHATWG: a byte string without NUL or a line break once trimmed
 fn normalize_header_value<'js>(ctx: &Ctx<'js>, value: &str) -> JsResult<String> {
   let value = value.trim_matches(HTTP_WHITESPACE);
-  if value.chars().any(|c| matches!(c, '\0' | '\r' | '\n') || c > '\u{ff}') {
+  if !is_header_value(value) {
     return Err(Exception::throw_type(ctx, &format!("'{value}' is not a header value")));
   }
   Ok(value.to_string())
@@ -96,10 +95,10 @@ fn read_header_pairs<'js>(ctx: &Ctx<'js>, headers: Value<'js>) -> JsResult<Vec<S
   for pair in pairs.chunks_exact_mut(2) {
     let name = normalize_header_name(ctx, &pair[0])?;
     if RESERVED_HEADERS.contains(&name.as_str()) {
-      return PluginErrorCode::InvalidArgument.throw(ctx, &format!("fetch: the '{name}' header belongs to the transport"));
+      return PluginErrorCode::InvalidArgument
+        .throw(ctx, &format!("fetch: the '{name}' header belongs to the transport"));
     }
-    // a line break in a value is a second header, and a request the plugin did not write
-    if pair[1].chars().any(|c| (c < ' ' && c != '\t') || c == '\u{7f}') {
+    if !is_header_value(&pair[1]) {
       return Err(Exception::throw_type(ctx, &format!("fetch: the '{name}' header has a control character in it")));
     }
     pair[0] = name;
@@ -108,14 +107,13 @@ fn read_header_pairs<'js>(ctx: &Ctx<'js>, headers: Value<'js>) -> JsResult<Vec<S
 }
 
 fn read_spec<'js>(ctx: &Ctx<'js>, method: Value<'js>, headers: Value<'js>, redirect: Value<'js>) -> JsResult<Spec> {
-  let invalid = |message: String| PluginErrorCode::InvalidArgument.throw::<Spec>(ctx, &message);
   let redirect = if redirect.is_undefined() { "follow".to_string() } else { coerce_string(ctx, redirect)? };
   if !REDIRECT_MODES.contains(&redirect.as_str()) {
-    return invalid(format!("fetch: '{redirect}' is not a redirect mode"));
+    return PluginErrorCode::InvalidArgument.throw(ctx, &format!("fetch: '{redirect}' is not a redirect mode"));
   }
   let method = if method.is_undefined() { "GET".to_string() } else { coerce_string(ctx, method)? };
   if !is_token(&method) {
-    return invalid(format!("fetch: '{method}' is not a method"));
+    return PluginErrorCode::InvalidArgument.throw(ctx, &format!("fetch: '{method}' is not a method"));
   }
   Ok(Spec {
     method: method.to_ascii_uppercase(),
@@ -124,83 +122,46 @@ fn read_spec<'js>(ctx: &Ctx<'js>, method: Value<'js>, headers: Value<'js>, redir
   })
 }
 
-enum BodyError {
-  HandleExpired(String),
-  InvalidArgument(String),
-  QuotaExceeded { usage: u64, message: String },
-}
-
-impl BodyError {
-  fn message(&self) -> &str {
-    match self {
-      Self::HandleExpired(message) | Self::InvalidArgument(message) => message,
-      Self::QuotaExceeded { message, .. } => message,
-    }
-  }
-
-  fn code(&self) -> PluginErrorCode<'_> {
-    match self {
-      Self::HandleExpired(_) => PluginErrorCode::HandleExpired,
-      Self::InvalidArgument(_) => PluginErrorCode::InvalidArgument,
-      Self::QuotaExceeded { usage, .. } => PluginErrorCode::QuotaExceeded(
-        i64::try_from(*usage).unwrap_or(i64::MAX),
-        i64::try_from(BUILD_LIMIT_BYTES).unwrap_or(i64::MAX),
-      ),
-    }
-  }
-}
-
 impl FetchState {
-  fn read_body(&self, value: &Value<'_>) -> Result<Option<Vec<u8>>, BodyError> {
+  fn read_body<'js>(&self, ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<Option<Vec<u8>>> {
     if value.is_undefined() || value.is_null() {
       return Ok(None);
     }
     if let Some(text) = value.as_string() {
-      let text = text.to_string().map_err(|e| BodyError::InvalidArgument(format!("fetch: {e:?}")))?;
-      return Ok(Some(text.into_bytes()));
+      return Ok(Some(text.to_string()?.into_bytes()));
     }
     if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
-      // SAFETY: no javascript runs while the slice is borrowed
-      let Some(bytes) = (unsafe { typed.as_bytes() }) else {
-        return Err(BodyError::InvalidArgument("fetch: the body array is detached".to_string()));
+      let Some(bytes) = qjs_read_typed_bytes(&typed, <[u8]>::to_vec) else {
+        return PluginErrorCode::InvalidArgument.throw(ctx, "fetch: the body array is detached");
       };
-      return Ok(Some(bytes.to_vec()));
-    }
-    if let Some(wire) = self.blobs.export_for_host(value) {
-      let id = crate::api::io::blob::export_id_of(&wire).unwrap_or(0);
-      let Some(export) = self.blobs.resolve_export(id) else {
-        return Err(BodyError::HandleExpired("fetch: the body blob is gone".to_string()));
-      };
-      if export.len() > BUILD_LIMIT_BYTES {
-        return Err(BodyError::QuotaExceeded {
-          usage: export.len(),
-          message: format!(
-            "fetch: a request body is capped at {BUILD_LIMIT_BYTES} bytes; use uploadFile for anything bigger"
-          ),
-        });
-      }
-      let bytes = export
-        .read(0, export.len())
-        .map_err(|_| BodyError::HandleExpired("fetch: the body blob is gone".to_string()))?;
       return Ok(Some(bytes));
     }
-    if rquickjs::Class::<crate::api::io::blob::BlobHandle>::from_value(value).is_ok() {
-      return Err(BodyError::HandleExpired("fetch: the body blob was disposed".to_string()));
+    if let Some(export) = blob::export_blob(value) {
+      if export.len() > BUILD_LIMIT_BYTES {
+        return PluginErrorCode::QuotaExceeded(export.len() as i64, BUILD_LIMIT_BYTES as i64).throw(
+          ctx,
+          &format!("fetch: a request body is capped at {BUILD_LIMIT_BYTES} bytes; use uploadFile for anything bigger"),
+        );
+      }
+      return match export.read(0, export.len()) {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(_) => PluginErrorCode::HandleExpired.throw(ctx, "fetch: the body blob is gone"),
+      };
     }
-    Err(BodyError::InvalidArgument("fetch: the body must be a string, a Uint8Array or a Blob".to_string()))
+    if rquickjs::Class::<BlobHandle>::from_value(value).is_ok() {
+      return PluginErrorCode::HandleExpired.throw(ctx, "fetch: the body blob was disposed");
+    }
+    PluginErrorCode::InvalidArgument.throw(ctx, "fetch: the body must be a string, a Uint8Array or a Blob")
   }
 
   fn js_send<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, url: String, spec: Spec, body: Value<'js>) -> JsResult<Object<'js>> {
-    let host = match parse_target(&url) {
+    let host = match url::parse_http_url("fetch", &url) {
       Ok(host) => host,
       Err(message) => return PluginErrorCode::InvalidArgument.throw(ctx, &message),
     };
     self.grants.check_grant(ctx, "fetch", Some(&host), MATCH_DOMAIN)?;
 
-    let body = match self.read_body(&body) {
-      Ok(body) => body,
-      Err(error) => return error.code().throw(ctx, error.message()),
-    };
+    let body = self.read_body(ctx, &body)?;
 
     let mut request_id = 0;
     let promise = self.pending.park(ctx, (), |id| {
@@ -219,37 +180,26 @@ pub fn install_fetch<'js>(
   ctx: &Ctx<'js>,
   host: Rc<dyn FetchHost>,
   grants: Rc<dyn GrantHost>,
-  blobs: Rc<BlobState>,
   log: crate::Log,
   globals: &crate::api::Globals<'js>,
 ) -> JsResult<Rc<FetchState>> {
   let state = Rc::new(FetchState {
     host,
     grants,
-    blobs,
     log,
     pending: PendingTable::default(),
   });
 
   let natives = Object::new(ctx.clone())?;
-  {
-    let state = state.clone();
-    natives.set(
-      "send",
-      Function::new(
-        ctx.clone(),
-        move |ctx: Ctx<'js>,
-              url: String,
-              method: Value<'js>,
-              headers: Value<'js>,
-              redirect: Value<'js>,
-              body: Value<'js>| {
-          let spec = read_spec(&ctx, method, headers, redirect)?;
-          state.js_send(&ctx, url, spec, body)
-        },
-      )?,
-    )?;
-  }
+  set_fn!(natives, "send", ctx, state, move |ctx: Ctx<'js>,
+                                             url: String,
+                                             method: Value<'js>,
+                                             headers: Value<'js>,
+                                             redirect: Value<'js>,
+                                             body: Value<'js>| {
+    let spec = read_spec(&ctx, method, headers, redirect)?;
+    state.js_send(&ctx, url, spec, body)
+  });
   natives.set(
     "headerName",
     Function::new(ctx.clone(), |ctx: Ctx<'js>, name: Value<'js>| {
@@ -264,16 +214,10 @@ pub fn install_fetch<'js>(
       normalize_header_value(&ctx, &value)
     })?,
   )?;
-  {
-    let state = state.clone();
-    natives.set(
-      "abort",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, request_id: i64| {
-        state.pending.forget(&ctx, request_id);
-        state.host.abort(request_id);
-      })?,
-    )?;
-  }
+  set_fn!(natives, "abort", ctx, state, move |ctx: Ctx<'js>, request_id: i64| {
+    state.pending.forget(&ctx, request_id);
+    state.host.abort(request_id);
+  });
 
   let plugin_error = globals.plugin_error.clone();
   let timers = Object::new(ctx.clone())?;
@@ -282,7 +226,7 @@ pub fn install_fetch<'js>(
     timers.set(name, f)?;
   }
 
-  let factory = prelude::load(ctx, PRELUDE)?;
+  let factory = qjs_load_prelude(ctx, PRELUDE)?;
   factory.call::<_, ()>((natives, plugin_error, timers))?;
   Ok(state)
 }
@@ -295,9 +239,9 @@ fn mint_body<'js>(ctx: &Ctx<'js>, body: &Object<'js>) -> JsResult<Value<'js>> {
 
 impl FetchState {
   pub fn settle(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
-    let state = self;
-    context.with(|ctx| {
-      let settled = state.pending.settle(&ctx, request_id, result_wire, false, |ctx, _, wire| {
+    self
+      .pending
+      .settle_and_pump(rt, context, &self.log, "fetch", request_id, result_wire, |ctx, _, wire| {
         let json = wire
           .strip_prefix('J')
           .ok_or_else(|| rquickjs::Exception::throw_message(ctx, "fetch: malformed host response"))?;
@@ -314,11 +258,6 @@ impl FetchState {
         object.set("body", blob)?;
         Ok(object.into_value())
       });
-      if let Err(why) = settled {
-        (state.log)(&format!("fetch({request_id}) settle failed: {why}"));
-      }
-    });
-    pump_jobs(rt, context, state.log.as_ref());
   }
 }
 

@@ -16,14 +16,12 @@ export async function readFileHash(file: string): Promise<string | null> {
 export interface CopyTree {
   from: string
   into: string
-  /** Output name for each entry; defaults to its original name. */
-  rename?: (name: string) => string
-  /** Output content for each file; defaults to its original content. */
-  substitute?: (body: string) => string
+  rename: (name: string) => string
+  substitute: (body: string) => string
 }
 
 export async function copyTree(options: CopyTree): Promise<void> {
-  const { from, into, rename = name => name, substitute = body => body } = options
+  const { from, into, rename, substitute } = options
   for (const entry of await fs.readdir(from, { withFileTypes: true })) {
     const source = join(from, entry.name)
     const target = join(into, rename(entry.name))

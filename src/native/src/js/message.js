@@ -39,7 +39,7 @@
 
   const orNull = value => (value === undefined ? null : value)
 
-  const documentOf = (media) => {
+  const readDocument = (media) => {
     if (media === null || baseName(media) !== 'messageMediaDocument') return null
     const document = orNull(media.document)
     return document === null || baseName(document) === 'documentEmpty' ? null : document
@@ -146,14 +146,14 @@
     }
 
     get document() {
-      return documentOf(this.media)
+      return readDocument(this.media)
     }
 
     get mediaType() {
       const media = this.media
       if (media === null) return null
       const name = baseName(media)
-      if (name === 'messageMediaDocument') return documentMediaType(documentOf(media))
+      if (name === 'messageMediaDocument') return documentMediaType(readDocument(media))
       return MEDIA_TYPES[name] ?? 'other'
     }
 

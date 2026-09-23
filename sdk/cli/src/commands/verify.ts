@@ -8,7 +8,7 @@ import { dedentRoutineSource } from '../routines/emit.js'
 import { findRoutineCalls, parseFile } from '../routines/find.js'
 import { RoutineProgramSchema } from '../routines/ops.js'
 import { defineCommand } from '../utils/args.js'
-import { CliError, fail, messageAt, renderMessages, success } from '../utils/log.js'
+import { CliError, fail, messageAt, printMessages, success } from '../utils/log.js'
 import { describeIssue } from '../utils/schema.js'
 
 interface Verdict {
@@ -95,7 +95,7 @@ export function verifyFile(file: string, source: string): Verdict[] {
     if (call.arguments.length > 2) return { ...where, problem: 'has unexpected routine arguments' }
     let literal: unknown
     try {
-      literal = readLiteral(call.argument ?? null)
+      literal = readLiteral(call.body ?? null)
     } catch (error) {
       if (error instanceof CliError) return { ...where, problem: 'is not a compiled routine' }
       throw error
@@ -130,7 +130,7 @@ export function verifyFile(file: string, source: string): Verdict[] {
     }
 
     try {
-      const program = compileRoutine(expression, `(${recordedSource})`, { mode: call.mode, file: 'routine.ts' })
+      const program = compileRoutine(expression, `(${recordedSource})`, { mode: call.mode })
       if (
         JSON.stringify([program.v, program.captures, program.slots, program.code, program.tries])
         !== JSON.stringify([built.v, built.captures, built.slots, built.code, built.tries])
@@ -183,10 +183,7 @@ export const verifyCmd = defineCommand({
 
     if (problems.length > 0) {
       fail(`${problems.length} routine${problems.length === 1 ? '' : 's'} did not check out`)
-      for (const frame of await renderMessages(problems, 'error')) process.stdout.write(frame)
-    }
-
-    if (problems.length > 0) {
+      await printMessages(problems, 'error')
       process.exitCode = 1
       return
     }

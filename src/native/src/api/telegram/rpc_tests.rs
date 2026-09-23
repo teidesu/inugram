@@ -1,44 +1,30 @@
 use super::*;
 use crate::api::error::install_rejection_tracker;
-use crate::api::globals::RandomHost;
+use crate::api::telegram::account::tests::{TestAccountHost, TWO_ACCOUNTS};
 use crate::api::tl::proxy::TlHost;
-use crate::sandbox::grants::TestGrantHost;
+use crate::sandbox::grants::CachedGrantHost;
 use rquickjs::Context;
 
-/// counts up from a seed, so `crypto.getRandomValues` really writes through and two draws differ
 #[derive(Default)]
-struct CountingRandom(Cell<u8>);
-
-impl RandomHost for CountingRandom {
-  fn random_bytes(&self, out: &mut [u8]) -> bool {
-    for byte in out.iter_mut() {
-      self.0.set(self.0.get().wrapping_add(1));
-      *byte = self.0.get();
-    }
-    true
-  }
-}
-
-#[derive(Default)]
-struct TestHost {
-  registered: RefCell<Vec<(Vec<String>, u32, String, bool, String)>>,
-  unregistered: RefCell<Vec<u32>>,
-  next_calls: RefCell<Vec<(i64, String)>>,
-  invoke_calls: RefCell<Vec<(i64, i32, String)>>,
-  raw_calls: RefCell<Vec<(i64, i32, Vec<u8>)>>,
-  takeout_calls: RefCell<Vec<(i64, i32, i32, String, String)>>,
-  update_registered: RefCell<Vec<(u32, Vec<String>, String)>>,
-  update_unregistered: RefCell<Vec<u32>>,
-  intercept_update_registered: RefCell<Vec<(u32, Vec<String>)>>,
-  intercept_update_unregistered: RefCell<Vec<u32>>,
-  verdicts: RefCell<Vec<(i64, bool)>>,
-  intercept_update_register_err: RefCell<Option<String>>,
-  completes: RefCell<Vec<(i64, String)>>,
-  register_err: RefCell<Option<String>>,
-  update_register_err: RefCell<Option<String>>,
-  next_err: RefCell<Option<String>>,
-  tl_fields: RefCell<HashMap<String, String>>,
-  tl_released: RefCell<Vec<i64>>,
+pub(crate) struct TestHost {
+  pub(crate) registered: RefCell<Vec<(Vec<String>, u32, String, bool, String)>>,
+  pub(crate) unregistered: RefCell<Vec<u32>>,
+  pub(crate) next_calls: RefCell<Vec<(i64, String)>>,
+  pub(crate) invoke_calls: RefCell<Vec<(i64, i32, String)>>,
+  pub(crate) raw_calls: RefCell<Vec<(i64, i32, Vec<u8>)>>,
+  pub(crate) takeout_calls: RefCell<Vec<(i64, i32, i32, String, String)>>,
+  pub(crate) update_registered: RefCell<Vec<(u32, Vec<String>, String)>>,
+  pub(crate) update_unregistered: RefCell<Vec<u32>>,
+  pub(crate) intercept_update_registered: RefCell<Vec<(u32, Vec<String>)>>,
+  pub(crate) intercept_update_unregistered: RefCell<Vec<u32>>,
+  pub(crate) verdicts: RefCell<Vec<(i64, bool)>>,
+  pub(crate) intercept_update_register_err: RefCell<Option<String>>,
+  pub(crate) completes: RefCell<Vec<(i64, String)>>,
+  pub(crate) register_err: RefCell<Option<String>>,
+  pub(crate) update_register_err: RefCell<Option<String>>,
+  pub(crate) next_err: RefCell<Option<String>>,
+  pub(crate) tl_fields: RefCell<HashMap<String, String>>,
+  pub(crate) tl_released: RefCell<Vec<i64>>,
 }
 
 impl RpcHost for TestHost {
@@ -150,410 +136,183 @@ impl TlHost for TestHost {
   }
 }
 
-fn wire_json(json: &str) -> String {
-  format!("J{json}")
-}
-
-/// disposes on drop, so a failing assertion is one failed test rather than an abort in
-/// `JS_FreeRuntime` that takes the whole suite's reporting with it
 type Disposing = crate::testing::harness::DisposeOnDrop<RpcState>;
 
-type LoggingFixture = (Runtime, Context, Rc<TestHost>, Disposing, std::sync::Arc<crate::testing::harness::Logs>);
-
-fn setup(grants: &[&str]) -> (Runtime, Context, Rc<TestHost>, Disposing) {
-  let (rt, ctx, host, state, _log) = setup_logging(grants);
-  (rt, ctx, host, state)
-}
+type Fixture = (Runtime, Context, Rc<TestHost>, Disposing, std::sync::Arc<crate::testing::harness::Logs>);
 
 use crate::testing::harness::eval_unit as eval;
 
 use crate::testing::harness::eval_json;
 
-/// like [`setup`] but captures every `log()` upcall so tests can assert on emitted diagnostics
-fn setup_logging(grants: &[&str]) -> LoggingFixture {
-  setup_fixture(grants, false)
+fn setup(grants: &[&str]) -> Fixture {
+  setup_engine(grants, false, Some(TestAccountHost::with(TWO_ACCOUNTS)))
 }
 
-/// like [`setup`] with the sandbox globals installed first, as on a device, so `AbortController` exists
-fn setup_with_globals(grants: &[&str]) -> (Runtime, Context, Rc<TestHost>, Disposing) {
-  let (rt, ctx, host, state, _log) = setup_fixture(grants, true);
-  (rt, ctx, host, state)
+fn dispose_with_accounts(ctx: &Context, state: &Rc<RpcState>) {
+  state.dispose(ctx);
+  if let Some(accounts) = &state.accounts {
+    accounts.dispose(ctx);
+  }
 }
 
-fn setup_fixture(grants: &[&str], with_globals: bool) -> LoggingFixture {
-  setup_engine::<TestHost>(grants, with_globals)
-}
-
-/// the engine every suite here runs against, whichever fake stands in for the app: the account api
-/// is installed for every engine, so every dispatch has a handle to hand over, and `installApi`
-/// runs before `installRpc` on a device, which is where the demuxed events find `inu.Message`
+/// the engine every suite here runs against, whichever fake stands in for the app. `installApi` runs
+/// before `installRpc` on a device, which is where the demuxed events find `inu.Message`
 fn setup_engine<H: RpcHost + TlHost + Default + 'static>(
   grants: &[&str],
   with_globals: bool,
+  accounts_host: Option<Rc<TestAccountHost>>,
 ) -> (Runtime, Context, Rc<H>, Disposing, std::sync::Arc<crate::testing::harness::Logs>) {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
+  let (rt, ctx) = crate::testing::harness::new_engine();
   let host = Rc::new(H::default());
-  let host_dyn: Rc<dyn RpcHost> = host.clone();
   let tl = TlViews::new(host.clone());
-  let grant_host = TestGrantHost::new(grants);
+  let grant_host = CachedGrantHost::new(grants);
   let logs = crate::testing::harness::Logs::new();
   let log = crate::testing::harness::log_sink(&logs);
-  let accounts_host: Rc<dyn crate::api::telegram::account::AccountHost> =
-    crate::api::telegram::account::tests::TestAccountHost::with(crate::api::telegram::account::tests::TWO_ACCOUNTS);
   let state = ctx.with(|ctx| {
     let inu = crate::testing::harness::get_api_globals(&ctx);
-    crate::api::error::install_plugin_error(&ctx).unwrap();
     if with_globals {
-      let random: Rc<dyn RandomHost> = Rc::new(CountingRandom::default());
-      crate::api::globals::install_globals(
-        &ctx,
-        random,
-        std::path::Path::new(""),
-        crate::sandbox::limits::ExternalMemory::new(),
-      )
-      .unwrap();
+      crate::testing::harness::install_sandbox_globals(&ctx, std::path::Path::new("")).unwrap();
     }
     let shared = crate::api::tl::utils::install_utils(&ctx, &inu).unwrap();
     crate::api::tl::message::install_message(&ctx, &shared, &inu).unwrap();
-    let accounts = crate::api::telegram::account::install_account(
-      &ctx,
-      accounts_host,
-      grant_host.as_host(),
-      Lifecycle::new(),
-      log.clone(),
-      &inu,
-    )
-    .unwrap();
-    install_rpc(&ctx, host_dyn, tl, grant_host.as_host(), Lifecycle::new(), Some(accounts), shared, log, &inu).unwrap()
+    let accounts = accounts_host.map(|accounts_host| {
+      crate::api::telegram::account::install_account(
+        &ctx,
+        accounts_host,
+        grant_host.clone(),
+        Lifecycle::new(),
+        log.clone(),
+        &inu,
+      )
+      .unwrap()
+    });
+    install_rpc(&ctx, host.clone(), tl, grant_host.clone(), Lifecycle::new(), accounts, shared, log, &inu).unwrap()
   });
-  let state = Disposing::new(&ctx, state, |ctx, state| state.dispose(ctx));
+  let state = Disposing::new(&ctx, state, dispose_with_accounts);
   (rt, ctx, host, state, logs)
 }
 
 #[test]
-fn middleware_transforms_request_then_passes_through_next_response() {
-  let (rt, ctx, host, state) = setup(&["interceptRpc"]);
-  eval(
-    &ctx,
-    r#"
-            inu.interceptRpc('foo.bar', ({ request: req }, next) => {
-                req.x = req.x + 1;
-                return next(req);
-            });
-            "#,
-  );
-
-  state.dispatch(&rt, &ctx, 1, 100, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar","x":1}"#));
-
-  assert_eq!(host.next_calls.borrow().len(), 1);
-  assert_eq!(host.next_calls.borrow()[0].1, wire_json(r#"{"_":"foo.bar","x":2}"#));
-  assert!(host.completes.borrow().is_empty());
-
-  state.complete_next(&rt, &ctx, 100, &wire_json(r#"{"_":"foo.bar","x":2,"ok":true}"#));
-
-  let completes = host.completes.borrow();
-  assert_eq!(completes.len(), 1);
-  assert_eq!(completes[0], (100, wire_json(r#"{"_":"foo.bar","x":2,"ok":true}"#)));
-}
-
-#[test]
-fn next_without_a_request_forwards_the_one_the_middleware_was_handed() {
-  let (rt, ctx, host, state) = setup(&["interceptRpc"]);
-  eval(
-    &ctx,
-    "inu.interceptRpc('foo.bar', ({ request }, next) => { request.x = request.x + 1; return next(); });",
-  );
-
-  state.dispatch(&rt, &ctx, 1, 100, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar","x":1}"#));
-
-  assert_eq!(host.next_calls.borrow().as_slice(), [(100, wire_json(r#"{"_":"foo.bar","x":2}"#))]);
-}
-
-#[test]
-fn middleware_returns_undefined_without_awaiting_passes_through_next() {
-  let (rt, ctx, host, state) = setup(&["interceptRpc"]);
-  eval(
-    &ctx,
-    r#"
-            inu.interceptRpc('foo.bar', ({ request: req }, next) => {
-                next(req);
-            });
-            "#,
-  );
-
-  state.dispatch(&rt, &ctx, 1, 500, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
-  assert!(host.completes.borrow().is_empty());
-
-  state.complete_next(&rt, &ctx, 500, &wire_json(r#"{"_":"foo.bar","done":true}"#));
-  let completes = host.completes.borrow();
-  assert_eq!(completes.len(), 1);
-  assert_eq!(completes[0], (500, wire_json(r#"{"_":"foo.bar","done":true}"#)));
-}
-
-#[test]
-fn short_circuit_without_next() {
-  let (rt, ctx, host, state) = setup(&["interceptRpc"]);
-  eval(
-    &ctx,
-    r#"
-            inu.interceptRpc('foo.bar', ({ request: req }, next) => {
-                return { _: 'foo.bar', short: true };
-            });
-            "#,
-  );
-
-  state.dispatch(&rt, &ctx, 1, 200, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
-
-  assert!(host.next_calls.borrow().is_empty());
-  let completes = host.completes.borrow();
-  assert_eq!(completes.len(), 1);
-  assert_eq!(completes[0], (200, wire_json(r#"{"_":"foo.bar","short":true}"#)));
-}
-
-#[test]
-fn async_middleware_promise_result() {
-  let (rt, ctx, host, state) = setup(&["interceptRpc"]);
-  eval(
-    &ctx,
-    r#"
-            inu.interceptRpc('foo.bar', async ({ request: req }, next) => {
-                await Promise.resolve();
-                return { _: 'foo.bar', async: true };
-            });
-            "#,
-  );
-
-  state.dispatch(&rt, &ctx, 1, 300, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
-
-  let completes = host.completes.borrow();
-  assert_eq!(completes.len(), 1);
-  assert_eq!(completes[0], (300, wire_json(r#"{"_":"foo.bar","async":true}"#)));
-}
-
-#[test]
-fn next_called_twice_throws_type_error() {
-  let (rt, ctx, host, state) = setup(&["interceptRpc"]);
-  eval(
-    &ctx,
-    r#"
-            inu.interceptRpc('foo.bar', ({ request: req }, next) => {
-                next(req);
-                next(req);
-            });
-            "#,
-  );
-
-  state.dispatch(&rt, &ctx, 1, 400, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
-
-  let completes = host.completes.borrow();
-  assert_eq!(completes.len(), 1);
-  assert_eq!(completes[0].0, 400);
-  assert!(completes[0].1.starts_with('E'));
-  assert!(completes[0].1.contains("only be called once"));
-}
-
-#[test]
-fn abandon_rejects_the_parked_next_with_the_supplied_wire() {
-  let (rt, ctx, host, state) = setup(&["interceptRpc"]);
-  eval(
-    &ctx,
-    r#"
-            globalThis.__caught = null;
-            inu.interceptRpc('foo.bar', async ({ request: req }, next) => {
-                try { return await next(req); } catch (e) {
-                    globalThis.__caught = [e instanceof inu.RpcError, e.code, e.text];
-                    throw e;
-                }
-            });
-            "#,
-  );
-
-  state.dispatch(&rt, &ctx, 1, 950, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
-  assert_eq!(host.next_calls.borrow().len(), 1);
-
-  state.abandon_dispatch(&rt, &ctx, 950, "R-1000:INTERCEPTOR_TIMEOUT");
-
-  let caught: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__caught)").unwrap());
-  assert_eq!(caught, r#"[true,-1000,"INTERCEPTOR_TIMEOUT"]"#);
-}
-
-#[test]
-fn a_middleware_settling_after_abandon_never_completes() {
-  let (rt, ctx, host, state, logs) = setup_logging(&["interceptRpc"]);
-  eval(
-    &ctx,
-    r#"
-            inu.interceptRpc('foo.bar', async ({ request: req }, next) => {
-                try { await next(req); } catch (e) {}
-                return { _: 'foo.bar', late: true };
-            });
-            "#,
-  );
-
-  state.dispatch(&rt, &ctx, 1, 951, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
-  state.abandon_dispatch(&rt, &ctx, 951, "R-1000:INTERCEPTOR_TIMEOUT");
-
-  assert!(host.completes.borrow().is_empty(), "an abandoned dispatch must never answer the host");
-  assert!(
-    logs.borrow().is_empty(),
-    "abandoning is the host's decision, not the plugin's fault: {:?}",
-    logs.borrow()
-  );
-}
-
-#[test]
-fn a_middleware_rethrowing_its_abandoned_next_logs_nothing() {
-  let (rt, ctx, host, state, logs) = setup_logging(&["interceptRpc"]);
-  eval(
-    &ctx,
-    "inu.interceptRpc('foo.bar', async (_, next) => { const response = await next(); return response; });",
-  );
-
-  state.dispatch(&rt, &ctx, 1, 953, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
-  state.abandon_dispatch(&rt, &ctx, 953, "R-1000:INTERCEPTOR_CANCELLED");
-
-  assert!(host.completes.borrow().is_empty());
-  assert!(logs.borrow().is_empty(), "an app cancel is not the plugin's fault: {:?}", logs.borrow());
-}
-
-#[test]
-fn an_update_middleware_rejecting_after_it_was_abandoned_logs_nothing() {
-  let (rt, ctx, host, state, logs) = setup_logging(&["interceptUpdate(updateNewMessage)"]);
-  eval(
-    &ctx,
-    "globalThis.__reject = null; inu.interceptUpdate('updateNewMessage', () => new Promise((_, reject) => { __reject = reject }));",
-  );
-  dispatch_intercept(&rt, &ctx, &state, &host, 5, "updateNewMessage", NEW_MESSAGE);
-
-  state.abandon_update_dispatch(&rt, &ctx, 5, "R-1000:INTERCEPTOR_TIMEOUT");
-  eval(&ctx, "__reject(new Error('gave up'))");
-  pump_jobs(&rt, &ctx, &|_| {});
-
-  assert!(host.verdicts.borrow().is_empty());
-  assert!(logs.borrow().is_empty(), "the stage was already abandoned: {:?}", logs.borrow());
-}
-
-#[test]
-fn next_after_abandon_throws_timed_out() {
-  let (rt, ctx, _host, state) = setup(&["interceptRpc"]);
-  eval(
-    &ctx,
-    r#"
-            inu.interceptRpc('foo.bar', ({ request: req }, next) => {
-                globalThis.__next = next;
-                return new Promise(() => {});
-            });
-            "#,
-  );
-
-  state.dispatch(&rt, &ctx, 1, 952, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
-  state.abandon_dispatch(&rt, &ctx, 952, "R-1000:INTERCEPTOR_TIMEOUT");
-
-  assert_eq!(
-    catch_json(&ctx, "globalThis.__next({ _: 'foo.bar' })"),
-    r#"[true,"timed-out",null,"next(): the interceptor chain's budget expired and this stage was abandoned"]"#,
-  );
-}
-
-#[test]
-fn next_after_a_non_timeout_teardown_does_not_blame_the_budget() {
-  let (rt, ctx, _host, state) = setup(&["interceptRpc"]);
-  eval(
-    &ctx,
-    r#"
-            inu.interceptRpc('foo.bar', ({ request: req }, next) => {
-                globalThis.__next = next;
-                return new Promise(() => {});
-            });
-            "#,
-  );
-
-  state.dispatch(&rt, &ctx, 1, 954, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
-  state.abandon_dispatch(&rt, &ctx, 954, "R-1000:INTERCEPTOR_ABANDONED");
-
-  assert_eq!(
-    catch_json(&ctx, "globalThis.__next({ _: 'foo.bar' })"),
-    r#"[true,"aborted",null,"next(): the interceptor chain was torn down and this stage was abandoned"]"#,
-  );
-}
-
-#[test]
-fn abandoning_a_stage_aborts_its_signal_before_rejecting_next() {
-  let (rt, ctx, _host, state) = setup_with_globals(&["interceptRpc"]);
-  eval(
-    &ctx,
-    r#"
-        globalThis.__order = [];
-        inu.interceptRpc('foo.bar', async ({ signal }, next) => {
-            signal.addEventListener('abort', () => {
-                __order.push(['abort', signal.reason instanceof inu.PluginError, signal.reason.code, signal.reason.message]);
-            });
-            try { return await next(); } catch (e) { __order.push(['next', e.text]); throw e; }
-        });
-        "#,
-  );
-
-  state.dispatch(&rt, &ctx, 1, 960, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
-  state.abandon_dispatch(&rt, &ctx, 960, "R-1000:INTERCEPTOR_CANCELLED");
-
-  assert_eq!(
-    eval_json(&ctx, "__order"),
-    r#"[["abort",true,"aborted","the app cancelled the request and this stage was abandoned"],["next","INTERCEPTOR_CANCELLED"]]"#,
-  );
-}
-
-#[test]
-fn a_signal_first_read_after_its_stage_timed_out_is_already_aborted() {
-  let (rt, ctx, _host, state) = setup_with_globals(&["interceptRpc"]);
-  eval(
-    &ctx,
-    "inu.interceptRpc('foo.bar', (context) => { globalThis.__context = context; return new Promise(() => {}); });",
-  );
-
-  state.dispatch(&rt, &ctx, 1, 961, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
-  state.abandon_dispatch(&rt, &ctx, 961, "R-1000:INTERCEPTOR_TIMEOUT");
-
-  assert_eq!(
-    eval_json(
-      &ctx,
-      "[__context.signal.aborted, __context.signal.reason.code, __context.signal === __context.signal]"
+fn a_middleware_decides_what_goes_out_and_what_settles() {
+  const REQUEST: &str = r#"J{"_":"foo.bar","x":1}"#;
+  const BUMPED: &str = r#"J{"_":"foo.bar","x":2}"#;
+  const CATCH: &str = "({ request }, next) => next(request).catch(e => ({ _: 'foo.bar', caught: [e instanceof inu.RpcError, e instanceof inu.PluginError, e.code ?? null, e.text ?? null, e.message] }))";
+  for (middleware, answer, sent, settled) in [
+    ("({ request }, next) => { request.x++; return next(request); }", Some(r#"J{"_":"foo.bar","ok":true}"#), Some(BUMPED), r#"J{"_":"foo.bar","ok":true}"#),
+    ("({ request }, next) => { request.x++; return next(); }", Some("N"), Some(BUMPED), "N"),
+    ("({ request }, next) => { next(request); }", Some(r#"J{"_":"foo.bar","done":true}"#), Some(REQUEST), r#"J{"_":"foo.bar","done":true}"#),
+    ("() => ({ _: 'foo.bar', short: true })", None, None, r#"J{"_":"foo.bar","short":true}"#),
+    ("() => new inu.RpcError(403, 'FORBIDDEN')", None, None, "R403:FORBIDDEN"),
+    (
+      "({ request }, next) => { next(request); try { next(request) } catch (e) { return { _: 'foo.bar', again: e.message } } }",
+      None,
+      Some(REQUEST),
+      r#"J{"_":"foo.bar","again":"next() may only be called once"}"#,
     ),
-    r#"[true,"timed-out",true]"#,
-  );
+    (CATCH, Some("R400:PEER_ID_INVALID"), Some(REQUEST), r#"J{"_":"foo.bar","caught":[true,false,400,"PEER_ID_INVALID","400: PEER_ID_INVALID"]}"#),
+    (CATCH, Some("Eboom"), Some(REQUEST), r#"J{"_":"foo.bar","caught":[false,false,null,null,"boom"]}"#),
+    (
+      CATCH,
+      Some("Pforbidden\n\n\n\nblocked by policy"),
+      Some(REQUEST),
+      r#"J{"_":"foo.bar","caught":[false,true,"forbidden",null,"blocked by policy"]}"#,
+    ),
+  ] {
+    let (rt, ctx, host, state, _logs) = setup(&["interceptRpc"]);
+    eval(&ctx, &format!("inu.interceptRpc('foo.bar', {middleware});"));
+    state.dispatch(&rt, &ctx, 1, 100, "foo.bar", 0, REQUEST);
+    if let Some(answer) = answer {
+      assert!(host.completes.borrow().is_empty(), "settled before next() answered: {middleware}");
+      state.complete_next(&rt, &ctx, 100, answer);
+    }
+    let sent_wires: Vec<String> = host.next_calls.borrow().iter().map(|(_, wire)| wire.clone()).collect();
+    assert_eq!(sent_wires, sent.map(str::to_string).into_iter().collect::<Vec<_>>(), "{middleware}");
+    assert_eq!(host.completes.borrow().as_slice(), [(100, settled.to_string())], "{middleware}");
+  }
 }
 
 #[test]
-fn the_signal_of_a_stage_that_completed_never_aborts() {
-  let (rt, ctx, host, state) = setup_with_globals(&["interceptRpc"]);
+fn a_stage_settling_after_it_was_abandoned_answers_nothing_and_logs_nothing() {
+  for middleware in [
+    "async (_, next) => { try { await next(); } catch (e) {} return { _: 'foo.bar', late: true }; }",
+    "async (_, next) => await next()",
+  ] {
+    let (rt, ctx, host, state, logs) = setup(&["interceptRpc"]);
+    eval(&ctx, &format!("inu.interceptRpc('foo.bar', {middleware});"));
+    state.dispatch(&rt, &ctx, 1, 951, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
+    state.abandon_dispatch(&rt, &ctx, 951, "R-1000:INTERCEPTOR_CANCELLED");
+    assert!(host.completes.borrow().is_empty(), "{middleware}");
+    assert!(logs.borrow().is_empty(), "{middleware}: {:?}", logs.borrow());
+  }
+  // the batch moved on without this stage, so a late 'drop' must not retro-drop an applied update
+  for settle in ["__settle('drop')", "__reject(new Error('gave up'))"] {
+    let (rt, ctx, host, state, logs) =
+      setup_engine::<TestHost>(&["interceptUpdate(updateNewMessage)"], true, Some(TestAccountHost::with(TWO_ACCOUNTS)));
+    eval(
+      &ctx,
+      "inu.interceptUpdate('updateNewMessage', ({ signal }) => { globalThis.__signal = signal; return new Promise((resolve, reject) => { globalThis.__settle = resolve; globalThis.__reject = reject; }); });",
+    );
+    dispatch_intercept(&rt, &ctx, &state, &host, 5, "updateNewMessage", NEW_MESSAGE);
+    assert!(host.verdicts.borrow().is_empty());
+    state.abandon_update_dispatch(&rt, &ctx, 5, "R-1000:INTERCEPTOR_TIMEOUT");
+    assert_eq!(eval_json(&ctx, "[__signal.aborted, __signal.reason.code]"), r#"[true,"timed-out"]"#);
+    eval(&ctx, settle);
+    pump_jobs(&rt, &ctx, &|_| {});
+    assert!(host.verdicts.borrow().is_empty(), "{settle}");
+    assert!(logs.borrow().is_empty(), "{settle}: {:?}", logs.borrow());
+  }
+}
+
+/// the signal is minted lazily, so one first read after the abandon must already be aborted
+#[test]
+fn next_after_abandon_throws_by_the_reason_it_was_abandoned_for() {
+  for (reason, code, thrown) in [
+    (
+      "R-1000:INTERCEPTOR_TIMEOUT",
+      "timed-out",
+      r#"[true,"timed-out",null,"next(): the interceptor chain's budget expired and this stage was abandoned"]"#,
+    ),
+    (
+      "R-1000:INTERCEPTOR_ABANDONED",
+      "aborted",
+      r#"[true,"aborted",null,"next(): the interceptor chain was torn down and this stage was abandoned"]"#,
+    ),
+  ] {
+    let (rt, ctx, _host, state, _logs) =
+      setup_engine::<TestHost>(&["interceptRpc"], true, Some(TestAccountHost::with(TWO_ACCOUNTS)));
+    eval(
+      &ctx,
+      "inu.interceptRpc('foo.bar', (context, next) => { globalThis.__context = context; globalThis.__next = next; return new Promise(() => {}); });",
+    );
+
+    state.dispatch(&rt, &ctx, 1, 952, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
+    state.abandon_dispatch(&rt, &ctx, 952, reason);
+
+    assert_eq!(
+      eval_json(
+        &ctx,
+        "[__context.signal.aborted, __context.signal.reason.code, __context.signal === __context.signal]"
+      ),
+      format!(r#"[true,"{code}",true]"#),
+    );
+    assert_eq!(catch_json(&ctx, "globalThis.__next({ _: 'foo.bar' })"), thrown);
+  }
+}
+
+#[test]
+fn a_stage_that_already_settled_neither_aborts_nor_forwards() {
+  let (rt, ctx, host, state, _logs) =
+    setup_engine::<TestHost>(&["interceptRpc"], true, Some(TestAccountHost::with(TWO_ACCOUNTS)));
   eval(
     &ctx,
-    "inu.interceptRpc('foo.bar', ({ signal }) => { globalThis.__signal = signal; return { _: 'foo.bar' }; });",
+    "inu.interceptRpc('foo.bar', ({ signal }, next) => { globalThis.__signal = signal; globalThis.__next = next; return { _: 'foo.bar' }; });",
   );
 
-  state.dispatch(&rt, &ctx, 1, 962, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
+  state.dispatch(&rt, &ctx, 1, 962, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
   assert_eq!(host.completes.borrow().len(), 1);
   state.abandon_dispatch(&rt, &ctx, 962, "R-1000:INTERCEPTOR_ABANDONED");
 
   assert_eq!(eval_json(&ctx, "__signal.aborted"), "false");
-}
-
-#[test]
-fn next_after_its_own_settle_throws_invalid_argument() {
-  let (rt, ctx, host, state) = setup(&["interceptRpc"]);
-  eval(
-    &ctx,
-    r#"
-            inu.interceptRpc('foo.bar', ({ request: req }, next) => {
-                globalThis.__next = next;
-                return { _: 'foo.bar', short: true };
-            });
-            "#,
-  );
-
-  state.dispatch(&rt, &ctx, 1, 953, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
-  assert_eq!(host.completes.borrow().len(), 1);
-
   assert_eq!(
     catch_json(&ctx, "globalThis.__next({ _: 'foo.bar' })"),
     r#"[true,"invalid-argument",null,"next(): this dispatch already settled"]"#,
@@ -561,193 +320,185 @@ fn next_after_its_own_settle_throws_invalid_argument() {
   assert!(host.next_calls.borrow().is_empty());
 }
 
-/// the account-less form names no account, so it carries `ANY_ACCOUNT` and the host is the one
-/// that decides what that means; the `Account` form carries the slot its handle is pinned to
 #[test]
-fn invoke_rpc_carries_the_account_it_was_called_through() {
-  let (_rt, ctx, host, _state) = setup(&["invokeRpc", "account.read(self)"]);
+fn abandoning_a_stage_aborts_its_signal_before_rejecting_next() {
+  let (rt, ctx, _host, state, _logs) =
+    setup_engine::<TestHost>(&["interceptRpc"], true, Some(TestAccountHost::with(TWO_ACCOUNTS)));
   eval(
     &ctx,
     r#"
-        inu.invokeRpc({ _: 'foo.bar' });
-        inu.account(1).invokeRpc({ _: 'foo.bar' });
-        "#,
+      globalThis.__order = [];
+      inu.interceptRpc('foo.bar', async ({ signal }, next) => {
+        signal.addEventListener('abort', () => {
+          __order.push(['abort', signal.reason instanceof inu.PluginError, signal.reason.code, signal.reason.message]);
+        });
+        try { return await next(); } catch (e) { __order.push(['next', e instanceof inu.RpcError, e.code, e.text]); throw e; }
+      });
+    "#,
   );
-  let slots: Vec<i32> = host.invoke_calls.borrow().iter().map(|(_, slot, _)| *slot).collect();
-  assert_eq!(slots, vec![ANY_ACCOUNT, 1]);
-}
 
-/// one prototype serves every slot, so a method torn off a handle has to fail by name rather
-/// than send on slot 0 - `utils.js`'s rule for every other member of the surface
-#[test]
-fn a_torn_off_invoke_rpc_refuses_rather_than_picking_a_slot() {
-  let (_rt, ctx, host, _state) = setup(&["invokeRpc", "account.read(self)"]);
+  state.dispatch(&rt, &ctx, 1, 960, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
+  state.abandon_dispatch(&rt, &ctx, 960, "R-1000:INTERCEPTOR_CANCELLED");
+
   assert_eq!(
-    eval_json(
-      &ctx,
-      "(() => { const f = inu.account(1).invokeRpc; try { f({ _: 'foo.bar' }) } catch (e) { return [e.code, e.message] } })()"
+    eval_json(&ctx, "__order"),
+    r#"[["abort",true,"aborted","the app cancelled the request and this stage was abandoned"],["next",true,-1000,"INTERCEPTOR_CANCELLED"]]"#,
+  );
+}
+
+#[test]
+fn an_invoke_settles_by_the_wire_the_host_answers_with() {
+  let (rt, ctx, host, state, _logs) = setup(&["invokeRpc"]);
+  eval(
+    &ctx,
+    r#"
+      globalThis.__real = inu.RpcError;
+      inu.RpcError = class Impostor extends Error {};
+      globalThis.__seen = [];
+      for (let i = 0; i < 4; i++) {
+        inu.invokeRpc({ _: 'foo.bar' }).then(r => { __seen[i] = r }, e => {
+          __seen[i] = [e instanceof __real, e instanceof inu.PluginError, e.code ?? null, e.text ?? null, e.usage ?? null, e.quota ?? null, e.message];
+        });
+      }
+    "#,
+  );
+  let ids: Vec<i64> = host.invoke_calls.borrow().iter().map(|(id, _, _)| *id).collect();
+  let wires = [
+    r#"J{"_":"foo.bar","ok":true}"#,
+    "EBAD_REQUEST: oops",
+    "R400:PEER_ID_INVALID",
+    "Pquota-exceeded\n\n64\n32\ntoo big",
+  ];
+  for (id, wire) in ids.into_iter().zip(wires) {
+    state.settle(&rt, &ctx, id, wire);
+  }
+  assert_eq!(
+    eval_json(&ctx, "__seen"),
+    r#"[{"_":"foo.bar","ok":true},[false,false,null,null,null,null,"BAD_REQUEST: oops"],[true,false,400,"PEER_ID_INVALID",null,null,"400: PEER_ID_INVALID"],[false,true,"quota-exceeded",null,64,32,"too big"]]"#,
+  );
+}
+
+#[test]
+fn a_refused_registration_or_call_never_reaches_the_host() {
+  for (grants, code, thrown) in [
+    (
+      "interceptRpc(messages.sendMessage)",
+      "inu.interceptRpc(['messages.sendMessage', 'users.getUsers'], () => {})",
+      r#"[true,"not-granted","interceptRpc(users.getUsers)","missing grant: interceptRpc(users.getUsers)"]"#,
     ),
-    r#"["invalid-argument","invokeRpc: not called on an account handle; use inu.account().invokeRpc(...)"]"#,
-  );
-  assert!(host.invoke_calls.borrow().is_empty());
+    (
+      "interceptRpc(users.getUsers)",
+      "inu.interceptRpc('users.getUsers', () => {}, true)",
+      r#"[false,null,null,"interceptRpc: options must be an object"]"#,
+    ),
+    (
+      "interceptRpc(users.getUsers)",
+      "inu.interceptRpc('users.getUsers', () => {}, { strict: 'yes' })",
+      r#"[false,null,null,"interceptRpc: 'strict' must be a boolean"]"#,
+    ),
+    (
+      "invokeRpc",
+      "inu.invokeRpc({})",
+      r#"[true,"invalid-argument",null,"invokeRpc: the request must carry its method name in '_'"]"#,
+    ),
+    (
+      "invokeRpc",
+      "inu.invokeRpc({ _: 42 })",
+      r#"[true,"invalid-argument",null,"invokeRpc: the request must carry its method name in '_'"]"#,
+    ),
+    (
+      "invokeRpc(users.getUsers)",
+      "inu.invokeRpc({ _: 'messages.sendMessage' })",
+      r#"[true,"not-granted","invokeRpc(messages.sendMessage)","missing grant: invokeRpc(messages.sendMessage)"]"#,
+    ),
+    (
+      "onUpdate(updateNewMessage)",
+      "inu.onUpdate(['updateNewMessage', 'updateUserTyping'], () => {})",
+      r#"[true,"not-granted","onUpdate(updateUserTyping)","missing grant: onUpdate(updateUserTyping)"]"#,
+    ),
+    (
+      "onUpdate",
+      "inu.onUpdate([], () => {})",
+      r#"[false,null,null,"onUpdate: type list must not be empty"]"#,
+    ),
+    (
+      "onUpdate",
+      "inu.onUpdate([1], () => {})",
+      r#"[false,null,null,"onUpdate: type list must contain only strings"]"#,
+    ),
+    // the two halves of the scope vocabulary do not imply each other, in either direction
+    (
+      "onUpdate(updateNewMessage)",
+      "inu.onNewMessage(() => {})",
+      r#"[true,"not-granted","onUpdate(new_message)","missing grant: onUpdate(new_message)"]"#,
+    ),
+    (
+      "onUpdate(new_message)",
+      "inu.onUpdate('updateNewMessage', () => {})",
+      r#"[true,"not-granted","onUpdate(updateNewMessage)","missing grant: onUpdate(updateNewMessage)"]"#,
+    ),
+    (
+      "interceptRpc(messages.sendMessage)",
+      "inu.interceptSendMessage(() => 'send')",
+      r#"[true,"not-granted","interceptSendMessage","missing grant: interceptSendMessage"]"#,
+    ),
+    (
+      "interceptUpdate(updateEditMessage)",
+      "inu.interceptUpdate('updateNewMessage', () => 'deliver')",
+      r#"[true,"not-granted","interceptUpdate(updateNewMessage)","missing grant: interceptUpdate(updateNewMessage)"]"#,
+    ),
+    (
+      "interceptUpdate(updateEditMessage)",
+      "inu.interceptUpdate([], () => 'deliver')",
+      r#"[false,null,null,"interceptUpdate: type list must not be empty"]"#,
+    ),
+    (
+      "invokeRpc",
+      "inu.invokeRaw(new Uint8Array([1, 2, 3, 4]))",
+      r#"[true,"not-granted","unsafe.invokeRaw","missing grant: unsafe.invokeRaw"]"#,
+    ),
+    (
+      "unsafe.invokeRaw",
+      "inu.invokeRaw({ _: 'foo.bar' })",
+      r#"[true,"invalid-argument",null,"invokeRaw: expected the serialized method as a Uint8Array"]"#,
+    ),
+    (
+      "invokeRpc account.read(self)",
+      "inu.account(1).initTakeoutSession()",
+      r#"[true,"not-granted","takeout","missing grant: takeout"]"#,
+    ),
+  ] {
+    let (_rt, ctx, host, state, _logs) = setup(&grants.split(' ').collect::<Vec<_>>());
+    assert_eq!(catch_json(&ctx, code), thrown, "{code}");
+    let reached = !host.registered.borrow().is_empty()
+      || !host.update_registered.borrow().is_empty()
+      || !host.intercept_update_registered.borrow().is_empty()
+      || !host.invoke_calls.borrow().is_empty()
+      || !host.raw_calls.borrow().is_empty()
+      || !host.takeout_calls.borrow().is_empty();
+    assert!(!reached, "{code} reached the host");
+    assert!(state.intercept_fns.is_empty() && state.update_fns.is_empty(), "{code}");
+  }
 }
 
 #[test]
-fn invoke_rpc_resolves_and_rejects() {
-  let (rt, ctx, host, state) = setup(&["invokeRpc"]);
+fn a_handler_is_handed_the_account_its_update_or_request_arrived_on() {
+  let (rt, ctx, host, state, _logs) = setup(&["onUpdate", "interceptRpc", "account.read(self)"]);
   eval(
     &ctx,
     r#"
-            globalThis.__ok = null;
-            globalThis.__err = null;
-            inu.invokeRpc({_:'foo.bar'}).then(r => { globalThis.__ok = r; });
-            "#,
+      globalThis.__seen = [];
+      globalThis.__record = (account) => __seen.push([account.id, account.userId, account.isCurrent()]);
+      inu.onUpdate('updateNewMessage', (update, account) => __record(account));
+      inu.interceptRpc('foo.bar', ({ request, account }, next) => { __record(account); return next(request); });
+    "#,
   );
-
-  assert_eq!(host.invoke_calls.borrow().len(), 1);
-  let invoke_id = host.invoke_calls.borrow()[0].0;
-  state.settle(&rt, &ctx, invoke_id, &wire_json(r#"{"_":"foo.bar","ok":true}"#));
-  let ok: String = ctx.with(|ctx| ctx.eval::<String, _>("JSON.stringify(globalThis.__ok)").unwrap());
-  assert_eq!(ok, r#"{"_":"foo.bar","ok":true}"#);
-
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(r#"inu.invokeRpc({_:'foo.baz'}).catch(e => { globalThis.__err = e.message; });"#)
-      .unwrap();
-  });
-  assert_eq!(host.invoke_calls.borrow().len(), 2);
-  let invoke_id2 = host.invoke_calls.borrow()[1].0;
-  state.settle(&rt, &ctx, invoke_id2, "EBAD_REQUEST: oops");
-  let err: String = ctx.with(|ctx| ctx.eval::<String, _>("globalThis.__err").unwrap());
-  assert_eq!(err, "BAD_REQUEST: oops");
-}
-
-#[test]
-fn rpc_error_wire_rejects_as_rpc_error_instance_and_rethrow_round_trips() {
-  let (rt, ctx, host, state) = setup(&["interceptRpc"]);
-  eval(
-    &ctx,
-    r#"
-            globalThis.__caught = null;
-            inu.interceptRpc('foo.bar', async ({ request: req }, next) => {
-                try {
-                    return await next(req);
-                } catch (e) {
-                    globalThis.__caught = { isRpc: e instanceof inu.RpcError, code: e.code, text: e.text, message: e.message };
-                    throw e;
-                }
-            });
-            "#,
-  );
-
-  state.dispatch(&rt, &ctx, 1, 900, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
-  state.complete_next(&rt, &ctx, 900, "R400:PEER_ID_INVALID");
-
-  let caught: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__caught)").unwrap());
-  assert_eq!(caught, r#"{"isRpc":true,"code":400,"text":"PEER_ID_INVALID","message":"400: PEER_ID_INVALID"}"#);
-  let completes = host.completes.borrow();
-  assert_eq!(completes.len(), 1);
-  assert_eq!(completes[0], (900, "R400:PEER_ID_INVALID".to_string()));
-}
-
-#[test]
-fn thrown_rpc_error_completes_with_r_wire() {
-  let (rt, ctx, host, state) = setup(&["interceptRpc"]);
-  eval(
-    &ctx,
-    r#"
-            inu.interceptRpc('foo.bar', ({ request: req }, next) => {
-                throw new inu.RpcError(420, 'FLOOD_WAIT_3');
-            });
-            "#,
-  );
-
-  state.dispatch(&rt, &ctx, 1, 901, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
-  let completes = host.completes.borrow();
-  assert_eq!(completes.len(), 1);
-  assert_eq!(completes[0], (901, "R420:FLOOD_WAIT_3".to_string()));
-}
-
-#[test]
-fn returned_rpc_error_completes_with_r_wire() {
-  let (rt, ctx, host, state) = setup(&["interceptRpc"]);
-  eval(
-    &ctx,
-    r#"
-            inu.interceptRpc('foo.bar', ({ request: req }, next) => {
-                return new inu.RpcError(403, 'FORBIDDEN');
-            });
-            "#,
-  );
-
-  state.dispatch(&rt, &ctx, 1, 902, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
-  let completes = host.completes.borrow();
-  assert_eq!(completes.len(), 1);
-  assert_eq!(completes[0], (902, "R403:FORBIDDEN".to_string()));
-}
-
-#[test]
-fn invoke_rejection_with_rpc_error_wire_is_an_rpc_error_instance() {
-  let (rt, ctx, host, state) = setup(&["invokeRpc"]);
-  eval(
-    &ctx,
-    r#"
-            globalThis.__caught = null;
-            inu.invokeRpc({_:'foo.bar'}).catch(e => {
-                globalThis.__caught = { isRpc: e instanceof inu.RpcError, code: e.code, text: e.text };
-            });
-            "#,
-  );
-
-  let invoke_id = host.invoke_calls.borrow()[0].0;
-  state.settle(&rt, &ctx, invoke_id, "R-503:Timeout");
-  let caught: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__caught)").unwrap());
-  assert_eq!(caught, r#"{"isRpc":true,"code":-503,"text":"Timeout"}"#);
-}
-
-#[test]
-fn replacing_inu_rpc_error_does_not_change_host_errors() {
-  let (rt, ctx, host, state) = setup(&["invokeRpc"]);
-  eval(
-    &ctx,
-    r#"
-            globalThis.__realRpcError = inu.RpcError;
-            inu.RpcError = class Impostor extends Error {};
-            inu.invokeRpc({_:'foo.bar'}).catch(e => {
-                globalThis.__caught = [e instanceof __realRpcError, e instanceof inu.RpcError, e.code, e.text];
-            });
-            "#,
-  );
-
-  let invoke_id = host.invoke_calls.borrow()[0].0;
-  state.settle(&rt, &ctx, invoke_id, "R400:PEER_ID_INVALID");
-  let caught: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__caught)").unwrap());
-  assert_eq!(caught, r#"[true,false,400,"PEER_ID_INVALID"]"#);
-}
-
-#[test]
-fn null_completion_resolves_next_as_null_and_round_trips() {
-  let (rt, ctx, host, state) = setup(&["interceptRpc"]);
-  eval(
-    &ctx,
-    r#"
-            globalThis.__got = 'unset';
-            inu.interceptRpc('foo.bar', async ({ request: req }, next) => {
-                const r = await next(req);
-                globalThis.__got = r;
-                return r;
-            });
-            "#,
-  );
-
-  state.dispatch(&rt, &ctx, 1, 903, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
-  state.complete_next(&rt, &ctx, 903, "N");
-
-  let got_is_null: bool = ctx.with(|ctx| ctx.eval("globalThis.__got === null").unwrap());
-  assert!(got_is_null);
-  let completes = host.completes.borrow();
-  assert_eq!(completes.len(), 1);
-  assert_eq!(completes[0], (903, "N".to_string()));
+  state.dispatch_update(&rt, &ctx, UPDATE_TYPE, 1, UPDATE_WIRE);
+  state.dispatch_update(&rt, &ctx, UPDATE_TYPE, 0, UPDATE_WIRE);
+  let callback_id = host.registered.borrow()[0].1;
+  state.dispatch(&rt, &ctx, callback_id, 990, "foo.bar", 1, r#"J{"_":"foo.bar"}"#);
+  assert_eq!(eval_json(&ctx, "__seen"), "[[1,222,false],[0,111,true],[1,222,false]]");
+  assert_eq!(host.next_calls.borrow().len(), 1);
 }
 
 fn seed_tl_object(host: &Rc<TestHost>, type_name: &str) {
@@ -758,7 +509,7 @@ fn seed_tl_object(host: &Rc<TestHost>, type_name: &str) {
 
 #[test]
 fn invoke_result_handle_resolves_to_a_writable_plugin_lifetime_view() {
-  let (rt, ctx, host, state) = setup(&["invokeRpc"]);
+  let (rt, ctx, host, state, _logs) = setup(&["invokeRpc"]);
   seed_tl_object(&host, "foo.bar");
   eval(&ctx, r#"inu.invokeRpc({_:'foo.bar'}).then(r => { globalThis.__got = r; });"#);
 
@@ -768,7 +519,6 @@ fn invoke_result_handle_resolves_to_a_writable_plugin_lifetime_view() {
   ctx.with(|ctx| {
     assert_eq!(ctx.eval::<String, _>("globalThis.__got._").unwrap(), "foo.bar");
     ctx.eval::<(), _>("globalThis.__got.x = 5").unwrap();
-    // the view outlives its dispatch: still readable after the promise settled
     assert_eq!(ctx.eval::<i64, _>("globalThis.__got.x").unwrap(), 5);
     ctx.eval::<(), _>("globalThis.__got = undefined").unwrap();
   });
@@ -779,20 +529,28 @@ fn invoke_result_handle_resolves_to_a_writable_plugin_lifetime_view() {
 
 #[test]
 fn update_payload_handle_resolves_to_a_read_only_view() {
-  let (rt, ctx, host, state) = setup(&["onUpdate"]);
+  let (rt, ctx, host, state, _logs) = setup(&["onUpdate"]);
   seed_tl_object(&host, "updateFoo");
-  eval(&ctx, "inu.onUpdate('updateFoo', (u) => { globalThis.__seen = u; });");
+  state.dispatch_update(&rt, &ctx, "updateFoo", 0, &format!("HOR{TEST_HANDLE}"));
+  assert_eq!(
+    *host.tl_released.borrow(),
+    vec![TEST_HANDLE],
+    "an update nobody listens to still releases its handle"
+  );
 
+  eval(&ctx, "inu.onUpdate('updateFoo', (u) => { globalThis.__seen = u; });");
   state.dispatch_update(&rt, &ctx, "updateFoo", 0, &format!("HOR{TEST_HANDLE}"));
 
   ctx.with(|ctx| {
     assert_eq!(ctx.eval::<String, _>("globalThis.__seen._").unwrap(), "updateFoo");
     let caught: String = ctx
       .eval(
-        r#"(() => {
-                    try { globalThis.__seen.x = 5; return 'no-throw' }
-                    catch (e) { return [e instanceof inu.PluginError, e.code].join('|') }
-                })()"#,
+        r#"
+          (() => {
+            try { globalThis.__seen.x = 5; return 'no-throw' }
+            catch (e) { return [e instanceof inu.PluginError, e.code].join('|') }
+          })()
+        "#,
       )
       .unwrap();
     assert_eq!(caught, "true|forbidden");
@@ -801,52 +559,11 @@ fn update_payload_handle_resolves_to_a_read_only_view() {
   assert_eq!(host.tl_fields.borrow().get("x").unwrap(), "I1");
 }
 
-#[test]
-fn an_update_with_no_listeners_still_releases_its_handle() {
-  let (rt, ctx, host, state) = setup(&[]);
-  seed_tl_object(&host, "updateFoo");
-
-  state.dispatch_update(&rt, &ctx, "updateFoo", 0, &format!("HOR{TEST_HANDLE}"));
-
-  assert_eq!(*host.tl_released.borrow(), vec![TEST_HANDLE]);
-}
-
-#[test]
-fn on_update_fan_out_survives_throwing_callback() {
-  let (rt, ctx, host, state) = setup(&["onUpdate"]);
-  eval(
-    &ctx,
-    r#"
-            globalThis.__seen = null;
-            inu.onUpdate('updateFoo', (u) => { throw new Error('boom'); });
-            inu.onUpdate('updateFoo', (u) => { globalThis.__seen = u.a; });
-            "#,
-  );
-
-  assert_eq!(host.update_registered.borrow().len(), 2);
-  state.dispatch_update(&rt, &ctx, "updateFoo", 0, &wire_json(r#"{"_":"updateFoo","a":42}"#));
-  let seen: i32 = ctx.with(|ctx| ctx.eval::<i32, _>("globalThis.__seen").unwrap());
-  assert_eq!(seen, 42);
-}
-
-/// evaluates `code`, returning the caught error as `[isPluginError, code, grant, message]` json
 use crate::testing::harness::catch_json;
 
 #[test]
-fn intercept_registration_without_a_scoped_grant_throws_not_granted() {
-  let (_rt, ctx, host, state) = setup(&["interceptRpc(messages.sendMessage)"]);
-  let caught = catch_json(&ctx, "inu.interceptRpc(['messages.sendMessage', 'users.getUsers'], () => {})");
-  assert_eq!(
-    caught,
-    r#"[true,"not-granted","interceptRpc(users.getUsers)","missing grant: interceptRpc(users.getUsers)"]"#,
-  );
-  assert!(host.registered.borrow().is_empty(), "a denied method must never reach the host");
-  assert!(state.intercept_fns.is_empty());
-}
-
-#[test]
-fn intercept_registration_with_a_scoped_grant_reaches_the_host() {
-  let (_rt, ctx, host, _state) = setup(&["interceptRpc(users.getUsers)"]);
+fn an_intercept_registration_reaches_the_host_and_drops_its_callback_when_refused() {
+  let (_rt, ctx, host, state, _logs) = setup(&["interceptRpc(users.getUsers)"]);
   eval(
     &ctx,
     "inu.interceptRpc('users.getUsers', () => {}); inu.interceptRpc('users.getUsers', () => {}, { strict: true });",
@@ -854,78 +571,23 @@ fn intercept_registration_with_a_scoped_grant_reaches_the_host() {
   assert_eq!(host.registered.borrow()[0].0, vec!["users.getUsers".to_string()]);
   assert!(!host.registered.borrow()[0].3);
   assert!(host.registered.borrow()[1].3);
-}
 
-#[test]
-fn intercept_options_reject_malformed_strict_values() {
-  let (_rt, ctx, host, _state) = setup(&["interceptRpc(users.getUsers)"]);
-  assert_eq!(
-    catch_json(&ctx, "inu.interceptRpc('users.getUsers', () => {}, true)"),
-    r#"[false,null,null,"interceptRpc: options must be an object"]"#,
-  );
-  assert_eq!(
-    catch_json(&ctx, "inu.interceptRpc('users.getUsers', () => {}, { strict: 'yes' })"),
-    r#"[false,null,null,"interceptRpc: options.strict must be a boolean"]"#,
-  );
-  assert!(host.registered.borrow().is_empty());
-}
-
-#[test]
-fn invoke_without_a_method_name_throws_invalid_argument() {
-  let (_rt, ctx, host, _state) = setup(&["invokeRpc"]);
-  assert_eq!(
-    catch_json(&ctx, "inu.invokeRpc({})"),
-    r#"[true,"invalid-argument",null,"invokeRpc: the request must carry its method name in '_'"]"#,
-  );
-  assert_eq!(
-    catch_json(&ctx, "inu.invokeRpc({ _: 42 })"),
-    r#"[true,"invalid-argument",null,"invokeRpc: the request must carry its method name in '_'"]"#,
-  );
-  assert!(host.invoke_calls.borrow().is_empty());
-}
-
-#[test]
-fn invoke_of_an_ungranted_method_throws_not_granted() {
-  let (_rt, ctx, host, _state) = setup(&["invokeRpc(users.getUsers)"]);
-  assert_eq!(
-    catch_json(&ctx, "inu.invokeRpc({ _: 'messages.sendMessage' })"),
-    r#"[true,"not-granted","invokeRpc(messages.sendMessage)","missing grant: invokeRpc(messages.sendMessage)"]"#,
-  );
-  assert!(host.invoke_calls.borrow().is_empty());
-}
-
-#[test]
-fn on_update_without_a_scoped_grant_throws_not_granted() {
-  let (_rt, ctx, host, state) = setup(&["onUpdate(updateNewMessage)"]);
-  assert_eq!(
-    catch_json(&ctx, "inu.onUpdate(['updateNewMessage', 'updateUserTyping'], () => {})"),
-    r#"[true,"not-granted","onUpdate(updateUserTyping)","missing grant: onUpdate(updateUserTyping)"]"#,
-  );
-  assert!(host.update_registered.borrow().is_empty(), "a denied type must never reach the host");
-  assert!(state.update_fns.is_empty());
-}
-
-#[test]
-fn on_update_needs_a_type_list() {
-  let (_rt, ctx, host, _state) = setup(&["onUpdate"]);
-  for code in ["inu.onUpdate(() => {})", "inu.onUpdate([], () => {})", "inu.onUpdate([1], () => {})"] {
-    let threw = ctx.with(|ctx| ctx.eval::<(), _>(code).is_err());
-    assert!(threw, "expected a TypeError from: {code}");
-  }
-  assert!(host.update_registered.borrow().is_empty());
+  *host.register_err.borrow_mut() = Some("not granted".to_string());
+  assert!(ctx.with(|ctx| ctx.eval::<(), _>("inu.interceptRpc('users.getUsers', () => {})").is_err()));
+  assert_eq!(state.intercept_fns.len(), 2, "a registration the host refused keeps its callback");
 }
 
 #[test]
 fn an_update_only_reaches_the_registrations_that_named_its_type() {
-  let (rt, ctx, host, state) = setup(&["onUpdate"]);
+  let (rt, ctx, host, state, _logs) = setup(&["onUpdate"]);
   eval(
     &ctx,
     r#"
-        globalThis.__ran = [];
-        inu.onUpdate('updateNewMessage', () => { __ran.push('new'); });
-        inu.onUpdate(['updateUserTyping', 'updateNewMessage'], (u) => { __ran.push(`both:${u._}`); });
-        inu.onUpdate('updateUserTyping', () => { __ran.push('typing'); });
-        "#,
+      globalThis.__ran = [];
+      inu.onUpdate('updateNewMessage', () => { __ran.push('new'); });
+      inu.onUpdate(['updateUserTyping', 'updateNewMessage'], (u) => { __ran.push(`both:${u._}`); });
+      inu.onUpdate('updateUserTyping', () => { __ran.push('typing'); });
+    "#,
   );
   assert_eq!(
     host.update_registered.borrow()[1].1,
@@ -942,178 +604,24 @@ fn an_update_only_reaches_the_registrations_that_named_its_type() {
   assert!(state.update_fns.len() == 3);
 }
 
-#[test]
-fn an_update_handler_is_handed_the_account_it_arrived_on() {
-  let (rt, ctx, _host, state) = setup(&["onUpdate", "account.read(self)"]);
-  eval(
-    &ctx,
-    r#"
-        globalThis.__seen = null;
-        inu.onUpdate('updateNewMessage', (update, account) => {
-            __seen = [account.id, account.userId, account.isCurrent()];
-        });
-        "#,
-  );
-  state.dispatch_update(&rt, &ctx, UPDATE_TYPE, 1, UPDATE_WIRE);
-  assert_eq!(eval_json(&ctx, "__seen"), "[1,222,false]");
-
-  state.dispatch_update(&rt, &ctx, UPDATE_TYPE, 0, UPDATE_WIRE);
-  assert_eq!(eval_json(&ctx, "__seen"), "[0,111,true]");
-}
-
-#[test]
-fn an_interceptor_is_handed_the_account_the_request_is_on() {
-  let (rt, ctx, host, state) = setup(&["interceptRpc", "account.read(self)"]);
-  eval(
-    &ctx,
-    r#"
-        globalThis.__seen = null;
-        inu.interceptRpc('foo.bar', ({ request: req, account }, next) => {
-            __seen = [account.id, account.userId, account.isCurrent()];
-            return next(req);
-        });
-        "#,
-  );
-  state.dispatch(&rt, &ctx, 1, 990, "foo.bar", 1, &wire_json(r#"{"_":"foo.bar"}"#));
-  assert_eq!(eval_json(&ctx, "__seen"), "[1,222,false]");
-  assert_eq!(host.next_calls.borrow().len(), 1);
-}
-
 /// the account api is installed before the rpc one, but nothing forces it to have succeeded -
 /// and a dispatch that cannot name its account still has to run rather than fail the app's call
 #[test]
 fn without_the_account_api_a_dispatch_hands_over_undefined() {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
-  let host = Rc::new(TestHost::default());
-  let host_dyn: Rc<dyn RpcHost> = host.clone();
-  let tl = TlViews::new(host.clone());
-  let grants = TestGrantHost::new(&["onUpdate", "interceptRpc"]);
-  let log: crate::Log = std::sync::Arc::new(|_: &str| {});
-  let state = ctx.with(|ctx| {
-    let inu = crate::testing::harness::get_api_globals(&ctx);
-    crate::api::error::install_plugin_error(&ctx).unwrap();
-    let shared = crate::api::tl::utils::install_utils(&ctx, &inu).unwrap();
-    crate::api::tl::message::install_message(&ctx, &shared, &inu).unwrap();
-    install_rpc(&ctx, host_dyn, tl, grants.as_host(), Lifecycle::new(), None, shared, log, &inu).unwrap()
-  });
-  let state = Disposing::new(&ctx, state, |ctx, state| state.dispose(ctx));
+  let (rt, ctx, host, state, _logs) = setup_engine::<TestHost>(&["onUpdate", "interceptRpc"], false, None);
 
   eval(
     &ctx,
     r#"
-        globalThis.__seen = [];
-        inu.onUpdate('updateNewMessage', (u, account) => { __seen.push(typeof account); });
-        inu.interceptRpc('foo.bar', ({ request: req, account }, next) => { __seen.push(typeof account); return next(req); });
-        "#,
+      globalThis.__seen = [];
+      inu.onUpdate('updateNewMessage', (u, account) => { __seen.push(typeof account); });
+      inu.interceptRpc('foo.bar', ({ request: req, account }, next) => { __seen.push(typeof account); return next(req); });
+    "#,
   );
   state.dispatch_update(&rt, &ctx, UPDATE_TYPE, 0, UPDATE_WIRE);
-  state.dispatch(&rt, &ctx, 1, 991, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
+  state.dispatch(&rt, &ctx, 1, 991, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
   assert_eq!(eval_json(&ctx, "__seen"), r#"["undefined","undefined"]"#);
   assert_eq!(host.next_calls.borrow().len(), 1);
-}
-
-#[test]
-fn invoke_rejection_with_a_plugin_error_wire_carries_usage_and_quota() {
-  let (rt, ctx, host, state) = setup(&["invokeRpc"]);
-  eval(
-    &ctx,
-    r#"
-            globalThis.__caught = null;
-            inu.invokeRpc({_:'foo.bar'}).catch(e => {
-                globalThis.__caught = [e instanceof inu.PluginError, e.code, e.usage, e.quota, typeof e.usage, e.message];
-            });
-            "#,
-  );
-
-  let invoke_id = host.invoke_calls.borrow()[0].0;
-  state.settle(&rt, &ctx, invoke_id, "Pquota-exceeded\n\n64\n32\ntoo big");
-  let caught: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__caught)").unwrap());
-  assert_eq!(caught, r#"[true,"quota-exceeded",64,32,"number","too big"]"#);
-}
-
-#[test]
-fn a_plugin_error_wire_from_the_host_rejects_next_as_a_plugin_error() {
-  let (rt, ctx, _host, state) = setup(&["interceptRpc"]);
-  eval(
-    &ctx,
-    r#"
-            globalThis.__caught = null;
-            inu.interceptRpc('foo.bar', async ({ request: req }, next) => {
-                try { return await next(req); } catch (e) {
-                    globalThis.__caught = [e instanceof inu.PluginError, e.code, e.grant];
-                    return { _: 'foo.bar' };
-                }
-            });
-            "#,
-  );
-
-  state.dispatch(&rt, &ctx, 1, 904, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
-  state.complete_next(&rt, &ctx, 904, "Pforbidden\n\n\n\nblocked by policy");
-
-  let caught: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__caught)").unwrap());
-  assert_eq!(caught, r#"[true,"forbidden",null]"#);
-}
-
-#[test]
-fn registration_rejected_drops_callback() {
-  let (_rt, ctx, _host, state) = setup(&["interceptRpc"]);
-  *_host.register_err.borrow_mut() = Some("not granted".to_string());
-  let threw =
-    ctx.with(|ctx| ctx.eval::<(), _>("inu.interceptRpc('foo.bar', ({ request: req }, next) => req);").is_err());
-  assert!(threw);
-  assert!(state.intercept_fns.is_empty());
-}
-
-#[test]
-fn middleware_error_rejects_next_and_completes_with_error_wire() {
-  let (rt, ctx, host, state) = setup(&["interceptRpc"]);
-  eval(
-    &ctx,
-    r#"
-            inu.interceptRpc('foo.bar', ({ request: req }, next) => {
-                return next(req).catch(e => ({ _: 'foo.bar', caught: e.message }));
-            });
-            "#,
-  );
-
-  state.dispatch(&rt, &ctx, 1, 600, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
-  state.complete_next(&rt, &ctx, 600, "Eboom");
-
-  let completes = host.completes.borrow();
-  assert_eq!(completes.len(), 1);
-  assert_eq!(completes[0], (600, wire_json(r#"{"_":"foo.bar","caught":"boom"}"#)));
-}
-
-#[test]
-fn throwing_interceptor_is_logged_and_completes_with_error() {
-  let (rt, ctx, host, state, logs) = setup_logging(&["interceptRpc"]);
-  eval(
-    &ctx,
-    r#"
-            inu.interceptRpc('foo.bar', ({ request: req }, next) => {
-                throw new Error('kaboom');
-            });
-            "#,
-  );
-
-  state.dispatch(&rt, &ctx, 1, 700, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
-
-  let completes = host.completes.borrow();
-  assert_eq!(completes.len(), 1);
-  assert_eq!(completes[0].0, 700);
-  assert!(completes[0].1.starts_with('E'));
-  assert!(completes[0].1.contains("kaboom"));
-  drop(completes);
-
-  assert!(
-    logs
-      .borrow()
-      .iter()
-      .any(|l| l.contains("interceptRpc(foo.bar) callback threw") && l.contains("kaboom")),
-    "expected a logged diagnostic, got: {:?}",
-    logs.borrow(),
-  );
 }
 
 /// classifies a captured diagnostic exactly as the bridge's sink does, so a test reads the
@@ -1129,28 +637,32 @@ fn levels(logs: &std::sync::Arc<crate::testing::harness::Logs>) -> Vec<(i32, Str
     .collect()
 }
 
-/// A plugin exception records a fault and disables the plugin; a host failure does not. Distinguish
-/// them so middleware that throws on every messages.sendMessage fails only the first send, then
-/// stops running.
 #[test]
 fn a_plugin_throw_faults_where_a_host_failure_does_not() {
-  let (rt, ctx, host, state, logs) = setup_logging(&["interceptRpc", "onUpdate"]);
-  install_rejection_tracker(&rt, crate::testing::harness::log_sink(&logs));
+  let (rt, ctx, host, state, logs) = setup(&["interceptRpc", "onUpdate"]);
+  install_rejection_tracker(&rt, &ctx, crate::testing::harness::log_sink(&logs)).unwrap();
   eval(
     &ctx,
     r#"
-        inu.interceptRpc('foo.bar', () => { throw new Error('kaboom'); });
-        inu.interceptRpc('foo.baz', async () => { throw new Error('rejected'); });
-        inu.onUpdate('updateFoo', () => { throw new Error('boom'); });
-        inu.onUpdate('updateBar', async () => { throw new Error('unawaited'); });
-        "#,
+      inu.interceptRpc('foo.bar', () => { throw new Error('kaboom'); });
+      inu.interceptRpc('foo.baz', async () => { throw new Error('rejected'); });
+      inu.onUpdate('updateFoo', () => { throw new Error('boom'); });
+      inu.onUpdate('updateFoo', () => { globalThis.__survived = true; });
+      inu.onUpdate('updateBar', async () => { throw new Error('unawaited'); });
+    "#,
   );
   let ids: Vec<u32> = host.registered.borrow().iter().map(|(_, id, _, _, _)| *id).collect();
 
-  state.dispatch(&rt, &ctx, ids[0], 700, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
-  state.dispatch(&rt, &ctx, ids[1], 701, "foo.baz", 0, &wire_json(r#"{"_":"foo.baz"}"#));
-  state.dispatch_update(&rt, &ctx, "updateFoo", 0, &wire_json(r#"{"_":"updateFoo"}"#));
-  state.dispatch_update(&rt, &ctx, "updateBar", 0, &wire_json(r#"{"_":"updateBar"}"#));
+  state.dispatch(&rt, &ctx, ids[0], 700, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
+  state.dispatch(&rt, &ctx, ids[1], 701, "foo.baz", 0, r#"J{"_":"foo.baz"}"#);
+  state.dispatch_update(&rt, &ctx, "updateFoo", 0, r#"J{"_":"updateFoo"}"#);
+  state.dispatch_update(&rt, &ctx, "updateBar", 0, r#"J{"_":"updateBar"}"#);
+
+  let completes = host.completes.borrow().clone();
+  assert_eq!(completes.iter().map(|(id, _)| *id).collect::<Vec<_>>(), vec![700, 701]);
+  assert!(completes[0].1.starts_with('E') && completes[0].1.contains("kaboom"), "{completes:?}");
+  assert!(completes[1].1.starts_with('E') && completes[1].1.contains("rejected"), "{completes:?}");
+  assert_eq!(eval_json(&ctx, "__survived"), "true", "a throwing handler stopped the fan-out");
 
   let seen = levels(&logs);
   let wanted = [
@@ -1174,26 +686,13 @@ fn a_plugin_throw_faults_where_a_host_failure_does_not() {
   assert_eq!(levels(&logs).first().map(|(level, _)| *level), Some(crate::LEVEL_ERROR), "got: {:?}", levels(&logs),);
 }
 
-/// throwing an `inu.RpcError` is the documented way to fail an intercepted request, and an
-/// abandoned stage's parked next() rejects with one the plugin did not cause, so neither may
-/// disable it: the first would punish using the api as written, the second would let one
-/// plugin's stall switch off another
 #[test]
 fn an_rpc_error_out_of_a_stage_is_control_flow_not_a_fault() {
-  let (rt, ctx, host, state, logs) = setup_logging(&["interceptRpc"]);
-  eval(
-    &ctx,
-    r#"
-        inu.interceptRpc('foo.bar', () => { throw new inu.RpcError(420, 'FLOOD_WAIT_3'); });
-        inu.interceptRpc('foo.baz', async ({ request: req }, next) => { await next(req); });
-        "#,
-  );
-  let ids: Vec<u32> = host.registered.borrow().iter().map(|(_, id, _, _, _)| *id).collect();
+  let (rt, ctx, host, state, logs) = setup(&["interceptRpc"]);
+  eval(&ctx, "inu.interceptRpc('foo.bar', () => { throw new inu.RpcError(420, 'FLOOD_WAIT_3'); });");
 
-  state.dispatch(&rt, &ctx, ids[0], 800, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
-  // the host abandons the stage parked in await next(), exactly as a chain collapse does
-  state.dispatch(&rt, &ctx, ids[1], 801, "foo.baz", 0, &wire_json(r#"{"_":"foo.baz"}"#));
-  state.abandon_dispatch(&rt, &ctx, 801, &proxy::encode_rpc_error(-1000, "INTERCEPTOR_ABANDONED"));
+  state.dispatch(&rt, &ctx, 1, 800, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
+  assert_eq!(host.completes.borrow().as_slice(), [(800, "R420:FLOOD_WAIT_3".to_string())]);
 
   for (level, message) in levels(&logs) {
     assert_ne!(level, crate::LEVEL_FAULT, "'{message}' must not disable the plugin",);
@@ -1204,7 +703,7 @@ fn an_rpc_error_out_of_a_stage_is_control_flow_not_a_fault() {
 /// spinning stage has to be cut down *and* the request answered
 #[test]
 fn a_spinning_middleware_is_interrupted_and_the_request_is_still_answered() {
-  let (rt, ctx, host, state, logs) = setup_logging(&["interceptRpc"]);
+  let (rt, ctx, host, state, logs) = setup(&["interceptRpc"]);
   crate::sandbox::limits::install_interrupt_handler(&rt, std::sync::Arc::new(|_: &str| {}));
   ctx.with(|ctx| {
     ctx
@@ -1214,7 +713,7 @@ fn a_spinning_middleware_is_interrupted_and_the_request_is_still_answered() {
 
   {
     let _deadline = crate::sandbox::limits::arm(50);
-    state.dispatch(&rt, &ctx, 1, 980, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
+    state.dispatch(&rt, &ctx, 1, 980, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
   }
 
   let completes = host.completes.borrow();
@@ -1230,50 +729,20 @@ fn a_spinning_middleware_is_interrupted_and_the_request_is_still_answered() {
   );
 }
 
-#[test]
-fn rejecting_interceptor_is_logged_and_completes_with_error() {
-  let (rt, ctx, host, state, logs) = setup_logging(&["interceptRpc"]);
-  eval(
-    &ctx,
-    r#"
-            inu.interceptRpc('foo.bar', async ({ request: req }, next) => {
-                throw new Error('async-boom');
-            });
-            "#,
-  );
-
-  state.dispatch(&rt, &ctx, 1, 800, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
-
-  let completes = host.completes.borrow();
-  assert_eq!(completes.len(), 1);
-  assert!(completes[0].1.starts_with('E'));
-  assert!(completes[0].1.contains("async-boom"));
-  drop(completes);
-
-  assert!(
-    logs
-      .borrow()
-      .iter()
-      .any(|l| l.contains("interceptRpc(foo.bar) callback rejected") && l.contains("async-boom")),
-    "expected a logged diagnostic, got: {:?}",
-    logs.borrow(),
-  );
-}
-
 /// a failing assertion must cost one failed test, not the whole binary: without disposal on the
 /// unwind path the engine's still-rooted `Persistent`s reach `JS_FreeRuntime` and abort
 #[test]
 fn a_panicking_test_body_still_releases_its_roots() {
-  let (rt, ctx, _host, state) = setup(&["interceptRpc", "invokeRpc"]);
+  let (rt, ctx, _host, state, _logs) = setup(&["interceptRpc", "invokeRpc"]);
   let engine = Rc::clone(&state);
   eval(
     &ctx,
     r#"
-            inu.interceptRpc('foo.bar', ({ request: req }, next) => new Promise(() => {}));
-            inu.invokeRpc({ _: 'foo.baz' });
-            "#,
+      inu.interceptRpc('foo.bar', ({ request: req }, next) => new Promise(() => {}));
+      inu.invokeRpc({ _: 'foo.baz' });
+    "#,
   );
-  state.dispatch(&rt, &ctx, 1, 970, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
+  state.dispatch(&rt, &ctx, 1, 970, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
   assert_eq!(engine.intercept_fns.len(), 1);
   assert_eq!(engine.invokes.len(), 1);
   assert_eq!(engine.dispatches.borrow().len(), 1);
@@ -1289,82 +758,19 @@ fn a_panicking_test_body_still_releases_its_roots() {
   assert!(engine.dispatches.borrow().is_empty());
 }
 
-#[test]
-fn unhandled_rejection_is_logged() {
-  let (rt, ctx, logs, log) = setup_rejection_tracker();
-
-  ctx.with(|ctx| {
-    // an async handler that throws with nothing awaiting/catching it (the async onUpdate case)
-    ctx.eval::<(), _>(r#"(async () => { throw new Error('nope'); })();"#).unwrap();
-  });
-  pump_jobs(&rt, &ctx, log.as_ref());
-
-  assert!(
-    logs.borrow().iter().any(|l| l.contains("unhandled promise rejection") && l.contains("nope")),
-    "expected an unhandled-rejection diagnostic, got: {:?}",
-    logs.borrow(),
-  );
-}
-
-#[test]
-fn a_reason_that_raises_while_being_formatted_leaves_nothing_pending() {
-  let (rt, ctx, logs, log) = setup_rejection_tracker();
-
-  eval(
-    &ctx,
-    r#"Promise.reject({
-                toString() { throw new Error('nested'); },
-                get stack() { throw new Error('nested'); },
-            });"#,
-  );
-  pump_jobs(&rt, &ctx, log.as_ref());
-
-  assert!(!logs.borrow().is_empty(), "the rejection still has to be reported");
-  // the tracker returns straight into quickjs, so a raise left pending here would surface at
-  // whatever unrelated call touched the context next
-  ctx.with(|ctx| {
-    let leftover = ctx.catch();
-    assert_eq!(
-      leftover.type_of(),
-      rquickjs::Type::Uninitialized,
-      "formatting left an exception pending: {leftover:?}"
-    );
-  });
-}
-
-#[test]
-fn handled_rejection_is_not_logged() {
-  let (rt, ctx, logs, log) = setup_rejection_tracker();
-
-  eval(&ctx, r#"Promise.reject(new Error('caught')).catch(() => {});"#);
-  pump_jobs(&rt, &ctx, log.as_ref());
-
-  assert!(logs.borrow().is_empty(), "a caught rejection must not log, got: {:?}", logs.borrow());
-}
-
-/// a bare runtime with the tracker the engine installs for every plugin, and the sink it reports into
-fn setup_rejection_tracker() -> (Runtime, Context, std::sync::Arc<crate::testing::harness::Logs>, crate::Log) {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
-  let logs = crate::testing::harness::Logs::new();
-  let log = crate::testing::harness::log_sink(&logs);
-  install_rejection_tracker(&rt, log.clone());
-  (rt, ctx, logs, log)
-}
-
 const UPDATE_TYPE: &str = "updateNewMessage";
 const UPDATE_WIRE: &str = "J{\"_\":\"updateNewMessage\"}";
 
 #[test]
 fn unkeyed_on_update_registrations_stack_and_dispose_individually() {
-  let (rt, ctx, host, state) = setup(&["onUpdate"]);
+  let (rt, ctx, host, state, _logs) = setup(&["onUpdate"]);
   eval(
     &ctx,
     r#"
-        globalThis.__ran = [];
-        globalThis.__d1 = inu.onUpdate('updateNewMessage', () => { __ran.push(1); });
-        globalThis.__d2 = inu.onUpdate('updateNewMessage', () => { __ran.push(2); });
-        "#,
+      globalThis.__ran = [];
+      globalThis.__d1 = inu.onUpdate('updateNewMessage', () => { __ran.push(1); });
+      globalThis.__d2 = inu.onUpdate('updateNewMessage', () => { __ran.push(2); });
+    "#,
   );
   assert_eq!(state.update_fns.len(), 2, "unkeyed registrations stack");
 
@@ -1387,90 +793,55 @@ fn unkeyed_on_update_registrations_stack_and_dispose_individually() {
 }
 
 #[test]
-fn an_update_handler_registered_during_a_dispatch_joins_the_next_one() {
-  let (rt, ctx, _host, state) = setup(&["onUpdate"]);
+fn a_dispatch_walks_the_handlers_it_started_with() {
+  let (rt, ctx, host, state, _logs) = setup(&["onUpdate"]);
   eval(
     &ctx,
     r#"
-        globalThis.__ran = [];
-        inu.onUpdate('updateNewMessage', () => {
-            __ran.push('outer');
-            if (!globalThis.__added) {
-                globalThis.__added = true;
-                inu.onUpdate('updateNewMessage', () => { __ran.push('inner'); });
-            }
-        });
-        "#,
+      globalThis.__ran = [];
+      globalThis.__first = inu.onUpdate('updateNewMessage', () => {
+        __first();
+        __first();
+        __second();
+        inu.onUpdate('updateNewMessage', () => { __ran.push('added'); });
+        __ran.push('first');
+      });
+      globalThis.__second = inu.onUpdate('updateNewMessage', () => { __ran.push('second'); });
+    "#,
   );
 
   state.dispatch_update(&rt, &ctx, UPDATE_TYPE, 0, UPDATE_WIRE);
-  assert_eq!(eval_json(&ctx, "__ran"), r#"["outer"]"#, "the dispatch walks the snapshot it started with");
+  assert_eq!(eval_json(&ctx, "__ran"), r#"["first","second"]"#);
+  assert_eq!(host.update_unregistered.borrow().len(), 2);
+  assert_eq!(state.update_fns.len(), 1);
 
   state.dispatch_update(&rt, &ctx, UPDATE_TYPE, 0, UPDATE_WIRE);
-  assert_eq!(eval_json(&ctx, "__ran"), r#"["outer","outer","inner"]"#);
-}
-
-#[test]
-fn an_update_handler_disposed_mid_dispatch_still_runs_in_that_dispatch() {
-  let (rt, ctx, _host, state) = setup(&["onUpdate"]);
-  eval(
-    &ctx,
-    r#"
-        globalThis.__ran = [];
-        inu.onUpdate('updateNewMessage', () => { __ran.push('first'); globalThis.__d2(); });
-        globalThis.__d2 = inu.onUpdate('updateNewMessage', () => { __ran.push('second'); });
-        "#,
-  );
-
-  state.dispatch_update(&rt, &ctx, UPDATE_TYPE, 0, UPDATE_WIRE);
-  assert_eq!(eval_json(&ctx, "__ran"), r#"["first","second"]"#, "the in-flight run still completes");
-
-  state.dispatch_update(&rt, &ctx, UPDATE_TYPE, 0, UPDATE_WIRE);
-  assert_eq!(eval_json(&ctx, "__ran"), r#"["first","second","first"]"#);
-}
-
-#[test]
-fn a_handler_disposing_itself_from_its_own_callback_finishes_that_call() {
-  let (rt, ctx, host, state) = setup(&["onUpdate"]);
-  eval(
-    &ctx,
-    r#"
-        globalThis.__ran = [];
-        globalThis.__d = inu.onUpdate('updateNewMessage', () => {
-            globalThis.__d();
-            globalThis.__d();
-            __ran.push('done');
-        });
-        "#,
-  );
-
-  state.dispatch_update(&rt, &ctx, UPDATE_TYPE, 0, UPDATE_WIRE);
-  assert_eq!(eval_json(&ctx, "__ran"), r#"["done"]"#);
-  assert_eq!(host.update_unregistered.borrow().len(), 1);
-  assert!(state.update_fns.is_empty());
-
-  state.dispatch_update(&rt, &ctx, UPDATE_TYPE, 0, UPDATE_WIRE);
-  assert_eq!(eval_json(&ctx, "__ran"), r#"["done"]"#);
+  assert_eq!(eval_json(&ctx, "__ran"), r#"["first","second","added"]"#);
 }
 
 #[test]
 fn registering_after_unload_began_is_a_no_op_returning_a_no_op_disposer() {
-  let (rt, ctx, host, state) = setup(&["onUpdate", "interceptRpc"]);
+  let (rt, ctx, host, state, _logs) =
+    setup(&["onUpdate", "interceptRpc", "interceptUpdate(updateNewMessage)", "interceptSendMessage"]);
   state.lifecycle.begin_unload();
   eval(
     &ctx,
     r#"
-        globalThis.__ran = [];
-        globalThis.__shapes = [
-            typeof inu.onUpdate('updateNewMessage', () => { __ran.push('update'); }),
-            typeof inu.interceptRpc('foo.bar', ({ request: req }, next) => next(req)),
-        ];
-        inu.onUpdate('updateNewMessage', () => {})();
-        "#,
+      globalThis.__ran = [];
+      globalThis.__shapes = [
+        typeof inu.onUpdate('updateNewMessage', () => { __ran.push('update'); }),
+        typeof inu.onNewMessage(() => { __ran.push('new'); }),
+        typeof inu.interceptRpc('foo.bar', ({ request: req }, next) => next(req)),
+        typeof inu.interceptUpdate('updateNewMessage', () => 'drop'),
+        typeof inu.interceptSendMessage(() => 'drop'),
+      ];
+      inu.onUpdate('updateNewMessage', () => {})();
+    "#,
   );
-  assert_eq!(eval_json(&ctx, "__shapes"), r#"["function","function"]"#);
+  assert_eq!(eval_json(&ctx, "__shapes"), r#"["function","function","function","function","function"]"#);
   assert!(host.registered.borrow().is_empty(), "the host must not hear about it either");
   assert!(host.update_registered.borrow().is_empty());
+  assert!(host.intercept_update_registered.borrow().is_empty());
   assert!(state.update_fns.is_empty());
   assert!(state.intercept_fns.is_empty());
 
@@ -1485,14 +856,14 @@ const NEW_MESSAGE: &str = r#"J{"_":"updateNewMessage","message":{"_":"message","
 /// `onUpdate(updateNewMessage)`, and only the host knows which the plugin declared.
 #[test]
 fn a_demuxed_registration_names_its_own_constructors_and_its_own_grant_scope() {
-  let (_rt, ctx, host, state) = setup(&["onUpdate(new_message,edit_message,delete_message)"]);
+  let (_rt, ctx, host, state, _logs) = setup(&["onUpdate(new_message,edit_message,delete_message)"]);
   eval(
     &ctx,
     r#"
-        inu.onNewMessage(() => {});
-        inu.onMessageEdited(() => {});
-        inu.onMessageDeleted(() => {});
-        "#,
+      inu.onNewMessage(() => {});
+      inu.onMessageEdited(() => {});
+      inu.onMessageDeleted(() => {});
+    "#,
   );
 
   let registered = host.update_registered.borrow();
@@ -1518,44 +889,19 @@ fn a_demuxed_registration_names_its_own_constructors_and_its_own_grant_scope() {
   assert_eq!(state.update_fns.len(), 3);
 }
 
-/// the two halves of the `onUpdate` scope vocabulary buy different things, in both directions
-#[test]
-fn the_demuxed_scope_and_the_constructor_scope_do_not_imply_each_other() {
-  let (_rt, ctx, host, state) = setup(&["onUpdate(updateNewMessage)"]);
-  assert_eq!(
-    catch_json(&ctx, "inu.onNewMessage(() => {})"),
-    r#"[true,"not-granted","onUpdate(new_message)","missing grant: onUpdate(new_message)"]"#,
-  );
-  assert!(host.update_registered.borrow().is_empty(), "a denied event must never reach the host");
-  assert!(state.update_fns.is_empty());
-
-  let (_rt, ctx, host, state) = setup(&["onUpdate(new_message)"]);
-  assert_eq!(
-    catch_json(&ctx, "inu.onUpdate('updateNewMessage', () => {})"),
-    r#"[true,"not-granted","onUpdate(updateNewMessage)","missing grant: onUpdate(updateNewMessage)"]"#,
-  );
-  assert!(host.update_registered.borrow().is_empty());
-  assert!(state.update_fns.is_empty());
-}
-
-#[test]
-fn an_unscoped_on_update_grant_covers_the_demuxed_events_too() {
-  let (_rt, ctx, host, _state) = setup(&["onUpdate"]);
-  eval(&ctx, "inu.onNewMessage(() => {});");
-  assert_eq!(host.update_registered.borrow().len(), 1);
-}
-
 #[test]
 fn a_new_message_arrives_as_a_message_wrapper_over_the_update_s_own_message() {
-  let (rt, ctx, _host, state) = setup(&["onUpdate(new_message)"]);
+  let (rt, ctx, _host, state, _logs) = setup(&["onUpdate(new_message)"]);
   eval(
     &ctx,
     r#"
-        globalThis.__seen = [];
-        inu.onNewMessage((m, account) => {
-            __seen.push([m instanceof inu.Message, m.id, m.text, m.dialogId, account.id, m.raw._]);
-        });
-        "#,
+      globalThis.__real = inu.Message;
+      inu.Message = class Impostor { constructor() { this.id = -1 } };
+      globalThis.__seen = [];
+      inu.onNewMessage((m, account) => {
+        __seen.push([m instanceof __real, m.id, m.text, m.dialogId, account.id, m.raw._]);
+      });
+    "#,
   );
 
   state.dispatch_update(&rt, &ctx, "updateNewMessage", 1, NEW_MESSAGE);
@@ -1563,192 +909,12 @@ fn a_new_message_arrives_as_a_message_wrapper_over_the_update_s_own_message() {
   assert_eq!(eval_json(&ctx, "__seen"), r#"[[true,42,"hi",7,1,"message"]]"#);
 }
 
-/// a channel's messages arrive under their own constructor, and the whole point of the demuxed
-/// form is that the plugin never has to know which of the two it was
-#[test]
-fn both_constructors_of_an_event_reach_one_handler() {
-  let (rt, ctx, _host, state) = setup(&["onUpdate(new_message,edit_message)"]);
-  eval(
-    &ctx,
-    r#"
-        globalThis.__new = [];
-        globalThis.__edited = [];
-        inu.onNewMessage(m => __new.push(m.id));
-        inu.onMessageEdited(m => __edited.push(m.id));
-        "#,
-  );
-
-  state.dispatch_update(&rt, &ctx, "updateNewMessage", 0, NEW_MESSAGE);
-  state.dispatch_update(
-    &rt,
-    &ctx,
-    "updateNewChannelMessage",
-    0,
-    r#"J{"_":"updateNewChannelMessage","message":{"_":"message","id":43}}"#,
-  );
-  state.dispatch_update(
-    &rt,
-    &ctx,
-    "updateEditChannelMessage",
-    0,
-    r#"J{"_":"updateEditChannelMessage","message":{"_":"message","id":44}}"#,
-  );
-
-  assert_eq!(eval_json(&ctx, "[__new, __edited]"), "[[42,43],[44]]");
-}
-
-#[test]
-fn a_deleted_message_names_its_dialog_only_when_the_update_carried_one() {
-  let (rt, ctx, _host, state) = setup(&["onUpdate(delete_message)"]);
-  eval(
-    &ctx,
-    r#"
-        globalThis.__seen = [];
-        inu.onMessageDeleted((dialogId, ids, account) => __seen.push([dialogId, ids, account.id]));
-        "#,
-  );
-
-  state.dispatch_update(
-    &rt,
-    &ctx,
-    "updateDeleteChannelMessages",
-    0,
-    r#"J{"_":"updateDeleteChannelMessages","channel_id":"99","messages":[5,6]}"#,
-  );
-  state.dispatch_update(&rt, &ctx, "updateDeleteMessages", 0, r#"J{"_":"updateDeleteMessages","messages":[7]}"#);
-
-  assert_eq!(eval_json(&ctx, "__seen"), "[[-99,[5,6],0],[null,[7],0]]");
-}
-
-/// the demuxed events are a *narrowing* of the same registry, not a second stream: one
-/// materialized update reaches each registration that named its constructor once, whichever
-/// form registered it
-#[test]
-fn one_dispatch_reaches_the_raw_and_the_demuxed_handler_once_each() {
-  let (rt, ctx, _host, state) = setup(&["onUpdate"]);
-  eval(
-    &ctx,
-    r#"
-        globalThis.__ran = [];
-        inu.onUpdate('updateNewMessage', u => __ran.push(`raw:${u.message.id}`));
-        inu.onNewMessage(m => __ran.push(`demux:${m.id}`));
-        inu.onNewMessage(m => __ran.push(`demux2:${m.id}`));
-        "#,
-  );
-
-  state.dispatch_update(&rt, &ctx, "updateNewMessage", 0, NEW_MESSAGE);
-
-  assert_eq!(eval_json(&ctx, "__ran"), r#"["raw:42","demux:42","demux2:42"]"#);
-}
-
-#[test]
-fn a_demuxed_handler_ignores_the_events_it_did_not_ask_for() {
-  let (rt, ctx, _host, state) = setup(&["onUpdate"]);
-  eval(
-    &ctx,
-    r#"
-        globalThis.__ran = [];
-        inu.onNewMessage(() => __ran.push('new'));
-        inu.onMessageDeleted(() => __ran.push('deleted'));
-        "#,
-  );
-
-  state.dispatch_update(
-    &rt,
-    &ctx,
-    "updateEditMessage",
-    0,
-    r#"J{"_":"updateEditMessage","message":{"_":"message","id":1}}"#,
-  );
-
-  assert_eq!(eval_json(&ctx, "__ran"), "[]");
-}
-
-#[test]
-fn a_demuxed_disposer_behaves_like_every_other_one() {
-  let (rt, ctx, host, state) = setup(&["onUpdate"]);
-  eval(
-    &ctx,
-    r#"
-        globalThis.__ran = 0;
-        globalThis.__d = inu.onNewMessage(() => { __ran++; });
-        "#,
-  );
-  let callback_id = host.update_registered.borrow()[0].0;
-
-  state.dispatch_update(&rt, &ctx, "updateNewMessage", 0, NEW_MESSAGE);
-  eval(&ctx, "__d(); __d();");
-  state.dispatch_update(&rt, &ctx, "updateNewMessage", 0, NEW_MESSAGE);
-
-  assert_eq!(eval_json(&ctx, "__ran"), "1");
-  assert_eq!(*host.update_unregistered.borrow(), vec![callback_id]);
-  assert!(state.update_fns.is_empty());
-}
-
-#[test]
-fn registering_a_demuxed_event_after_unload_began_is_a_no_op() {
-  let (rt, ctx, host, state) = setup(&["onUpdate"]);
-  state.lifecycle.begin_unload();
-  eval(
-    &ctx,
-    r#"
-        globalThis.__ran = 0;
-        globalThis.__shape = typeof inu.onNewMessage(() => { __ran++; });
-        "#,
-  );
-
-  assert_eq!(eval_json(&ctx, "__shape"), r#""function""#);
-  assert!(host.update_registered.borrow().is_empty());
-  assert!(state.update_fns.is_empty());
-
-  state.dispatch_update(&rt, &ctx, "updateNewMessage", 0, NEW_MESSAGE);
-  assert_eq!(eval_json(&ctx, "__ran"), "0");
-}
-
-/// the wrapper is built from the class this engine installed, so a plugin cannot decide what
-/// its own handler is handed by assigning over `inu.Message`
-#[test]
-fn replacing_inu_message_does_not_change_what_a_handler_receives() {
-  let (rt, ctx, _host, state) = setup(&["onUpdate"]);
-  eval(
-    &ctx,
-    r#"
-        globalThis.__real = inu.Message;
-        inu.Message = class Impostor { constructor() { this.id = -1 } };
-        globalThis.__seen = [];
-        inu.onNewMessage(m => __seen.push([m instanceof __real, m.id]));
-        "#,
-  );
-
-  state.dispatch_update(&rt, &ctx, "updateNewMessage", 0, NEW_MESSAGE);
-
-  assert_eq!(eval_json(&ctx, "__seen"), "[[true,42]]");
-}
-
-#[test]
-fn a_throwing_demuxed_handler_does_not_stop_the_next_one() {
-  let (rt, ctx, _host, state, logs) = setup_logging(&["onUpdate"]);
-  eval(
-    &ctx,
-    r#"
-        globalThis.__ran = [];
-        inu.onNewMessage(() => { throw new Error('boom') });
-        inu.onNewMessage(m => __ran.push(m.id));
-        "#,
-  );
-
-  state.dispatch_update(&rt, &ctx, "updateNewMessage", 0, NEW_MESSAGE);
-
-  assert_eq!(eval_json(&ctx, "__ran"), "[42]");
-  assert!(logs.borrow().iter().any(|l| l.contains("callback threw")), "{:?}", logs.borrow());
-}
-
 /// the oracle is the only test the js surface gets on a device; everything it asserts is a
 /// function of the updates handed to it, so it runs here against synthesised ones
 #[test]
 fn the_bundled_events_test_plugin_passes() {
-  const ORACLE: &str = include_str!("../../../../test/plugins/events-test.js");
-  let (rt, ctx, _host, state) = setup(&crate::testing::harness::manifest_grants(ORACLE));
+  const ORACLE: &str = crate::testing::test_plugin!("events-test.js");
+  let (rt, ctx, _host, state, _logs) = setup(&crate::testing::harness::manifest_grants(ORACLE));
   let lines = crate::testing::harness::install_capturing_console(&ctx);
   eval(&ctx, ORACLE);
 
@@ -1783,52 +949,13 @@ fn the_bundled_events_test_plugin_passes() {
 /// here, so the count covers the whole file rather than its load-time third.
 #[test]
 fn the_bundled_accounts_test_plugin_passes() {
-  const ORACLE: &str = include_str!("../../../../test/plugins/accounts-test.js");
+  const ORACLE: &str = crate::testing::test_plugin!("accounts-test.js");
   const SWITCHED: &str = r#"[{"id":0,"userId":111,"isCurrent":false,"isPremium":false},{"id":1,"userId":222,"isCurrent":true,"isPremium":true}]"#;
 
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
-  let host = Rc::new(TestHost::default());
-  let host_dyn: Rc<dyn RpcHost> = host.clone();
-  let tl = TlViews::new(host.clone());
-  let grant_host = TestGrantHost::new(&crate::testing::harness::manifest_grants(ORACLE));
-  let log: crate::Log = std::sync::Arc::new(|_: &str| {});
-  let accounts_host =
-    crate::api::telegram::account::tests::TestAccountHost::with(crate::api::telegram::account::tests::TWO_ACCOUNTS);
-  let accounts_dyn: Rc<dyn crate::api::telegram::account::AccountHost> = accounts_host.clone();
-  let (state, accounts) = ctx.with(|ctx| {
-    let inu = crate::testing::harness::get_api_globals(&ctx);
-    crate::api::error::install_plugin_error(&ctx).unwrap();
-    let shared = crate::api::tl::utils::install_utils(&ctx, &inu).unwrap();
-    crate::api::tl::message::install_message(&ctx, &shared, &inu).unwrap();
-    let accounts = crate::api::telegram::account::install_account(
-      &ctx,
-      accounts_dyn,
-      grant_host.as_host(),
-      Lifecycle::new(),
-      log.clone(),
-      &inu,
-    )
-    .unwrap();
-    let state = install_rpc(
-      &ctx,
-      host_dyn,
-      tl,
-      grant_host.as_host(),
-      Lifecycle::new(),
-      Some(accounts.clone()),
-      shared,
-      log,
-      &inu,
-    )
-    .unwrap();
-    (state, accounts)
-  });
-  // the oracle registers onAccountsChanged and withCurrentAccount, so the account api holds
-  // roots of its own and JS_FreeRuntime aborts if only the rpc half is disposed
-  let _accounts_disposer =
-    crate::testing::harness::DisposeOnDrop::new(&ctx, accounts.clone(), |ctx, state| state.dispose(ctx));
-  let state = Disposing::new(&ctx, state, |ctx, state| state.dispose(ctx));
+  let accounts_host = TestAccountHost::with(TWO_ACCOUNTS);
+  let (rt, ctx, _host, state, _logs) =
+    setup_engine::<TestHost>(&crate::testing::harness::manifest_grants(ORACLE), false, Some(accounts_host.clone()));
+  let accounts = state.accounts.clone().unwrap();
 
   let lines = crate::testing::harness::install_capturing_console(&ctx);
   eval(&ctx, ORACLE);
@@ -1840,7 +967,7 @@ fn the_bundled_accounts_test_plugin_passes() {
     &ctx,
     "updateUserStatus",
     1,
-    &wire_json(r#"{"_":"updateUserStatus","user_id":"111","status":{"_":"userStatusOnline"}}"#),
+    r#"J{"_":"updateUserStatus","user_id":"111","status":{"_":"userStatusOnline"}}"#,
   );
 
   let lines = lines.borrow().clone();
@@ -1849,13 +976,13 @@ fn the_bundled_accounts_test_plugin_passes() {
 
 #[test]
 fn intercept_disposer_unregisters_once_and_a_later_dispatch_passes_through() {
-  let (rt, ctx, host, state, logs) = setup_logging(&["interceptRpc"]);
+  let (rt, ctx, host, state, logs) = setup(&["interceptRpc"]);
   eval(
     &ctx,
     r#"
-        globalThis.__ran = 0;
-        globalThis.__d = inu.interceptRpc('foo.bar', ({ request: req }, next) => { __ran++; return next(req); });
-        "#,
+      globalThis.__ran = 0;
+      globalThis.__d = inu.interceptRpc('foo.bar', ({ request: req }, next) => { __ran++; return next(req); });
+    "#,
   );
   let callback_id = host.registered.borrow()[0].1;
 
@@ -1865,56 +992,47 @@ fn intercept_disposer_unregisters_once_and_a_later_dispatch_passes_through() {
 
   // the host picked its chain before it saw the disposal: the stage goes transparent rather
   // than failing the app's request
-  state.dispatch(&rt, &ctx, callback_id, 980, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
+  state.dispatch(&rt, &ctx, callback_id, 980, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
   assert_eq!(eval_json(&ctx, "__ran"), "0");
   assert_eq!(host.next_calls.borrow().len(), 1);
   assert!(host.completes.borrow().is_empty());
 
-  state.complete_next(&rt, &ctx, 980, &wire_json(r#"{"_":"foo.bar","ok":true}"#));
-  let completes = host.completes.borrow();
-  assert_eq!(completes.len(), 1);
-  assert_eq!(completes[0], (980, wire_json(r#"{"_":"foo.bar","ok":true}"#)));
+  state.complete_next(&rt, &ctx, 980, r#"J{"_":"foo.bar","ok":true}"#);
+  assert_eq!(host.completes.borrow().as_slice(), [(980, r#"J{"_":"foo.bar","ok":true}"#.to_string())]);
   assert!(
     logs.borrow().iter().any(|l| l.contains("disposed interceptor")),
     "expected a logged diagnostic, got: {:?}",
     logs.borrow(),
   );
-}
 
-#[test]
-fn a_passthrough_dispatch_the_host_refuses_completes_with_that_error() {
-  let (rt, ctx, host, state) = setup(&["interceptRpc"]);
-  eval(&ctx, "globalThis.__d = inu.interceptRpc('foo.bar', ({ request: req }, next) => next(req)); __d();");
+  // a structured wire the host refuses the passthrough with is not re-tagged
   *host.next_err.borrow_mut() = Some("R420:FLOOD_WAIT_5".to_string());
-
-  state.dispatch(&rt, &ctx, 1, 981, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
-  let completes = host.completes.borrow();
-  assert_eq!(completes.len(), 1);
-  assert_eq!(completes[0], (981, "R420:FLOOD_WAIT_5".to_string()), "a structured wire must not be re-tagged");
+  state.dispatch(&rt, &ctx, callback_id, 981, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
+  assert_eq!(host.completes.borrow().last(), Some(&(981, "R420:FLOOD_WAIT_5".to_string())));
 }
 
 #[test]
 fn an_interceptor_disposing_itself_mid_dispatch_still_finishes_that_dispatch() {
-  let (rt, ctx, host, state) = setup(&["interceptRpc"]);
+  let (rt, ctx, host, state, _logs) = setup(&["interceptRpc"]);
   eval(
     &ctx,
     r#"
-        globalThis.__d = inu.interceptRpc('foo.bar', async ({ request: req }, next) => {
-            globalThis.__d();
-            const r = await next(req);
-            return { _: 'foo.bar', finished: true };
-        });
-        "#,
+      globalThis.__d = inu.interceptRpc('foo.bar', async ({ request: req }, next) => {
+        globalThis.__d();
+        const r = await next(req);
+        return { _: 'foo.bar', finished: true };
+      });
+    "#,
   );
 
-  state.dispatch(&rt, &ctx, 1, 982, "foo.bar", 0, &wire_json(r#"{"_":"foo.bar"}"#));
+  state.dispatch(&rt, &ctx, 1, 982, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
   assert_eq!(host.next_calls.borrow().len(), 1, "the in-flight run keeps going after its own disposal");
   assert!(state.intercept_fns.is_empty());
 
-  state.complete_next(&rt, &ctx, 982, &wire_json(r#"{"_":"foo.bar"}"#));
+  state.complete_next(&rt, &ctx, 982, r#"J{"_":"foo.bar"}"#);
   let completes = host.completes.borrow();
   assert_eq!(completes.len(), 1);
-  assert_eq!(completes[0], (982, wire_json(r#"{"_":"foo.bar","finished":true}"#)));
+  assert_eq!(completes[0], (982, r#"J{"_":"foo.bar","finished":true}"#.to_string()));
 }
 
 const SEND_TEXT: &str = r#"{"_":"messages.sendMessage","peer":{"_":"inputPeerUser","user_id":"7","access_hash":"3"},"message":"hi","random_id":"1"}"#;
@@ -1943,7 +1061,6 @@ fn send_callback_id(host: &Rc<TestHost>) -> u32 {
   entry.1
 }
 
-/// runs one send through the chain and hands back `(what next() was given, what settled)`
 fn run_send(
   rt: &Runtime,
   ctx: &Context,
@@ -1958,81 +1075,27 @@ fn run_send(
   // every send ends in exactly one of the two, so this is a fresh id per call - and it has to
   // be, since a dispatch that parked in `next()` still holds its resolvers until dispose
   let dispatch_id = (before_next + before_complete + 1) as i64;
-  state.dispatch(rt, ctx, callback_id, dispatch_id, method, 0, &wire_json(json));
+  state.dispatch(rt, ctx, callback_id, dispatch_id, method, 0, &format!("J{json}"));
   let next = host.next_calls.borrow().get(before_next).map(|(_, wire)| wire.clone());
   let complete = host.completes.borrow().get(before_complete).map(|(_, wire)| wire.clone());
   (next, complete)
 }
 
 #[test]
-fn one_outgoing_shape_covers_all_four_send_methods() {
-  let (rt, ctx, host, state) = setup(&["interceptSendMessage"]);
-  eval(
-    &ctx,
-    r#"
-        globalThis.__seen = [];
-        inu.interceptSendMessage(({ message: m }) => {
-            __seen.push({
-                peer: m.peer,
-                text: m.text.text,
-                media: m.media.length,
-                silent: m.silent,
-                isEdit: m.isEdit,
-                editMessageId: m.editMessageId,
-            });
-            return 'send';
-        });
-        "#,
-  );
-  for (method, json) in [
-    ("messages.sendMessage", SEND_TEXT),
-    ("messages.sendMedia", SEND_MEDIA),
-    ("messages.sendMultiMedia", SEND_ALBUM),
-    ("messages.editMessage", EDIT),
-  ] {
-    run_send(&rt, &ctx, &state, &host, method, json);
-  }
-  assert_eq!(
-    eval_json(&ctx, "__seen"),
-    r#"[{"peer":7,"text":"hi","media":0,"silent":false,"isEdit":false,"editMessageId":null},"#.to_owned()
-      + r#"{"peer":-9,"text":"cap","media":1,"silent":true,"isEdit":false,"editMessageId":null},"#
-      + r#"{"peer":-5,"text":"one","media":2,"silent":false,"isEdit":false,"editMessageId":null},"#
-      + r#"{"peer":7,"text":"fixed","media":1,"silent":false,"isEdit":true,"editMessageId":42}]"#,
-  );
-}
-
-/// a send to Saved Messages carries `inputPeerSelf`, the one peer form `peer` cannot read out
-/// of the request itself, so it resolves through the account handle's own `userId`.
-#[test]
-fn reading_the_peer_of_a_saved_messages_send_needs_no_grant() {
-  let (rt, ctx, host, state) = setup(&["interceptSendMessage"]);
-  eval(
-    &ctx,
-    r#"
-        globalThis.__seen = null;
-        inu.interceptSendMessage(({ message: m }) => { __seen = m.peer; return 'send' });
-        "#,
-  );
-  let to_self = r#"{"_":"messages.sendMessage","peer":{"_":"inputPeerSelf"},"message":"note","random_id":"1"}"#;
-  let (next, complete) = run_send(&rt, &ctx, &state, &host, "messages.sendMessage", to_self);
-
-  assert_eq!(eval_json(&ctx, "__seen"), "111", "the send's own peer was unreadable");
-  assert!(next.is_some(), "the user's message never reached the network");
-  assert!(complete.is_none(), "the send was answered instead of passed on: {complete:?}");
-}
-
-#[test]
 fn a_rewrite_reaches_the_request_that_actually_goes_out() {
-  let (rt, ctx, host, state) = setup(&["interceptSendMessage"]);
+  let (rt, ctx, host, state, _logs) = setup(&["interceptSendMessage"]);
   eval(
     &ctx,
-    r#"inu.interceptSendMessage(({ message: m }) => {
-            m.text = { text: 'rewritten', entities: [{ _: 'messageEntityBold', offset: 0, length: 2 }] };
-            m.silent = true;
-            m.replyToMessageId = 11;
-            m.scheduleDate = 1700000000;
-            return 'send';
-        });"#,
+    r#"
+      inu.interceptSendMessage(async ({ message: m }) => {
+        await Promise.resolve();
+        m.text = { text: 'rewritten', entities: [{ _: 'messageEntityBold', offset: 0, length: 2 }] };
+        m.silent = true;
+        m.replyToMessageId = 11;
+        m.scheduleDate = 1700000000;
+        return 'send';
+      });
+    "#,
   );
   let (next, complete) = run_send(&rt, &ctx, &state, &host, "messages.sendMessage", SEND_TEXT);
   assert_eq!(complete, None, "a 'send' verdict settles from next(), not from the stage");
@@ -2045,87 +1108,80 @@ fn a_rewrite_reaches_the_request_that_actually_goes_out() {
 }
 
 #[test]
-fn a_dropped_send_never_goes_out_and_the_app_is_told_it_failed() {
-  let (rt, ctx, host, state) = setup(&["interceptSendMessage"]);
-  eval(&ctx, "inu.interceptSendMessage(() => 'drop');");
-  let (next, complete) = run_send(&rt, &ctx, &state, &host, "messages.sendMessage", SEND_TEXT);
-  assert_eq!(next, None, "a dropped send must not reach the network");
-  assert_eq!(complete.as_deref(), Some("R-1000:MESSAGE_DROPPED_BY_PLUGIN"));
+fn a_send_goes_out_only_on_a_send_verdict() {
+  for (middleware, prefix, text, fault) in [
+    ("() => 'drop'", "R-1000:MESSAGE_DROPPED_BY_PLUGIN", "", false),
+    ("async () => 'drop'", "R-1000:MESSAGE_DROPPED_BY_PLUGIN", "", false),
+    ("() => { throw new Error('boom') }", "E", "boom", true),
+    ("() => {}", "E", "expected 'send' or 'drop'", true),
+  ] {
+    let (rt, ctx, host, state, logs) = setup(&["interceptSendMessage"]);
+    eval(&ctx, &format!("inu.interceptSendMessage({middleware});"));
+    let (next, complete) = run_send(&rt, &ctx, &state, &host, "messages.sendMessage", SEND_TEXT);
+    assert_eq!(next, None, "{middleware}");
+    let complete = complete.unwrap_or_default();
+    assert!(complete.starts_with(prefix) && complete.contains(text), "{middleware}: {complete}");
+    let faulted = levels(&logs).iter().any(|(level, _)| *level == crate::LEVEL_FAULT);
+    assert_eq!(faulted, fault, "{middleware}: {:?}", levels(&logs));
+  }
 }
 
+/// a Saved Messages send carries `inputPeerSelf`, the one peer form `peer` cannot read out of the
+/// request, so it resolves through the account's own `userId`; a topic-only reply is not a reply
+/// anyone wrote
 #[test]
-fn quick_async_validation_drops_during_the_initial_job_drain() {
-  let (rt, ctx, host, state) = setup(&["interceptSendMessage"]);
-  eval(&ctx, "inu.interceptSendMessage(async () => 'drop');");
-  let (next, complete) = run_send(&rt, &ctx, &state, &host, "messages.sendMessage", SEND_TEXT);
-  assert_eq!(next, None);
-  assert_eq!(complete.as_deref(), Some("R-1000:MESSAGE_DROPPED_BY_PLUGIN"));
-}
-
-#[test]
-fn a_throwing_send_middleware_drops_the_send_and_is_the_plugins_fault() {
-  let (rt, ctx, host, state, logs) = setup_logging(&["interceptSendMessage"]);
-  eval(&ctx, "inu.interceptSendMessage(() => { throw new Error('boom') });");
-  let (next, complete) = run_send(&rt, &ctx, &state, &host, "messages.sendMessage", SEND_TEXT);
-  assert_eq!(next, None);
-  assert!(complete.unwrap().starts_with("E"), "a throw fails the send");
-  assert_eq!(levels(&logs).first().map(|(level, _)| *level), Some(crate::LEVEL_FAULT));
-}
-
-/// the verdict is what makes the choice total, so a middleware that fell off the end must not
-/// read as consent to send - and, unlike `drop`, it is a bug and says so
-#[test]
-fn a_send_middleware_that_returns_nothing_drops_rather_than_sending() {
-  let (rt, ctx, host, state, logs) = setup_logging(&["interceptSendMessage"]);
-  eval(&ctx, "inu.interceptSendMessage(() => {});");
-  let (next, complete) = run_send(&rt, &ctx, &state, &host, "messages.sendMessage", SEND_TEXT);
-  assert_eq!(next, None);
-  assert!(complete.unwrap().contains("expected 'send' or 'drop'"));
-  assert_eq!(levels(&logs).first().map(|(level, _)| *level), Some(crate::LEVEL_FAULT));
-}
-
-#[test]
-fn an_async_send_middleware_is_awaited_before_the_request_goes_out() {
-  let (rt, ctx, host, state) = setup(&["interceptSendMessage"]);
+fn the_send_view_reads_the_peer_and_the_reply_the_user_meant() {
+  let (rt, ctx, host, state, _logs) = setup(&["interceptSendMessage"]);
   eval(
     &ctx,
-    r#"inu.interceptSendMessage(async ({ message: m }) => {
-            await Promise.resolve();
-            m.text = 'awaited';
-            return 'send';
-        });"#,
+    r#"
+      globalThis.__seen = [];
+      inu.interceptSendMessage(({ message: m }) => { __seen.push([m.peer, m.replyToMessageId, m.topicId]); return 'send' });
+    "#,
   );
-  let (next, _) = run_send(&rt, &ctx, &state, &host, "messages.sendMessage", SEND_TEXT);
-  assert!(next.unwrap().contains(r#""message":"awaited""#));
+  let to_self = r#"{"_":"messages.sendMessage","peer":{"_":"inputPeerSelf"},"message":"note","random_id":"1"}"#;
+  let in_topic = r#"{"_":"messages.sendMessage","peer":{"_":"inputPeerChannel","channel_id":"9","access_hash":"3"},"message":"hi","random_id":"1","reply_to":{"_":"inputReplyToMessage","reply_to_msg_id":20,"top_msg_id":20}}"#;
+  let replying = r#"{"_":"messages.sendMessage","peer":{"_":"inputPeerChannel","channel_id":"9","access_hash":"3"},"message":"hi","random_id":"1","reply_to":{"_":"inputReplyToMessage","reply_to_msg_id":33,"top_msg_id":20}}"#;
+  for send in [to_self, in_topic, replying] {
+    let (next, _) = run_send(&rt, &ctx, &state, &host, "messages.sendMessage", send);
+    assert!(next.is_some(), "the user's message never reached the network: {send}");
+  }
+  assert_eq!(eval_json(&ctx, "__seen"), "[[111,null,null],[-9,null,20],[-9,33,20]]");
 }
 
-/// Callback syntax does not predict whether a verdict will arrive before the draw deadline.
+/// callback syntax does not predict whether a verdict arrives before the draw deadline, so it
+/// must not change what the host is told to filter on
 #[test]
-fn async_and_sync_send_middleware_register_the_same_filter() {
-  let (_rt, ctx, host, _state) = setup(&["interceptSendMessage"]);
-  eval(&ctx, "inu.interceptSendMessage(async () => 'send');");
-  eval(&ctx, r#"inu.interceptSendMessage({ text: /^\./ }, async () => 'send');"#);
-  eval(&ctx, "inu.interceptSendMessage(() => 'send');");
-  eval(&ctx, r#"inu.interceptSendMessage({ text: /^\./ }, () => 'send');"#);
-  let registered = host.registered.borrow();
-  assert_eq!(registered[0].4, registered[2].4);
-  assert_eq!(registered[1].4, registered[3].4);
+fn interceptsendmessage_serializes_its_filter_whatever_the_callback_syntax() {
+  let (_rt, ctx, host, _state, _logs) = setup(&["interceptSendMessage"]);
+  eval(
+    &ctx,
+    r#"
+      inu.interceptSendMessage(async () => 'send');
+      inu.interceptSendMessage({ text: /^\.stats$/i, isEdit: false }, async () => 'send');
+      inu.interceptSendMessage(() => 'send');
+      inu.interceptSendMessage({ text: /^\.stats$/i, isEdit: false }, () => 'send');
+    "#,
+  );
+  let filters: Vec<String> = host.registered.borrow().iter().map(|entry| entry.4.clone()).collect();
+  assert_eq!(filters[1], r#"{"isEdit":false,"text":{"source":"^\\.stats$","flags":"i"}}"#);
+  assert_eq!((&filters[0], &filters[1]), (&filters[2], &filters[3]));
 }
 
 /// `next()` refuses to rewrite the method the app is already awaiting a response type for, so a
 /// length change is refused where it is decidable rather than at the bridge
 #[test]
 fn media_may_be_replaced_but_not_added_or_removed() {
-  let (rt, ctx, host, state) = setup(&["interceptSendMessage"]);
+  let (rt, ctx, host, state, _logs) = setup(&["interceptSendMessage"]);
   eval(
     &ctx,
     r#"
-        globalThis.__errors = [];
-        inu.interceptSendMessage(({ message: m }) => {
-            try { m.media = [{ _: 'inputMediaEmpty' }] } catch (e) { __errors.push([e.code, m.isEdit]) }
-            return 'send';
-        });
-        "#,
+      globalThis.__errors = [];
+      inu.interceptSendMessage(({ message: m }) => {
+        try { m.media = [{ _: 'inputMediaEmpty' }] } catch (e) { __errors.push([e.code, m.isEdit]) }
+        return 'send';
+      });
+    "#,
   );
   run_send(&rt, &ctx, &state, &host, "messages.sendMessage", SEND_TEXT);
   run_send(&rt, &ctx, &state, &host, "messages.sendMultiMedia", SEND_ALBUM);
@@ -2136,63 +1192,9 @@ fn media_may_be_replaced_but_not_added_or_removed() {
 }
 
 #[test]
-fn a_topic_only_reply_does_not_read_as_a_reply_anyone_wrote() {
-  let (rt, ctx, host, state) = setup(&["interceptSendMessage"]);
-  eval(
-    &ctx,
-    r#"
-        globalThis.__seen = [];
-        inu.interceptSendMessage(({ message: m }) => {
-            __seen.push([m.replyToMessageId, m.topicId]);
-            return 'send';
-        });
-        "#,
-  );
-  let in_topic = r#"{"_":"messages.sendMessage","peer":{"_":"inputPeerChannel","channel_id":"9","access_hash":"3"},"message":"hi","random_id":"1","reply_to":{"_":"inputReplyToMessage","reply_to_msg_id":20,"top_msg_id":20}}"#;
-  let replying = r#"{"_":"messages.sendMessage","peer":{"_":"inputPeerChannel","channel_id":"9","access_hash":"3"},"message":"hi","random_id":"1","reply_to":{"_":"inputReplyToMessage","reply_to_msg_id":33,"top_msg_id":20}}"#;
-  run_send(&rt, &ctx, &state, &host, "messages.sendMessage", in_topic);
-  run_send(&rt, &ctx, &state, &host, "messages.sendMessage", replying);
-  assert_eq!(eval_json(&ctx, "__seen"), "[[null,20],[33,20]]");
-}
-
-#[test]
-fn interceptsendmessage_is_gated_on_its_own_grant_and_not_on_the_methods_it_covers() {
-  let (_rt, ctx, _host, _state) = setup(&["interceptRpc(messages.sendMessage)"]);
-  assert_eq!(
-    catch_json(&ctx, "inu.interceptSendMessage(() => 'send')"),
-    r#"[true,"not-granted","interceptSendMessage","missing grant: interceptSendMessage"]"#,
-  );
-}
-
-#[test]
-fn interceptsendmessage_serializes_its_optional_filter_for_the_host() {
-  let (_rt, ctx, host, _state) = setup(&["interceptSendMessage"]);
-  eval(&ctx, "inu.interceptSendMessage({ text: /^\\.stats$/i, isEdit: false }, () => 'send')");
-  let registered = host.registered.borrow();
-  assert_eq!(registered.len(), 1);
-  assert_eq!(registered[0].4, r#"{"isEdit":false,"text":{"source":"^\\.stats$","flags":"i"}}"#);
-}
-
-#[test]
-fn a_send_disposer_takes_the_stage_out_of_the_chain() {
-  let (rt, ctx, host, state) = setup(&["interceptSendMessage"]);
-  eval(
-    &ctx,
-    "globalThis.__ran = 0; globalThis.__d = inu.interceptSendMessage(() => { __ran++; return 'drop' });",
-  );
-  let callback_id = send_callback_id(&host);
-  eval(&ctx, "__d(); __d();");
-  assert_eq!(host.unregistered.borrow().as_slice(), [callback_id]);
-  // the host picked its chain before it could see the disposal; the stage goes transparent
-  state.dispatch(&rt, &ctx, callback_id, 7, "messages.sendMessage", 0, &wire_json(SEND_TEXT));
-  assert_eq!(eval_json(&ctx, "__ran"), "0");
-  assert_eq!(host.next_calls.borrow().len(), 1, "a disposed stage passes the send through");
-}
-
-#[test]
 fn the_bundled_send_intercept_test_plugin_passes() {
-  const ORACLE: &str = include_str!("../../../../test/plugins/send-intercept-test.js");
-  let (rt, ctx, host, state) = setup(&crate::testing::harness::manifest_grants(ORACLE));
+  const ORACLE: &str = crate::testing::test_plugin!("send-intercept-test.js");
+  let (rt, ctx, host, state, _logs) = setup(&crate::testing::harness::manifest_grants(ORACLE));
   let lines = crate::testing::harness::install_capturing_console(&ctx);
   eval(&ctx, ORACLE);
   for (method, json) in [
@@ -2241,115 +1243,35 @@ fn dispatch_intercept(
 }
 
 #[test]
-fn an_update_interceptor_names_its_constructors_and_answers_a_verdict() {
-  let (rt, ctx, host, state) = setup(&["interceptUpdate(updateNewMessage)"]);
+fn an_update_interceptor_writes_through_to_the_app_s_object_and_answers_a_verdict() {
+  let (rt, ctx, host, state, _logs) = setup(&["interceptUpdate(updateNewMessage)"]);
+  seed_tl_object(&host, "updateNewMessage");
   eval(
     &ctx,
-    "globalThis.__seen = []; inu.interceptUpdate('updateNewMessage', ({ update: u }) => { __seen.push(u.message.id); return 'deliver' });",
+    "globalThis.__seen = []; inu.interceptUpdate('updateNewMessage', ({ update: u }) => { __seen.push(u._); u.x = 12; return 'deliver' });",
   );
-  assert_eq!(host.intercept_update_registered.borrow()[0].1, vec!["updateNewMessage".to_string()],);
-  dispatch_intercept(&rt, &ctx, &state, &host, 5, "updateNewMessage", NEW_MESSAGE);
-  assert_eq!(eval_json(&ctx, "__seen"), "[42]");
-  assert_eq!(host.verdicts.borrow().as_slice(), [(5, true)]);
-}
-
-#[test]
-fn a_drop_verdict_reaches_the_host_as_one() {
-  let (rt, ctx, host, state) = setup(&["interceptUpdate(updateNewMessage)"]);
-  eval(&ctx, "inu.interceptUpdate('updateNewMessage', () => 'drop');");
-  dispatch_intercept(&rt, &ctx, &state, &host, 5, "updateNewMessage", NEW_MESSAGE);
-  assert_eq!(host.verdicts.borrow().as_slice(), [(5, false)]);
-}
-
-#[test]
-fn an_update_view_is_writable_and_the_write_reaches_the_app_s_object() {
-  let (rt, ctx, host, state) = setup(&["interceptUpdate(updateNewMessage)"]);
-  host.tl_fields.borrow_mut().insert("pts".to_string(), "J9".to_string());
-  eval(
-    &ctx,
-    "inu.interceptUpdate('updateNewMessage', ({ update: u }) => { u.pts = 12; return 'deliver' });",
-  );
-  dispatch_intercept(&rt, &ctx, &state, &host, 5, "updateNewMessage", "HOW77");
-  assert_eq!(host.tl_fields.borrow().get("pts").map(String::as_str), Some("J12"));
+  assert_eq!(host.intercept_update_registered.borrow()[0].1, vec!["updateNewMessage".to_string()]);
+  dispatch_intercept(&rt, &ctx, &state, &host, 5, "updateNewMessage", &format!("HOW{TEST_HANDLE}"));
+  assert_eq!(eval_json(&ctx, "__seen"), r#"["updateNewMessage"]"#);
+  assert_eq!(host.tl_fields.borrow().get("x").map(String::as_str), Some("J12"));
   assert_eq!(host.verdicts.borrow().as_slice(), [(5, true)]);
 }
 
 /// dropping is the one verdict that desyncs pts, so a plugin's bug must never produce it
 #[test]
-fn a_throwing_update_middleware_delivers_and_is_the_plugins_fault() {
-  let (rt, ctx, host, state, logs) = setup_logging(&["interceptUpdate(updateNewMessage)"]);
-  eval(&ctx, "inu.interceptUpdate('updateNewMessage', () => { throw new Error('boom') });");
-  dispatch_intercept(&rt, &ctx, &state, &host, 5, "updateNewMessage", NEW_MESSAGE);
-  assert_eq!(host.verdicts.borrow().as_slice(), [(5, true)]);
-  assert_eq!(levels(&logs).first().map(|(level, _)| *level), Some(crate::LEVEL_FAULT));
-}
-
-#[test]
-fn a_rejecting_update_middleware_delivers_and_is_the_plugins_fault() {
-  let (rt, ctx, host, state, logs) = setup_logging(&["interceptUpdate(updateNewMessage)"]);
-  eval(&ctx, "inu.interceptUpdate('updateNewMessage', async () => { throw new Error('boom') });");
-  dispatch_intercept(&rt, &ctx, &state, &host, 5, "updateNewMessage", NEW_MESSAGE);
-  assert_eq!(host.verdicts.borrow().as_slice(), [(5, true)]);
-  assert_eq!(levels(&logs).first().map(|(level, _)| *level), Some(crate::LEVEL_FAULT));
-}
-
-#[test]
-fn an_unknown_update_verdict_delivers_rather_than_dropping() {
-  let (rt, ctx, host, state, logs) = setup_logging(&["interceptUpdate(updateNewMessage)"]);
-  eval(&ctx, "inu.interceptUpdate('updateNewMessage', () => {});");
-  dispatch_intercept(&rt, &ctx, &state, &host, 5, "updateNewMessage", NEW_MESSAGE);
-  assert_eq!(host.verdicts.borrow().as_slice(), [(5, true)]);
-  assert_eq!(levels(&logs).first().map(|(level, _)| *level), Some(crate::LEVEL_FAULT));
-}
-
-/// the batch moved on without this stage, so a verdict that arrives afterwards must not retro-
-/// drop an update the app has already applied
-#[test]
-fn a_middleware_settling_after_its_stage_was_abandoned_answers_nothing() {
-  let (rt, ctx, host, state) = setup(&["interceptUpdate(updateNewMessage)"]);
-  eval(
-    &ctx,
-    "globalThis.__settle = null; inu.interceptUpdate('updateNewMessage', () => new Promise((r) => { __settle = r }));",
-  );
-  dispatch_intercept(&rt, &ctx, &state, &host, 5, "updateNewMessage", NEW_MESSAGE);
-  assert!(host.verdicts.borrow().is_empty(), "a parked middleware has not answered yet");
-
-  state.abandon_update_dispatch(&rt, &ctx, 5, "R-1000:INTERCEPTOR_TIMEOUT");
-  eval(&ctx, "__settle('drop')");
-  pump_jobs(&rt, &ctx, &|_| {});
-  assert!(host.verdicts.borrow().is_empty(), "the abandoned stage answered anyway");
-}
-
-#[test]
-fn an_update_middleware_signal_aborts_when_the_batch_times_out() {
-  let (rt, ctx, host, state) = setup_with_globals(&["interceptUpdate(updateNewMessage)"]);
-  eval(
-    &ctx,
-    "globalThis.__reason = null; inu.interceptUpdate('updateNewMessage', ({ signal }) => { signal.addEventListener('abort', () => { __reason = signal.reason.code }); return new Promise(() => {}); });",
-  );
-  dispatch_intercept(&rt, &ctx, &state, &host, 5, "updateNewMessage", NEW_MESSAGE);
-
-  state.abandon_update_dispatch(&rt, &ctx, 5, "R-1000:INTERCEPTOR_TIMEOUT");
-
-  assert_eq!(eval_json(&ctx, "__reason"), r#""timed-out""#);
-}
-
-#[test]
-fn a_send_middleware_signal_aborts_when_the_send_is_cancelled() {
-  let (rt, ctx, host, state) = setup_with_globals(&["interceptSendMessage"]);
-  eval(&ctx, "globalThis.__signal = null; inu.interceptSendMessage(({ signal }) => { __signal = signal; return new Promise(() => {}); });");
-  let callback_id = send_callback_id(&host);
-
-  state.dispatch(&rt, &ctx, callback_id, 970, "messages.sendMessage", 0, &wire_json(SEND_TEXT));
-  assert_eq!(eval_json(&ctx, "__signal.aborted"), "false");
-  state.abandon_dispatch(&rt, &ctx, 970, "R-1000:INTERCEPTOR_CANCELLED");
-
-  assert_eq!(eval_json(&ctx, "[__signal.aborted, __signal.reason.code]"), r#"[true,"aborted"]"#);
+fn a_failing_update_middleware_delivers_and_is_the_plugins_fault() {
+  for middleware in ["() => { throw new Error('boom') }", "async () => { throw new Error('boom') }", "() => {}"] {
+    let (rt, ctx, host, state, logs) = setup(&["interceptUpdate(updateNewMessage)"]);
+    eval(&ctx, &format!("inu.interceptUpdate('updateNewMessage', {middleware});"));
+    dispatch_intercept(&rt, &ctx, &state, &host, 5, "updateNewMessage", NEW_MESSAGE);
+    assert_eq!(host.verdicts.borrow().as_slice(), [(5, true)], "{middleware}");
+    assert_eq!(levels(&logs).first().map(|(level, _)| *level), Some(crate::LEVEL_FAULT), "{middleware}");
+  }
 }
 
 #[test]
 fn a_dispatch_naming_a_disposed_update_interceptor_delivers() {
-  let (rt, ctx, host, state) = setup(&["interceptUpdate(updateNewMessage)"]);
+  let (rt, ctx, host, state, _logs) = setup(&["interceptUpdate(updateNewMessage)"]);
   eval(
     &ctx,
     "globalThis.__ran = 0; globalThis.__d = inu.interceptUpdate('updateNewMessage', () => { __ran++; return 'drop' });",
@@ -2363,34 +1285,9 @@ fn a_dispatch_naming_a_disposed_update_interceptor_delivers() {
 }
 
 #[test]
-fn intercept_update_needs_a_scoped_grant_and_a_type_list() {
-  let (_rt, ctx, _host, _state) = setup(&["interceptUpdate(updateEditMessage)"]);
-  assert_eq!(
-    catch_json(&ctx, "inu.interceptUpdate('updateNewMessage', () => 'deliver')"),
-    r#"[true,"not-granted","interceptUpdate(updateNewMessage)","missing grant: interceptUpdate(updateNewMessage)"]"#,
-  );
-  assert_eq!(
-    catch_json(&ctx, "inu.interceptUpdate([], () => 'deliver')"),
-    r#"[false,null,null,"interceptUpdate: type list must not be empty"]"#,
-  );
-}
-
-#[test]
-fn registering_an_update_interceptor_after_unload_began_is_a_no_op() {
-  let (_rt, ctx, host, state) = setup(&["interceptUpdate(updateNewMessage)"]);
-  state.lifecycle.begin_unload();
-  eval(
-    &ctx,
-    "globalThis.__d = inu.interceptUpdate('updateNewMessage', () => 'drop'); globalThis.__t = typeof __d; __d();",
-  );
-  assert_eq!(eval_json(&ctx, "__t"), r#""function""#);
-  assert!(host.intercept_update_registered.borrow().is_empty());
-}
-
-#[test]
 fn the_bundled_update_intercept_test_plugin_passes() {
-  const ORACLE: &str = include_str!("../../../../test/plugins/update-intercept-test.js");
-  let (rt, ctx, host, state) = setup(&crate::testing::harness::manifest_grants(ORACLE));
+  const ORACLE: &str = crate::testing::test_plugin!("update-intercept-test.js");
+  let (rt, ctx, host, state, _logs) = setup(&crate::testing::harness::manifest_grants(ORACLE));
   let lines = crate::testing::harness::install_capturing_console(&ctx);
   eval(&ctx, ORACLE);
   for (id, type_name, wire) in [
@@ -2413,19 +1310,13 @@ fn the_bundled_update_intercept_test_plugin_passes() {
   crate::testing::harness::assert_oracle_exact(&lines, "update intercept test done", 16);
 }
 
-/// the verdicts the host recorded, as the json the oracle cross-checks its own bookkeeping
-/// against - the part of the contract that only the host can see
 fn serde_verdicts(host: &Rc<TestHost>) -> String {
   let verdicts: Vec<String> = host.verdicts.borrow().iter().map(|(id, deliver)| format!("[{id},{deliver}]")).collect();
   format!("[{}]", verdicts.join(","))
 }
 
-/// The oracles whose subject is a TL *view* rather than the chain: what a plugin can read, write
-/// and enumerate on one. They need a handle table with nesting, vectors and per-field read-only-ness
-/// that `tests::TestHost`'s single flat handle cannot express, so they get their own host - and
-/// nothing else in the crate runs them, which is what
-/// [`crate::testing::harness::assert_oracle_exact`]'s exact count is for.
-#[cfg(test)]
+/// The TL-view oracles need nesting, vectors and per-field read-only-ness that [`TestHost`]'s single
+/// flat handle cannot express, so they get their own host.
 mod bundled_oracles {
   use super::*;
   use crate::api::tl::proxy::TlHost;
@@ -2469,9 +1360,7 @@ mod bundled_oracles {
     format!("P{code}\n\n\n\n{message}")
   }
 
-  /// the `_` of a request, whichever channel it arrived on: a plain object crosses as `J<json>`,
-  /// a view the plugin passed straight through as a handle
-  fn method_of(host: &OracleHost, request_wire: &str) -> String {
+  fn read_request_method(host: &OracleHost, request_wire: &str) -> String {
     if let Some(json) = request_wire.strip_prefix('J') {
       let at = json.find(r#""_":""#).expect("a request names its method");
       let rest = &json[at + r#""_":""#.len()..];
@@ -2486,22 +1375,20 @@ mod bundled_oracles {
     name
   }
 
-  /// what a handle resolves to: the node it names, and whether writes through it are refused
   type Held = (Rc<RefCell<Node>>, bool);
 
   #[derive(Default)]
   struct OracleHost {
     handles: RefCell<HashMap<i64, Held>>,
     next_id: Cell<i64>,
-    /// what `ApiFilter.HIDDEN_FIELDS` does to a field: absent on every read path, and a write
+    /// what `TlFilter.HIDDEN_FIELDS` does to a field: absent on every read path, and a write
     /// refused so the hiding is not write-through
     hidden: RefCell<HashSet<String>>,
-    /// what `ApiFilter.REDACTION_EVIDENCE_FIELDS` does: writes refused, and the value handed
+    /// what `TlFilter`'s redaction evidence does: writes refused, and the value handed
     /// out read-only so the verdict cannot be changed one level down either
     sealed: RefCell<HashSet<String>>,
     /// the `auth.*`/`account.*` takeover list, which no grant lifts
     refused: RefCell<HashSet<String>>,
-    /// what a `next()` may not change the method away from
     chain_method: RefCell<String>,
     invokes: RefCell<Vec<(i64, i32, String)>>,
     nexts: RefCell<Vec<(i64, String)>>,
@@ -2641,17 +1528,17 @@ mod bundled_oracles {
           let body: Vec<String> = fields
             .iter()
             .filter(|(k, _)| !hidden.contains(k))
-            .map(|(k, v)| format!("\"{k}\":{}", self.json_of(v)))
+            .map(|(k, v)| format!("\"{k}\":{}", self.encode_value_json(v)))
             .collect();
           format!("{{\"_\":\"{type_name}\"{}{}}}", if body.is_empty() { "" } else { "," }, body.join(","))
         }
         Node::Vector(items) => {
-          format!("[{}]", items.iter().map(|v| self.json_of(v)).collect::<Vec<_>>().join(","))
+          format!("[{}]", items.iter().map(|v| self.encode_value_json(v)).collect::<Vec<_>>().join(","))
         }
       }
     }
 
-    fn json_of(&self, value: &Val) -> String {
+    fn encode_value_json(&self, value: &Val) -> String {
       match value {
         Val::Ref(child) => self.to_json(child),
         Val::Wire(w) => {
@@ -2686,7 +1573,7 @@ mod bundled_oracles {
     }
     fn on_unregister(&self, _callback_id: u32) {}
     fn on_invoke(&self, invoke_id: i64, slot: i32, request_wire: &str) -> Option<String> {
-      let method = method_of(self, request_wire);
+      let method = read_request_method(self, request_wire);
       if self.refused.borrow().contains(&method) {
         return Some(plugin_error("forbidden", &format!("'{method}' is not callable by a plugin")));
       }
@@ -2700,7 +1587,7 @@ mod bundled_oracles {
       Some(plugin_error("unsupported", "the oracle host opens no takeout sessions"))
     }
     fn on_next(&self, dispatch_id: i64, request_wire: &str) -> Option<String> {
-      let method = method_of(self, request_wire);
+      let method = read_request_method(self, request_wire);
       let expected = self.chain_method.borrow().clone();
       if !expected.is_empty() && method != expected {
         return Some(plugin_error("forbidden", &format!("next(): expected a '{expected}' request, got '{method}'")));
@@ -2726,13 +1613,13 @@ mod bundled_oracles {
   type Fixture = (Runtime, Context, Rc<OracleHost>, Disposing, std::sync::Arc<crate::testing::harness::Logs>);
 
   fn setup(grants: &[&str], with_globals: bool) -> Fixture {
-    super::setup_engine::<OracleHost>(grants, with_globals)
+    super::setup_engine::<OracleHost>(grants, with_globals, Some(TestAccountHost::with(TWO_ACCOUNTS)))
   }
 
-  const GLOBALS_ORACLE: &str = include_str!("../../../../test/plugins/globals-test.js");
-  const LAZY_TL_ORACLE: &str = include_str!("../../../../test/plugins/lazy-tl-test.js");
-  const TAKEOVER_ORACLE: &str = include_str!("../../../../test/plugins/takeover-test.js");
-  const API_FILTER_ORACLE: &str = include_str!("../../../../test/plugins/api-filter-test.js");
+  const GLOBALS_ORACLE: &str = crate::testing::test_plugin!("globals-test.js");
+  const LAZY_TL_ORACLE: &str = crate::testing::test_plugin!("lazy-tl-test.js");
+  const TAKEOVER_ORACLE: &str = crate::testing::test_plugin!("takeover-test.js");
+  const API_FILTER_ORACLE: &str = crate::testing::test_plugin!("api-filter-test.js");
 
   /// `help.getConfig` as the app would answer it, with the one field the takeover filter strips
   fn config_node() -> Rc<RefCell<Node>> {
@@ -2784,10 +1671,8 @@ mod bundled_oracles {
     crate::testing::harness::assert_oracle_exact(&lines, "lazy tl test done", 10);
   }
 
-  /// The list itself is the host's (`GrantCatalog`, pinned by `:InuCore`'s own suite); what
-  /// this covers is the half only an engine can: a `P` wire on each of the three channels a
-  /// refusal can arrive over - `on_invoke`, `on_register` and the `String?` error channel
-  /// `on_next` - reaching plugin code as an `inu.PluginError` with the code the host named.
+  /// The list itself is the host's (`GrantCatalog`); this covers a `P` wire on each of the three refusal
+  /// channels (`on_invoke`, `on_register`, `on_next`) reaching the plugin as an `inu.PluginError`.
   #[test]
   fn the_bundled_takeover_test_plugin_passes() {
     let (rt, ctx, host, state, _logs) = setup(&crate::testing::harness::manifest_grants(TAKEOVER_ORACLE), false);
@@ -2809,10 +1694,8 @@ mod bundled_oracles {
     crate::testing::harness::assert_oracle_exact(&lines, "takeover test done", 6);
   }
 
-  /// Same division: `ApiFilter`'s field lists are the host's, and what runs here is the half
-  /// that lives in the view - that `in`, `Object.keys`, a read, a `toJSON()` snapshot and an
-  /// assignment all agree with what the host said about a field, rather than three of the five
-  /// agreeing and the plugin reading the token off the fourth.
+  /// `TlFilter`'s field lists are the host's; this covers `in`, `Object.keys`, a read, `toJSON()` and an
+  /// assignment all agreeing with what the host said about a field.
   #[test]
   fn the_bundled_api_filter_test_plugin_passes() {
     let (rt, ctx, host, state, _logs) = setup(&crate::testing::harness::manifest_grants(API_FILTER_ORACLE), false);
@@ -2872,62 +1755,42 @@ mod bundled_oracles {
   }
 }
 
-/// bytes are the whole method, so the only thing rust decides about them is that they *are* bytes:
-/// anything else reaches `js_value_to_wire` as json and is caught by the tag it came back with
+/// the account-less form carries `ANY_ACCOUNT` and the host decides what that means; the
+/// `Account` form carries the slot its handle is pinned to
 #[test]
-fn invoke_raw_sends_bytes_and_refuses_everything_else() {
-  let (_rt, ctx, host, _state) = setup(&["unsafe.invokeRaw", "account.read(self)"]);
-  eval(&ctx, "inu.invokeRaw(new Uint8Array([0x2e, 0xfd, 0xa9, 0xac, 1]))");
-  eval(&ctx, "inu.account(1).invokeRaw(new Uint8Array([1, 2, 3, 4]))");
+fn an_invoke_carries_the_account_it_was_called_through_and_raw_bytes_cross_as_bytes() {
+  let (rt, ctx, host, state, _logs) = setup(&["invokeRpc", "unsafe.invokeRaw", "account.read(self)"]);
+  eval(
+    &ctx,
+    r#"
+      inu.invokeRpc({ _: 'foo.bar' });
+      inu.account(1).invokeRpc({ _: 'foo.bar' });
+      inu.invokeRaw(new Uint8Array([0x2e, 0xfd, 0xa9, 0xac, 1])).then(r => { globalThis.__raw = r; });
+      inu.account(1).invokeRaw(new Uint8Array([1, 2, 3, 4]));
+    "#,
+  );
 
+  let slots: Vec<i32> = host.invoke_calls.borrow().iter().map(|(_, slot, _)| *slot).collect();
+  assert_eq!(slots, vec![ANY_ACCOUNT, 1]);
   let calls = host.raw_calls.borrow().clone();
   assert_eq!(calls.iter().map(|(_, slot, _)| *slot).collect::<Vec<_>>(), vec![ANY_ACCOUNT, 1]);
-  // the bytes reach the host as bytes: nothing base64s them on the way
   assert_eq!(calls[0].2, vec![0x2e, 0xfd, 0xa9, 0xac, 1]);
   assert_eq!(calls[1].2, vec![1, 2, 3, 4]);
 
-  assert_eq!(
-    catch_json(&ctx, "inu.invokeRaw({ _: 'foo.bar' })"),
-    r#"[true,"invalid-argument",null,"invokeRaw: expected the serialized method as a Uint8Array"]"#,
-  );
-  assert_eq!(host.raw_calls.borrow().len(), 2);
-}
-
-#[test]
-fn invoke_raw_without_its_grant_throws_not_granted() {
-  let (_rt, ctx, host, _state) = setup(&["invokeRpc"]);
-  assert_eq!(
-    catch_json(&ctx, "inu.invokeRaw(new Uint8Array([1, 2, 3, 4]))"),
-    r#"[true,"not-granted","unsafe.invokeRaw","missing grant: unsafe.invokeRaw"]"#,
-  );
-  assert!(host.raw_calls.borrow().is_empty());
-}
-
-#[test]
-fn invoke_raw_resolves_with_the_response_bytes() {
-  let (rt, ctx, host, state) = setup(&["unsafe.invokeRaw"]);
-  eval(
-    &ctx,
-    "globalThis.__raw = null; inu.invokeRaw(new Uint8Array([1, 2, 3, 4])).then(r => { globalThis.__raw = r; })",
-  );
-  let invoke_id = host.raw_calls.borrow()[0].0;
-  state.settle_bytes(&rt, &ctx, invoke_id, &[5, 6, 7, 8]);
-  assert_eq!(
-    eval_json(&ctx, "[Array.from(globalThis.__raw), globalThis.__raw instanceof Uint8Array]"),
-    "[[5,6,7,8],true]"
-  );
+  state.settle_bytes(&rt, &ctx, calls[0].0, &[5, 6, 7, 8]);
+  assert_eq!(eval_json(&ctx, "[Array.from(__raw), __raw instanceof Uint8Array]"), "[[5,6,7,8],true]");
 }
 
 #[test]
 fn a_takeout_session_carries_its_id_into_every_op() {
-  let (rt, ctx, host, state) = setup(&["takeout", "invokeRpc(messages.getHistory)", "account.read(self)"]);
+  let (rt, ctx, host, state, _logs) = setup(&["takeout", "invokeRpc(messages.getHistory)", "account.read(self)"]);
   eval(
     &ctx,
     r#"
-        globalThis.__session = null;
-        inu.account(1).initTakeoutSession({ messageUsers: true, fileMaxSize: 1500000 })
-          .then(s => { globalThis.__session = s; });
-        "#,
+      globalThis.__session = null;
+      inu.account(1).initTakeoutSession({ messageUsers: true, fileMaxSize: 1500000 })
+        .then(s => { globalThis.__session = s; });
+    "#,
   );
 
   let init = host.takeout_calls.borrow()[0].clone();
@@ -2946,17 +1809,15 @@ fn a_takeout_session_carries_its_id_into_every_op() {
     calls.iter().map(|(_, slot, op, id, arg)| (*slot, *op, id.clone(), arg.clone())).collect::<Vec<_>>(),
     vec![
       (1, OP_TAKEOUT_INIT, String::new(), init.4.clone()),
-      (1, OP_TAKEOUT_INVOKE, "8123456789".to_string(), wire_json(r#"{"_":"messages.getHistory"}"#)),
+      (1, OP_TAKEOUT_INVOKE, "8123456789".to_string(), r#"J{"_":"messages.getHistory"}"#.to_string()),
       (1, OP_TAKEOUT_FINISH, "8123456789".to_string(), "1".to_string()),
     ],
   );
 }
 
-/// a session is not a way around the method list: wrapping a call checks the same scope the
-/// unwrapped call would have
 #[test]
 fn a_wrapped_call_still_needs_its_method_grant() {
-  let (rt, ctx, host, state) = setup(&["takeout", "invokeRpc(users.getUsers)", "account.read(self)"]);
+  let (rt, ctx, host, state, _logs) = setup(&["takeout", "invokeRpc(users.getUsers)", "account.read(self)"]);
   eval(&ctx, "inu.account(1).initTakeoutSession().then(s => { globalThis.__s = s; })");
   let init_id = host.takeout_calls.borrow()[0].0;
   state.settle(&rt, &ctx, init_id, "S77");
@@ -2966,29 +1827,4 @@ fn a_wrapped_call_still_needs_its_method_grant() {
     r#"[true,"not-granted","invokeRpc(messages.getHistory)","missing grant: invokeRpc(messages.getHistory)"]"#,
   );
   assert_eq!(host.takeout_calls.borrow().len(), 1, "the refused call must never reach the host");
-}
-
-#[test]
-fn takeout_without_its_grant_throws_not_granted() {
-  let (_rt, ctx, host, _state) = setup(&["invokeRpc", "account.read(self)"]);
-  assert_eq!(
-    catch_json(&ctx, "inu.account(1).initTakeoutSession()"),
-    r#"[true,"not-granted","takeout","missing grant: takeout"]"#,
-  );
-  assert!(host.takeout_calls.borrow().is_empty());
-}
-
-const PLUGIN_RPC_KT: &str = include_str!("../../../../fork/helpers/plugins/telegram/PluginRpc.kt");
-
-fn kotlin_const<'a>(source: &'a str, name: &str) -> &'a str {
-  let marker = format!("const val {name} = ");
-  let at = source.find(&marker).unwrap_or_else(|| panic!("PluginRpc.kt declares no {name}")) + marker.len();
-  source[at..].lines().next().unwrap().trim().trim_matches('"')
-}
-
-/// a drop is recognized on the host by exactly this code and text, so the two sides must agree
-#[test]
-fn the_drop_sentinel_is_the_one_the_host_recognizes() {
-  assert_eq!(kotlin_const(PLUGIN_RPC_KT, "SYNTHETIC_CODE"), DROP_CODE.to_string());
-  assert_eq!(kotlin_const(PLUGIN_RPC_KT, "DROPPED_TEXT"), DROP_TEXT);
 }

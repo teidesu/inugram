@@ -1,8 +1,7 @@
 use super::*;
-use crate::api::platform::jvm::{install_jvm, JvmHost, JvmState};
-use crate::sandbox::grants::TestGrantHost;
+use crate::api::platform::jvm::{install_jvm, JvmState};
+use crate::sandbox::grants::CachedGrantHost;
 use rquickjs::Context;
-use std::ops::Deref;
 
 /// the names the app's own `NotificationCenter` would answer to; a closed vocabulary is the
 /// point, so the fake has one too
@@ -33,34 +32,6 @@ impl NotificationHost for TestNotificationHost {
   }
 }
 
-/// the jvm table a payload's handles are minted into; every op answers the wire the real host would
-#[derive(Default)]
-struct TestJvmHost {
-  calls: RefCell<Vec<String>>,
-}
-
-impl JvmHost for TestJvmHost {
-  fn jvm(&self, op: i32, target: i64, name: &str, args: &[String]) -> String {
-    self.calls.borrow_mut().push(format!("{op}|{target}|{name}|{}", args.join(",")));
-    "Sanswered".to_string()
-  }
-}
-
-/// the jvm bridge kept alive beside the delegate, so that disposing the fixture releases both
-/// engines' roots rather than aborting the runtime free on the ones nobody dropped
-struct Jvm {
-  host: Rc<TestJvmHost>,
-  _state: crate::testing::harness::DisposeOnDrop<JvmState>,
-}
-
-impl Deref for Jvm {
-  type Target = TestJvmHost;
-
-  fn deref(&self) -> &TestJvmHost {
-    &self.host
-  }
-}
-
 type Disposing = crate::testing::harness::DisposeOnDrop<NotificationState>;
 type Fixture = (
   Runtime,
@@ -68,30 +39,26 @@ type Fixture = (
   Rc<TestNotificationHost>,
   Disposing,
   std::sync::Arc<crate::testing::harness::Logs>,
-  Jvm,
+  crate::testing::harness::DisposeOnDrop<JvmState>,
 );
 
 fn setup(grants: &[&str]) -> Fixture {
   let (rt, ctx) = crate::testing::harness::new_engine();
   let host = Rc::new(TestNotificationHost::default());
   let host_dyn: Rc<dyn NotificationHost> = host.clone();
-  let grants = TestGrantHost::new(grants).as_host();
+  let grants = CachedGrantHost::new(grants);
   let logs = crate::testing::harness::Logs::new();
   let log = crate::testing::harness::log_sink(&logs);
-  let jvm_host = Rc::new(TestJvmHost::default());
-  let jvm_host_dyn: Rc<dyn JvmHost> = jvm_host.clone();
+  let jvm_host = crate::api::platform::jvm::tests::TestJvmHost::new().as_host();
   let (state, jvm_state) = ctx.with(|ctx| {
     let inu = crate::testing::harness::get_api_globals(&ctx);
-    let jvm = install_jvm(&ctx, jvm_host_dyn, None, grants.clone(), Lifecycle::new(), log.clone(), None, &inu).unwrap();
+    let jvm = install_jvm(&ctx, jvm_host, None, grants.clone(), Lifecycle::new(), log.clone(), None, &inu).unwrap();
     let state =
       install_notifications(&ctx, host_dyn, grants, Lifecycle::new(), log.clone(), Some(jvm.clone()), &inu).unwrap();
     (state, jvm)
   });
   let state = Disposing::new(&ctx, state, |ctx, state| state.dispose(ctx));
-  let jvm = Jvm {
-    host: jvm_host,
-    _state: crate::testing::harness::DisposeOnDrop::new(&ctx, jvm_state, |ctx, state| state.dispose(ctx)),
-  };
+  let jvm = crate::testing::harness::DisposeOnDrop::new(&ctx, jvm_state, |ctx, state| state.dispose(ctx));
   (rt, ctx, host, state, logs, jvm)
 }
 
@@ -105,26 +72,36 @@ fn arm(ctx: &Context) {
   ctx.with(|ctx| {
     ctx
       .eval::<(), _>(
-        r#"globalThis.__seen = [];
-               globalThis.__d = inu.android.addNotificationCenterDelegate({
-                 dialogsNeedReload: (...args) => __seen.push(['dialogsNeedReload', args]),
-                 closeChats: (...args) => __seen.push(['closeChats', args]),
-               });"#,
+        r#"
+          globalThis.__seen = [];
+          globalThis.__d = inu.android.addNotificationCenterDelegate({
+            dialogsNeedReload: (...args) => __seen.push(['dialogsNeedReload', args]),
+            closeChats: (...args) => __seen.push(['closeChats', args]),
+          });
+        "#,
       )
       .unwrap()
   });
 }
 
+/// the payload is java objects, so the delegate reaches as far as `inu.jvm` does and is refused
+/// the same way when a plugin asked for only half of that
 #[test]
-fn the_delegate_is_refused_without_the_grant_and_nothing_reaches_the_host() {
-  let (_rt, ctx, host, _state, _logs, _jvm) = setup(&["openUrl"]);
-  assert_eq!(
-    catch_json(&ctx, "inu.android.addNotificationCenterDelegate({ closeChats: () => {} })"),
-    r#"[true,"not-granted","unsafe.notificationCenter","missing grant: unsafe.notificationCenter"]"#,
-  );
-  assert!(host.registered.borrow().is_empty());
+fn the_delegate_is_refused_without_either_grant_and_nothing_reaches_the_host() {
+  for (grants, missing) in
+    [(&["unsafe.jvm"], "unsafe.notificationCenter"), (&["unsafe.notificationCenter"], "unsafe.jvm")]
+  {
+    let (_rt, ctx, host, _state, _logs, _jvm) = setup(grants);
+    assert_eq!(
+      catch_json(&ctx, "inu.android.addNotificationCenterDelegate({ closeChats: () => {} })"),
+      format!(r#"[true,"not-granted","{missing}","missing grant: {missing}"]"#),
+    );
+    assert!(host.registered.borrow().is_empty());
+  }
 }
 
+/// a non-scalar java argument reaches the plugin as the `JavaObject` `inu.jvm` would hand it, and
+/// an event this delegate never named is not its business even if the host asks
 #[test]
 fn a_handler_is_called_with_the_account_and_then_the_events_own_arguments() {
   let (rt, ctx, host, state, logs, _jvm) = setup(GRANTED);
@@ -134,63 +111,16 @@ fn a_handler_is_called_with_the_account_and_then_the_events_own_arguments() {
   state.dispatch(&rt, &ctx, token, "dialogsNeedReload", -1, &["B1".to_string()]);
   // a value the host could not encode is that one argument lost, and it still arrives in place
   state.dispatch(&rt, &ctx, token, "closeChats", 0, &["N".to_string(), "Stext".to_string(), "D4.5".to_string()]);
+  state.dispatch(&rt, &ctx, token, "messagesDeleted", 0, &[]);
   assert_eq!(
     eval_json(&ctx, "globalThis.__seen"),
     r#"[["closeChats",[1,-1001]],["dialogsNeedReload",[-1,true]],["closeChats",[0,null,"text",4.5]]]"#,
   );
-  assert!(logs.borrow().is_empty(), "unexpected logs: {:?}", logs.borrow());
-}
-
-/// what this surface is for: an event's java arguments reach the plugin as the same `JavaObject`
-/// `inu.jvm` would hand it, rather than as the nulls a scalars-only payload had to put there.
-/// What the handle then *does* is the jvm bridge's own business and is pinned there; a unit test
-/// has no vm to call into
-#[test]
-fn a_non_scalar_argument_arrives_as_a_jvm_handle() {
-  let (rt, ctx, host, state, logs, _jvm) = setup(GRANTED);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"globalThis.__shape = null;
-               inu.android.addNotificationCenterDelegate({
-                 closeChats: (account, dialogId, messages) => {
-                   __shape = [account, dialogId, typeof messages, typeof messages.call, typeof messages.getField];
-                 },
-               });"#,
-      )
-      .unwrap()
-  });
-  let token = host.registered.borrow()[0].0;
   state.dispatch(&rt, &ctx, token, "closeChats", 3, &["I-1001".to_string(), "GO77".to_string()]);
   assert_eq!(
-    eval_json(&ctx, "globalThis.__shape"),
-    r#"[3,-1001,"object","function","function"]"#,
-    "a scalar stays a scalar and the java object beside it becomes a handle",
+    eval_json(&ctx, "(([, [a, id, m]]) => [a, id, typeof m.call, typeof m.getField])(__seen[3])"),
+    r#"[3,-1001,"function","function"]"#,
   );
-  assert!(logs.borrow().is_empty(), "unexpected logs: {:?}", logs.borrow());
-}
-
-/// the payload is java objects, so the delegate reaches as far as `inu.jvm` does and is refused
-/// the same way when a plugin asked for only half of that
-#[test]
-fn the_delegate_is_refused_without_the_jvm_grant() {
-  let (_rt, ctx, host, _state, _logs, _jvm) = setup(&["unsafe.notificationCenter"]);
-  assert_eq!(
-    catch_json(&ctx, "inu.android.addNotificationCenterDelegate({ closeChats: () => {} })"),
-    r#"[true,"not-granted","unsafe.jvm","missing grant: unsafe.jvm"]"#,
-  );
-  assert!(host.registered.borrow().is_empty());
-}
-
-/// only the handler the event names runs, and an event this delegate never named is not its
-/// business even if the host asks
-#[test]
-fn only_the_named_handler_runs() {
-  let (rt, ctx, host, state, logs, _jvm) = setup(GRANTED);
-  arm(&ctx);
-  let token = host.registered.borrow()[0].0;
-  state.dispatch(&rt, &ctx, token, "messagesDeleted", 0, &[]);
-  assert_eq!(eval_json(&ctx, "globalThis.__seen"), "[]");
   assert!(logs.borrow().is_empty(), "unexpected logs: {:?}", logs.borrow());
 }
 
@@ -224,9 +154,11 @@ fn delegates_stack_and_each_gets_its_own_token() {
   ctx.with(|ctx| {
     ctx
       .eval::<(), _>(
-        r#"globalThis.__ran = [];
-               inu.android.addNotificationCenterDelegate({ closeChats: () => __ran.push('first') });
-               inu.android.addNotificationCenterDelegate({ closeChats: () => __ran.push('second') });"#,
+        r#"
+          globalThis.__ran = [];
+          inu.android.addNotificationCenterDelegate({ closeChats: () => __ran.push('first') });
+          inu.android.addNotificationCenterDelegate({ closeChats: () => __ran.push('second') });
+        "#,
       )
       .unwrap()
   });
@@ -311,8 +243,10 @@ fn registering_after_unload_began_is_a_no_op() {
   let shape: String = ctx.with(|ctx| {
     ctx
       .eval::<String, _>(
-        r#"globalThis.__ran = 0;
-               typeof inu.android.addNotificationCenterDelegate({ closeChats: () => { __ran++ } });"#,
+        r#"
+          globalThis.__ran = 0;
+          typeof inu.android.addNotificationCenterDelegate({ closeChats: () => { __ran++ } });
+        "#,
       )
       .unwrap()
   });
@@ -332,10 +266,9 @@ fn dispose_releases_the_callbacks_and_tells_the_host_to_stop_observing() {
   // the host is told through its own detach rather than one upcall per token: an engine being
   // torn down cannot answer another one. What this pins is that nothing is left in the engine
   assert!(host.unregistered.borrow().is_empty());
-  // rt/ctx drop after this without aborting == the roots were released
 }
 
-const ORACLE: &str = include_str!("../../../../test/plugins/notifications-test.js");
+const ORACLE: &str = crate::testing::test_plugin!("notifications-test.js");
 
 /// the bundled oracle is the only test this surface gets on a device, and every assertion in it
 /// is a function of what it was handed - so the posts it wants are synthesised here
@@ -343,11 +276,7 @@ const ORACLE: &str = include_str!("../../../../test/plugins/notifications-test.j
 fn the_bundled_notifications_test_plugin_passes() {
   let (rt, ctx, host, state, logs, _jvm) = setup(&crate::testing::harness::manifest_grants(ORACLE));
   let lines = crate::testing::harness::install_capturing_console(&ctx);
-  ctx.with(|ctx| match ctx.eval::<(), _>(ORACLE) {
-    Ok(()) => {}
-    Err(rquickjs::Error::Exception) => panic!("{}", format_exception(&ctx)),
-    Err(e) => panic!("{e:?}"),
-  });
+  crate::testing::harness::eval_unit(&ctx, ORACLE);
   let token = host.registered.borrow().last().expect("the oracle registered nothing").0;
   state.dispatch(&rt, &ctx, token, "dialogsNeedReload", 0, &["B1".to_string()]);
   state.dispatch(&rt, &ctx, token, "updateInterfaces", -1, &["I512".to_string(), "N".to_string()]);
@@ -394,7 +323,7 @@ fn an_account_suppresses_only_its_own_notifications() {
     let account = crate::api::telegram::account::install_account(
       &ctx,
       account_host,
-      TestGrantHost::new(&["notifications.suppress"]).as_host(),
+      CachedGrantHost::new(["notifications.suppress"]),
       Lifecycle::new(),
       crate::testing::harness::log_sink(&crate::testing::harness::Logs::new()),
       &inu,

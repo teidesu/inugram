@@ -8,10 +8,9 @@ import android.content.Context
 import android.os.Bundle
 import desu.inugram.helpers.plugins.PluginManager
 import org.telegram.messenger.AndroidUtilities
-import org.telegram.messenger.Utilities
 
 object PluginAppVisibility {
-    // an activity restarting across a configuration change stops before its replacement starts, so the count blips through zero
+    // an activity restarting across a config change stops before its replacement starts
     private const val BACKGROUND_DEBOUNCE_MS = 700L
 
     // keep in sync with rust `lifecycle::AppMode::from_code`
@@ -20,18 +19,17 @@ object PluginAppVisibility {
     const val MODE_PAUSED = 2
     const val MODE_BACKGROUND = 3
 
-    // UI-thread state read from the plugin queue, hence @Volatile. false until an activity says otherwise: a process a push woke has no ui and never will
+    // false until an activity starts: a push-woken process has no ui
     @Volatile
     private var foreground = false
 
-    /** `getCurrentScreen()` answers `null` while the app is backgrounded, and the stack alone cannot say that - going away does not change it */
     val isForeground: Boolean get() = foreground
     private var watching = false
     private var startedActivities = 0
     private var resumedActivities = 0
     private val enterBackground = Runnable { if (startedActivities == 0) publish(MODE_BACKGROUND) }
 
-    /** call once from [PluginManager.init], before any activity exists, so the count never misses the first start. An app-wide signal needs no stock patch */
+    /** before any activity exists, so the count never misses the first start */
     fun watch(context: Context) {
         if (watching) return
         watching = true
@@ -53,8 +51,7 @@ object PluginAppVisibility {
                 AndroidUtilities.runOnUIThread(enterBackground, BACKGROUND_DEBOUNCE_MS)
             }
 
-            // the finer pair counts the same way the coarse one does: one activity handing over to
-            // another inside the app must not read as the app being left
+            // one activity handing over to another must not read as leaving the app
             override fun onActivityResumed(activity: Activity) {
                 resumedActivities++
                 publish(MODE_RESUMED)
@@ -72,13 +69,13 @@ object PluginAppVisibility {
         })
     }
 
-    /** the coarse pair is the one that answers [isForeground]; a pause leaves the app visible */
+    /** a pause leaves the app visible */
     private fun publish(mode: Int) {
         when (mode) {
             MODE_FOREGROUND -> if (foreground) return else foreground = true
             MODE_BACKGROUND -> if (!foreground) return else foreground = false
         }
-        // [foreground] above is tracked either way, so a plugin started later reads the real state
+        // tracked either way, so a plugin started later reads the real state
         if (!PluginManager.anyRunning) return
         EngineDispatch.scheduler.postRunnable {
             for (plugin in PluginManager.plugins()) plugin.engine?.appVisibilityChanged(mode)

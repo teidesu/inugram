@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use rquickjs::function::Constructor;
-use rquickjs::{Ctx, Exception, JsLifetime, Object, Result as JsResult};
+use rquickjs::{Ctx, Exception, Function, JsLifetime, Object, Result as JsResult};
 
 pub(crate) mod canvas;
 pub(crate) mod error;
@@ -17,17 +17,27 @@ pub(crate) mod tl;
 pub(crate) mod ui;
 pub(crate) mod url;
 
-#[derive(Clone)]
+/// `Reflect` as it was before any plugin code ran, for a proxy trap handing an access back to
+/// ordinary semantics: rquickjs has no property access that takes a receiver
+#[derive(Clone, JsLifetime)]
+pub(crate) struct ReflectFns<'js> {
+  pub(crate) get: Function<'js>,
+  pub(crate) set: Function<'js>,
+  pub(crate) define_property: Function<'js>,
+  pub(crate) delete_property: Function<'js>,
+  pub(crate) get_own_property_descriptor: Function<'js>,
+  pub(crate) own_keys: Function<'js>,
+}
+
+/// Captured before any plugin code runs, so a plugin replacing a global cannot change what the
+/// engine calls.
+#[derive(Clone, JsLifetime)]
 pub(crate) struct Globals<'js> {
   pub(crate) inu: Object<'js>,
   pub(crate) plugin_error: Constructor<'js>,
+  pub(crate) reflect: ReflectFns<'js>,
   message: Rc<RefCell<Option<Constructor<'js>>>>,
   rpc_error: Rc<RefCell<Option<Constructor<'js>>>>,
-}
-
-// SAFETY: every JavaScript-lifetime-bound field uses the struct's `'js` lifetime.
-unsafe impl<'js> JsLifetime<'js> for Globals<'js> {
-  type Changed<'to> = Globals<'to>;
 }
 
 impl<'js> Globals<'js> {
@@ -35,9 +45,18 @@ impl<'js> Globals<'js> {
     let inu = Object::new(ctx.clone())?;
     inu.set("PluginError", plugin_error.clone())?;
     ctx.globals().set("inu", inu.clone())?;
+    let reflect: Object = ctx.globals().get("Reflect")?;
     ctx.store_userdata(Self {
       inu,
       plugin_error,
+      reflect: ReflectFns {
+        get: reflect.get("get")?,
+        set: reflect.get("set")?,
+        define_property: reflect.get("defineProperty")?,
+        delete_property: reflect.get("deleteProperty")?,
+        get_own_property_descriptor: reflect.get("getOwnPropertyDescriptor")?,
+        own_keys: reflect.get("ownKeys")?,
+      },
       message: Rc::new(RefCell::new(None)),
       rpc_error: Rc::new(RefCell::new(None)),
     })?;
@@ -51,7 +70,6 @@ impl<'js> Globals<'js> {
     Ok((*globals).clone())
   }
 
-  /// the `inu.<name>` object several apis add to, created by whichever of them installs first
   pub(crate) fn get_namespace(&self, ctx: &Ctx<'js>, name: &str) -> JsResult<Object<'js>> {
     if let Ok(existing) = self.inu.get::<_, Object>(name) {
       return Ok(existing);

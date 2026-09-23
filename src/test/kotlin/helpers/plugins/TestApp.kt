@@ -10,20 +10,9 @@ import org.telegram.messenger.MessagesController
 import org.telegram.messenger.UserConfig
 import org.telegram.tgnet.TLRPC
 
-/**
- * Seeds the app's own caches, and the one transfer engine that has to be a recorder.
- *
- * Everything here writes through stock's real accessors where one exists (`putUsers`, `putChat`),
- * because those are what the bridge is written around: `putUsers` does the username indexing and the
- * min-entity merging that a two-line stand-in silently would not. Reflection is only for the caches
- * stock has no setter for.
- */
+/** writes through stock accessors where one exists: `putUsers` also indexes usernames and merges min entities */
 object TestApp {
-    /**
-     * allocates without running a constructor, for a stock singleton whose real one opens sockets or
-     * starts threads. Every field it would have set stays at the zero value, so only overridden
-     * members may be called.
-     */
+    /** skips the constructor of a stock singleton that opens sockets or starts threads */
     fun <T> allocate(cls: Class<T>, account: Int): T {
         val unsafeClass = Class.forName("sun.misc.Unsafe")
         val unsafe = unsafeClass.getDeclaredField("theUnsafe").apply { isAccessible = true }.get(null)
@@ -64,8 +53,7 @@ object TestApp {
         touchedAccounts.clear()
         loaders.clear()
         updateControllers.clear()
-        // eagerly, for the reason `RecordingConnectionsManager.reset` is eager: a transfer started
-        // before a test first asked for the loader would be started by the app's real one
+        // eagerly, or a transfer started before first use would reach stock's real loader
         for (account in 0 until UserConfig.MAX_ACCOUNT_COUNT) fileLoader(account)
     }
 
@@ -84,10 +72,7 @@ object TestApp {
 
     private fun touch(account: Int) = touchedAccounts.add(account)
 
-    /**
-     * the slot's logged-in user. Assigned rather than passed to `setCurrentUser`, which saves to
-     * prefs and posts on the notification centre; what the bridge reads is the field.
-     */
+    /** stock `setCurrentUser` saves to prefs and posts notifications */
     fun signIn(account: Int = 0, id: Long = 100L + account): TLRPC.User {
         touch(account)
         val user = TLRPC.TL_user().apply {
@@ -99,7 +84,6 @@ object TestApp {
         return user
     }
 
-    /** [signIn] with a user the test built itself */
     fun signInAs(account: Int, user: TLRPC.User) {
         touch(account)
         currentUserField().set(UserConfig.getInstance(account), user)
@@ -124,7 +108,7 @@ object TestApp {
         (field.get(controller) as LongSparseArray<TLRPC.UserFull>).put(userId, full)
     }
 
-    /** both views the app keeps of its chat list's own messages, the way `loadDialogs` fills them */
+    /** fills both views stock keeps of dialog messages, as `loadDialogs` does */
     fun cacheDialogMessage(account: Int, dialogId: Long, message: TLRPC.Message) {
         touch(account)
         val controller = MessagesController.getInstance(account)
@@ -133,7 +117,7 @@ object TestApp {
         controller.dialogMessagesByIds.put(message.id, cached)
     }
 
-    /** stock's own `saveDraft` goes to the database and the network; the cache is what is read */
+    /** stock `saveDraft` goes to the database and the network */
     @Suppress("UNCHECKED_CAST")
     fun putDraft(dialogId: Long, threadId: Long, draft: TLRPC.DraftMessage, account: Int = 0) {
         touch(account)
@@ -144,11 +128,7 @@ object TestApp {
         byThread.put(threadId, draft)
     }
 
-    /**
-     * the controller a test hands `PluginUpdates.onUpdates`, which is the only use it has for
-     * one. Deliberately *not* installed into `MessagesController.Instance`: every other read on the
-     * update path is meant to reach the app's own.
-     */
+    /** not installed into `MessagesController.Instance`, so other reads reach stock's own */
     fun updatesController(account: Int = 0): RecordingMessagesController =
         updateControllers.getOrPut(account) { allocate(RecordingMessagesController::class.java, account) }
 
@@ -161,18 +141,12 @@ object TestApp {
     }
 }
 
-/**
- * Nothing here transfers: a test posts the [org.telegram.messenger.NotificationCenter] events the
- * real loader would, which is how a download that failed, one already on disk, and one reporting
- * progress are each written. [paths] is what `getPathToMessage` answers, so a test decides whether
- * the file exists.
- */
 class RecordingFileLoader : FileLoader {
     class Load(val what: Any?, val parent: Any?)
 
     private constructor() : super(0)
 
-    // built on first read: [TestApp.allocate] runs no constructor, so no initializer here runs
+    // [TestApp.allocate] runs no constructor, so initializers never run
     private var loadList: ArrayList<Load>? = null
     private var uploadList: ArrayList<String>? = null
     private var pathMap: HashMap<Int, File>? = null

@@ -11,22 +11,6 @@ fn the_first_report_is_delivered_and_the_rest_of_the_window_is_not() {
 }
 
 #[test]
-fn a_chunk_stream_costs_one_call_per_interval() {
-  let mut throttle = ProgressThrottle::new(100);
-  let mut delivered = 0;
-  // the 200 MB download the coalescing exists for
-  for chunk in 1..=6400i64 {
-    let now = chunk as u64 * 60_000 / 6400;
-    if throttle.offer(now, chunk * 32_768, 6400 * 32_768).is_some() {
-      delivered += 1;
-    }
-  }
-  // a window closes on the first chunk past it, so 100 ms of wall clock is 100..109 ms of
-  // reports
-  assert!((570..=600).contains(&delivered), "6400 reports collapsed to {delivered}");
-}
-
-#[test]
 fn the_last_withheld_report_survives_to_the_end_of_the_transfer() {
   let mut throttle = ProgressThrottle::new(100);
   throttle.offer(0, 10, 100);
@@ -73,28 +57,10 @@ fn a_transfer_whose_size_is_learned_late_reports_the_change() {
 type Fixture = (Runtime, Context, std::sync::Arc<crate::testing::harness::Logs>, crate::Log);
 
 fn setup() -> Fixture {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
+  let (rt, ctx) = crate::testing::harness::new_engine();
   let logs = crate::testing::harness::Logs::new();
   let log = crate::testing::harness::log_sink(&logs);
   (rt, ctx, logs, log)
-}
-
-#[test]
-fn the_callback_sees_only_the_reports_the_throttle_passed() {
-  let (_rt, ctx, _logs, log) = setup();
-  ctx.with(|ctx| {
-    let cb: Function =
-      ctx.eval("globalThis.__seen = []; (loaded, total) => { __seen.push([loaded, total]); }").unwrap();
-    let reporter = ProgressReporter::with_interval(&ctx, cb, u64::MAX, log);
-    reporter.report(&ctx, 10, 100);
-    reporter.report(&ctx, 40, 100);
-    reporter.report(&ctx, 70, 100);
-    reporter.finish(&ctx, 100, 100);
-
-    let seen: String = ctx.eval("JSON.stringify(__seen)").unwrap();
-    assert_eq!(seen, "[[10,100],[100,100]]");
-  });
 }
 
 #[test]

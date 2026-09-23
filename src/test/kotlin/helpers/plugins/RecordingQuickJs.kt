@@ -1,16 +1,6 @@
 package desu.inugram.helpers.plugins
 
-/**
- * A [QuickJs] that records instead of entering an engine.
- *
- * A subclass rather than a stand-in class: this runs in the app's own process, where the real
- * [QuickJs] is already on the classpath, so the JVM harness's trick of compiling a same-named double
- * in its place is not available. [start] is overridden to skip `nativeCreate`, which leaves `ptr` at
- * 0, so any member *not* overridden here throws rather than reaching a context that was never made.
- *
- * Everything an engine would do in JS is a recorded call plus an optional hook, which is how a test
- * plays a middleware.
- */
+/** [start] skips `nativeCreate`, so any member not overridden here throws on `ptr == 0` */
 class RecordingQuickJs : QuickJs() {
     class Dispatch(val callbackId: Int, val dispatchId: Long, val method: String, val accountId: Int, val requestWire: String)
     class Completion(val dispatchId: Long, val resultWire: String)
@@ -59,7 +49,6 @@ class RecordingQuickJs : QuickJs() {
     val xposedAfterOnlys = ArrayList<XposedAfterOnly>()
     val xposedReleases = ArrayList<Long>()
 
-    /** callback ids java asked to run, in the order the engine would have run them */
     val jvmCallbacks = ArrayList<Int>()
 
     var rpcInstalled = false
@@ -71,27 +60,17 @@ class RecordingQuickJs : QuickJs() {
     var xposedInstalled = false
         private set
 
-    /** what this engine does with the view it is handed, standing in for the plugin's middleware */
-
-    /** the middleware: called with every dispatch the host hands this engine */
     var onDispatchRpc: ((Dispatch) -> Unit)? = null
 
-    /** what the middleware does when its own `await next()` settles */
     var onCompleteNext: ((Completion) -> Unit)? = null
 
-    /**
-     * the engine rejects a parked `await` synchronously here, so plugin code runs *inside* this
-     * call - which is what makes the order of a collapse observable at all
-     */
+    /** the real engine rejects a parked `await` synchronously, so plugin code runs inside this call */
     var onAbandonDispatch: ((Abandon) -> Unit)? = null
 
-    /** the `interceptUpdate` middleware: called with every update stage handed to this engine */
     var onDispatchUpdateIntercept: ((UpdateDispatch) -> Unit)? = null
 
-    /** called as a write settles, so a test can see the world the way the settle saw it */
     var onWriteResult: ((WriteResult) -> Unit)? = null
 
-    /** what this engine answers a menu render with; `null` is an engine that could not answer */
     var onRenderActions: ((Int, String) -> String?)? = null
 
     var onXposedBefore: ((XposedBefore) -> Array<String>?)? = null
@@ -109,13 +88,7 @@ class RecordingQuickJs : QuickJs() {
 
     override fun close() = Unit
 
-    /**
-     * `inu.jvm`'s reference table, which a started engine keeps in rust: these are the one group of
-     * native members a recording engine cannot simply refuse, because `PluginJvm` mints through them
-     * whenever *java* hands a value over - an `inu.xposed` hook argument, a routine's operand - and
-     * that half runs without an engine at all. Ids are the engine's own either way, so a test that
-     * asserts one plugin cannot name another's is asserting the same thing here.
-     */
+    /** `PluginJvm` mints through these without an engine, so they cannot refuse like the rest */
     private val handles = java.util.concurrent.ConcurrentHashMap<Long, Any>()
     private val nextHandle = java.util.concurrent.atomic.AtomicLong(1)
 
@@ -134,7 +107,6 @@ class RecordingQuickJs : QuickJs() {
         handles.remove(id)
     }
 
-    /** what a leak looks like from outside: a wire minted for a phase that never read it */
     val liveHandles: Int get() = handles.size
 
     override fun jvmCloseHandles() {
@@ -176,7 +148,6 @@ class RecordingQuickJs : QuickJs() {
         onDispatchRpc?.invoke(dispatch)
     }
 
-    /** sorted by table, so a suite reads the answers of the api it drives */
     override fun settle(api: Int, requestId: Long, wire: String) {
         when (api) {
             SETTLE_READS -> readResults.add(ReadResult(requestId, wire))

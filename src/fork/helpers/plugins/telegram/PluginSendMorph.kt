@@ -12,22 +12,12 @@ import org.telegram.messenger.SendMessagesHelper
 import org.telegram.tgnet.TLRPC
 
 /**
- * Implements `message.setMedia(file)` by updating the composer's existing local message.
- *
- * Stock configures media through `DelayedMessage` during `sendMessage(params)`, so an existing
- * request cannot gain media directly. Instead, unwind the send, update its local message,
- * and retry through `SendMessageParams.of(retryMessageObject)`, which preserves the message
- * and ID. The composer then uploads media and shows progress on the existing bubble.
- *
- * Use the composer's retry MessageObject, created after sending state and upload registration.
- * [PluginSendHold] converts its draw into a replacement so the cell animates the change.
+ * Stock configures media through `DelayedMessage` inside `sendMessage(params)`, so a request cannot gain
+ * media. The send is unwound, its local message updated, and retried through
+ * `SendMessageParams.of(retryMessageObject)`, which keeps the message and id.
  */
 object PluginSendMorph {
-    /**
-     * Stores a marker in `Message.params`, which stock persists across retries.
-     * The replacement send passes through middleware again; the marker prevents another
-     * `setMedia` call from causing an infinite retry loop.
-     */
+    /** stock persists `Message.params` across retries; the marker stops a middleware from `setMedia`-looping its own re-send */
     private const val MORPHED_KEY = "inu_plugin_morphed"
 
     internal class Media(
@@ -35,7 +25,7 @@ object PluginSendMorph {
         val name: String,
         val mime: String,
         val asDocument: Boolean,
-        /** read where the file is taken, since the composer reads this back on the ui thread */
+        /** the composer reads this back on the ui thread */
         val described: PluginMedia.LocalDescription,
     ) {
         val path: File get() = upload.file
@@ -43,16 +33,16 @@ object PluginSendMorph {
         var entities: ArrayList<TLRPC.MessageEntity> = ArrayList()
     }
 
-    /** ui thread only: written as the retry starts, read by the draw it causes */
+    /** ui thread only */
     private val morphing = HashSet<Int>()
 
     internal fun setMedia(call: Call): String? {
         val wire = call.values.firstOrNull() ?: refuse("invalid-argument", "setMedia: no file")
         val source = PluginMedia.stagedFile(call, wire)
         val name = PluginMedia.getFileName(source, call.json.optString("fileName"))
-        // rust deletes what it staged the moment this write answers, and the composer uploads long after that
+        // rust deletes what it staged when this write answers, long before the composer uploads
         val upload = PluginMedia.takeForUpload(call, source.path, name)
-        val mime = source.mime.ifEmpty { PluginMedia.mimeOfName(name) }
+        val mime = source.mime.ifEmpty { PluginMedia.guessMimeFromName(name) }
         val asDocument = call.flag("asDocument")
         val media = Media(upload, name, mime, asDocument, PluginMedia.describeLocalDocument(upload.file, mime, asDocument))
         try {
@@ -61,17 +51,14 @@ object PluginSendMorph {
             upload.discard()
             throw e
         }
-        // what this returns is an error wire or nothing; the answer goes back through [answer],
-        // which is also what keeps the settle out of this upcall and off the engine's own thread
-        PluginWrites.answer(call) { PluginWire.encodeNull() }
+        // [answer] keeps the settle out of this upcall
+        call.answer { PluginWire.encodeNull() }
         return null
     }
 
-    /** whether this message may still take media, which it may not if it is already the answer to one */
     internal fun isMorphed(message: MessageObject): Boolean =
         message.messageOwner?.params?.containsKey(MORPHED_KEY) == true
 
-    /** the chain's verdict, acted on from the composer's own error path, which is where a send is unwound */
     internal fun takeOver(
         helper: SendMessagesHelper,
         account: Int,
@@ -86,18 +73,14 @@ object PluginSendMorph {
             val retry = grow(account, message, media)
             morphing.add(message.id)
             helper.sendMessage(SendMessagesHelper.SendMessageParams.of(retry))
-            // the composer draws inside that call, so an id still here is one whose draw never came
+            // the composer draws inside that call, so an id still here never drew
             morphing.remove(message.id)
             if (media.upload.owned) PluginSentFiles.track(account, message.id, media.path)
         }
         return true
     }
 
-    /**
-     * the composer draws the retry the way it draws any send, but this message is already on screen:
-     * what it wants is the change animation, not a second arrival. Stock pairs that notification
-     * with swapping the dialog's own last-message objects, or the chat list keeps the stale preview.
-     */
+    /** stock pairs the change notification with swapping the dialog's last-message objects, or the chat list keeps a stale preview */
     internal fun redrawInstead(account: Int, peer: Long, messages: ArrayList<MessageObject>, scheduleDate: Int): Boolean {
         val message = messages.firstOrNull() ?: return false
         if (!morphing.remove(message.id)) return false
@@ -130,7 +113,7 @@ object PluginSendMorph {
             }
         } else {
             TLRPC.TL_messageMediaDocument().apply {
-                document = PluginOptimisticSend.documentOf(account, media.path, media.name, media.mime, media.described)
+                document = PluginOptimisticSend.buildLocalDocument(account, media.path, media.name, media.mime, media.described)
                 flags = flags or 1
             }
         }
@@ -145,7 +128,7 @@ object PluginSendMorph {
         }
         val params = owner.params ?: HashMap<String, String>().also { owner.params = it }
         params[MORPHED_KEY] = "1"
-        // the type is decided in the constructor, so a grown message needs a fresh object to read as media
+        // the type is decided in the constructor
         return MessageObject(account, owner, true, true)
     }
 }

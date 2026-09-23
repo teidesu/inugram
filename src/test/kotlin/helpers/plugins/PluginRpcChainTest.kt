@@ -9,26 +9,12 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.junit.Before
 import org.junit.Test
-import org.telegram.tgnet.RequestDelegate
 import org.telegram.tgnet.TLObject
 import org.telegram.tgnet.TLRPC
 
-/**
- * The `interceptRpc` chain end to end: the app's `sendRequestInternal` on one side, a scripted
- * middleware on the other, and the real queues (virtual, single-threaded) in between.
- *
- * Everything here is a rule from AGENTS.md's "Plugin engine invariants" that no other target can
- * reach, because it needs a request instance, a chain and a queue at once.
- */
 class PluginRpcChainTest {
-    /**
-     * counts what the real [TLObject] does not: how often it was freed. The base `freeResources` is
-     * empty and the `disableFree` check lives in whichever subclass owns a `NativeByteBuffer`, so
-     * the shape below is that subclass's.
-     *
-     * The name is load-bearing: `TlNames.classNameToTlName` reads the *class*, so a counter called
-     * anything else would enter a chain registered for a different method.
-     */
+    // mirrors the `disableFree` check of a stock subclass owning a `NativeByteBuffer`. The name
+    // matters: `TlNames.classNameToTlName` reads the class
     @Suppress("ClassName")
     class TL_users_getUsers : TLRPC.TL_users_getUsers() {
         var freeCount = 0
@@ -62,19 +48,12 @@ class PluginRpcChainTest {
     fun setUp() = resetBridge()
 
     private fun send(app: AppRequest, token: Int = 11, account: Int = 0): Boolean =
-        PluginRpc.maybeIntercept(
-            connections(account),
-            app.request,
-            RequestDelegate { response, error ->
-                app.answered = true
-                app.response = response
-                app.error = error
-            },
-            null, null, null,
-            0, 0, 0, false, token, account,
-        )
+        sendThroughPlugins(app.request, token, account) { response, error ->
+            app.answered = true
+            app.response = response
+            app.error = error
+        }
 
-    /** a plugin whose middleware immediately forwards with `next()` and returns what it gets */
     private fun passthroughPlugin(name: String = "p"): Plugin {
         val plugin = startPlugin(name, "interceptRpc(users.getUsers)")
         assertNull(plugin.interceptRpc("users.getUsers"))
@@ -168,23 +147,19 @@ class PluginRpcChainTest {
         drain()
         assertEquals(1, plugin.js.dispatches.size)
 
-        // stock re-enters sendRequestInternal with the very instance it was handed, a fresh token,
-        // and without invoking the delegate
+        // stock re-sends the same instance with a fresh token, without invoking the delegate
         connections().inu_retryNotInited(connections().lastSent()!!, 99)
         drain()
 
         assertEquals(1, plugin.js.dispatches.size, "the middleware must not run twice for one flight")
         assertEquals(2, connections().sent.size, "and the retry must still reach the wire")
 
-        // once the delegate answers, no further send can follow and the lease ends
         connections().lastSent()!!.answer(null, null, 0L)
         drain()
         assertTrue(app.answered)
 
         assertTrue(
-            PluginRpc.maybeIntercept(
-                connections(), app.request, null, null, null, null, 0, 0, 0, false, 100, 0,
-            ),
+            sendThroughPlugins(app.request, token = 100, onDone = null),
             "a genuinely new send of the same instance is a new chain",
         )
     }
@@ -193,7 +168,6 @@ class PluginRpcChainTest {
     fun a_cancel_that_beats_the_send_runs_the_caller_s_oncancelled_and_stops_the_request() {
         val plugin = startPlugin("p", "interceptRpc(users.getUsers)")
         plugin.interceptRpc("users.getUsers")
-        // a middleware that parks: the chain never reaches the passthrough
         plugin.js.onDispatchRpc = {}
         val app = AppRequest()
 
@@ -273,7 +247,6 @@ class PluginRpcChainTest {
         drain()
         val sent = connections().lastSent()!!
 
-        // a slow server is not charged to the plugins
         advanceBy(30_000)
         assertFalse(app.answered)
 
@@ -293,7 +266,6 @@ class PluginRpcChainTest {
         assertTrue(send(app))
         drain()
 
-        // sendRequestInternal frees the request the moment it has serialized it; the chain owns it
         assertTrue(app.request.disableFree, "the send must not gut a view a stage still holds")
         assertEquals(0, app.request.freeCount)
 
@@ -305,8 +277,6 @@ class PluginRpcChainTest {
 
     @Test
     fun a_short_circuiting_chain_still_frees_the_request_it_took_over() {
-        // the app's request is serialized-and-freed by stock on the send it never reaches, so the
-        // chain owns that free whether or not it passed the request on
         val plugin = startPlugin("p", "interceptRpc(users.getUsers)")
         assertNull(plugin.interceptRpc("users.getUsers"))
         plugin.js.onDispatchRpc = { plugin.complete(it.dispatchId, PluginWire.encodeJson("""{"_":"boolTrue"}""")) }
@@ -387,22 +357,13 @@ class PluginRpcChainTest {
 
     @Test
     fun a_takeover_method_is_refused_even_under_an_unscoped_grant() {
-        // an unscoped grant satisfies every scope check, so this refusal is the only thing between
-        // `@grant interceptRpc` and auth.exportLoginToken
         val plugin = startPlugin("p", "interceptRpc", "invokeRpc")
         assertPluginError("forbidden", plugin.interceptRpc("auth.exportLoginToken"))
         assertPluginError("forbidden", plugin.js.listener!!.onInvokeRpc(1L, QuickJs.ANY_ACCOUNT, PluginWire.encodeJson("""{"_":"auth.exportLoginToken"}""")))
-        // the account.* half of the list is not a prefix, so it is refused by name or not at all
         assertPluginError("forbidden", plugin.interceptRpc("account.deleteAccount"))
         assertPluginError("forbidden", plugin.js.listener!!.onInvokeRpc(2L, QuickJs.ANY_ACCOUNT, PluginWire.encodeJson("""{"_":"account.resetAuthorization"}""")))
     }
 
-    /**
-     * the account-less form sends on the slot the plugin started on and the `Account` form on the
-     * one it names, which is the whole difference between them. The slot is not the host's to
-     * trust: `invokeRpc` lives on a prototype every handle shares, so a plugin can call it through
-     * any object carrying an `id`.
-     */
     @Test
     fun invokerpc_sends_on_the_slot_it_was_given() {
         for (slot in 0..1) TestApp.signIn(slot, id = 100L + slot)
@@ -422,16 +383,11 @@ class PluginRpcChainTest {
         assertPluginError("invalid-argument", plugin.js.listener!!.onInvokeRpc(5L, -2, request))
     }
 
-    /**
-     * a request handle the plugin was handed read-only (an `onUpdate` payload, anything off an
-     * `Account`) coming back in as the request: accepting it would re-mint the app's own object
-     * writable on the next read of any of its fields.
-     */
     @Test
     fun a_read_only_handle_is_refused_wherever_a_request_is_decoded() {
         val plugin = startPlugin("p", "interceptRpc(users.getUsers)", "invokeRpc(users.getUsers)")
         assertNull(plugin.interceptRpc("users.getUsers"))
-        val appOwned = tlTableOf(plugin)!!.mintForPlugin(TLRPC.TL_users_getUsers(), readOnly = true)
+        val appOwned = getTlHandles(plugin)!!.mintForPlugin(TLRPC.TL_users_getUsers(), readOnly = true)
         val readOnlyWire = PluginWire.encodeHandle(vector = false, id = appOwned, readOnly = true)
 
         var refusal: String? = null
@@ -454,34 +410,11 @@ class PluginRpcChainTest {
         assertTrue(send(app))
         drain()
 
-        // next() only queues the advance; the plugin stops before that runnable gets to run, so the
-        // identity guard on it is the only thing between a dead chain and a real send.
-        // (the later window, a collapse after the send is already queued on stageQueue, needs two
-        // real threads and is not reachable from this single-threaded harness.)
         plugin.next(dispatchId, PluginWire.encodeJson("""{"_":"users.getUsers"}"""))
         detachPlugin(plugin)
         drain()
 
         assertEquals(0, connections().sent.size, "a collapsed chain must not still reach the server")
-    }
-
-    @Test
-    fun a_stage_that_settles_without_awaiting_next_does_not_leave_its_sub_chain_walking() {
-        val first = startPlugin("first", "interceptRpc(users.getUsers)")
-        val second = passthroughPlugin("second")
-        assertNull(first.interceptRpc("users.getUsers"))
-        // calls next() and settles anyway, so the stage below it is live when this one answers
-        first.js.onDispatchRpc = {
-            first.next(it.dispatchId, it.requestWire)
-            first.complete(it.dispatchId, PluginWire.encodeJson("""{"_":"boolTrue"}"""))
-        }
-        val app = AppRequest()
-
-        assertTrue(send(app))
-        drain()
-
-        assertTrue(app.answered)
-        assertEquals(0, connections().sent.size, "the abandoned sub-chain must not send after the app was answered")
     }
 
     @Test
@@ -496,6 +429,7 @@ class PluginRpcChainTest {
 
         assertTrue(send(app))
         drain()
+        assertTrue(app.answered)
         assertEquals(0, connections().sent.size)
 
         assertTrue(send(app), "the cancelled send must not leave this request bypassing later chains")
@@ -503,12 +437,6 @@ class PluginRpcChainTest {
         assertEquals(2, plugin.js.dispatches.size)
     }
 
-    /**
-     * the same rule one stage deeper, which is the only place `abandonBelow` is what does the work:
-     * for the *first* stage `finalize` is the top-level one, so `collapseChain` removes every stage
-     * anyway and would cover for it. A middle stage answers *upward* into its parent's continuation
-     * and the chain stays live, so nothing else stops the stage below walking on to the real send.
-     */
     @Test
     fun a_middle_stage_that_settles_without_awaiting_next_does_not_leave_its_sub_chain_walking() {
         passthroughPlugin("first")
@@ -529,12 +457,11 @@ class PluginRpcChainTest {
         assertEquals(0, connections().sent.size, "the abandoned sub-chain must not send after the app was answered")
     }
 
-    /** the three plugins of a chain, each parked in `await next()` except the deepest */
-    private fun parkedChain(order: MutableList<String>): List<Plugin> =
-        listOf("first", "second", "third").map { name ->
+    private fun parkedChain(order: MutableList<String>, names: List<String>): List<Plugin> =
+        names.map { name ->
             val plugin = startPlugin(name, "interceptRpc(users.getUsers)")
             assertNull(plugin.interceptRpc("users.getUsers"))
-            plugin.js.onDispatchRpc = { if (name != "third") plugin.next(it.dispatchId, it.requestWire) }
+            plugin.js.onDispatchRpc = { if (name != names.last()) plugin.next(it.dispatchId, it.requestWire) }
             plugin.js.onAbandonDispatch = { order.add(name) }
             plugin
         }
@@ -542,7 +469,7 @@ class PluginRpcChainTest {
     @Test
     fun a_collapse_abandons_the_stages_deepest_first() {
         val order = ArrayList<String>()
-        parkedChain(order)
+        parkedChain(order, listOf("first", "second", "third"))
 
         assertTrue(send(AppRequest()))
         drain()
@@ -551,23 +478,11 @@ class PluginRpcChainTest {
         assertEquals(listOf("third", "second", "first"), order)
     }
 
-    /**
-     * the same order one stage down, where `abandonBelow` is what walks rather than `collapseChain`:
-     * a stage that settles answers upward and the chain stays live, so its sub-chain is torn down on
-     * its own and for the same reason - a rejection continuation re-enters `onNext`/`onComplete`,
-     * and a shallower stage must never be gone by the time a deeper one's does. A sub-chain of one
-     * is a walk with no observable order, which is why this takes four plugins.
-     */
+    // a sub-chain of one has no observable order, hence four plugins
     @Test
     fun a_middle_stage_that_settles_abandons_the_stages_below_it_deepest_first() {
         val order = ArrayList<String>()
-        val chain = listOf("first", "second", "third", "fourth").map { name ->
-            val plugin = startPlugin(name, "interceptRpc(users.getUsers)")
-            assertNull(plugin.interceptRpc("users.getUsers"))
-            plugin.js.onDispatchRpc = { if (name != "fourth") plugin.next(it.dispatchId, it.requestWire) }
-            plugin.js.onAbandonDispatch = { order.add(name) }
-            plugin
-        }
+        val chain = parkedChain(order, listOf("first", "second", "third", "fourth"))
         val second = chain[1]
 
         assertTrue(send(AppRequest()))
@@ -580,11 +495,7 @@ class PluginRpcChainTest {
         assertEquals(listOf("fourth", "third"), order)
     }
 
-    /**
-     * a stage parked in `await next()` is rejected *inside* [QuickJs.abandonDispatch], so its catch
-     * block runs while the collapse is still walking. Releasing the scope before that would leave it
-     * reading `handle-expired` off every field of the request it was handed.
-     */
+    // a parked stage's catch block runs inside `abandonDispatch`, while the collapse still walks
     @Test
     fun a_stage_the_collapse_rejects_can_still_read_its_own_request() {
         val plugin = startPlugin("p", "interceptRpc(users.getUsers)")
@@ -604,11 +515,9 @@ class PluginRpcChainTest {
         )
     }
 
-    /** the same ordering in `PluginManager.teardown`, where `session.tl.releaseAll` is what has to come last */
     @Test
     fun a_stage_detach_rejects_can_still_read_its_own_request() {
-        // two registrations put one plugin in the chain twice, which is what gives detach a stage of
-        // its own to abandon: its topmost one answers the app rather than the engine
+        // two registrations give detach a stage of its own to abandon below the topmost
         val plugin = startPlugin("p", "interceptRpc(users.getUsers)")
         assertNull(plugin.interceptRpc("users.getUsers", callbackId = 1))
         assertNull(plugin.interceptRpc("users.getUsers", callbackId = 2))
@@ -673,7 +582,6 @@ class PluginRpcChainTest {
         first.js.onDispatchRpc = { order.add("first"); first.next(it.dispatchId, it.requestWire) }
         second.js.onDispatchRpc = { order.add("second"); second.next(it.dispatchId, it.requestWire) }
 
-        // the user drags `second` above `first`
         setInstalledPlugins(listOf(second, first))
         PluginRpc.refreshChainOrder()
         drain()

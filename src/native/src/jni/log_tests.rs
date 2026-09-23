@@ -84,7 +84,7 @@ fn builtins_print_their_contents() {
   assert_eq!(
     log_line(
       "console.log(new Map([['a', 1]]), new Set([1]), new Uint8Array([1, 2]), /x/g, new Date(0), new Number(3),
-                   new ArrayBuffer(4), new Date(NaN))"
+       new ArrayBuffer(4), new Date(NaN))"
     ),
     "Map(1) { 'a' => 1 } Set(1) { 1 } Uint8Array(2) [ 1, 2 ] /x/g 1970-01-01T00:00:00.000Z [Number: 3] \
      ArrayBuffer { byteLength: 4 } Invalid Date"

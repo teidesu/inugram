@@ -3,6 +3,7 @@ use std::rc::Rc;
 
 use rquickjs::{ArrayBuffer, Ctx, Exception, Function, Object, Result as JsResult, TypedArray, Value};
 
+use crate::utils::qjs::{qjs_read_buffer_bytes, qjs_read_typed_bytes, qjs_write_typed_bytes};
 use crate::{
   api::io::blob::{self, BlobState},
   sandbox::limits::ExternalMemory,
@@ -56,25 +57,19 @@ pub fn install_globals<'js>(
     Function::new(ctx.clone(), move |ctx: Ctx<'js>, array: Value<'js>| random_fill(&ctx, host.as_ref(), array))?,
   )?;
 
-  let factory = crate::utils::prelude::load(ctx, PRELUDE)?;
+  let factory = crate::utils::qjs::qjs_load_prelude(ctx, PRELUDE)?;
   factory.call::<_, ()>((natives,))?;
   Ok(blobs)
 }
 
 fn decode_utf8(ctx: &Ctx<'_>, input: Value<'_>) -> JsResult<String> {
   if let Ok(bytes) = TypedArray::<u8>::from_value(input.clone()) {
-    // SAFETY: no javascript runs while the slice is borrowed
-    let Some(bytes) = (unsafe { bytes.as_bytes() }) else {
-      return Err(Exception::throw_type(ctx, "TextDecoder: the array is detached"));
-    };
-    return Ok(String::from_utf8_lossy(bytes).into_owned());
+    return qjs_read_typed_bytes(&bytes, |bytes| String::from_utf8_lossy(bytes).into_owned())
+      .ok_or_else(|| Exception::throw_type(ctx, "TextDecoder: the array is detached"));
   }
   if let Some(buffer) = ArrayBuffer::from_value(input) {
-    // SAFETY: no javascript runs while the slice is borrowed
-    let Some(bytes) = (unsafe { buffer.as_bytes() }) else {
-      return Err(Exception::throw_type(ctx, "TextDecoder: the buffer is detached"));
-    };
-    return Ok(String::from_utf8_lossy(bytes).into_owned());
+    return qjs_read_buffer_bytes(&buffer, |bytes| String::from_utf8_lossy(bytes).into_owned())
+      .ok_or_else(|| Exception::throw_type(ctx, "TextDecoder: the buffer is detached"));
   }
   Err(Exception::throw_type(ctx, "TextDecoder: expected a Uint8Array or an ArrayBuffer"))
 }
@@ -89,16 +84,18 @@ fn random_fill<'js>(ctx: &Ctx<'js>, host: &dyn RandomHost, array: Value<'js>) ->
     return Err(Exception::throw_message(ctx, "getRandomValues: the host has no randomness to give"));
   }
 
-  let Some(raw) = typed.as_raw() else {
-    return Err(Exception::throw_type(ctx, "getRandomValues: the array is detached"));
-  };
-  if raw.len() != bytes.len() {
-    return Err(Exception::throw_type(ctx, "getRandomValues: the array was resized"));
+  let copied = qjs_write_typed_bytes(&typed, |raw| {
+    let fits = raw.len() == bytes.len();
+    if fits {
+      raw.copy_from_slice(&bytes);
+    }
+    fits
+  });
+  match copied {
+    None => Err(Exception::throw_type(ctx, "getRandomValues: the array is detached")),
+    Some(false) => Err(Exception::throw_type(ctx, "getRandomValues: the array was resized")),
+    Some(true) => Ok(array),
   }
-  // SAFETY: `as_raw` guarantees a live, non-detached typed-array buffer, and no javascript has run
-  // since. Its length was checked against `bytes`, so both ranges are valid and equal.
-  unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), raw.cast::<u8>().as_ptr(), raw.len()) };
-  Ok(array)
 }
 
 #[cfg(test)]

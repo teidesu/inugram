@@ -12,10 +12,9 @@ use crate::api::io::fs::FsState;
 use crate::api::io::staging::{SourceStager, StagedFile, StagedSource};
 use crate::api::tl::proxy::plain_wire_to_js;
 use crate::api::ui::{OP_PICK_FILE, OP_SAVE_FILE};
-use crate::runtime::{pump_jobs, Parked, PendingTable};
+use crate::runtime::{Parked, PendingTable};
 use crate::utils::arguments::{opt_bool, stringify_json};
 
-/// Maximum number of MIME types accepted by one picker.
 const MAX_ACCEPT_TYPES: usize = 32;
 
 pub trait FilesHost {
@@ -24,9 +23,7 @@ pub trait FilesHost {
 }
 
 enum FileRequest {
-  /// a pick, and whether the caller asked for more than one file
   Pick { multiple: bool },
-  /// a save, and the file staged for the host to copy out of
   Save { _staged: Option<StagedFile> },
 }
 
@@ -51,7 +48,7 @@ pub fn install_files<'js>(
   let state = Rc::new(FilesState {
     host,
     blobs: blobs.clone(),
-    sources: SourceStager::new(blobs, stage_dir, "save", BUILD_LIMIT_BYTES, "inu.ui.saveFile"),
+    sources: SourceStager::new(stage_dir, "save", BUILD_LIMIT_BYTES, "inu.ui.saveFile"),
     log,
     pending: PendingTable::default(),
   });
@@ -87,11 +84,10 @@ impl FilesState {
   }
 
   fn pick<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, options: Opt<Value<'js>>) -> JsResult<Value<'js>> {
-    let state = self;
     let mut multiple = false;
     let out = Object::new(ctx.clone())?;
     if let Some(options) = options.0.as_ref().and_then(|v| v.as_object()) {
-      multiple = opt_bool(ctx, options, "pickFile", "multiple")?;
+      multiple = opt_bool(ctx, options, "pickFile", "multiple")?.unwrap_or_default();
       if let Some(accept) = options.get::<_, Option<Value>>("accept")? {
         let array =
           accept.as_array().ok_or_else(|| Exception::throw_type(ctx, "pickFile: 'accept' must be an array"))?;
@@ -111,7 +107,7 @@ impl FilesState {
       }
     }
     out.set("multiple", multiple)?;
-    state.start(ctx, OP_PICK_FILE, out, FileRequest::Pick { multiple })
+    self.start(ctx, OP_PICK_FILE, out, FileRequest::Pick { multiple })
   }
 
   fn save<'js>(
@@ -120,7 +116,6 @@ impl FilesState {
     content: &Value<'js>,
     options: Opt<Value<'js>>,
   ) -> JsResult<Value<'js>> {
-    let state = self;
     let out = Object::new(ctx.clone())?;
     if let Some(options) = options.0.as_ref().and_then(|v| v.as_object()) {
       for name in ["fileName", "type"] {
@@ -129,9 +124,9 @@ impl FilesState {
         }
       }
     }
-    let StagedSource { path, owned } = state.sources.stage(ctx, content)?;
+    let StagedSource { path, owned } = self.sources.stage(ctx, content)?;
     out.set("path", path.to_string_lossy().to_string())?;
-    state.start(ctx, OP_SAVE_FILE, out, FileRequest::Save { _staged: owned.then(|| StagedFile(path)) })
+    self.start(ctx, OP_SAVE_FILE, out, FileRequest::Save { _staged: owned.then(|| StagedFile(path)) })
   }
 
   fn start<'js>(
@@ -141,35 +136,34 @@ impl FilesState {
     options: Object<'js>,
     kind: FileRequest,
   ) -> JsResult<Value<'js>> {
-    let state = self;
     let json = stringify_json(ctx, options.into_value(), "ui: serialization failed")?;
-    Ok(state.pending.park(ctx, kind, |request_id| state.host.ui_files(op, request_id, &json))?.into_value())
+    Ok(self.pending.park(ctx, kind, |request_id| self.host.ui_files(op, request_id, &json))?.into_value())
   }
 
   /// A pick answers `J` and the copies it made, a save `B1` or `B0` for whether it happened, and
   /// either may answer an error wire instead.
   pub fn settle(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
-    let state = self;
-    context.with(|ctx| {
-      let settled = state.pending.settle(&ctx, request_id, result_wire, false, |ctx, request, wire| match request {
-        FileRequest::Pick { multiple } => {
-          let json = wire
-            .strip_prefix('J')
-            .ok_or_else(|| Exception::throw_message(ctx, "pickFile: malformed host answer"))?;
-          state.picked(ctx, json, *multiple)
-        }
-        FileRequest::Save { .. } => plain_wire_to_js(ctx, wire),
-      });
-      if let Err(why) = settled {
-        (state.log)(&format!("ui: files({request_id}) settle failed: {why}"));
-      }
-    });
-    pump_jobs(rt, context, state.log.as_ref());
+    self
+      .pending
+      .settle_and_pump(
+        rt,
+        context,
+        &self.log,
+        "ui: files",
+        request_id,
+        result_wire,
+        |ctx, request, wire| match request {
+          FileRequest::Pick { multiple } => {
+            let json = wire
+              .strip_prefix('J')
+              .ok_or_else(|| Exception::throw_message(ctx, "pickFile: malformed host answer"))?;
+            self.picked(ctx, json, *multiple)
+          }
+          FileRequest::Save { .. } => plain_wire_to_js(ctx, wire),
+        },
+      );
   }
 
-  /// Creates an owning `File` for each host-made copy. Charges it to the plugin's spill budget and
-  /// deletes it when the handle is released. The picker grants one-time access to selected files
-  /// only.
   fn picked<'js>(&self, ctx: &Ctx<'js>, answer: &str, multiple: bool) -> JsResult<Value<'js>> {
     let parsed = ctx.json_parse(answer)?;
     let array = parsed.as_array().ok_or_else(|| Exception::throw_message(ctx, "pickFile: malformed host answer"))?;

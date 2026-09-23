@@ -1,52 +1,27 @@
 // ==InuPlugin==
 // @name         api filter test
-// @author       teidesu
-// @version      1.0
 // @description  asserts config.autologin_token is stripped, redaction evidence is sealed, and service login codes are redacted
 // @grant        invokeRpc(help.getConfig)
 // @grant        invokeRpc(messages.getHistory)
 // @grant        onUpdate(updateNewMessage)
-// @plugin-api   1
-// @platform     android
 // ==/InuPlugin==
 
 const CODE_RE = /[0-9-]{5,}/
 const SERVICE_IDS = ['777000', '489000']
 
-function pass(label, detail) {
-  console.log(detail === undefined ? `PASS ${label}` : `PASS ${label}: ${detail}`)
-}
-
-function fail(label, detail) {
-  console.error(`FAIL ${label}: ${detail}`)
-}
-
-// every read-side assertion below is satisfied by a build with the filter switched off entirely,
-// so each half also asserts a refusal that only a live filter produces
-// three halves, each asynchronous, and "done" is what says every one of them reported. a marker
-// at the end of the file would print before a single response had arrived
+// a build with the filter off passes every read-side check, so each half also asserts a refusal
+// only a live filter produces. "done" prints once all three async halves reported
 let halvesLeft = 3
 function halfDone() {
   if (--halvesLeft === 0) console.log('api filter test done')
 }
 
-function refuses(write) {
+// common.d.ts: a stripped field is refused as absent (invalid-argument), a sealed one as forbidden
+function refuses(write, code = 'forbidden') {
   try {
     write()
   } catch (e) {
-    return e instanceof inu.PluginError && e.code === 'forbidden'
-  }
-  return false
-}
-
-// a *stripped* field is the other refusal, and common.d.ts says which: "assigning one is refused
-// the way assigning a field the type does not have is", so `invalid-argument` rather than the
-// `forbidden` a sealed field earns
-function refusesAsAbsent(write) {
-  try {
-    write()
-  } catch (e) {
-    return e instanceof inu.PluginError && e.code === 'invalid-argument'
+    return e instanceof inu.PluginError && e.code === code
   }
   return false
 }
@@ -58,11 +33,10 @@ inu.invokeRpc({ _: 'help.getConfig' }).then(
     if ('autologin_token' in config) return fail(label, '`in` says the field is there')
     if (Object.keys(config).includes('autologin_token')) return fail(label, 'Object.keys lists it')
     if (config.autologin_token !== null) return fail(label, `reads back ${config.autologin_token}`)
-    // `toJSON` is on every view the bridge hands over, but the generated tl typings don't carry it
+    // the generated tl typings lack `toJSON`
     if ('autologin_token' in /** @type {any} */ (config).toJSON()) return fail(label, 'the toJSON() snapshot carries it')
-    // the reads above all hold on a server that simply sent no token, so this is the half that
-    // distinguishes "stripped" from "was never there"
-    if (!refusesAsAbsent(() => { config.autologin_token = 'x' })) {
+    // a server that sent no token passes the reads above; this tells stripped from never-there
+    if (!refuses(() => { config.autologin_token = 'x' }, 'invalid-argument')) {
       return fail(label, 'assigning it was not refused, so nothing is filtering')
     }
     pass(label, `${Object.keys(config).length} other field(s) still readable`)
@@ -90,7 +64,7 @@ inu.invokeRpc({
       console.log(`SKIP ${label}: saved messages is empty`)
       return halfDone()
     }
-    // an invokeRpc response is writable, so a refusal here is the filter and nothing else
+    // an invokeRpc response is writable, so a refusal here is the filter's
     for (const field of ['from_id', 'peer_id', 'fwd_from', 'out']) {
       if (!refuses(() => { message[field] = null })) return fail(label, `${field} accepted a write`)
     }
@@ -105,8 +79,7 @@ inu.invokeRpc({
 )
 
 function findServiceSender(message) {
-  // mirrors ApiFilter.isServiceMessage, including fwd_from and the out rule: an oracle keyed on a
-  // narrower predicate than the filter's is blind to exactly the messages the filter misses
+  // mirrors TlFilter.isServiceMessage, including fwd_from and the out rule
   const isService = p =>
     // long fields cross as strings
     p !== null && typeof p === 'object' && p._ === 'peerUser' && SERVICE_IDS.includes(String(p.user_id))

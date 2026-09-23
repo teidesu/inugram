@@ -570,11 +570,6 @@ function baseRef(cls: TlClass) {
   return `tl.$base.${cls.container}.${cls.name}`
 }
 
-/** the type a field of this class is read as: the union for a base, the interface for a leaf */
-function typeRef(cls: TlClass) {
-  return refToString(cls)
-}
-
 /**
  * mirrors TlJson.valueToJson - anything it can't map is dropped from the snapshot, so anything
  * this returns `null` for is dropped from the typings too.
@@ -609,7 +604,7 @@ function mapType(java: string, cls: TlClass, ctx: EmitCtx, long: LongMode = 'str
   if (java.endsWith('[]')) return null // java arrays other than byte[] have no json mapping
 
   const target = ctx.resolve(cls.container, java)
-  if (target && ctx.keptSet.has(target)) return typeRef(target)
+  if (target && ctx.keptSet.has(target)) return refToString(target)
   return null
 }
 
@@ -868,7 +863,7 @@ export async function generateTl(): Promise<boolean> {
       )
       if (cls.responseType) {
         const resolved = resolve(cls.container, cls.responseType)
-        const inner = resolved && keptSet.has(resolved) ? typeRef(resolved) : 'tl.TypeTlObject'
+        const inner = resolved && keptSet.has(resolved) ? refToString(resolved) : 'tl.TypeTlObject'
         rpcReturns.push(`'${cls.tlName}': ${cls.responseIsVector ? `${inner}[]` : inner}`)
       }
     } else {

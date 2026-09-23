@@ -5,25 +5,15 @@ import java.io.File
 import org.telegram.messenger.ApplicationLoader
 
 /**
- * Detects plugins that keep the app from running, and runs none for one process when they do.
+ * Two signals, each a small file in [dir] rather than the shared `inugram` prefs, whose every write
+ * rewrites and syncs all settings:
+ * - [STARTING] exists while one plugin's top-level code runs; dying with it present means that code hung or crashed.
+ * - [CRASHES] counts consecutive processes crashing within [CRASH_WINDOW_MILLIS] of their first plugin start.
  *
- * Two signals, each a small file in [dir] rather than a key in the shared `inugram` prefs, whose
- * every write rewrites and syncs all of the app's settings:
- * - [STARTING] exists while one plugin's top-level code runs. A process that dies with it in
- *   place hung or crashed in that code.
- * - [CRASHES] counts consecutive processes that crashed within [CRASH_WINDOW_MILLIS] of their
- *   first plugin starting. That catches a hook or callback that takes the app down shortly after
- *   boot, where [STARTING] is already gone.
- *
- * Guard each plugin's evaluation separately. A process-wide guard would misread normal Android
- * headless startup and termination (push, widget, `BOOT_COMPLETED`) as a crash. A guard covering
- * the whole startup pass would also misread termination after [BootCohort.EARLY_BUDGET_MILLIS][
- * desu.inugram.core.plugins.BootCohort.EARLY_BUDGET_MILLIS], when the app stops waiting but plugins
- * may still be evaluating. The crash count only moves on an uncaught exception, so a reaped
- * process never counts.
- *
- * Writes are plain file writes, not synced: they only have to outlive this process, and the kernel
- * keeps a write a dead process made.
+ * Guarded per plugin: a process-wide or whole-pass guard would misread normal headless startup and
+ * termination (push, widget, `BOOT_COMPLETED`, or past [BootCohort.EARLY_BUDGET_MILLIS]) as a crash.
+ * Only uncaught exceptions count, so a reaped process never does. Writes are unsynced: the kernel keeps a
+ * dead process's writes.
  */
 class BootGuard(
     private val dir: File = File(ApplicationLoader.applicationContext.filesDir, DIR),
@@ -37,16 +27,13 @@ class BootGuard(
 
     private var decided = false
 
-    /** when this process first ran plugin code; 0 until then */
+    /** 0 until this process first runs plugin code */
     @Volatile
     private var firstStartAt = 0L
 
     val safeMode: Boolean get() = reason != null
 
-    /**
-     * Returns true if plugins may run. Once selected, safe mode lasts for the whole process,
-     * including the later startup pass. Reads and clears every flag it acts on.
-     */
+    /** safe mode lasts the whole process once chosen. Reads and clears every flag it acts on */
     @Synchronized
     fun startPass(): Boolean {
         if (decided) return reason == null
@@ -61,7 +48,6 @@ class BootGuard(
         return false
     }
 
-    /** runs one plugin's own code with [STARTING] on disk across it, and across nothing else */
     fun guardPlugin(body: () -> Unit) {
         if (firstStartAt == 0L) firstStartAt = uptimeMillis()
         write(STARTING, "")
@@ -72,19 +58,18 @@ class BootGuard(
         }
     }
 
-    /** the user asked for safe mode; honoured (and cleared) by the next process's first pass */
+    /** honoured and cleared by the next process's first pass */
     fun armForcedSafeMode() {
         write(FORCED, "")
     }
 
-    /** called on the crashing thread, before the process dies */
+    /** on the crashing thread, before the process dies */
     fun recordCrash() {
         val startedAt = firstStartAt
         if (startedAt == 0L || uptimeMillis() - startedAt >= CRASH_WINDOW_MILLIS) return
         write(CRASHES, (readCrashes() + 1).toString())
     }
 
-    /** this process kept its plugins running through the window, so the crashes before it were not a loop */
     fun survivedWindow() {
         File(dir, CRASHES).delete()
     }
@@ -92,7 +77,7 @@ class BootGuard(
     private fun readCrashes(): Int =
         runCatching { File(dir, CRASHES).readText().trim().toInt() }.getOrDefault(0)
 
-    /** a guard that cannot be armed does not stop the plugin: that is the state before this class existed */
+    /** a guard that cannot be armed does not stop the plugin */
     private fun write(name: String, content: String) {
         try {
             dir.mkdirs()

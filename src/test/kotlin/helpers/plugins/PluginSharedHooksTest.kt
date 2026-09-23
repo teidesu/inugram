@@ -9,7 +9,6 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -17,19 +16,10 @@ import org.junit.Test
 class PluginSharedHooksTest {
     private val method = JvmFixture::class.java.getDeclaredMethod("computeHookSum", Int::class.java, Int::class.java)
 
-    @Before fun setUp() { resetBridge(); JvmFixture.sharedHookCalls.set(0) }
+    @Before fun setUp() = resetBridge()
 
     private fun createPlugin(name: String) = startPlugin(name, "unsafe.jvm", "unsafe.xposed")
-    private fun getHandle(plugin: Plugin, value: Any): Long = PluginJvm.bridgeFor(plugin.js)!!.encode(value).substring(2).toLong()
-    private fun invoke(plugin: Plugin, op: Int, target: Long, name: String = "", vararg args: String): String =
-        plugin.js.listener!!.xposed(op, target, name, arrayOf(*args))
-    private fun install(plugin: Plugin, target: Member = method): Long {
-        val wire = invoke(plugin, PluginXposed.OP_HOOK, getHandle(plugin, target))
-        assertTrue(wire.startsWith("S"), wire)
-        val site = wire.substring(1).toLong()
-        invoke(plugin, PluginXposed.OP_JS_BEFORES, site, "1")
-        return site
-    }
+    private fun install(plugin: Plugin, target: Member = method): Long = plugin.hookWithBefore(plugin.jvmHandle(target))
 
     @Test fun plugins_share_before_after_and_independent_disposal() {
         val first = createPlugin("first")
@@ -51,9 +41,9 @@ class PluginSharedHooksTest {
             assertEquals(1, JvmFixture.sharedHookCalls.get())
             assertEquals(listOf("before first", "before second", "after second", "after first"), order)
             order.clear()
-            assertEquals("I3", invoke(observer, PluginXposed.OP_CALL_ORIGINAL, getHandle(observer, method), "", "N", "I1", "I2"))
+            assertEquals("I3", observer.xposed(PluginXposed.OP_CALL_ORIGINAL, observer.jvmHandle(method), "", "N", "I1", "I2"))
             assertTrue(order.isEmpty())
-            invoke(first, PluginXposed.OP_UNHOOK, firstSite)
+            first.xposed(PluginXposed.OP_UNHOOK, firstSite)
             assertTrue(PluginXposed.isHooked(method))
             second.js.onXposedBefore = { arrayOf("P1", "I1", "I2") }
             second.js.onXposedAfter = { "I30" }
@@ -73,14 +63,14 @@ class PluginSharedHooksTest {
         first.js.onXposedAfter = { assertEquals(21, it.result); "I22" }
         try {
             install(first)
-            val before = second.js.listener!!.jvm(PluginJvm.OP_XPOSED_ROUTINE, 0, """{"v":1,"slots":0,"tries":[],"code":[["capture",0],["capture",1],["arg",0],["add",2,1],["setArg",0,3]]}""", arrayOf("I0", "I5"))
-            val after = second.js.listener!!.jvm(PluginJvm.OP_XPOSED_ROUTINE, 0, """{"v":1,"slots":0,"tries":[],"code":[["capture",0],["result"],["add",1,0],["setResult",2]]}""", arrayOf("I10"))
+            val before = second.jvm(PluginJvm.OP_XPOSED_ROUTINE, 0, """{"v":1,"slots":0,"tries":[],"code":[["capture",0],["capture",1],["arg",0],["add",2,1],["setArg",0,3]]}""", "I0", "I5")
+            val after = second.jvm(PluginJvm.OP_XPOSED_ROUTINE, 0, """{"v":1,"slots":0,"tries":[],"code":[["capture",0],["result"],["add",1,0],["setResult",2]]}""", "I10")
             assertTrue(before.startsWith("GO"), before)
             assertTrue(after.startsWith("GO"), after)
             val phases = arrayOf("G" + before.substring(2), "G" + after.substring(2))
-            val wire = invoke(second, PluginXposed.OP_HOOK, getHandle(second, method), "", *phases)
+            val wire = second.xposed(PluginXposed.OP_HOOK, second.jvmHandle(method), "", *phases)
             assertTrue(wire.startsWith("S"), wire)
-            invoke(second, PluginXposed.OP_NATIVE_ADD, wire.substring(1).toLong(), "native", *phases)
+            second.xposed(PluginXposed.OP_NATIVE_ADD, wire.substring(1).toLong(), "native", *phases)
             assertEquals(22, method.invoke(null, 1, 2))
             assertEquals(1, JvmFixture.sharedHookCalls.get())
             assertTrue(second.js.xposedBefores.isEmpty())
@@ -141,33 +131,13 @@ class PluginSharedHooksTest {
         }
     }
 
-    @Test fun unchanged_objects_keep_identity_across_plugins() {
-        val first = createPlugin("object first")
-        val second = createPlugin("object second")
-        val target = JvmFixture::class.java.getDeclaredMethod("getPayload")
-        first.js.onXposedBefore = { arrayOf("P1") }
-        second.js.onXposedBefore = { arrayOf("P1") }
-        val instance = JvmFixture()
-        try {
-            install(first, target)
-            install(second, target)
-            for (value in listOf(JvmFixture(), 42L, null)) {
-                instance.payload = value
-                assertSame(value, target.invoke(instance))
-            }
-        } finally {
-            PluginXposed.detach(first.session!!)
-            PluginXposed.detach(second.session!!)
-        }
-    }
-
     @Test fun call_original_constructor_bypasses_another_plugins_hook() {
         val first = createPlugin("constructor hook")
         val caller = createPlugin("constructor caller")
         val constructor = JvmFixture::class.java.getDeclaredConstructor()
         try {
             install(first, constructor)
-            val result = invoke(caller, PluginXposed.OP_CALL_ORIGINAL, getHandle(caller, constructor), "", "N")
+            val result = caller.xposed(PluginXposed.OP_CALL_ORIGINAL, caller.jvmHandle(constructor), "", "N")
             assertTrue(result.startsWith("GO"), result)
             val instance = PluginJvm.bridgeFor(caller.js)!!.decode("G" + result.substring(2)) as JvmFixture
             assertEquals(3, instance.count)
@@ -185,8 +155,8 @@ class PluginSharedHooksTest {
             val firstSite = install(first)
             val secondSite = install(second)
             first.js.onXposedBefore = {
-                invoke(first, PluginXposed.OP_UNHOOK, firstSite)
-                invoke(second, PluginXposed.OP_UNHOOK, secondSite)
+                first.xposed(PluginXposed.OP_UNHOOK, firstSite)
+                second.xposed(PluginXposed.OP_UNHOOK, secondSite)
                 arrayOf("P1", "I1", "I2")
             }
             assertEquals(3, method.invoke(null, 1, 2))

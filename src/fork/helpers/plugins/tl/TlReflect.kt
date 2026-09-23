@@ -1,8 +1,5 @@
 package desu.inugram.helpers.plugins.tl
 
-import desu.inugram.core.plugins.TlFlags
-import desu.inugram.core.plugins.TlInt53
-import desu.inugram.core.plugins.TlNames
 import desu.inugram.core.plugins.TlTables
 import java.lang.reflect.Field
 import java.lang.reflect.Modifier
@@ -28,19 +25,10 @@ import org.telegram.tgnet.tl.TL_update
 import org.telegram.tgnet.tl.legacy.TL_legacy_message
 
 /**
- * Caches TL classes, exposed fields, and flag metadata.
- *
- * All host TL reads use [publicFields]: [TlHandles] views, [TlJson] snapshots, and [TlFilter]
- * draft checks. Reflection requires a `declaredFields` walk through the hierarchy, while the
- * result stays constant for the process. [TlFlags] supplies flag bits; this class locates and
- * updates their flag words on actual objects.
- *
- * Rules mirrored in `sdk/types/common.d.ts`:
- * - `flags`/`flags2` are neither exposed nor accepted. Cleared optional fields are omitted.
- *   Assignments recompute the field's bit; `null`, `0`, `""`, and empty vectors clear it.
- * - Stock's `//custom` fields, such as `Message.dialog_id`, `attachPath`, and
- *   `voiceTranscription`, are also exposed because reflection cannot distinguish them
- *   from wire fields.
+ * Rules mirrored in `sdk/types/common.d.ts`: `flags`/`flags2` are neither exposed nor accepted, cleared
+ * optional fields are omitted, and assignments recompute the bit (`null`, `0`, `""`, `[]` clear it).
+ * Stock's `//custom` fields (`Message.dialog_id`, `attachPath`, ...) are exposed too: reflection cannot
+ * tell them from wire fields.
  */
 object TlReflect {
     // fields inherited from TLObject that are runtime bookkeeping, not TL wire data
@@ -72,22 +60,17 @@ object TlReflect {
     private val infosByClass = java.util.concurrent.ConcurrentHashMap<Class<*>, Map<String, FieldInfo>>()
     private val fullyScalarByClass = java.util.concurrent.ConcurrentHashMap<Class<*>, Boolean>()
 
-    /**
-     * everything a read decides from (class, name), settled once: `Field.getGenericType()` reparses
-     * the signature on every call, and the gate is three lookups. [wordField] is the flags word
-     * holding [gate]'s bit, `null` when the field is not gated.
-     */
+    /** `Field.getGenericType()` reparses the signature on every call */
     class FieldInfo(
         val field: Field,
-        val gate: TlFlags.Gate?,
+        val gate: TlTables.Gate?,
         val wordField: Field?,
         val isFlagWord: Boolean,
         val hiddenInTakeover: Boolean,
         val sealedInTakeover: Boolean,
         val redactedInTakeover: Boolean,
-        /** a draft rides on a `Dialog`, a `ForumTopic`, a `savedDialog` and `updateDraftMessage` as well as on `getDraft`, so this keys on the field's declared type */
+        /** drafts also ride on `Dialog`, `ForumTopic`, `savedDialog` and `updateDraftMessage`, so this keys on declared type */
         val isDraft: Boolean,
-        /** a long, or a vector of them, that crosses as a js number ([TlInt53]) */
         val isInt53: Boolean,
     ) {
         val genericType: java.lang.reflect.Type = field.genericType
@@ -97,7 +80,6 @@ object TlReflect {
 
         val isScalar: Boolean = type == String::class.java || type.isPrimitive
 
-        /** which [Field] getter answers without boxing; [KIND_OTHER] has to go through `get` */
         val kind: Int = when (type) {
             java.lang.Long.TYPE -> KIND_LONG
             Integer.TYPE -> KIND_INT
@@ -120,7 +102,7 @@ object TlReflect {
         val fields = publicFields(cls)
         val out = LinkedHashMap<String, FieldInfo>(fields.size)
         for ((name, field) in fields) {
-            val gate = TlFlags.gateOf(cls, name)
+            val gate = TlFlags.findGate(cls, name)
             out[name] = FieldInfo(
                 field = field,
                 gate = gate,
@@ -142,13 +124,6 @@ object TlReflect {
         return generic.rawType == ArrayList::class.java && generic.actualTypeArguments[0] == java.lang.Long::class.java
     }
 
-    fun fieldInfo(cls: Class<*>, name: String): FieldInfo? = fieldInfos(cls)[name]
-
-    /**
-     * Whether all fields are scalar, as in `peerUser`, `inputPeerChat`, or
-     * `documentAttributeVideo`. These objects can be fully projected without later bridge reads.
-     * Objects containing children cannot: their children need handles and lazy field reads.
-     */
     fun isFullyScalar(cls: Class<*>): Boolean = fullyScalarByClass.getOrPut(cls) {
         val infos = fieldInfos(cls).values.filterNot { it.isFlagWord }
         infos.isNotEmpty() && infos.all { it.isScalar }
@@ -162,14 +137,6 @@ object TlReflect {
         return out
     }
 
-    /** a `static int constructor` is what makes a TL class serializable - stock declares hundreds without the `TL_` prefix, so the name says nothing */
-    private fun isWireSerializable(cls: Class<*>): Boolean = try {
-        val field = cls.getDeclaredField("constructor")
-        Modifier.isStatic(field.modifiers) && field.type == Integer.TYPE
-    } catch (e: NoSuchFieldException) {
-        false
-    }
-
     private fun collectTlClasses(root: Class<*>, out: MutableMap<String, Class<out TLObject>>) {
         val stack = ArrayDeque<Class<*>>()
         stack.add(root)
@@ -178,7 +145,7 @@ object TlReflect {
             for (nested in cls.declaredClasses) stack.add(nested)
             if (!TLObject::class.java.isAssignableFrom(cls)) continue
             if (Modifier.isAbstract(cls.modifiers)) continue
-            if (!isWireSerializable(cls)) continue
+            if (TlTables.readConstructorId(cls) == null) continue
             @Suppress("UNCHECKED_CAST")
             val tlClass = cls as Class<out TLObject>
             val tlName = TlNames.classNameToTlName(cls)
@@ -188,15 +155,10 @@ object TlReflect {
             } else if (TlNames.isLayerVariant(existing.simpleName) && !TlNames.isLayerVariant(cls.simpleName)) {
                 out[tlName] = tlClass
             }
-            // else: keep the existing (non-layer) mapping
         }
     }
 
-    /**
-     * most-derived first, because stock shadows inherited fields with a different type
-     * (`PageBlock.caption` is a PageCaption, `pageBlockBlockquote.caption` a RichText) and
-     * `Class.getFields()` does not say which it hands back first.
-     */
+    /** stock shadows inherited fields with a different type (`pageBlockBlockquote.caption`), and `Class.getFields()` order is unspecified */
     fun publicFields(cls: Class<*>): Map<String, Field> = fieldsByClass.getOrPut(cls) {
         val map = LinkedHashMap<String, Field>()
         var current: Class<*>? = cls
@@ -213,22 +175,18 @@ object TlReflect {
         map
     }
 
-    /**
-     * every table a TL read consults is built on first use, and the first read a plugin makes is
-     * what pays for it (measured on a Pixel 9: 85ms, most of it parsing the TL flag table out of the
-     * apk). [PluginManager] calls this off the boot path so no read does.
-     */
+    /** the first TL read otherwise pays for every table (Pixel 9: 85ms, mostly parsing the flag table out of the apk) */
     fun prewarm() {
         TlTables.prewarm()
         classesByTlName
     }
 
-    fun classOf(tlName: String): Class<out TLObject>? = classesByTlName[tlName]
+    fun findTlClass(tlName: String): Class<out TLObject>? = classesByTlName[tlName]
 
-    /** for writes onto a live object whose other fields must be left exactly as the app had them */
+    /** the other fields of a live object must stay exactly as the app had them */
     fun syncFlagBit(obj: TLObject, fieldName: String) {
         val cls = obj.javaClass
-        val gate = TlFlags.gateOf(cls, fieldName) ?: return
+        val gate = TlFlags.findGate(cls, fieldName) ?: return
         val fields = publicFields(cls)
         val wordField = fields[TlFlags.wordName(gate.word) ?: return] ?: return
         val present = TlFlags.isBitPresent(cls, gate) { TlFlags.isPresent(fields[it]?.get(obj)) }
@@ -240,7 +198,7 @@ object TlReflect {
     fun syncFlags(obj: TLObject) {
         val cls = obj.javaClass
         val fields = publicFields(cls)
-        for (word in TlFlags.wordsOf(cls)) {
+        for (word in TlFlags.getFlagWords(cls)) {
             val name = TlFlags.wordName(word) ?: continue
             val target = fields[name] ?: continue
             target.setInt(obj, TlFlags.computeWord(cls, word) { field ->
@@ -249,7 +207,7 @@ object TlReflect {
         }
     }
 
-    /** a hand-built request nests objects carrying flag words of their own, so a top-level-only sync still drops them */
+    /** nested objects carry their own flag words */
     fun syncFlagsDeep(obj: TLObject) {
         for (field in publicFields(obj.javaClass).values) {
             when (val value = field.get(obj)) {

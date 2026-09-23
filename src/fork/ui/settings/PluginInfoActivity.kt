@@ -173,12 +173,10 @@ internal fun tierColors(tier: GrantTier?): Pair<Int, Int> = when (tier) {
 /** worst tier among the grants we recognize, or null when nothing rises above neutral */
 internal fun highestGrantTier(manifest: PluginManifest): GrantTier? =
     mergeGrants(manifest.grants)
-        .filterKeys { GrantCatalog.entryOf(it) != null }
-        .map { (name, scopes) -> GrantCatalog.tierOf(name, scopes) }
+        .filterKeys { GrantCatalog.findEntry(it) != null }
+        .map { (name, scopes) -> GrantCatalog.resolveTier(name, scopes) }
         .maxOrNull()
         ?.takeIf { it != GrantTier.NEUTRAL }
-
-private class GrantPresentation(val titleRes: Int, val iconRes: Int)
 
 /**
  * What every permission list shows: worst tier first, so the red rows are the ones a user reads
@@ -187,7 +185,7 @@ private class GrantPresentation(val titleRes: Int, val iconRes: Int)
 internal fun sortedGrants(tokens: List<String>): List<Pair<String, List<String>?>> =
     mergeGrants(tokens)
         .map { (name, scopes) -> name to scopes }
-        .sortedByDescending { (name, scopes) -> GrantCatalog.tierOf(name, scopes) }
+        .sortedByDescending { (name, scopes) -> GrantCatalog.resolveTier(name, scopes) }
 
 /**
  * what [asked] wants that [baseline] does not cover: a grant whose name [baseline] lacks, or one
@@ -205,7 +203,7 @@ internal fun findGrantsBeyond(baseline: List<String>, asked: List<String>): List
         if (scopes == null) return@mapNotNull name to null
         val added = scopes.filter { it !in hadScopes }
         if (added.isEmpty()) null else name to added
-    }.sortedByDescending { (name, scopes) -> GrantCatalog.tierOf(name, scopes) }
+    }.sortedByDescending { (name, scopes) -> GrantCatalog.resolveTier(name, scopes) }
 }
 
 /**
@@ -223,7 +221,7 @@ internal fun findGrantsKept(previous: List<String>, current: List<String>): List
         if (scopes == null) return@mapNotNull name to hadScopes
         val kept = scopes.filter { it in hadScopes }
         if (kept.isEmpty()) null else name to kept
-    }.sortedByDescending { (name, scopes) -> GrantCatalog.tierOf(name, scopes) }
+    }.sortedByDescending { (name, scopes) -> GrantCatalog.resolveTier(name, scopes) }
 }
 
 /** merged by grant name in first-appearance order; `null` scopes = unscoped (full access) */
@@ -299,43 +297,8 @@ private fun grantSubtitle(name: String, scopes: List<String>?): String? = when (
         scopes?.let { labeledScopes(it, UPDATE_SCOPE_LABELS) } ?: LocaleController.getString(R.string.InuPluginScopeAllUpdates),
     )
 
-
-    "notifications.suppress" -> LocaleController.getString(R.string.InuPluginGrantNotificationsSuppressInfo)
-    "takeout" -> LocaleController.getString(R.string.InuPluginGrantTakeoutInfo)
-    "unsafe.fs" -> LocaleController.getString(R.string.InuPluginGrantUnsafeFsInfo)
-    "unsafe.invokeRaw" -> LocaleController.getString(R.string.InuPluginGrantUnsafeInvokeRawInfo)
-    "unsafe.jvm" -> LocaleController.getString(R.string.InuPluginGrantUnsafeJvmInfo)
-
-    "unsafe.xposed" -> LocaleController.getString(R.string.InuPluginGrantUnsafeXposedInfo)
-    "unsafe.notificationCenter" -> LocaleController.getString(R.string.InuPluginGrantUnsafeNotificationCenterInfo)
-    "unsafe.disableApiFiltering" -> LocaleController.getString(R.string.InuPluginGrantUnsafeDisableApiFilteringInfo)
-
-    else -> null
+    else -> GRANT_INFO[name]?.let(LocaleController::getString)
 }
-
-private val KNOWN_GRANTS = mapOf(
-    "fs" to GrantPresentation(R.string.InuPluginGrantFs, R.drawable.files_storage),
-    "clipboard.write" to GrantPresentation(R.string.InuPluginGrantClipboardWrite, R.drawable.msg_copy),
-    "openUrl" to GrantPresentation(R.string.InuPluginGrantOpenUrl, R.drawable.msg_link),
-    "onAppVisibilityChange" to GrantPresentation(R.string.InuPluginGrantAppVisibility, R.drawable.menu_hide_gift),
-    "clipboard.read" to GrantPresentation(R.string.InuPluginGrantClipboardRead, R.drawable.msg_copy),
-    "notifications.suppress" to GrantPresentation(R.string.InuPluginGrantNotificationsSuppress, R.drawable.msg_mute),
-    "fetch" to GrantPresentation(R.string.InuPluginGrantFetch, R.drawable.msg_language),
-    "account.read" to GrantPresentation(R.string.InuPluginGrantAccountRead, R.drawable.msg_contacts),
-    "account.write" to GrantPresentation(R.string.InuPluginGrantAccountWrite, R.drawable.msg_send),
-    "onUpdate" to GrantPresentation(R.string.InuPluginGrantOnUpdate, R.drawable.msg_message),
-    "interceptUpdate" to GrantPresentation(R.string.InuPluginGrantInterceptUpdate, R.drawable.msg_download),
-    "interceptSendMessage" to GrantPresentation(R.string.InuPluginGrantInterceptSend, R.drawable.msg_edit),
-    "interceptRpc" to GrantPresentation(R.string.InuPluginGrantInterceptRpc, R.drawable.msg_log),
-    "invokeRpc" to GrantPresentation(R.string.InuPluginGrantInvokeRpc, R.drawable.msg_bot),
-    "takeout" to GrantPresentation(R.string.InuPluginGrantTakeout, R.drawable.msg_download),
-    "unsafe.fs" to GrantPresentation(R.string.InuPluginGrantUnsafeFs, R.drawable.files_storage),
-    "unsafe.invokeRaw" to GrantPresentation(R.string.InuPluginGrantUnsafeInvokeRaw, R.drawable.msg_bot),
-    "unsafe.jvm" to GrantPresentation(R.string.InuPluginGrantUnsafeJvm, R.drawable.inu_tabler_code),
-    "unsafe.xposed" to GrantPresentation(R.string.InuPluginGrantUnsafeXposed, R.drawable.msg_replace),
-    "unsafe.notificationCenter" to GrantPresentation(R.string.InuPluginGrantUnsafeNotificationCenter, R.drawable.msg_notifications),
-    "unsafe.disableApiFiltering" to GrantPresentation(R.string.InuPluginGrantUnsafeDisableApiFiltering, R.drawable.msg_block),
-)
 
 internal class GrantRowView(context: Context) : LinearLayout(context) {
     private val iconBackground = SettingsActivity.SettingCell.Background()
@@ -389,7 +352,7 @@ internal class GrantRowView(context: Context) : LinearLayout(context) {
             invalidate()
         }
         val known = KNOWN_GRANTS[name]
-        val tier = if (known == null) null else GrantCatalog.tierOf(name, scopes)
+        val tier = if (known == null) null else GrantCatalog.resolveTier(name, scopes)
         icon.setImageResource(known?.iconRes ?: R.drawable.msg_help)
         icon.setColorFilter(PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN))
         val (top, bottom) = tierColors(tier)

@@ -1,7 +1,6 @@
 (natives, shared, Message, PluginError, ops) => {
   const {
     baseName,
-    invalid,
     SEPARATOR,
     toSpec,
     toSpecList,
@@ -10,15 +9,14 @@
     toOptions,
     toCount,
     toFieldNames,
-    slotOf,
+    readAccountSlot,
   } = shared
 
-  // keep in sync with rust `reads::KIND_*` and Kotlin `PluginReads.KIND_*`
+  // keep in sync with Kotlin `PluginReads.KIND_*`
   const KIND_PEER = 0
   const KIND_USER = 1
   const KIND_CHANNEL = 2
 
-  // what a resolve* was already handed and gives straight back, per kind
   const PASSTHROUGH = [
     new Set([
       'inputPeerSelf',
@@ -35,7 +33,7 @@
   // opaque per `common.d.ts`: it is a token native mints, and which list minted it is checked there
   const toCursor = (value, what) => {
     if (value === undefined || value === null) return ''
-    if (typeof value !== 'string') throw invalid(`${what}: cursor must be a previous page's next`)
+    if (typeof value !== 'string') throw new PluginError('invalid-argument', `${what}: cursor must be a previous page's next`)
     return value
   }
 
@@ -55,13 +53,29 @@
   const toArchive = (value, what) => {
     if (value === undefined || value === null) return ARCHIVE.get('exclude')
     const mode = ARCHIVE.get(value)
-    if (mode === undefined) throw invalid(`${what}: archive must be 'exclude', 'only' or 'keep'`)
+    if (mode === undefined) throw new PluginError('invalid-argument', `${what}: archive must be 'exclude', 'only' or 'keep'`)
     return mode
   }
 
   const toBatch = (value, what) => {
     const size = toCount(value, what, 'batchSize')
     return size === 0 ? BATCH_SIZE : size
+  }
+
+  const inputPeer = (slot, spec, kind) => natives.read(slot, ops.inputPeer, spec + SEPARATOR + kind)
+
+  async function* pageByCursor(limit, fetchPage) {
+    let cursor
+    let sent = 0
+    for (;;) {
+      const page = await fetchPage(cursor)
+      for (const item of page) {
+        yield item
+        if (++sent === limit) return
+      }
+      if (typeof page.next !== 'string') return
+      cursor = page.next
+    }
   }
 
   const wrap = raw => (raw === null ? null : new Message(raw))
@@ -71,11 +85,10 @@
   const passthrough = (peer, kind) =>
     peer !== null && typeof peer === 'object' && PASSTHROUGH[kind].has(baseName(peer))
 
-  // every async member fails asynchronously, whatever went wrong - a bad argument, a missing grant,
-  // a cursor from another list
+  // every async member rejects rather than throws
   const fetchWith = (account, op, what, build) => {
     try {
-      const slot = slotOf(account, what)
+      const slot = readAccountSlot(account, what)
       const [peer, args, cursor = ''] = build()
       return natives.fetch(slot, op, peer, JSON.stringify(args), cursor)
     } catch (e) {
@@ -83,10 +96,8 @@
     }
   }
 
-  // at most `RESOLVE_CONCURRENCY` of them are in flight, per `common.d.ts`. A peer that is not
-  // found stays `null` where it was asked about: the caller named several, and one of them being
-  // unknown is an answer rather than a failure of the batch. Nothing else is - a refusal or a
-  // failure answered as `null` cannot be told from "there is no such peer".
+  // at most `RESOLVE_CONCURRENCY` in flight (`common.d.ts`). Only not-found becomes `null`: a refusal
+  // answered as `null` could not be told from "there is no such peer"
   const resolveMisses = (slot, out, misses) => {
     let next = 0
     const worker = async () => {
@@ -108,75 +119,72 @@
 
   const resolveWith = (account, peer, kind, what) => {
     try {
-      const slot = slotOf(account, what)
+      const slot = readAccountSlot(account, what)
       if (passthrough(peer, kind)) return Promise.resolve(peer)
       const spec = toSpec(peer)
-      const cached = natives.inputPeer(slot, spec, kind)
-      // the cache first, so the common case costs neither a promise hop nor a request
+      const cached = inputPeer(slot, spec, kind)
       if (cached !== null) return Promise.resolve(cached)
       return natives.resolve(slot, spec, kind)
     } catch (e) {
-      // an async member fails asynchronously, whatever went wrong - including a missing grant
       return Promise.reject(e)
     }
   }
 
   const proto = {
     getMe() {
-      return natives.getMe(slotOf(this, 'getMe'))
+      return natives.read(readAccountSlot(this, 'getMe'), ops.me, '')
     },
 
     getUser(peer) {
-      return natives.getUser(slotOf(this, 'getUser'), toSpec(peer))
+      return natives.read(readAccountSlot(this, 'getUser'), ops.user, toSpec(peer))
     },
 
     getChat(peer) {
-      return natives.getChat(slotOf(this, 'getChat'), toSpec(peer))
+      return natives.read(readAccountSlot(this, 'getChat'), ops.chat, toSpec(peer))
     },
 
     getPeer(peer) {
-      return natives.getPeer(slotOf(this, 'getPeer'), toSpec(peer))
+      return natives.read(readAccountSlot(this, 'getPeer'), ops.peer, toSpec(peer))
     },
 
     getDialog(peer) {
-      return natives.getDialog(slotOf(this, 'getDialog'), toSpec(peer))
+      return natives.read(readAccountSlot(this, 'getDialog'), ops.dialog, toSpec(peer))
     },
 
     isDialogMuted(peer, options) {
-      const slot = slotOf(this, 'isDialogMuted')
+      const slot = readAccountSlot(this, 'isDialogMuted')
       const opts = toOptions(options, 'isDialogMuted')
-      const topicId = opts.topicId === undefined ? 0 : toCount(opts.topicId, 'isDialogMuted', 'topicId')
-      return natives.isDialogMuted(slot, toSpec(peer), topicId)
+      return natives.read(slot, ops.dialogMuted, toSpec(peer) + SEPARATOR + toCount(opts.topicId, 'isDialogMuted', 'topicId'))
     },
 
     previewMessage(message, options) {
-      const slot = slotOf(this, 'previewMessage')
+      const slot = readAccountSlot(this, 'previewMessage')
       const opts = toOptions(options, 'previewMessage')
       const raw = message === null || typeof message !== 'object' ? message : message.raw ?? message
       return natives.previewMessage(slot, raw, opts.hideSpoilers === true)
     },
 
     getTopicCached(peer, topicId) {
-      const slot = slotOf(this, 'getTopicCached')
-      return natives.getTopic(slot, toSpec(peer), toCount(topicId, 'getTopicCached', 'topicId'))
+      const slot = readAccountSlot(this, 'getTopicCached')
+      return natives.read(slot, ops.topic, toSpec(peer) + SEPARATOR + toCount(topicId, 'getTopicCached', 'topicId'))
     },
 
     getUsers(peers) {
-      return natives.getUsers(slotOf(this, 'getUsers'), toSpecList(peers, 'getUsers'))
+      return natives.readMany(readAccountSlot(this, 'getUsers'), ops.users, toSpecList(peers, 'getUsers'))
     },
 
     getChats(peers) {
-      return natives.getChats(slotOf(this, 'getChats'), toSpecList(peers, 'getChats'))
+      return natives.readMany(readAccountSlot(this, 'getChats'), ops.chats, toSpecList(peers, 'getChats'))
     },
 
     getMessagesCached(peer, messageIds) {
-      const slot = slotOf(this, 'getMessagesCached')
+      const slot = readAccountSlot(this, 'getMessagesCached')
       const spec = toSpec(peer)
       if (!Array.isArray(messageIds)) {
-        return wrap(natives.getMessage(slot, spec, toMessageId(messageIds, 'getMessagesCached')))
+        return wrap(natives.read(slot, ops.messageCached, spec + SEPARATOR + toMessageId(messageIds, 'getMessagesCached')))
       }
       const ids = toMessageIds(messageIds, 'getMessagesCached').join(SEPARATOR)
-      return natives.getMessages(slot, spec, ids).map(wrap)
+      return natives.readMany(slot, ops.messagesCached, spec + SEPARATOR + ids).map(wrap)
     },
 
     getMessages(peer, messageIds) {
@@ -191,9 +199,9 @@
     },
 
     resolvePeerCached(peer) {
-      const slot = slotOf(this, 'resolvePeerCached')
+      const slot = readAccountSlot(this, 'resolvePeerCached')
       if (passthrough(peer, KIND_PEER)) return peer
-      return natives.inputPeer(slot, toSpec(peer), KIND_PEER)
+      return inputPeer(slot, toSpec(peer), KIND_PEER)
     },
 
     resolvePeer(peer) {
@@ -202,11 +210,11 @@
 
     resolvePeerMany(peers) {
       try {
-        const slot = slotOf(this, 'resolvePeerMany')
+        const slot = readAccountSlot(this, 'resolvePeerMany')
         // the same gate every read runs, before the first element crosses - so an empty list is
         // refused for the same reason a full one is rather than answering `[]` to anybody
         natives.checkPeers(slot)
-        if (!Array.isArray(peers)) throw invalid('resolvePeerMany: expected an array of peers')
+        if (!Array.isArray(peers)) throw new PluginError('invalid-argument', 'resolvePeerMany: expected an array of peers')
         const out = Array.from({ length: peers.length }).fill(null)
         const misses = []
         for (let index = 0; index < peers.length; index++) {
@@ -216,8 +224,7 @@
             continue
           }
           const spec = toSpec(peer)
-          const cached = natives.inputPeer(slot, spec, KIND_PEER)
-          // the cache first, exactly as `resolvePeer` does: only what it cannot answer costs a request
+          const cached = inputPeer(slot, spec, KIND_PEER)
           if (cached !== null) out[index] = cached
           else misses.push([index, spec])
         }
@@ -236,9 +243,9 @@
     },
 
     getDraft(peer, options) {
-      const slot = slotOf(this, 'getDraft')
+      const slot = readAccountSlot(this, 'getDraft')
       const opts = toOptions(options, 'getDraft')
-      return natives.getDraft(slot, toSpec(peer), String(toCount(opts.topicId, 'getDraft', 'topicId')))
+      return natives.read(slot, ops.draft, toSpec(peer) + SEPARATOR + toCount(opts.topicId, 'getDraft', 'topicId'))
     },
 
     getUserFull(peer) {
@@ -288,7 +295,7 @@
         if (named && opts.archive !== undefined && opts.archive !== null) {
           // Folders have their own archive flag. Reject an explicit archive option to avoid
           // filtering out chats the folder includes.
-          throw invalid('getDialogsCached: name either archive or chatFolderId, not both')
+          throw new PluginError('invalid-argument', 'getDialogsCached: name either archive or chatFolderId, not both')
         }
         return [
           '',
@@ -317,31 +324,19 @@
       })
     },
 
-    //
-    // each pages the member above it by *calling* it through the captured prototype, so an argument
-    // is normalized, gated and materialized in exactly one place rather than in two that agree.
-    // Nothing runs until the first `next()`, so a bad argument and a missing grant reject there.
+    // each iterator pages the member above it through the captured prototype, so arguments are checked
+    // in one place. Nothing runs until the first `next()`, so a bad argument rejects there.
 
     async* iterDialogs(options) {
       const opts = toOptions(options, 'iterDialogs')
       const limit = toLimit(opts.limit, 'iterDialogs')
       const batch = toBatch(opts.batchSize, 'iterDialogs')
-      let cursor
-      let sent = 0
-      for (;;) {
-        const page = await proto.getDialogs.call(this, {
-          folderId: opts.folderId,
-          limit: batch,
-          fields: opts.fields,
-          cursor,
-        })
-        for (const dialog of page) {
-          yield dialog
-          if (++sent === limit) return
-        }
-        if (typeof page.next !== 'string') return
-        cursor = page.next
-      }
+      yield* pageByCursor(limit, cursor => proto.getDialogs.call(this, {
+        folderId: opts.folderId,
+        limit: batch,
+        fields: opts.fields,
+        cursor,
+      }))
     },
 
     async* iterHistory(peer, options) {
@@ -376,17 +371,7 @@
       const opts = toOptions(options, 'iterTopics')
       const limit = toLimit(opts.limit, 'iterTopics')
       const batch = toBatch(opts.batchSize, 'iterTopics')
-      let cursor
-      let sent = 0
-      for (;;) {
-        const page = await proto.getTopics.call(this, peer, { limit: batch, cursor })
-        for (const topic of page) {
-          yield topic
-          if (++sent === limit) return
-        }
-        if (typeof page.next !== 'string') return
-        cursor = page.next
-      }
+      yield* pageByCursor(limit, cursor => proto.getTopics.call(this, peer, { limit: batch, cursor }))
     },
   }
 

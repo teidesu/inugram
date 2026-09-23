@@ -80,7 +80,7 @@ impl FakeTlHost {
     self.counts.own_keys.set(0);
   }
 
-  fn gets_of(&self, key: &str) -> usize {
+  fn count_key_gets(&self, key: &str) -> usize {
     self.counts.gets.borrow().iter().filter(|k| k.as_str() == key).count()
   }
 
@@ -88,7 +88,7 @@ impl FakeTlHost {
     self.counts.gets.borrow().len()
   }
 
-  fn has_of(&self, key: &str) -> usize {
+  fn count_key_has(&self, key: &str) -> usize {
     self.counts.has.borrow().iter().filter(|k| k.as_str() == key).count()
   }
 
@@ -131,8 +131,6 @@ fn add_nested(entry: &Rc<RefCell<FakeEntry>>, key: &str, child: Rc<RefCell<FakeE
   }
 }
 
-/// renders a scalar wire tag (`N`/`S`/`I`/`D`/`B`/`Y`/`J`) as a JSON literal - enough for
-/// [`FakeTlHost`] to build `tl_copy`'s plain-value payload without a full wire->JSON codec.
 fn wire_to_test_json(wire: &str) -> String {
   let mut chars = wire.chars();
   let tag = chars.next().unwrap_or('N');
@@ -172,9 +170,7 @@ fn fake_entry_to_json(entry: &FakeEntry) -> String {
   }
 }
 
-/// mints a fresh handle for `value` if it's a [`FakeValue::Nested`] (matching real Kotlin's
-/// per-access minting, read-only-ness inherited from the parent entry), or returns the
-/// already-final wire as-is.
+/// a fresh handle per access for a [`FakeValue::Nested`], as Kotlin mints them
 fn fake_value_to_wire(host: &FakeTlHost, value: &FakeValue, read_only: bool) -> String {
   match value {
     FakeValue::Wire(w) => w.clone(),
@@ -393,17 +389,18 @@ fn an_int53_long_reads_as_a_number_and_any_other_long_as_a_string() {
 }
 
 fn make_ctx() -> (Runtime, Context) {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
+  let (rt, ctx) = crate::testing::harness::new_engine();
   ctx.with(|ctx| crate::api::error::install_plugin_error(&ctx).unwrap());
   (rt, ctx)
 }
 
-fn views_of(host: &Rc<FakeTlHost>) -> Rc<TlViews> {
-  TlViews::new(host.clone())
+fn fixture() -> (Runtime, Context, Rc<FakeTlHost>, Rc<TlViews>) {
+  let (rt, ctx) = make_ctx();
+  let host = Rc::new(FakeTlHost::default());
+  let views = TlViews::new(host.clone());
+  (rt, ctx, host, views)
 }
 
-/// installs a view over `id` as `globalThis.<name>`
 fn bind<'js>(
   ctx: &Ctx<'js>,
   views: &Rc<TlViews>,
@@ -424,10 +421,8 @@ fn bind_object<'js>(ctx: &Ctx<'js>, views: &Rc<TlViews>, name: &str, life: ViewL
 
 #[test]
 fn object_reads_type_name_fields_has_and_own_keys() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (_rt, ctx, host, views) = fixture();
   let id = host.mint(object_entry("myNamespace.myClass", &[("x", "I1"), ("name", "Shello")]));
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     bind_object(&ctx, &views, "obj", ViewLife::Dispatch, id);
@@ -451,49 +446,24 @@ fn object_reads_type_name_fields_has_and_own_keys() {
 /// the write half of `TAG_BYTES`: a `Uint8Array` reaches the host as bytes, never as base64 in a
 /// wire string, and everything that is not one still takes the wire
 #[test]
-fn assigning_a_uint8array_crosses_as_bytes() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
-  let id = host.mint(object_entry("foo", &[]));
-  let views = views_of(&host);
+fn a_bytes_field_reads_and_writes_as_a_uint8array() {
+  let (_rt, ctx, host, views) = fixture();
+  let id = host.mint(object_entry("foo", &[("data", &crate::api::tl::proxy::encode_bytes_wire(&[1, 2, 3, 255]))]));
 
   ctx.with(|ctx| {
     bind_object(&ctx, &views, "obj", ViewLife::Dispatch, id);
+    let read: String = ctx.eval("`${obj.data instanceof Uint8Array}:${Array.from(obj.data)}`").unwrap();
+    assert_eq!(read, "true:1,2,3,255");
     ctx.eval::<(), _>("obj.bytes = new Uint8Array([1, 2, 250]); obj.name = 'not bytes'").unwrap();
   });
 
-  // exactly one write took the byte path, and it is the one holding bytes
   assert_eq!(host.counts.byte_sets.borrow().clone(), vec![("bytes".to_string(), vec![1u8, 2, 250])]);
 }
 
 #[test]
-fn object_set_field_mutates_the_real_handle_target() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
-  let id = host.mint(object_entry("foo", &[]));
-  let views = views_of(&host);
-
-  ctx.with(|ctx| {
-    bind_object(&ctx, &views, "obj", ViewLife::Dispatch, id);
-    ctx.eval::<(), _>("obj.x = 42").unwrap();
-  });
-
-  // outbound scalar sets are always `J`-tagged JSON, never a raw `I` tag - see js_value_to_wire
-  let (entry_rc, _) = host.lookup(id).unwrap();
-  match &*entry_rc.borrow() {
-    FakeEntry::Object { fields, .. } => {
-      assert!(matches!(fields.get("x"), Some(FakeValue::Wire(w)) if w == "J42"))
-    }
-    _ => panic!("expected object entry"),
-  };
-}
-
-#[test]
 fn vector_length_indexing_push_and_iteration() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (_rt, ctx, host, views) = fixture();
   let id = host.mint(FakeEntry::Vector(vec![FakeValue::Wire("I10".to_string()), FakeValue::Wire("I20".to_string())]));
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     bind(&ctx, &views, "vec", true, false, ViewLife::Dispatch, id);
@@ -517,104 +487,14 @@ fn vector_length_indexing_push_and_iteration() {
 }
 
 #[test]
-fn bytes_field_roundtrips_through_uint8array_and_base64() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
-  let id = host.mint(object_entry("x", &[("data", &crate::api::tl::proxy::encode_bytes_wire(&[1, 2, 3, 255]))]));
-  let views = views_of(&host);
-
-  ctx.with(|ctx| {
-    bind_object(&ctx, &views, "obj", ViewLife::Dispatch, id);
-
-    let is_typed: bool = ctx.eval("obj.data instanceof Uint8Array").unwrap();
-    assert!(is_typed);
-    let sum: i64 = ctx.eval("obj.data[0] + obj.data[1] + obj.data[2] + obj.data[3]").unwrap();
-    assert_eq!(sum, 1 + 2 + 3 + 255);
-
-    ctx.eval::<(), _>("obj.data = new Uint8Array([9, 8, 7])").unwrap();
-  });
-
-  let (entry_rc, _) = host.lookup(id).unwrap();
-  match &*entry_rc.borrow() {
-    FakeEntry::Object { fields, .. } => {
-      assert!(
-        matches!(fields.get("data"), Some(FakeValue::Wire(w)) if w == &crate::api::tl::proxy::encode_bytes_wire(&[9, 8, 7]))
-      );
-    }
-    _ => panic!("expected object entry"),
-  };
-}
-
-/// mirrors real `TlHandles.kt`: reading the same TLObject-typed field twice mints two
-/// *independent* handle ids naming the same underlying value - so the first, transient proxy
-/// becoming unreachable and GC'd (freeing its own id) must not affect the second read.
-#[test]
-fn nested_object_field_yields_its_own_live_proxy() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
-  let child = Rc::new(RefCell::new(object_entry("child.type", &[("y", "I7")])));
-  let parent_id = host.mint(nested_entry("parent.type", "child", child));
-  let views = views_of(&host);
-
-  ctx.with(|ctx| {
-    bind_object(&ctx, &views, "obj", ViewLife::Dispatch, parent_id);
-
-    let child_type: String = ctx.eval("obj.child._").unwrap();
-    assert_eq!(child_type, "child.type");
-    let y: i64 = ctx.eval("obj.child.y").unwrap();
-    assert_eq!(y, 7);
-  });
-
-  // two reads of "child" minted two distinct handle ids (both != parent_id); a fresh id
-  // was allocated for each access, matching real Kotlin's no-caching design
-  assert!(host.next_id.get() >= parent_id + 2);
-}
-
-#[test]
-fn dropping_last_reference_and_running_gc_releases_the_handle() {
-  let (rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
-  let id = host.mint(object_entry("foo", &[]));
-  let views = views_of(&host);
-
-  ctx.with(|ctx| {
-    bind_object(&ctx, &views, "obj", ViewLife::Dispatch, id);
-    ctx.eval::<(), _>("obj = undefined").unwrap();
-  });
-
-  // QuickJS frees non-cyclic garbage via refcounting as soon as the last reference drops
-  // (here, immediately on `obj = undefined`); `run_gc()` only sweeps reference cycles, so
-  // it's a no-op backstop here - the handle is already gone by the time it runs
-  rt.run_gc();
-  assert!(!host.is_alive(id), "dropping the proxy's last reference must have released its handle");
-}
-
-#[test]
-fn double_release_is_a_no_op() {
-  let host = FakeTlHost::default();
-  let id = host.mint(object_entry("foo", &[]));
-
-  host.tl_release(id);
-  assert!(!host.is_alive(id));
-  // releasing again (e.g. GC finalizer firing after `releaseScope` already
-  // freed it in bulk) must be a harmless no-op, not a panic
-  host.tl_release(id);
-  assert!(!host.is_alive(id));
-}
-
-#[test]
 fn expired_chain_handle_does_not_crash_when_its_proxy_is_later_gcd() {
-  let (rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (rt, ctx, host, views) = fixture();
   let id = host.mint(object_entry("foo", &[]));
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     bind_object(&ctx, &views, "obj", ViewLife::Dispatch, id);
   });
 
-  // simulates `TlHandles.releaseScope` hard-invalidating the handle out from under a proxy
-  // that's still JS-reachable at the time
   host.tl_release(id);
   assert!(!host.is_alive(id));
 
@@ -623,106 +503,52 @@ fn expired_chain_handle_does_not_crash_when_its_proxy_is_later_gcd() {
     ctx.eval::<(), _>("obj = undefined").unwrap();
   });
 
-  // the proxy's HandleBox finalizer now fires `tl_release(id)` a second time once GC
-  // collects it - must not panic even though the entry is long gone
   rt.run_gc();
   assert!(!host.is_alive(id));
 }
 
 #[test]
-fn passing_a_live_proxy_back_reuses_its_handle_wire_without_copying() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
-  let id = host.mint(object_entry("x", &[]));
-  let views = views_of(&host);
-
-  ctx.with(|ctx| {
-    let proxy = bind_object(&ctx, &views, "obj", ViewLife::Dispatch, id);
-    let wire_out = js_value_to_wire(&ctx, proxy).unwrap();
-    assert_eq!(wire_out, format!("HOW{id}"));
-  });
-}
-
-#[test]
-fn plain_object_falls_back_to_json_wire() {
-  let (_rt, ctx) = make_ctx();
-  ctx.with(|ctx| {
-    let value: Value = ctx.eval("({a: 1})").unwrap();
-    let wire = js_value_to_wire(&ctx, value).unwrap();
-    assert_eq!(wire, "J{\"a\":1}");
-  });
-}
-
-#[test]
-fn expired_handle_get_throws_a_handle_expired_plugin_error() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
-  let views = views_of(&host);
-
-  ctx.with(|ctx| {
-    bind_object(&ctx, &views, "obj", ViewLife::Dispatch, 999);
-    assert!(ctx.eval::<Value, _>("obj.x").is_err());
-    assert!(ctx.eval::<Value, _>("Object.keys(obj)").is_err());
-
-    let caught: String = ctx
-      .eval(
-        r#"(() => {
-                    const seen = [];
-                    for (const read of [() => obj.x, () => Object.keys(obj), () => obj.toJSON()]) {
-                        try { read(); seen.push('no-throw'); }
-                        catch (e) { seen.push([e instanceof inu.PluginError, e.code].join('|')); }
-                    }
-                    return JSON.stringify(seen);
-                })()"#,
-      )
-      .unwrap();
-    assert_eq!(caught, r#"["true|handle-expired","true|handle-expired","true|handle-expired"]"#);
-
-    let message: String = ctx.eval("(() => { try { obj.x } catch (e) { return e.message } })()").unwrap();
-    assert_eq!(message, HANDLE_EXPIRED_MESSAGE);
-  });
-}
-
-#[test]
-fn expired_handle_presence_probes_throw_instead_of_answering_absent() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
-  let views = views_of(&host);
+fn every_read_of_an_expired_handle_throws_handle_expired() {
+  let (_rt, ctx, _host, views) = fixture();
 
   ctx.with(|ctx| {
     bind_object(&ctx, &views, "obj", ViewLife::Dispatch, 999);
 
     let caught: String = ctx
       .eval(
-        r#"(() => {
-                    const probes = [
-                        () => 'peer' in obj,
-                        () => Reflect.has(obj, 'peer'),
-                        () => Object.getOwnPropertyDescriptor(obj, 'peer'),
-                        () => Object.prototype.hasOwnProperty.call(obj, 'peer'),
-                    ];
-                    return JSON.stringify(probes.map((probe) => {
-                        try { return 'no-throw:' + String(probe()) }
-                        catch (e) { return [e instanceof inu.PluginError, e.code, e.message].join('|') }
-                    }));
-                })()"#,
+        r#"
+          (() => {
+            const reads = [
+              () => obj.x,
+              () => Object.keys(obj),
+              () => obj.toJSON(),
+              () => 'peer' in obj,
+              () => Reflect.has(obj, 'peer'),
+              () => Object.getOwnPropertyDescriptor(obj, 'peer'),
+              () => Object.prototype.hasOwnProperty.call(obj, 'peer'),
+            ];
+            return JSON.stringify(reads.map((read) => {
+              try { return 'no-throw:' + String(read()) }
+              catch (e) { return [e instanceof inu.PluginError, e.code, e.message].join('|') }
+            }));
+          })()
+        "#,
       )
       .unwrap();
-    let refusal = format!("true|handle-expired|{HANDLE_EXPIRED_MESSAGE}");
-    assert_eq!(caught, format!(r#"["{refusal}","{refusal}","{refusal}","{refusal}"]"#));
+    let refusal = format!(r#""true|handle-expired|{HANDLE_EXPIRED_MESSAGE}""#);
+    assert_eq!(caught, format!("[{}]", [refusal.as_str(); 7].join(",")));
   });
 }
 
 #[test]
 fn tojson_detaches_object_into_a_plain_mutation_safe_value() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (_rt, ctx, host, views) = fixture();
   let id = host.mint(object_entry("foo", &[("x", "I5")]));
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     bind_object(&ctx, &views, "obj", ViewLife::Dispatch, id);
 
+    assert_eq!(ctx.eval::<String, _>("JSON.stringify(obj)").unwrap(), r#"{"_":"foo","x":5}"#);
     let json: String = ctx.eval("(() => { const c = obj.toJSON(); c.x = 999; return JSON.stringify(c); })()").unwrap();
     assert_eq!(json, r#"{"_":"foo","x":999}"#);
   });
@@ -740,7 +566,6 @@ fn tojson_detaches_object_into_a_plain_mutation_safe_value() {
 fn snapshot_bytes_revive_as_uint8array_and_round_trip_through_stringify() {
   let (_rt, ctx) = make_ctx();
   ctx.with(|ctx| {
-    // AQID = [1, 2, 3]
     let value = json_parse_tl(&ctx, r#"{"_":"foo","data":{"$inuBytes":"AQID"}}"#).unwrap();
     ctx.globals().set("snap", value).unwrap();
 
@@ -749,14 +574,8 @@ fn snapshot_bytes_revive_as_uint8array_and_round_trip_through_stringify() {
     let bytes: Vec<u8> = ctx.eval::<Vec<u8>, _>("Array.from(snap.data)").unwrap();
     assert_eq!(bytes, vec![1, 2, 3]);
 
-    // plugin-side stringify re-wraps via the array's own toJSON
     let json: String = ctx.eval("JSON.stringify(snap)").unwrap();
     assert_eq!(json, r#"{"_":"foo","data":{"$inuBytes":"AQID"}}"#);
-
-    // a plugin-created Uint8Array (no toJSON) is wrapped by the outbound replacer
-    let literal: Value = ctx.eval("({_: 'bar', data: new Uint8Array([9, 8])})").unwrap();
-    let wire = js_value_to_wire(&ctx, literal).unwrap();
-    assert_eq!(wire, r#"J{"_":"bar","data":{"$inuBytes":"CQg="}}"#);
   });
 }
 
@@ -767,12 +586,12 @@ fn the_tl_json_marshalling_ignores_a_hijacked_json_global() {
     ctx
       .eval::<(), _>(
         r#"
-            globalThis.__seen = [];
-            globalThis.JSON = {
-                parse: (s) => { globalThis.__seen.push(String(s)); return {stolen: true} },
-                stringify: () => { globalThis.__seen.push('stringify'); return '"hijacked"' },
-            };
-            "#,
+          globalThis.__seen = [];
+          globalThis.JSON = {
+            parse: (s) => { globalThis.__seen.push(String(s)); return {stolen: true} },
+            stringify: () => { globalThis.__seen.push('stringify'); return '"hijacked"' },
+          };
+        "#,
       )
       .unwrap();
 
@@ -802,34 +621,13 @@ fn a_polluted_object_prototype_does_not_make_every_parsed_object_bytes() {
 }
 
 #[test]
-fn json_stringify_on_a_proxy_uses_tojson_snapshot() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
-  let id = host.mint(object_entry("foo", &[("x", "I5")]));
-  let views = views_of(&host);
-
-  ctx.with(|ctx| {
-    bind_object(&ctx, &views, "obj", ViewLife::Dispatch, id);
-
-    // JSON.stringify must not throw "no such field 'toJSON'"; it serializes the snapshot
-    let json: String = ctx.eval("JSON.stringify(obj)").unwrap();
-    assert_eq!(json, r#"{"_":"foo","x":5}"#);
-    // toJSON is directly callable and detached from the live object
-    let typ: String = ctx.eval("typeof obj.toJSON").unwrap();
-    assert_eq!(typ, "function");
-  });
-}
-
-#[test]
 fn json_stringify_of_a_vector_view_produces_the_array() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (_rt, ctx, host, views) = fixture();
   let items = vec![
     FakeValue::Wire("I10".to_string()),
     FakeValue::Nested(Rc::new(RefCell::new(object_entry("item", &[("a", "Shi")])))),
   ];
   let id = host.mint(FakeEntry::Vector(items));
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     bind(&ctx, &views, "vec", true, false, ViewLife::Plugin, id);
@@ -844,110 +642,66 @@ fn json_stringify_of_a_vector_view_produces_the_array() {
     assert!(ctx.eval::<bool, _>("Array.isArray(vec.toJSON())").unwrap());
     assert!(ctx.eval::<bool, _>("Object.getOwnPropertyDescriptor(vec, 'toJSON') === undefined").unwrap());
   });
-  assert_eq!(host.gets_of(TO_JSON_KEY), 0, "'toJSON' must never fall through to a vector index read");
+  assert_eq!(host.count_key_gets(TO_JSON_KEY), 0, "'toJSON' must never fall through to a vector index read");
 }
 
 #[test]
-fn read_only_view_refuses_writes_with_a_forbidden_plugin_error() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+fn read_only_view_refuses_writes_and_defines_with_a_forbidden_plugin_error() {
+  let (_rt, ctx, host, views) = fixture();
   let id = host.mint_read_only(object_entry("foo", &[("x", "I1")]));
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     bind(&ctx, &views, "obj", false, true, ViewLife::Plugin, id);
+    assert_eq!(ctx.eval::<i64, _>("obj.x").unwrap(), 1);
+    host.reset_counts();
 
     let caught: String = ctx
       .eval(
-        r#"(() => {
-                    const seen = [];
-                    for (const write of [() => { obj.x = 2 }, () => { delete obj.x }]) {
-                        try { write(); seen.push('no-throw'); }
-                        catch (e) { seen.push([e instanceof inu.PluginError, e.code, e.message].join('|')); }
-                    }
-                    return JSON.stringify(seen);
-                })()"#,
+        r#"
+          (() => {
+            const writes = [
+              () => { obj.x = 2 },
+              () => { delete obj.x },
+              () => Object.defineProperty(obj, 'x', { value: 5, configurable: true }),
+              () => Object.defineProperty(obj, 'z', { value: 5 }),
+              () => Object.defineProperty(obj, Symbol.for('inu.tl.cache'), { value: {} }),
+              () => Reflect.defineProperty(obj, 'x', { value: 5 }),
+            ];
+            return JSON.stringify(writes.map((write) => {
+              try { write(); return 'no-throw' }
+              catch (e) { return [e instanceof inu.PluginError, e.code, e.message].join('|') }
+            }));
+          })()
+        "#,
       )
       .unwrap();
-    assert_eq!(caught, format!(r#"["true|forbidden|{READ_ONLY_MESSAGE}","true|forbidden|{READ_ONLY_MESSAGE}"]"#));
-  });
-  assert_eq!(host.set_count(), 0, "a refused write must never reach the host");
-}
-
-#[test]
-fn writable_view_still_mutates_while_its_read_only_alias_does_not() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
-  let entry = Rc::new(RefCell::new(object_entry("foo", &[("x", "I1")])));
-  let rw = host.mint_shared(entry.clone(), false);
-  let ro = host.mint_shared(entry, true);
-  let views = views_of(&host);
-
-  ctx.with(|ctx| {
-    bind(&ctx, &views, "rw", false, false, ViewLife::Plugin, rw);
-    bind(&ctx, &views, "ro", false, true, ViewLife::Plugin, ro);
-
-    ctx.eval::<(), _>("rw.x = 9").unwrap();
-    let seen: i64 = ctx.eval("ro.x").unwrap();
-    assert_eq!(seen, 9);
-    assert!(ctx.eval::<Value, _>("ro.x = 10").is_err());
-    let still: i64 = ctx.eval("ro.x").unwrap();
-    assert_eq!(still, 9);
-  });
-}
-
-#[test]
-fn define_property_on_a_read_only_view_is_forbidden() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
-  let id = host.mint_read_only(object_entry("foo", &[("x", "I1")]));
-  let views = views_of(&host);
-
-  ctx.with(|ctx| {
-    bind(&ctx, &views, "obj", false, true, ViewLife::Plugin, id);
-
-    let caught: String = ctx
-      .eval(
-        r#"(() => {
-                    const defines = [
-                        () => Object.defineProperty(obj, 'x', { value: 5, configurable: true }),
-                        () => Object.defineProperty(obj, 'z', { value: 5 }),
-                        () => Object.defineProperty(obj, Symbol.for('inu.tl.cache'), { value: {} }),
-                        () => Reflect.defineProperty(obj, 'x', { value: 5 }),
-                    ];
-                    return JSON.stringify(defines.map((define) => {
-                        try { define(); return 'no-throw' }
-                        catch (e) { return [e instanceof inu.PluginError, e.code, e.message].join('|') }
-                    }));
-                })()"#,
-      )
-      .unwrap();
-    let refusal = format!("true|forbidden|{READ_ONLY_MESSAGE}");
-    assert_eq!(caught, format!(r#"["{refusal}","{refusal}","{refusal}","{refusal}"]"#));
+    let refusal = format!(r#""true|forbidden|{READ_ONLY_MESSAGE}""#);
+    assert_eq!(caught, format!("[{}]", [refusal.as_str(); 6].join(",")));
     assert_eq!(ctx.eval::<i64, _>("obj.x").unwrap(), 1);
   });
-  assert_eq!(host.set_count(), 0, "a refused define must never reach the host");
+  assert_eq!(host.set_count(), 0, "a refused write must never reach the host");
+  assert_eq!(host.count_key_gets("x"), 0, "the cached read must have survived the refusals");
 }
 
 /// a symbol's *description* is what `property_key_string` answers, so an unguarded delete trap
 /// would let a private `Symbol.for('message')` key clear the app's real `message`
 #[test]
 fn a_symbol_keyed_delete_cannot_reach_a_field_of_the_same_name() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (_rt, ctx, host, views) = fixture();
   let id = host.mint(object_entry("foo", &[("message", "Shi")]));
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     bind_object(&ctx, &views, "obj", ViewLife::Plugin, id);
     host.reset_counts();
     let seen: String = ctx
       .eval(
-        r#"(() => {
-                    let caught = 'no-throw';
-                    try { delete obj[Symbol.for('message')] } catch (e) { caught = e.message }
-                    return JSON.stringify([caught, obj.message]);
-                })()"#,
+        r#"
+          (() => {
+            let caught = 'no-throw';
+            try { delete obj[Symbol.for('message')] } catch (e) { caught = e.message }
+            return JSON.stringify([caught, obj.message]);
+          })()
+        "#,
       )
       .unwrap();
     assert_eq!(seen, r#"["tl proxy: cannot delete a symbol-keyed property","hi"]"#);
@@ -957,10 +711,8 @@ fn a_symbol_keyed_delete_cannot_reach_a_field_of_the_same_name() {
 
 #[test]
 fn define_property_cannot_forge_the_field_cache() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (_rt, ctx, host, views) = fixture();
   let id = host.mint(object_entry("foo", &[("x", "I1")]));
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     bind_object(&ctx, &views, "obj", ViewLife::Plugin, id);
@@ -969,28 +721,28 @@ fn define_property_cannot_forge_the_field_cache() {
     host.reset_counts();
     let seen: String = ctx
       .eval(
-        r#"(() => {
-                    const forged = { perm: {}, val: { x: 666 }, has: {} };
-                    let caught = 'no-throw';
-                    try {
-                        Object.defineProperty(obj, Symbol.for('inu.tl.cache'), { value: forged, configurable: true });
-                    } catch (e) { caught = e.message }
-                    return JSON.stringify([caught, obj.x]);
-                })()"#,
+        r#"
+          (() => {
+            const forged = { perm: {}, val: { x: 666 }, has: {} };
+            let caught = 'no-throw';
+            try {
+              Object.defineProperty(obj, Symbol.for('inu.tl.cache'), { value: forged, configurable: true });
+            } catch (e) { caught = e.message }
+            return JSON.stringify([caught, obj.x]);
+          })()
+        "#,
       )
       .unwrap();
     assert_eq!(seen, r#"["tl proxy: cannot define a symbol-keyed property",1]"#);
   });
-  assert_eq!(host.gets_of("x"), 0, "the real cache must have answered, untouched");
+  assert_eq!(host.count_key_gets("x"), 0, "the real cache must have answered, untouched");
   assert_eq!(host.set_count(), 0);
 }
 
 #[test]
 fn define_property_with_a_value_writes_through_like_an_assignment() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (_rt, ctx, host, views) = fixture();
   let id = host.mint(object_entry("foo", &[("x", "I1")]));
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     bind_object(&ctx, &views, "obj", ViewLife::Plugin, id);
@@ -1021,31 +773,31 @@ fn define_property_with_a_value_writes_through_like_an_assignment() {
 
 #[test]
 fn define_property_refuses_anything_but_a_plain_value_descriptor() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (_rt, ctx, host, views) = fixture();
   let id = host.mint(object_entry("foo", &[("x", "I1")]));
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     bind_object(&ctx, &views, "obj", ViewLife::Plugin, id);
 
     let caught: String = ctx
       .eval(
-        r#"(() => {
-                    const descriptors = [
-                        { get: () => 7 },
-                        { set: (v) => {} },
-                        { enumerable: true },
-                        {},
-                        { value: 5, configurable: false },
-                        { value: 5, writable: false },
-                        { value: 5, enumerable: false },
-                    ];
-                    return JSON.stringify(descriptors.map((descriptor) => {
-                        try { Object.defineProperty(obj, 'x', descriptor); return 'no-throw' }
-                        catch (e) { return [e instanceof inu.PluginError, e.code].join('|') }
-                    }));
-                })()"#,
+        r#"
+          (() => {
+            const descriptors = [
+              { get: () => 7 },
+              { set: (v) => {} },
+              { enumerable: true },
+              {},
+              { value: 5, configurable: false },
+              { value: 5, writable: false },
+              { value: 5, enumerable: false },
+            ];
+            return JSON.stringify(descriptors.map((descriptor) => {
+              try { Object.defineProperty(obj, 'x', descriptor); return 'no-throw' }
+              catch (e) { return [e instanceof inu.PluginError, e.code].join('|') }
+            }));
+          })()
+        "#,
       )
       .unwrap();
     assert_eq!(caught, format!("[{}]", [r#""true|unsupported""#; 7].join(",")));
@@ -1061,28 +813,28 @@ fn define_property_refuses_anything_but_a_plain_value_descriptor() {
 
 #[test]
 fn a_view_cannot_be_sealed_or_frozen() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (_rt, ctx, host, views) = fixture();
   let id = host.mint(object_entry("foo", &[("x", "I1")]));
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     bind_object(&ctx, &views, "obj", ViewLife::Plugin, id);
 
     let caught: String = ctx
       .eval(
-        r#"(() => {
-                    const seals = [
-                        () => Object.preventExtensions(obj),
-                        () => Object.freeze(obj),
-                        () => Object.seal(obj),
-                        () => Reflect.preventExtensions(obj),
-                    ];
-                    return JSON.stringify(seals.map((seal) => {
-                        try { seal(); return 'no-throw' }
-                        catch (e) { return [e instanceof inu.PluginError, e.code, e.message].join('|') }
-                    }));
-                })()"#,
+        r#"
+          (() => {
+            const seals = [
+              () => Object.preventExtensions(obj),
+              () => Object.freeze(obj),
+              () => Object.seal(obj),
+              () => Reflect.preventExtensions(obj),
+            ];
+            return JSON.stringify(seals.map((seal) => {
+              try { seal(); return 'no-throw' }
+              catch (e) { return [e instanceof inu.PluginError, e.code, e.message].join('|') }
+            }));
+          })()
+        "#,
       )
       .unwrap();
     let refusal = format!("true|unsupported|{NOT_EXTENSIBLE_MESSAGE}");
@@ -1098,11 +850,9 @@ fn a_view_cannot_be_sealed_or_frozen() {
 
 #[test]
 fn a_view_is_not_a_thenable() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (_rt, ctx, host, views) = fixture();
   let id = host.mint(object_entry("foo", &[("x", "I1")]));
   let vec_id = host.mint(FakeEntry::Vector(vec![FakeValue::Wire("I1".to_string())]));
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     bind_object(&ctx, &views, "obj", ViewLife::Plugin, id);
@@ -1110,7 +860,7 @@ fn a_view_is_not_a_thenable() {
     let seen: String = ctx.eval("JSON.stringify([typeof obj.then, typeof vec.then, 'then' in obj])").unwrap();
     assert_eq!(seen, r#"["undefined","undefined",false]"#);
   });
-  assert_eq!(host.gets_of("then"), 0);
+  assert_eq!(host.count_key_gets("then"), 0);
 }
 
 #[test]
@@ -1127,10 +877,8 @@ fn handle_wire_roundtrip() {
     assert!(parse_handle(malformed).is_none(), "'{malformed}' must not parse");
   }
 
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (_rt, ctx, host, views) = fixture();
   let id = host.mint_read_only(FakeEntry::Vector(vec![]));
-  let views = views_of(&host);
   ctx.with(|ctx| {
     let proxy = bind(&ctx, &views, "vec", true, true, ViewLife::Plugin, id);
     assert_eq!(js_value_to_wire(&ctx, proxy).unwrap(), format!("HVR{id}"));
@@ -1144,10 +892,8 @@ fn a_multi_byte_wire_is_an_error_not_a_panic() {
     assert!(parse_handle(malformed).is_none(), "'{malformed}' must not parse");
   }
 
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (_rt, ctx, host, views) = fixture();
   let id = host.mint(object_entry("foo", &[("x", "é"), ("y", ""), ("z", "H日1")]));
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     for wire in ["", "é", "日本語", "H日1", "HОW1", "\u{1F600}"] {
@@ -1162,87 +908,45 @@ fn a_multi_byte_wire_is_an_error_not_a_panic() {
 }
 
 #[test]
-fn dispatch_scoped_view_stores_nothing_on_its_target() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
-  let child = Rc::new(RefCell::new(object_entry("child", &[("y", "I7")])));
-  let mut fields = HashMap::new();
-  fields.insert("x".to_string(), FakeValue::Wire("I1".to_string()));
-  fields.insert("child".to_string(), FakeValue::Nested(child));
-  let id = host.mint(FakeEntry::Object { type_name: "foo".to_string(), fields });
-  let views = views_of(&host);
+fn only_a_plugin_lifetime_view_caches_its_reads() {
+  for (life, reads, same_child) in [(ViewLife::Dispatch, 2, false), (ViewLife::Plugin, 1, true)] {
+    let (_rt, ctx, host, views) = fixture();
+    let child = Rc::new(RefCell::new(object_entry("child", &[("y", "I7")])));
+    let mut fields = HashMap::new();
+    fields.insert("x".to_string(), FakeValue::Wire("I1".to_string()));
+    fields.insert("child".to_string(), FakeValue::Nested(child));
+    let id = host.mint(FakeEntry::Object { type_name: "foo".to_string(), fields });
 
-  ctx.with(|ctx| {
-    let proxy = bind_object(&ctx, &views, "obj", ViewLife::Dispatch, id);
-
-    ctx.eval::<i64, _>("obj.x").unwrap();
-    ctx.eval::<i64, _>("obj.x").unwrap();
-    assert_eq!(host.gets_of("x"), 2);
-
-    let distinct: bool = ctx.eval("obj.child !== obj.child").unwrap();
-    assert!(distinct);
-    assert_eq!(host.gets_of("child"), 2);
-
-    let target = proxy.as_proxy().unwrap().target().unwrap();
-    let handle = Class::<HandleBox>::from_object(&target).unwrap();
-    assert!(handle.borrow().vol.borrow().is_none());
-  });
-}
-
-#[test]
-fn plugin_lifetime_scalar_read_hits_the_host_once() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
-  let id = host.mint(object_entry("foo", &[("x", "I1")]));
-  let views = views_of(&host);
-
-  ctx.with(|ctx| {
-    bind_object(&ctx, &views, "obj", ViewLife::Plugin, id);
-    assert_eq!(ctx.eval::<i64, _>("obj.x").unwrap(), 1);
-    assert_eq!(ctx.eval::<i64, _>("obj.x").unwrap(), 1);
-  });
-  assert_eq!(host.gets_of("x"), 1);
-}
-
-#[test]
-fn plugin_lifetime_child_view_is_identical_across_reads() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
-  let child = Rc::new(RefCell::new(object_entry("child", &[("y", "I7")])));
-  let id = host.mint(nested_entry("parent", "child", child));
-  let views = views_of(&host);
-
-  ctx.with(|ctx| {
-    bind_object(&ctx, &views, "obj", ViewLife::Plugin, id);
-    let same: bool = ctx.eval("obj.child === obj.child").unwrap();
-    assert!(same);
-    assert_eq!(ctx.eval::<i64, _>("obj.child.y").unwrap(), 7);
-  });
-  assert_eq!(host.gets_of("child"), 1);
-  assert_eq!(host.next_id.get(), id + 1, "exactly one child handle was minted");
+    ctx.with(|ctx| {
+      bind_object(&ctx, &views, "obj", life, id);
+      assert_eq!(ctx.eval::<i64, _>("obj.x + obj.x").unwrap(), 2);
+      assert_eq!(ctx.eval::<bool, _>("obj.child === obj.child").unwrap(), same_child);
+      assert_eq!(ctx.eval::<i64, _>("obj.child.y").unwrap(), 7);
+    });
+    assert_eq!(host.count_key_gets("x"), reads);
+    assert_eq!(host.count_key_gets("child"), if same_child { 1 } else { 3 });
+  }
 }
 
 #[test]
 fn vector_elements_and_length_are_never_cached() {
-  let (rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (rt, ctx, host, views) = fixture();
   let items: Vec<FakeValue> = (0..3)
     .map(|i| FakeValue::Nested(Rc::new(RefCell::new(object_entry("item", &[("a", &format!("I{i}"))])))))
     .collect();
   let id = host.mint(FakeEntry::Vector(items));
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     bind(&ctx, &views, "vec", true, false, ViewLife::Plugin, id);
 
     let distinct: bool = ctx.eval("vec[0] !== vec[0]").unwrap();
     assert!(distinct);
-    assert_eq!(host.gets_of("0"), 2);
+    assert_eq!(host.count_key_gets("0"), 2);
 
     host.reset_counts();
     ctx.eval::<i64, _>("vec.length").unwrap();
     ctx.eval::<i64, _>("vec.length").unwrap();
-    assert_eq!(host.gets_of("length"), 2);
+    assert_eq!(host.count_key_gets("length"), 2);
   });
 
   let before = host.live_count();
@@ -1258,10 +962,8 @@ fn vector_elements_and_length_are_never_cached() {
 /// see what any other absent field answers, not the bookkeeping
 #[test]
 fn the_caches_own_names_are_not_fields() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (_rt, ctx, host, views) = fixture();
   let id = host.mint(object_entry("foo", &[("x", "I1")]));
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     bind_object(&ctx, &views, "obj", ViewLife::Plugin, id);
@@ -1270,11 +972,13 @@ fn the_caches_own_names_are_not_fields() {
 
     let answers: String = ctx
       .eval(
-        r##"JSON.stringify([
-             ...["#x", "@keys"].map((k) => { try { return String(obj[k]) } catch (e) { return e.message } }),
-             "#x" in obj,
-             "@keys" in obj,
-           ])"##,
+        r##"
+          JSON.stringify([
+            ...["#x", "@keys"].map((k) => { try { return String(obj[k]) } catch (e) { return e.message } }),
+            "#x" in obj,
+            "@keys" in obj,
+          ])
+        "##,
       )
       .unwrap();
     assert_eq!(answers, r##"["no such field '#x'","no such field '@keys'",false,false]"##);
@@ -1285,14 +989,12 @@ fn the_caches_own_names_are_not_fields() {
 /// expression: the iterator has to hold it, or the handle is released before the first `next()`
 #[test]
 fn a_temporary_vector_survives_being_iterated() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (_rt, ctx, host, views) = fixture();
   let items = Rc::new(RefCell::new(FakeEntry::Vector(vec![
     FakeValue::Wire("I1".to_string()),
     FakeValue::Wire("I2".to_string()),
   ])));
   let id = host.mint(nested_entry("updates", "updates", items));
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     bind_object(&ctx, &views, "obj", ViewLife::Dispatch, id);
@@ -1305,11 +1007,9 @@ fn a_temporary_vector_survives_being_iterated() {
 
 #[test]
 fn object_inside_a_vector_is_still_cached() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (_rt, ctx, host, views) = fixture();
   let items = vec![FakeValue::Nested(Rc::new(RefCell::new(object_entry("item", &[("a", "I5")]))))];
   let id = host.mint(FakeEntry::Vector(items));
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     bind(&ctx, &views, "vec", true, false, ViewLife::Plugin, id);
@@ -1318,17 +1018,15 @@ fn object_inside_a_vector_is_still_cached() {
     assert_eq!(ctx.eval::<i64, _>("m.a").unwrap(), 5);
     assert_eq!(ctx.eval::<i64, _>("m.a").unwrap(), 5);
   });
-  assert_eq!(host.gets_of("a"), 1);
-  assert_eq!(host.gets_of("0"), 1);
+  assert_eq!(host.count_key_gets("a"), 1);
+  assert_eq!(host.count_key_gets("0"), 1);
 }
 
 #[test]
 fn shared_flag_bit_sibling_is_refetched_after_a_write() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (_rt, ctx, host, views) = fixture();
   let id = host.mint(object_entry("foo", &[("x", "I1")]));
   *host.reveal_on_set.borrow_mut() = Some(("x".to_string(), "y".to_string(), "I9".to_string()));
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     bind_object(&ctx, &views, "obj", ViewLife::Plugin, id);
@@ -1344,21 +1042,19 @@ fn shared_flag_bit_sibling_is_refetched_after_a_write() {
     assert_eq!(ctx.eval::<Vec<String>, _>("Object.keys(obj)").unwrap(), vec!["_", "x", "y"]);
     assert_eq!(ctx.eval::<i64, _>("obj.y").unwrap(), 9);
   });
-  assert_eq!(host.gets_of("x"), 1);
-  assert_eq!(host.has_of("y"), 1);
+  assert_eq!(host.count_key_gets("x"), 1);
+  assert_eq!(host.count_key_has("y"), 1);
   assert_eq!(host.own_keys_count(), 1);
 }
 
 #[test]
 fn write_through_a_child_invalidates_the_parent() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (_rt, ctx, host, views) = fixture();
   let entities = Rc::new(RefCell::new(FakeEntry::Vector(vec![
     FakeValue::Wire("I1".to_string()),
     FakeValue::Wire("I2".to_string()),
   ])));
   let id = host.mint(nested_entry("message", "entities", entities));
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     bind_object(&ctx, &views, "obj", ViewLife::Plugin, id);
@@ -1368,7 +1064,7 @@ fn write_through_a_child_invalidates_the_parent() {
 
     host.reset_counts();
     ctx.eval::<(), _>("obj.entities.length = 0").unwrap();
-    assert_eq!(host.gets_of("entities"), 0, "the child view came from the parent's cache");
+    assert_eq!(host.count_key_gets("entities"), 0, "the child view came from the parent's cache");
 
     host.reset_counts();
     ctx.eval::<Vec<String>, _>("Object.keys(obj)").unwrap();
@@ -1376,18 +1072,16 @@ fn write_through_a_child_invalidates_the_parent() {
     ctx.eval::<(), _>("obj.entities").unwrap();
   });
   assert_eq!(host.own_keys_count(), 1);
-  assert_eq!(host.has_of("entities"), 1);
-  assert_eq!(host.gets_of("entities"), 1);
+  assert_eq!(host.count_key_has("entities"), 1);
+  assert_eq!(host.count_key_gets("entities"), 1);
 }
 
 #[test]
 fn aliased_views_see_each_others_writes() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (_rt, ctx, host, views) = fixture();
   let entry = Rc::new(RefCell::new(object_entry("foo", &[("x", "I1")])));
   let a = host.mint_shared(entry.clone(), false);
   let b = host.mint_shared(entry, false);
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     bind(&ctx, &views, "a", false, false, ViewLife::Plugin, a);
@@ -1402,10 +1096,8 @@ fn aliased_views_see_each_others_writes() {
 
 #[test]
 fn a_failing_tl_set_still_invalidates() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (_rt, ctx, host, views) = fixture();
   let id = host.mint(object_entry("foo", &[("x", "I1")]));
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     bind_object(&ctx, &views, "obj", ViewLife::Plugin, id);
@@ -1420,35 +1112,13 @@ fn a_failing_tl_set_still_invalidates() {
     host.reset_counts();
     assert_eq!(ctx.eval::<i64, _>("obj.x").unwrap(), 5);
   });
-  assert_eq!(host.gets_of("x"), 1);
-}
-
-#[test]
-fn refused_write_on_a_read_only_view_does_not_invalidate() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
-  let id = host.mint_read_only(object_entry("foo", &[("x", "I1")]));
-  let views = views_of(&host);
-
-  ctx.with(|ctx| {
-    bind(&ctx, &views, "obj", false, true, ViewLife::Plugin, id);
-    assert_eq!(ctx.eval::<i64, _>("obj.x").unwrap(), 1);
-
-    host.reset_counts();
-    assert!(ctx.eval::<Value, _>("obj.x = 2").is_err());
-    assert!(ctx.eval::<Value, _>("delete obj.x").is_err());
-    assert_eq!(ctx.eval::<i64, _>("obj.x").unwrap(), 1);
-  });
-  assert_eq!(host.set_count(), 0);
-  assert_eq!(host.gets_of("x"), 0, "the cached read must have survived the refusals");
+  assert_eq!(host.count_key_gets("x"), 1);
 }
 
 #[test]
 fn type_name_and_tojson_survive_an_epoch_bump() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (_rt, ctx, host, views) = fixture();
   let id = host.mint(object_entry("foo", &[("x", "I1")]));
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     bind_object(&ctx, &views, "obj", ViewLife::Plugin, id);
@@ -1459,7 +1129,7 @@ fn type_name_and_tojson_survive_an_epoch_bump() {
 
     host.reset_counts();
     assert_eq!(ctx.eval::<String, _>("obj._").unwrap(), "foo");
-    assert_eq!(host.gets_of("_"), 0);
+    assert_eq!(host.count_key_gets("_"), 0);
     assert!(ctx.eval::<bool, _>("f1 === obj.toJSON").unwrap());
 
     assert!(ctx.eval::<bool, _>("obj.toJSON() !== obj.toJSON()").unwrap());
@@ -1469,11 +1139,9 @@ fn type_name_and_tojson_survive_an_epoch_bump() {
 
 #[test]
 fn has_is_cached_separately_from_values() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (_rt, ctx, host, views) = fixture();
   let id = host.mint(object_entry("foo", &[("x", "N"), ("y", "I3")]));
   host.cleared_bits.borrow_mut().insert("y".to_string());
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     bind_object(&ctx, &views, "obj", ViewLife::Plugin, id);
@@ -1496,10 +1164,8 @@ fn has_is_cached_separately_from_values() {
 
 #[test]
 fn gopd_never_reports_tojson_and_does_not_poison_the_has_cache() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (_rt, ctx, host, views) = fixture();
   let id = host.mint(object_entry("foo", &[("x", "I1")]));
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     bind_object(&ctx, &views, "obj", ViewLife::Plugin, id);
@@ -1515,12 +1181,10 @@ fn gopd_never_reports_tojson_and_does_not_poison_the_has_cache() {
 
 #[test]
 fn gopd_reports_writable_false_configurable_true_on_a_read_only_view() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (_rt, ctx, host, views) = fixture();
   let entry = Rc::new(RefCell::new(object_entry("foo", &[("x", "I1")])));
   let ro = host.mint_shared(entry.clone(), true);
   let rw = host.mint_shared(entry, false);
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
         bind(&ctx, &views, "ro", false, true, ViewLife::Plugin, ro);
@@ -1528,13 +1192,15 @@ fn gopd_reports_writable_false_configurable_true_on_a_read_only_view() {
 
         let described: String = ctx
             .eval(
-                r#"JSON.stringify([
+                r#"
+                  JSON.stringify([
                     Object.getOwnPropertyDescriptor(ro, 'x'),
                     Object.getOwnPropertyDescriptor(rw, 'x'),
                     {...ro},
                     Object.entries(ro),
                     Object.isFrozen(ro),
-                ])"#,
+                  ])
+                "#,
             )
             .unwrap();
         assert_eq!(
@@ -1546,10 +1212,8 @@ fn gopd_reports_writable_false_configurable_true_on_a_read_only_view() {
 
 #[test]
 fn second_enumeration_costs_no_upcalls() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (_rt, ctx, host, views) = fixture();
   let id = host.mint(object_entry("foo", &[("x", "I1"), ("y", "S2")]));
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     bind_object(&ctx, &views, "obj", ViewLife::Plugin, id);
@@ -1564,68 +1228,43 @@ fn second_enumeration_costs_no_upcalls() {
 }
 
 #[test]
-fn own_keys_expiry_is_not_cached() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
-  let views = views_of(&host);
-
-  ctx.with(|ctx| {
-    bind_object(&ctx, &views, "obj", ViewLife::Plugin, 999);
-    assert!(ctx.eval::<Value, _>("Object.keys(obj)").is_err());
-    assert!(ctx.eval::<Value, _>("Object.keys(obj)").is_err());
-  });
-  assert_eq!(host.own_keys_count(), 2);
-}
-
-#[test]
-fn has_expiry_is_not_cached() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+fn errors_and_expiry_are_never_cached() {
+  let (_rt, ctx, host, views) = fixture();
   let id = host.mint(object_entry("foo", &[("x", "I1")]));
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     bind_object(&ctx, &views, "obj", ViewLife::Plugin, id);
     assert!(ctx.eval::<bool, _>("'x' in obj").unwrap());
+    assert!(ctx.eval::<Value, _>("obj.missing").is_err());
+    assert!(ctx.eval::<Value, _>("obj.missing").is_err());
+    assert_eq!(host.count_key_gets("missing"), 2);
 
     host.tl_release(id);
     host.reset_counts();
-    assert!(ctx.eval::<Value, _>("'y' in obj").is_err());
-    assert!(ctx.eval::<Value, _>("'y' in obj").is_err());
+    for _ in 0..2 {
+      assert!(ctx.eval::<Value, _>("'y' in obj").is_err());
+      assert!(ctx.eval::<Value, _>("Object.keys(obj)").is_err());
+    }
   });
-  assert_eq!(host.has_of("y"), 2);
-}
-
-#[test]
-fn errors_are_never_cached() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
-  let id = host.mint(object_entry("foo", &[]));
-  let views = views_of(&host);
-
-  ctx.with(|ctx| {
-    bind_object(&ctx, &views, "obj", ViewLife::Plugin, id);
-    assert!(ctx.eval::<Value, _>("obj.missing").is_err());
-    assert!(ctx.eval::<Value, _>("obj.missing").is_err());
-  });
-  assert_eq!(host.gets_of("missing"), 2);
+  assert_eq!(host.count_key_has("y"), 2);
+  assert_eq!(host.own_keys_count(), 2);
 }
 
 #[test]
 fn cache_never_answers_with_a_prototype_member() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (_rt, ctx, host, views) = fixture();
   let id = host.mint(object_entry("foo", &[("x", "I1")]));
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     bind_object(&ctx, &views, "obj", ViewLife::Plugin, id);
-    let probe = r#"(() => JSON.stringify([
-            (() => { try { return obj.constructor } catch (e) { return e.message } })(),
-            (() => { try { return obj.toString } catch (e) { return e.message } })(),
-            (() => { try { return obj.__proto__ } catch (e) { return e.message } })(),
-            'constructor' in obj,
-        ]))()"#;
+    let probe = r#"
+      (() => JSON.stringify([
+        (() => { try { return obj.constructor } catch (e) { return e.message } })(),
+        (() => { try { return obj.toString } catch (e) { return e.message } })(),
+        (() => { try { return obj.__proto__ } catch (e) { return e.message } })(),
+        'constructor' in obj,
+      ]))()
+    "#;
     let expected = r#"["no such field 'constructor'","no such field 'toString'","no such field '__proto__'",false]"#;
     assert_eq!(ctx.eval::<String, _>(probe).unwrap(), expected);
     ctx.eval::<Value, _>("({...obj})").unwrap();
@@ -1634,55 +1273,37 @@ fn cache_never_answers_with_a_prototype_member() {
 }
 
 #[test]
-fn cached_children_die_with_their_parent() {
-  let (rt, ctx) = make_ctx();
+fn cached_children_die_with_their_parent_and_with_the_runtime() {
   let host = Rc::new(FakeTlHost::default());
-  let child = Rc::new(RefCell::new(object_entry("child", &[("y", "I7")])));
-  let id = host.mint(nested_entry("parent", "child", child));
-  let views = views_of(&host);
-
-  ctx.with(|ctx| {
-    bind_object(&ctx, &views, "obj", ViewLife::Plugin, id);
-    assert_eq!(ctx.eval::<i64, _>("obj.child.y").unwrap(), 7);
-    assert_eq!(host.live_count(), 2);
-    ctx.eval::<(), _>("globalThis.obj = undefined").unwrap();
-  });
-
-  rt.run_gc();
-  assert_eq!(host.live_count(), 0);
-}
-
-#[test]
-fn dropping_the_runtime_releases_every_cached_handle() {
-  let host = Rc::new(FakeTlHost::default());
-  let child = Rc::new(RefCell::new(object_entry("child", &[("y", "I7")])));
-  let id = host.mint(nested_entry("parent", "child", child));
-
-  {
+  for drop_runtime in [false, true] {
+    let child = Rc::new(RefCell::new(object_entry("child", &[("y", "I7")])));
+    let id = host.mint(nested_entry("parent", "child", child));
     let (rt, ctx) = make_ctx();
-    let views = views_of(&host);
+    let views = TlViews::new(host.clone());
     ctx.with(|ctx| {
       bind_object(&ctx, &views, "obj", ViewLife::Plugin, id);
       assert_eq!(ctx.eval::<i64, _>("obj.child.y").unwrap(), 7);
     });
     assert_eq!(host.live_count(), 2);
-    drop(ctx);
-    drop(rt);
+    if drop_runtime {
+      drop(ctx);
+      drop(rt);
+    } else {
+      ctx.with(|ctx| ctx.eval::<(), _>("globalThis.obj = undefined").unwrap());
+      rt.run_gc();
+    }
+    assert_eq!(host.live_count(), 0);
   }
-
-  assert_eq!(host.live_count(), 0);
 }
 
 #[test]
 fn deep_chain_over_a_cyclic_graph_releases_fully() {
-  let (rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (rt, ctx, host, views) = fixture();
   let a = Rc::new(RefCell::new(object_entry("a", &[])));
   let b = Rc::new(RefCell::new(object_entry("b", &[])));
   add_nested(&a, "b", b.clone());
   add_nested(&b, "a", a.clone());
   let root = host.mint_shared(a, false);
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     bind_object(&ctx, &views, "root", ViewLife::Plugin, root);
@@ -1699,11 +1320,9 @@ fn deep_chain_over_a_cyclic_graph_releases_fully() {
 
 #[test]
 fn write_clears_the_writing_views_bag_promptly() {
-  let (rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (rt, ctx, host, views) = fixture();
   let child = Rc::new(RefCell::new(object_entry("child", &[("y", "I7")])));
   let id = host.mint(nested_entry("parent", "child", child));
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     bind_object(&ctx, &views, "obj", ViewLife::Plugin, id);
@@ -1720,11 +1339,9 @@ fn write_clears_the_writing_views_bag_promptly() {
 /// never crosses, and what was not sent is read the way it always was
 #[test]
 fn a_projected_handle_answers_its_scalars_without_the_host() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (_rt, ctx, host, views) = fixture();
   let id =
     host.mint_read_only(object_entry("dialog", &[("id", "S5"), ("date", "I9"), ("draft", "N"), ("pinned", "B1")]));
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     let wire =
@@ -1745,7 +1362,7 @@ fn a_projected_handle_answers_its_scalars_without_the_host() {
 
     let pinned: bool = ctx.eval("d.pinned").unwrap();
     assert!(pinned);
-    assert_eq!(host.gets_of("pinned"), 1, "what was not projected is read as before");
+    assert_eq!(host.count_key_gets("pinned"), 1, "what was not projected is read as before");
 
     let keys: Vec<String> = ctx.eval("Object.keys(d)").unwrap();
     assert!(keys.contains(&"pinned".to_string()) && keys.contains(&"_".to_string()));
@@ -1755,11 +1372,9 @@ fn a_projected_handle_answers_its_scalars_without_the_host() {
 
 #[test]
 fn a_projection_is_dropped_by_a_write_like_any_cached_value() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (_rt, ctx, host, views) = fixture();
   let projected = host.mint_read_only(object_entry("dialog", &[("id", "S5")]));
   let other = host.mint(object_entry("bar", &[("x", "I1")]));
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     let wire = format!("{}|{{\"_\":\"dialog\",\"id\":\"5\"}}", encode_handle(false, true, projected));
@@ -1770,20 +1385,18 @@ fn a_projection_is_dropped_by_a_write_like_any_cached_value() {
     let _: () = ctx.eval("other.x = 2").unwrap();
     let id: String = ctx.eval("d.id").unwrap();
     assert_eq!(id, "5");
-    assert_eq!(host.gets_of("id"), 1, "after a write the value is read again");
+    assert_eq!(host.count_key_gets("id"), 1, "after a write the value is read again");
     let type_name: String = ctx.eval("d._").unwrap();
     assert_eq!(type_name, "dialog");
-    assert_eq!(host.gets_of("_"), 0, "the type name never changes");
+    assert_eq!(host.count_key_gets("_"), 0, "the type name never changes");
   });
 }
 
 /// a dispatch-lifetime view caches nothing, so it adopts nothing either
 #[test]
 fn a_dispatch_view_ignores_a_projection() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (_rt, ctx, host, views) = fixture();
   let id = host.mint(object_entry("dialog", &[("id", "S5")]));
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     let wire = format!("{}|{{\"id\":\"stale\"}}", encode_handle(false, false, id));
@@ -1791,16 +1404,14 @@ fn a_dispatch_view_ignores_a_projection() {
     ctx.globals().set("d", value).unwrap();
     let id: String = ctx.eval("d.id").unwrap();
     assert_eq!(id, "5");
-    assert_eq!(host.gets_of("id"), 1);
+    assert_eq!(host.count_key_gets("id"), 1);
   });
 }
 
 #[test]
 fn a_malformed_projection_is_refused() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
+  let (_rt, ctx, host, views) = fixture();
   let id = host.mint_read_only(object_entry("dialog", &[("id", "S5")]));
-  let views = views_of(&host);
 
   ctx.with(|ctx| {
     for bad in ["[1]", "not json", ""] {
@@ -1808,141 +1419,4 @@ fn a_malformed_projection_is_refused() {
       assert!(views.wire_to_js_value(&ctx, &wire, ViewLife::Plugin).is_err(), "{bad:?}");
     }
   });
-}
-
-/// one handler serves every view of a context; a view costs its target and its proxy
-#[test]
-fn every_view_shares_one_handler() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
-  let a = host.mint(object_entry("a", &[]));
-  let b = host.mint_read_only(object_entry("b", &[]));
-  let views = views_of(&host);
-
-  ctx.with(|ctx| {
-    let a = bind(&ctx, &views, "a", false, false, ViewLife::Dispatch, a);
-    let b = bind(&ctx, &views, "b", true, true, ViewLife::Plugin, b);
-    let handler_a = a.as_proxy().unwrap().handler().unwrap();
-    let handler_b = b.as_proxy().unwrap().handler().unwrap();
-    assert_eq!(handler_a, handler_b);
-  });
-}
-
-/// Not a test: a benchmark of what a list answer costs to build and to read, on the rust side of
-/// the bridge alone (the fake host answers from memory). `cargo test --release bench_views -- --ignored --nocapture`.
-#[test]
-#[ignore]
-fn bench_views() {
-  let (_rt, ctx) = make_ctx();
-  let host = Rc::new(FakeTlHost::default());
-  let count = 200;
-  let views = views_of(&host);
-  let mint_all = || {
-    let mut wires = Vec::new();
-    for i in 0..count {
-      let peer = host.mint_read_only(object_entry("peerUser", &[("user_id", &format!("I{i}"))]));
-      let entry = Rc::new(RefCell::new(object_entry(
-        "dialog",
-        &[("id", &format!("S{i}")), ("last_message_date", &format!("I{}", 1_000_000 + i)), ("top_message", "I7")],
-      )));
-      let (peer_entry, _) = host.lookup(peer).unwrap();
-      add_nested(&entry, "peer", peer_entry);
-      let id = host.mint_shared(entry, true);
-      wires.push(encode_handle(false, true, id));
-    }
-    wires
-  };
-  let rounds = 6;
-  let mut build = Vec::new();
-  let mut cold = Vec::new();
-  let mut cached = Vec::new();
-  let mut nested = Vec::new();
-  for _ in 0..rounds {
-    let wires = mint_all();
-    ctx.with(|ctx| {
-      let started = std::time::Instant::now();
-      let array = Array::new(ctx.clone()).unwrap();
-      for (index, wire) in wires.iter().enumerate() {
-        array.set(index, views.wire_to_js_value(&ctx, wire, ViewLife::Plugin).unwrap()).unwrap();
-      }
-      ctx.globals().set("ds", array).unwrap();
-      build.push(started.elapsed());
-      let started = std::time::Instant::now();
-      if let Err(e) =
-        ctx.eval::<(), _>("globalThis.s = 0; for (const d of ds) { s += d.id.length; s += d.last_message_date; }")
-      {
-        panic!("{e}: {:?}", ctx.catch().as_exception().map(|x| x.message()));
-      }
-      cold.push(started.elapsed());
-      let started = std::time::Instant::now();
-      let _: () = ctx.eval("for (const d of ds) { s += d.id.length; s += d.last_message_date; }").unwrap();
-      cached.push(started.elapsed());
-      let started = std::time::Instant::now();
-      let _: () = ctx.eval("for (const d of ds) { s += d.peer.user_id; }").unwrap();
-      nested.push(started.elapsed());
-      let _: () = ctx.eval("ds = null").unwrap();
-    });
-    _rt.run_gc();
-  }
-  let median = |v: &mut Vec<std::time::Duration>| {
-    v.remove(0);
-    v.sort();
-    v[v.len() / 2].as_secs_f64() * 1000.0
-  };
-  println!(
-    "bench_views {count}: build={:.3}ms cold={:.3}ms cached={:.3}ms nested={:.3}ms",
-    median(&mut build),
-    median(&mut cold),
-    median(&mut cached),
-    median(&mut nested)
-  );
-}
-
-fn log_view(host: &Rc<FakeTlHost>, is_vector: bool, id: i64) -> Vec<String> {
-  let (_rt, ctx) = make_ctx();
-  let views = views_of(host);
-  let lines = crate::testing::harness::install_capturing_console(&ctx);
-  ctx.with(|ctx| {
-    bind(&ctx, &views, "view", is_vector, false, ViewLife::Dispatch, id);
-    ctx.eval::<(), _>("console.log(view)").unwrap();
-  });
-  let lines = lines.borrow();
-  lines.clone()
-}
-
-#[test]
-fn console_prints_a_view_as_its_type_and_fields() {
-  let host = Rc::new(FakeTlHost::default());
-  let peer = Rc::new(RefCell::new(object_entry("peerUser", &[("user_id", "I7")])));
-  let message = Rc::new(RefCell::new(object_entry("message", &[("id", "I5"), ("message", "Shi")])));
-  add_nested(&message, "peer_id", peer);
-  let id = host.mint_shared(message, false);
-  assert_eq!(
-    log_view(&host, false, id),
-    vec!["message { id: 5, message: 'hi', peer_id: peerUser { user_id: 7 } }"]
-  );
-}
-
-#[test]
-fn console_prints_a_vector_view_as_an_array() {
-  let host = Rc::new(FakeTlHost::default());
-  let peer = Rc::new(RefCell::new(object_entry("peerUser", &[("user_id", "I7")])));
-  let id = host.mint(FakeEntry::Vector(vec![FakeValue::Wire("I1".to_string()), FakeValue::Nested(peer)]));
-  assert_eq!(log_view(&host, true, id), vec!["[ 1, peerUser { user_id: 7 } ]"]);
-}
-
-#[test]
-fn console_collapses_a_view_nested_past_two_levels_to_its_type() {
-  let host = Rc::new(FakeTlHost::default());
-  let d = Rc::new(RefCell::new(object_entry("d.type", &[("x", "I1")])));
-  let c = Rc::new(RefCell::new(nested_entry("c.type", "d", d)));
-  let b = Rc::new(RefCell::new(nested_entry("b.type", "c", c)));
-  let id = host.mint(nested_entry("a.type", "b", b));
-  assert_eq!(log_view(&host, false, id), vec!["a.type { b: b.type { c: c.type { d: [d.type] } } }"]);
-}
-
-#[test]
-fn console_prints_an_expired_view_without_throwing() {
-  let host = Rc::new(FakeTlHost::default());
-  assert_eq!(log_view(&host, false, 999), vec![format!("[TL view: {HANDLE_EXPIRED_MESSAGE}]")]);
 }

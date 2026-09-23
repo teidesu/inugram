@@ -1,7 +1,9 @@
 package desu.inugram.helpers.plugins.telegram
 
+import android.webkit.MimeTypeMap
 import desu.inugram.core.plugins.OwnerRegistry
 import desu.inugram.helpers.plugins.SessionResource
+import desu.inugram.helpers.plugins.UiObservation
 import desu.inugram.core.plugins.PluginRefusal
 import desu.inugram.helpers.media.MediaSendHelper
 import desu.inugram.helpers.plugins.io.PluginTransfers
@@ -9,12 +11,9 @@ import desu.inugram.helpers.plugins.ui.PluginAnimationDecoder
 import desu.inugram.helpers.plugins.tl.TlHandles
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.EngineDispatch
-import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginSession
-import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.telegram.PluginWrites.Call
 import desu.inugram.core.plugins.PluginWire.refuse
-import desu.inugram.helpers.plugins.tl.TlFilter
 import desu.inugram.helpers.plugins.tl.TlJson
 import java.io.File
 import java.util.UUID
@@ -28,18 +27,11 @@ import org.telegram.tgnet.ConnectionsManager
 import org.telegram.tgnet.TLRPC
 
 /**
- * Manages `getMessageFile`, `downloadMedia`, `downloadMediaToFile`, `uploadFile`, and uploads
- * for `sendMedia`/`sendMultiMedia`.
- *
- * Stock's loader handles transfers, datacenter migration, CDN redirects, file-reference
- * refreshes, and the per-account path database. Downloads join existing transfers and use
- * the same locations as app downloads. This class tracks ownership and completion.
- *
- * Report progress per chunk; Rust `progress.rs` coalesces it. Upload inputs are already staged
- * as files because stock takes paths and only Rust can read blob content.
+ * Stock's loader handles transfers, dc migration, cdn redirects, file-reference refreshes and the path
+ * database; downloads join existing transfers. Upload inputs are staged as files because stock takes
+ * paths and only rust can read blob content.
  */
 object PluginMedia : SessionResource {
-    /** stock names every file it moves and reports it through the same three events, carrying the name first and the payload second */
     private class Transfer(
         val call: Call,
         val fileName: String,
@@ -50,23 +42,31 @@ object PluginMedia : SessionResource {
             if (upload) NotificationCenter.fileUploadProgressChanged else NotificationCenter.fileLoadProgressChanged
         val doneEvent = if (upload) NotificationCenter.fileUploaded else NotificationCenter.fileLoaded
         val failedEvent = if (upload) NotificationCenter.fileUploadFailed else NotificationCenter.fileLoadFailed
-        val events = intArrayOf(progressEvent, doneEvent, failedEvent)
 
-        /** ui thread only: both the add and the remove run there, in that order */
-        var observer: NotificationCenter.NotificationCenterDelegate? = null
+        val observation = UiObservation(
+            intArrayOf(progressEvent, doneEvent, failedEvent),
+            { listOf(NotificationCenter.getInstance(call.accountId)) },
+        ) { id, _, args ->
+            if (args.isEmpty() || args[0] != fileName) return@UiObservation
+            when (id) {
+                progressEvent -> report(this, longAt(args, 1), longAt(args, 2))
+                doneEvent -> {
+                    release(this)
+                    onDone(args.getOrNull(1), null)
+                }
+                failedEvent -> {
+                    release(this)
+                    onDone(null, "the transfer failed")
+                }
+            }
+        }
     }
 
-    /**
-     * every transfer still listening, per plugin. A transfer settles from a [NotificationCenter]
-     * event and there is no event for one stock never started, so without this the observer - and
-     * through it the engine - would outlive the plugin. Touched from the plugin queue and the ui thread.
-     */
     private val live = OwnerRegistry<PluginSession, Transfer>()
 
-
     fun messageFile(session: PluginSession, accountId: Int, value: String): String {
-        return try {
-            val message = messageOf(session.tl, value)
+        return EngineDispatch.produceWire("getMessageFile") {
+            val message = resolveMessageHandle(session.tl, value)
             val media = mediaFile(message) ?: return PluginWire.encodeNull()
             val loader = FileLoader.getInstance(accountId)
             val path = findLocalFile(loader, message, media)
@@ -76,25 +76,21 @@ object PluginMedia : SessionResource {
             json.put("path", path.absolutePath)
             json.put("exists", path.exists() && path.length() > 0)
             PluginWire.encodeJson(json.toString())
-        } catch (e: PluginRefusal) {
-            e.wire
-        } catch (e: Exception) {
-            PluginWire.encodePluginError("internal", "getMessageFile: ${e.message ?: e.toString()}")
         }
     }
 
     internal fun download(call: Call, toFile: Boolean): String? {
-        val message = messageOf(call.session.tl, call.values.firstOrNull() ?: refuse("invalid-argument", "no message"))
+        val message = resolveMessageHandle(call.session.tl, call.values.firstOrNull() ?: refuse("invalid-argument", "no message"))
         val media = mediaFile(message) ?: refuse("invalid-argument", "this message has no media to download")
         val loader = FileLoader.getInstance(call.accountId)
         val already = findLocalFile(loader, message, media)
         if (already != null) {
-            // still through [answer], because settling inside the upcall is the same-engine re-entry that aborts the process
-            PluginWrites.answer(call) { downloadWire(already, message, toFile) }
+            // settling inside the upcall re-enters the same engine and aborts the process
+            call.answer { downloadWire(already, message, toFile) }
             return null
         }
         val transfer = Transfer(call, media.fileName, upload = false) { arrived, error ->
-            PluginWrites.answer(call) {
+            call.answer {
                 val file = arrived as? File
                 when {
                     error != null -> PluginWire.encodePluginError("internal", "downloadMedia: $error")
@@ -114,56 +110,48 @@ object PluginMedia : SessionResource {
         return null
     }
 
-    /**
-     * The media's file if it is already on disk. A download lands where [FileLoader.getPathToMessage]
-     * says, but a document stock streamed - a gif autoplayed in a chat - is kept in its cache folder
-     * under the same name.
-     */
+    /** a document stock streamed (an autoplayed gif) is kept in its cache folder under the same name */
     private fun findLocalFile(loader: FileLoader, message: TLRPC.Message, media: Downloadable): File? =
         sequenceOf(
             { loader.getPathToMessage(message) },
             { (media as? Downloadable.Doc)?.let { loader.getPathToAttach(it.document, true) } },
         ).mapNotNull { it() }.firstOrNull { it.exists() && it.length() > 0 }
 
-    /** the name rides along so a download fed straight back to `sendMedia` keeps it */
     private fun downloadWire(file: File, message: TLRPC.Message, toFile: Boolean): String {
         val json = JSONObject()
         json.put("path", file.absolutePath)
         if (!toFile) {
             json.put("size", file.length())
-            json.put("mime", mimeOfMessage(message, file.name))
+            json.put("mime", getMessageMime(message, file.name))
             json.put("name", downloadName(message, file))
             json.put("mtime", file.lastModified())
         }
         return PluginWire.encodeJson(json.toString())
     }
 
-    private fun documentOf(message: TLRPC.Message): TLRPC.Document? =
+    private fun getMessageDocument(message: TLRPC.Message): TLRPC.Document? =
         (message.media as? TLRPC.TL_messageMediaDocument)?.document
 
     private fun downloadName(message: TLRPC.Message, file: File): String =
-        FileLoader.getDocumentFileName(documentOf(message)).takeIf { it.isNotEmpty() } ?: file.name
+        FileLoader.getDocumentFileName(getMessageDocument(message)).takeIf { it.isNotEmpty() } ?: file.name
 
-    private fun mimeOfMessage(message: TLRPC.Message, fileName: String): String =
-        documentOf(message)?.mime_type?.takeIf { it.isNotEmpty() } ?: mimeOfName(fileName)
+    private fun getMessageMime(message: TLRPC.Message, fileName: String): String =
+        getMessageDocument(message)?.mime_type?.takeIf { it.isNotEmpty() } ?: guessMimeFromName(fileName)
 
     internal fun uploadFile(call: Call): String? {
         val source = stagedFile(call, call.values.firstOrNull() ?: refuse("invalid-argument", "no file"))
         upload(call, source) { input ->
-            PluginWrites.answer(call) {
+            call.answer {
                 if (input == null) PluginWire.encodePluginError("internal", "uploadFile: the upload failed")
-                else PluginWire.encodeJson(TlJson.toJson(input, TlFilter.policyFor(call.session.permissions)).toString())
+                else PluginWire.encodeJson(TlJson.toJson(input, call.session.tl.policy).toString())
             }
         }
         return null
     }
 
     /**
-     * Stock's own `FileLoader.uploadFile(path, callback)` is deliberately not used: it matches the
-     * notification's path with `==`, and a second upload of a path already in `uploadOperationPaths`
-     * never starts an operation of its own, so its callback is handed a different `String` instance
-     * than the running operation reports under and never fires. Listening here settles every waiter
-     * on the one operation, and puts the observer where [detach] can end it.
+     * not stock's `FileLoader.uploadFile(path, callback)`: it matches paths with `==`, and a second upload of
+     * a path already in `uploadOperationPaths` starts no operation, so its callback never fires
      */
     private fun upload(call: Call, source: Source, done: (TLRPC.InputFile?) -> Unit) {
         val requested = call.json.optString("fileName")
@@ -179,16 +167,11 @@ object PluginMedia : SessionResource {
         }
     }
 
-    /**
-     * `onProgress` for a send the composer owns: stock uploads from the same staged path, so the
-     * same transfer reports it. It only reports - what settles the promise is the message coming
-     * back - so the done and failed events do nothing but stop the observer.
-     */
+    /** only reports progress; the message coming back settles the promise */
     internal fun watchUpload(call: Call, path: String) {
         observe(Transfer(call, path, upload = true) { _, _ -> })
     }
 
-    /** one operation reports the same `InputFile` instance to every waiter, so the name goes on a copy */
     private fun named(input: TLRPC.InputFile, name: String): TLRPC.InputFile {
         val copy = if (input is TLRPC.TL_inputFileBig) TLRPC.TL_inputFileBig() else TLRPC.TL_inputFile()
         copy.id = input.id
@@ -199,7 +182,7 @@ object PluginMedia : SessionResource {
     }
 
     internal fun sendMedia(call: Call, album: Boolean): String? {
-        // the peer first: a send into a secret chat must be refused before anything is uploaded
+        // a secret-chat send must be refused before anything uploads
         val peer = call.peer() as TLRPC.InputPeer
         val items = if (album) call.json.optJSONArray("items") ?: refuse("invalid-argument", "no items")
         else null
@@ -210,10 +193,10 @@ object PluginMedia : SessionResource {
             if (wire.startsWith(FILE_TAG)) {
                 val source = stagedFile(call, wire)
                 val name = getFileName(source, call.json.optString("fileName"))
-                val mime = source.mime.ifEmpty { mimeOfName(name) }
+                val mime = source.mime.ifEmpty { guessMimeFromName(name) }
                 val asDocument = call.flag("asDocument")
                 val described = describeLocalDocument(source.path, mime, asDocument)
-                // the file is taken only once the composer is: the fallback uploads the staged one, which lasts until the write answers
+                // the fallback uploads the staged file, which lasts until the write answers
                 return PluginOptimisticSend.sendMedia(call, source.path, name, mime, asDocument, described) {
                     PluginWrites.answerRefusals(call) { sendByRequest(call, peer, items, count, described.attributes) }
                 }
@@ -223,7 +206,6 @@ object PluginMedia : SessionResource {
         return null
     }
 
-    /** [described] is what an optimistic send already read off its one file, so the fallback does not read it again */
     private fun sendByRequest(
         call: Call,
         peer: TLRPC.InputPeer,
@@ -236,20 +218,20 @@ object PluginMedia : SessionResource {
         for (index in 0 until count) {
             val describe = items?.optJSONObject(index) ?: call.json
             resolveMedia(call, call.values[index], describe, described) { media ->
-                // back onto the engine's queue before the counter is touched: an item already uploaded answers inline while one still going up answers from the ui thread
+                // an uploaded item answers inline, one still uploading answers from the ui thread
                 EngineDispatch.scheduler.postRunnable {
                     medias[index] = media
                     remaining--
                     if (remaining > 0) return@postRunnable
                     if (medias.any { it == null }) {
-                        PluginWrites.answer(call) {
+                        call.answer {
                             PluginWire.encodePluginError("internal", "sendMedia: an upload failed")
                         }
                     } else {
                         try {
                             sendResolved(call, peer, medias.filterNotNull(), items)
                         } catch (e: PluginRefusal) {
-                            PluginWrites.answer(call) { e.wire }
+                            call.answer { e.wire }
                         }
                     }
                 }
@@ -268,7 +250,7 @@ object PluginMedia : SessionResource {
             request.peer = peer
             request.media = medias.first()
             request.message = call.json.optString("text")
-            request.entities = PluginWrites.entitiesOf(call.json)
+            request.entities = PluginWrites.readEntities(call.json)
             request.random_id = Utilities.random.nextLong()
             request.silent = call.flag("silent")
             request.schedule_date = call.int("scheduleDate")
@@ -292,7 +274,7 @@ object PluginMedia : SessionResource {
                     this.media = media
                     random_id = Utilities.random.nextLong()
                     message = describe.optString("text")
-                    entities = PluginWrites.entitiesOf(describe)
+                    entities = PluginWrites.readEntities(describe)
                 },
             )
         }
@@ -308,16 +290,16 @@ object PluginMedia : SessionResource {
     ) {
         val asDocument = describe.optBoolean("asDocument", false)
         if (!wire.startsWith(FILE_TAG)) {
-            when (val given = PluginWrites.tlValue(call.session.tl, wire)) {
+            when (val given = call.session.tl.objectFromWire(wire)) {
                 is TLRPC.InputMedia -> return done(given)
-                is TLRPC.InputFile -> return done(uploadedMedia(given, "", mimeOfName(""), asDocument, emptyList()))
+                is TLRPC.InputFile -> return done(uploadedMedia(given, "", guessMimeFromName(""), asDocument, emptyList()))
                 else -> refuse("invalid-argument", "sendMedia: '${given.javaClass.simpleName}' is not a file")
             }
         }
         val source = stagedFile(call, wire)
         val name = getFileName(source, describe.optString("fileName"))
-        val mime = source.mime.ifEmpty { mimeOfName(name) }
-        // read here rather than in the callback: that one answers on the ui thread, and this parses a container
+        val mime = source.mime.ifEmpty { guessMimeFromName(name) }
+        // not in the callback, which runs on the ui thread
         val attributes = described ?: describeLocalDocument(source.path, mime, asDocument, withThumb = false).attributes
         upload(call, source) { input ->
             if (input == null) done(null)
@@ -328,7 +310,6 @@ object PluginMedia : SessionResource {
         }
     }
 
-    /** an image goes up the way the ui would send it unless `asDocument` says otherwise; webp is the exception stock makes too, a sticker being a document however it looks */
     private fun uploadedMedia(
         input: TLRPC.InputFile,
         name: String,
@@ -350,21 +331,12 @@ object PluginMedia : SessionResource {
         }
     }
 
-    /** the file the composer uploads, and whether it is the app's own to move or delete afterwards */
     internal class Upload(val file: File, val owned: Boolean) {
         fun discard() {
             if (owned) file.delete()
         }
     }
 
-    /**
-     * What the composer is handed. A local message goes on pointing at that file, its extension is
-     * what tells the loader an mp4 is an animation, and stock moves a sent file out of its media
-     * cache once the server has answered. So a transfer rust staged, which it deletes the moment the
-     * write answers, is renamed into that cache - [PluginTransfers] keeps it on the same volume. A
-     * path the plugin named is uploaded from where it is and never moved, unless stock would move
-     * it or its extension disagrees with the name, which only a copy fixes.
-     */
     internal fun takeForUpload(call: Call, source: File, name: String): Upload {
         val staged = PluginTransfers.isStaged(call.session.plugin.id, source)
         val extension = name.substringAfterLast('.', "")
@@ -384,7 +356,6 @@ object PluginMedia : SessionResource {
         return Upload(target, owned = true)
     }
 
-    /** what a local [TLRPC.TL_document] needs to say about itself before the server has one of its own */
     internal class LocalDescription(
         val attributes: List<TLRPC.DocumentAttribute>,
         val thumb: TLRPC.PhotoSize?,
@@ -394,37 +365,18 @@ object PluginMedia : SessionResource {
         }
     }
 
-    /**
-     * What stock puts on a video the composer was given, and what nothing puts on a plugin's upload
-     * otherwise: an mp4 carrying only a filename arrives as a file rather than as something that
-     * plays. A silent video is an animation, which is what a gif is on telegram - stock's own muted
-     * sends say exactly this about theirs - so encoding one and sending it needs no more than this.
-     *
-     * The thumb is the first frame, which `MessageObject` reads once, in its constructor: nothing
-     * regenerates it when the server's document replaces the local one, so a document sent without
-     * one is an empty bubble until the chat is reopened.
-     *
-     * Nothing is claimed about a file the device cannot read: it goes as it would have anyway.
-     * Reading a container is disk work: call this on the queue the write came in on, never on the
-     * ui thread the composer and the upload's own answer run on.
-     */
     internal fun describeLocalDocument(file: File, mime: String, asDocument: Boolean, withThumb: Boolean = true): LocalDescription {
         if (asDocument || !mime.startsWith("video/")) return LocalDescription.NONE
         val path = file.absolutePath
         val video = MediaSendHelper.describeVideo(path, isEncrypted = false)
             ?: return LocalDescription.NONE
         val attributes = if (video.hasAudio) listOf(video.attribute) else listOf(video.attribute, TLRPC.TL_documentAttributeAnimated())
-        val thumb = if (withThumb) coverOf(path) else null
+        val thumb = if (withThumb) createVideoCover(path) else null
         return LocalDescription(attributes, thumb)
     }
 
-    /**
-     * The first frame, through the app's ffmpeg bridge rather than the platform's retriever: the
-     * platform spins up a hardware decoder for the one frame, which is most of a send's latency
-     * before its bubble draws, and ffmpeg decodes it straight at the cover's size. The platform
-     * stays as the fallback for what ffmpeg refuses.
-     */
-    private fun coverOf(path: String): TLRPC.PhotoSize? {
+    /** ffmpeg rather than the platform retriever, which spins up a hardware decoder for one frame */
+    private fun createVideoCover(path: String): TLRPC.PhotoSize? {
         val frame = PluginAnimationDecoder.readFirstFrame(path, THUMB_SIDE)
             ?: MediaSendHelper.readFirstFrame(path)
         return MediaSendHelper.saveVideoThumb(frame, isEncrypted = false)
@@ -439,7 +391,7 @@ object PluginMedia : SessionResource {
 
     internal fun getFileName(source: Source, requested: String): String = requested.ifEmpty {
         source.name.ifEmpty {
-            val extension = MIME_BY_EXTENSION.entries.firstOrNull { it.value == source.mime }?.key
+            val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(source.mime)
             if (extension == null) source.path.name else "${source.path.nameWithoutExtension}.$extension"
         }
     }
@@ -450,13 +402,12 @@ object PluginMedia : SessionResource {
         val path = File(json.optString("path"))
         if (!path.exists() || !path.isFile) refuse("not-found", "no such file: ${path.absolutePath}")
         if (path.length() == 0L) refuse("invalid-argument", "this file is empty")
-        // a path the plugin named is read here and nowhere else; the grant that let it name one was checked in `writes.rs`
         return Source(path, json.optString("name"), json.optString("mime"))
     }
 
-    // a transfer only names its message (stock reads the media off it and refreshes its file reference from it), so a read-only handle is the normal argument here
-    private fun messageOf(handles: TlHandles, wire: String): TLRPC.Message =
-        PluginWrites.readValue(handles, wire) as? TLRPC.Message
+    // stock reads the media off the message and refreshes its file reference from it, so a read-only handle is normal
+    private fun resolveMessageHandle(handles: TlHandles, wire: String): TLRPC.Message =
+        handles.objectFromWire(wire, allowReadOnly = true) as? TLRPC.Message
             ?: refuse("invalid-argument", "expected a message")
 
     private sealed class Downloadable(val fileName: String) {
@@ -481,40 +432,13 @@ object PluginMedia : SessionResource {
         }
     }
 
-    private val MIME_BY_EXTENSION = mapOf(
-        "jpg" to "image/jpeg", "jpeg" to "image/jpeg", "png" to "image/png", "gif" to "image/gif",
-        "webp" to "image/webp", "mp4" to "video/mp4", "webm" to "video/webm", "mp3" to "audio/mpeg",
-        "ogg" to "audio/ogg", "opus" to "audio/ogg", "pdf" to "application/pdf", "txt" to "text/plain",
-        "json" to "application/json", "zip" to "application/zip",
-    )
+    internal fun guessMimeFromName(name: String): String =
+        MimeTypeMap.getSingleton().getMimeTypeFromExtension(name.substringAfterLast('.', "").lowercase())
+            ?: "application/octet-stream"
 
-    internal fun mimeOfName(name: String): String {
-        val extension = name.substringAfterLast('.', "").lowercase()
-        return MIME_BY_EXTENSION[extension] ?: "application/octet-stream"
-    }
-
-    /** stock reports every transfer through [NotificationCenter] keyed by the name it gave the file. Added and removed on the ui thread, the only thread that centre may be touched from */
     private fun observe(transfer: Transfer) {
         live.add(transfer.call.session, transfer)
-        AndroidUtilities.runOnUIThread {
-            val centre = NotificationCenter.getInstance(transfer.call.accountId)
-            val observer = NotificationCenter.NotificationCenterDelegate { id, _, args ->
-                if (args.isEmpty() || args[0] != transfer.fileName) return@NotificationCenterDelegate
-                when (id) {
-                    transfer.progressEvent -> report(transfer, longAt(args, 1), longAt(args, 2))
-                    transfer.doneEvent -> {
-                        release(transfer)
-                        transfer.onDone(args.getOrNull(1), null)
-                    }
-                    transfer.failedEvent -> {
-                        release(transfer)
-                        transfer.onDone(null, "the transfer failed")
-                    }
-                }
-            }
-            transfer.observer = observer
-            for (id in transfer.events) centre.addObserver(observer, id)
-        }
+        transfer.observation.start()
     }
 
     private fun report(transfer: Transfer, loaded: Long, total: Long) {
@@ -532,28 +456,12 @@ object PluginMedia : SessionResource {
 
     private fun release(transfer: Transfer) {
         live.remove(transfer.call.session) { it === transfer }
-        stopObserving(transfer)
+        transfer.observation.stop()
     }
 
-    /**
-     * the remove takes the same ui hop the add did, which is the only thing that orders it behind
-     * one: [AndroidUtilities.runOnUIThread] always posts, so a transfer torn down before its own add
-     * landed still removes the observer that add is about to create. Reading [Transfer.observer]
-     * here would find it null and leave the observer holding the dead engine for the process's life.
-     */
-    private fun stopObserving(transfer: Transfer) {
-        AndroidUtilities.runOnUIThread {
-            val observer = transfer.observer ?: return@runOnUIThread
-            transfer.observer = null
-            val centre = NotificationCenter.getInstance(transfer.call.accountId)
-            for (id in transfer.events) centre.removeObserver(observer, id)
-        }
-    }
-
-    /** there is no event for a transfer stock declined to start, so an unloaded plugin's observers would sit on the centre for the life of the process */
     override fun detach(session: PluginSession) {
         val mine = live.take(session)
         if (mine.isEmpty()) return
-        for (transfer in mine) stopObserving(transfer)
+        for (transfer in mine) transfer.observation.stop()
     }
 }

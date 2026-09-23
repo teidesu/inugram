@@ -16,12 +16,8 @@ import java.util.concurrent.CopyOnWriteArrayList
 import org.json.JSONArray
 import org.json.JSONObject
 import org.telegram.messenger.AndroidUtilities
-import org.telegram.messenger.Utilities
 
-/**
- * one rendered row, and the [QuickJs] a tap on it goes back to. Never a [Plugin]: a reload builds
- * a new engine whose tokens restart at 1.
- */
+/** a reload builds a new engine whose tokens restart at 1, so never key by [Plugin] */
 data class ActionKey(val pluginId: String, val kind: Int, val id: String) {
     val storageKey: String get() = "$pluginId:$id"
 }
@@ -46,13 +42,7 @@ data class RegisteredActionRow(
     val dynamicFields: Int,
 )
 
-/**
- * Kotlin side of `inu.register*Action` (rust: `actions.rs`): rows a plugin contributes to menus the
- * app owns.
- *
- * Dynamic getters are rendered on [EngineDispatch.scheduler]. Static presentation is cached during
- * registration, so rows without relevant getters never enter an engine.
- */
+/** static presentation is cached at registration, so rows without dynamic getters never enter an engine */
 object PluginActions : SessionResource {
 
     // keep in sync with rust `actions::KIND_*`
@@ -79,7 +69,7 @@ object PluginActions : SessionResource {
     // keep in sync with rust `actions::EDITOR_*`; anything but replace sends
     const val EDITOR_REPLACE = 0
 
-    /** globalQueue is shared with every other engine op, so the wait has to be bounded by something other than the plugins' own good behaviour */
+    /** the engine queue is shared with every engine op, so the wait is bounded */
     const val RENDER_BUDGET_MS = 150L
 
     private val registry = ActionRegistry<QuickJs>()
@@ -92,12 +82,8 @@ object PluginActions : SessionResource {
     private var nextOptionId = OPTION_BASE
 
     /**
-     * Every menu but one is built by the gesture that opens it, so it reads the fresh count itself;
-     * the drawer is built once and lives as long as the activity, so a row registered afterwards
-     * would not appear until something else rebuilt it.
-     *
-     * Copy-on-write: a screen registers from the ui thread while [publishCounts] reads the list from
-     * an upcall on [EngineDispatch.scheduler].
+     * the drawer is built once per activity, unlike other menus, so it must be told about new rows.
+     * copy-on-write: registered on the ui thread, read from an upcall on [EngineDispatch.scheduler]
      */
     private val onCountsChanged = CopyOnWriteArrayList<() -> Unit>()
 
@@ -105,7 +91,7 @@ object PluginActions : SessionResource {
         onCountsChanged.add(redraw)
     }
 
-    /** the composers a `MessageEditorActionContext` may still name, ui thread + a volatile view */
+    /** ui thread, plus a volatile view */
     private val editorSurfaces = HashMap<Long, EditorSurface>()
     @Volatile private var liveEditorSurfaces = emptySet<Long>()
     private var nextEditorSurface = 1L
@@ -128,7 +114,7 @@ object PluginActions : SessionResource {
         val refusal = registry.register(session.engine, kind, token, id, placements, text, icon, dynamicFields)
         if (refusal != null) {
             session.log.w("actions", "refused an action row: $refusal")
-            // a `P` wire, so the cap refusal carries its own code: every other answer this upcall can give is a JNI-level failure, and reporting those as `quota-exceeded` tells a plugin it is at a limit it is nowhere near
+            // every other answer here is a JNI-level failure, so only the cap refusal is `quota-exceeded`
             return PluginWire.encodePluginError("quota-exceeded", refusal)
         }
         publishCounts()
@@ -140,7 +126,6 @@ object PluginActions : SessionResource {
         publishCounts()
     }
 
-    /** the engine is going away; everything it drew is inert from here on */
     override fun detach(session: PluginSession) {
         registry.forget(session.engine)
         publishCounts()
@@ -164,11 +149,7 @@ object PluginActions : SessionResource {
         return null
     }
 
-    /**
-     * where plugin rows start in the menu-item id spaces the app's own menus use. Far above stock's
-     * ids and the fork's own (`ChatHelper.OPTION_*`, `ChatActionsHelper.ACTION_*`), so a plugin row
-     * can never be mistaken for one of them.
-     */
+    /** far above stock ids and the fork's (`ChatHelper.OPTION_*`, `ChatActionsHelper.ACTION_*`) */
     const val OPTION_BASE = 900_000
 
     @Synchronized
@@ -257,7 +238,6 @@ object PluginActions : SessionResource {
 
     fun pluginOrderKey(key: ActionKey): String = "$PLUGIN_ORDER_PREFIX${key.storageKey}"
 
-    /** drops every setting keyed by an install outside [live], which nothing could otherwise reach again */
     fun retainInstalls(live: Set<String>) {
         fun keeps(storageKey: String) = storageKey.substringBefore(':') in live
         for (kind in intArrayOf(KIND_CHAT, KIND_MESSAGE)) {
@@ -277,11 +257,7 @@ object PluginActions : SessionResource {
         render(kind, ALL_PLACEMENTS, true, { "null" }, onRows)
     }
 
-    /**
-     * renders [kind]'s rows for [surface] and hands them back on the ui thread. [onRows] runs
-     * exactly once and never before this returns, so a menu can reserve its rows and bind its cells
-     * in the same turn it asked; a caller that has already given up ignores it.
-     */
+    /** [onRows] runs exactly once and never before this returns, so a menu can reserve rows in the same turn */
     fun render(kind: Int, surface: ActionSurface, onRows: (List<ActionRow>) -> Unit) {
         if (surface.isSecret) {
             AndroidUtilities.runOnUIThread { onRows(emptyList()) }
@@ -340,11 +316,8 @@ object PluginActions : SessionResource {
     }
 
     /**
-     * the user tapped [row]. The row is resolved to a live registration on the way in, by key
-     * rather than by the engine that drew it: a reload leaves menus that outlive it holding rows
-     * whose engine nothing lists any more, and the same key on the new engine answers for them.
-     * A key nothing registers - the plugin was disabled, uninstalled, or dropped that action -
-     * does nothing rather than reaching whatever took its token.
+     * resolved by key, not by the drawing engine: menus can outlive a reload, and the new engine answers for
+     * the same key. An unregistered key does nothing rather than reaching whatever took its token.
      */
     fun dispatch(row: ActionRow, surface: ActionSurface) {
         EngineDispatch.scheduler.postRunnable {
@@ -375,11 +348,7 @@ object PluginActions : SessionResource {
         liveEditorSurfaces = editorSurfaces.keys.toSet()
     }
 
-    /**
-     * the plugin list's own order, restricted to running engines. Both halves matter: the order is
-     * what `common.d.ts` promises rows come out in, and membership is what makes a row from a
-     * stopped or reloaded engine inert.
-     */
+    /** `common.d.ts` promises plugin-list order, and membership makes rows from stopped engines inert */
     private fun publishCounts() {
         val plugins = PluginManager.plugins().mapNotNull { plugin -> plugin.session?.takeIf { it.canDispatch() } }
         val order = plugins.map { it.engine }

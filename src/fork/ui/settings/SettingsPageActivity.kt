@@ -58,7 +58,7 @@ abstract class SettingsPageActivity : UniversalFragment() {
             listView.clipToPadding = false
             // pre-scroll before first layout so the row is on-screen at open, no jump after transition.
             if (highlightItemId != -1) {
-                val index = indexOfItem(listView, highlightItemId)
+                val index = findItemPosition(listView, highlightItemId)
                 if (index >= 0) {
                     listView.layoutManager.scrollToPositionWithOffset(index, AndroidUtilities.dp(60f))
                 }
@@ -69,12 +69,12 @@ abstract class SettingsPageActivity : UniversalFragment() {
     override fun onTransitionAnimationEnd(isOpen: Boolean, backward: Boolean) {
         super.onTransitionAnimationEnd(isOpen, backward)
         if (!isOpen || backward || highlightItemId == -1) return
-        val index = indexOfItem(listView, highlightItemId)
+        val index = findItemPosition(listView, highlightItemId)
         highlightItemId = -1
         if (index >= 0) listView.highlightRow { index }
     }
 
-    private fun indexOfItem(lv: UniversalRecyclerView, target: Int): Int {
+    private fun findItemPosition(lv: UniversalRecyclerView, target: Int): Int {
         var i = 0
         while (true) {
             val item = lv.adapter.getItem(i) ?: return -1

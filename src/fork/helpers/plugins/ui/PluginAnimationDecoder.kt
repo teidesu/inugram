@@ -11,16 +11,9 @@ import org.telegram.messenger.UserConfig
 import org.telegram.ui.Components.AnimatedFileNative
 import org.telegram.ui.Components.RLottieNative
 
-/**
- * Decodes frames for `inu.canvas.decodeAnimation`: ffmpeg for GIF/MP4/WebM, tlottie for TGS,
- * and an ordinary decode for single-frame images.
- *
- * Each frame gets its own bitmap for the plugin's `ImageBitmap`. All operations run on [queue]
- * because decoders are not thread-safe and sequential reads depend on frame order.
- */
-/** the one call shape every video decode here makes: no crop, no rotation, the frame as ffmpeg has it */
 private fun AnimatedFileNative.readInto(bitmap: Bitmap?): Int = getVideoFrame(bitmap, false, 0f, 0f, false)
 
+/** All operations run on [queue]: decoders are not thread-safe and sequential reads depend on frame order. */
 internal sealed class PluginAnimationDecoder(shared: Executor) {
     val queue: Executor = SerialExecutor(shared)
 
@@ -38,7 +31,6 @@ internal sealed class PluginAnimationDecoder(shared: Executor) {
 
     abstract fun frame(index: Int): Frame
 
-    /** the frame after the last one read, or null once the source has no more */
     abstract fun next(): Frame?
 
     protected abstract fun release()
@@ -46,11 +38,7 @@ internal sealed class PluginAnimationDecoder(shared: Executor) {
     @Volatile
     private var closed = false
 
-    /**
-     * Called from whichever thread the plugin's handle went away on, so the decoder is let go on
-     * [queue] - behind a frame that may still be decoding on it. The staged file it reads may
-     * already be unlinked by then, which an open decoder does not notice.
-     */
+    /** called from any thread, so the decoder is released on [queue] behind a frame that may still be decoding */
     fun close() {
         if (closed) return
         closed = true
@@ -73,7 +61,7 @@ internal sealed class PluginAnimationDecoder(shared: Executor) {
 
         override fun frame(index: Int): Frame {
             val bitmap = newFrame(width, height)
-            // anything below zero drew nothing, and the bitmap is still the blank one we allocated
+            // below zero means nothing was drawn
             if (lottie.getFrame(index, bitmap, true) < 0) {
                 bitmap.recycle()
                 throw IllegalArgumentException("frame $index did not render")
@@ -88,10 +76,8 @@ internal sealed class PluginAnimationDecoder(shared: Executor) {
     }
 
     /**
-     * ffmpeg scales an opaque frame into whatever bitmap it is handed, so a size the plugin asked for
-     * is decoded at directly rather than minted at the source's size and drawn down. A transparent
-     * one it writes only into a bitmap of the frame's own size, and leaves any other blank: that
-     * source is decoded at its own size and drawn down here instead.
+     * ffmpeg scales an opaque frame into any bitmap, so it decodes at the asked size. A transparent frame is
+     * only written into a bitmap of its own size, so those decode at source size and are drawn down here.
      */
     private class Video(
         shared: Executor,
@@ -136,8 +122,7 @@ internal sealed class PluginAnimationDecoder(shared: Executor) {
 
         private inline fun read(index: Int, decode: (Bitmap) -> Int): Frame {
             val bitmap = newFrame(decodeWidth, decodeHeight)
-            // ffmpeg answers zero when it decoded nothing, and the bitmap stays the blank one: the
-            // frame count is a duration times a rate, so a source can run out before it is reached
+            // ffmpeg answers zero when it decoded nothing; the frame count is estimated, so a source can end early
             if (decode(bitmap) == 0) {
                 bitmap.recycle()
                 throw NoFrame(index)
@@ -174,14 +159,10 @@ internal sealed class PluginAnimationDecoder(shared: Executor) {
     companion object {
         private const val DEFAULT_FPS = 30
 
-        /** the size a lottie animation renders at when the plugin names none, which is stock's own sticker size */
+        /** stock's sticker size */
         private const val LOTTIE_SIDE = 512
 
-        /**
-         * The format is read off the content rather than off a name, there being no name to read: a
-         * source the plugin passed as bytes was staged into a file called neither. A zero [width] or
-         * [height] is the source's own size, which a lottie animation does not have.
-         */
+        /** sniffed from content: bytes the plugin passed were staged without a name. Lottie has no own size */
         fun open(shared: Executor, path: String, width: Int, height: Int): PluginAnimationDecoder {
             val file = File(path)
             if (!file.isFile || file.length() == 0L) {
@@ -207,10 +188,6 @@ internal sealed class PluginAnimationDecoder(shared: Executor) {
             return Still(shared, still)
         }
 
-        /**
-         * The first frame of a video, decoded at a size that fits [maxSide] with its aspect kept,
-         * rotation applied; null for anything ffmpeg does not open as a video.
-         */
         fun readFirstFrame(path: String, maxSide: Int): Bitmap? {
             val meta = IntArray(META_FIELDS)
             val video = AnimatedFileNative.createDecoderFrom(path, meta, UserConfig.selectedAccount, 0, null, false)
@@ -241,11 +218,7 @@ internal sealed class PluginAnimationDecoder(shared: Executor) {
             }
         }
 
-        /**
-         * Whether ffmpeg can scale this source's frames, learnt from its first frame decoded into a
-         * single pixel, after which the source is rewound. The native side only reports opacity for
-         * a frame it was handed a bitmap for, and scales exactly the formats it calls opaque.
-         */
+        /** native only reports opacity for a frame it was handed a bitmap for, and scales exactly the opaque formats */
         private fun isOpaque(video: AnimatedFileNative): Boolean {
             val probe = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
             try {
@@ -257,7 +230,7 @@ internal sealed class PluginAnimationDecoder(shared: Executor) {
             }
         }
 
-        /** draws [bitmap] into one of the given size and takes it: the original is recycled when a new one was made */
+        /** recycles the original when a new one was made */
         private fun scaleTo(bitmap: Bitmap, width: Int, height: Int): Bitmap {
             if (bitmap.width == width && bitmap.height == height) return bitmap
             val scaled = Bitmap.createScaledBitmap(bitmap, width, height, true)
@@ -271,7 +244,7 @@ internal sealed class PluginAnimationDecoder(shared: Executor) {
         private const val GZIP_FIRST = 0x1f
         private const val GZIP_SECOND = 0x8b
 
-        /** a lottie sticker is gzipped json, and tlottie reads the plain json too */
+        /** a lottie sticker is gzipped json, and tlottie reads plain json too */
         private fun isLottie(file: File): Boolean {
             val head = ByteArray(2)
             val read = file.inputStream().use { it.read(head) }

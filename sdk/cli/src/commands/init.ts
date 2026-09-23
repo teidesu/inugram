@@ -11,10 +11,6 @@ import { slugify } from '../utils/manifest.js'
 
 const TEMPLATE_DIR = join(templatesDir, 'default')
 
-function dependencyRange(): string {
-  return version === 'dev' || version === '0.0.0' ? 'latest' : `^${version}`
-}
-
 export const initCmd = defineCommand({
   meta: {
     name: 'init',
@@ -47,7 +43,7 @@ export const initCmd = defineCommand({
       throw new CliError(`${join(root, 'package.json')} already exists. Scaffolding into an existing project is currently not supported`)
     }
 
-    const range = dependencyRange()
+    const range = version === 'dev' || version === '0.0.0' ? 'latest' : `^${version}`
     const name = basename(root).replace(/[^a-z0-9-]+/gi, '-').toLowerCase() || 'inu-plugins'
 
     step(`Scaffolding ${color.bold(name)} in ${root}`)

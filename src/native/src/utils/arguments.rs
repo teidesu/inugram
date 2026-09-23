@@ -30,29 +30,47 @@ pub fn field<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> J
   obj.get(key).map_err(|_| Exception::throw_type(ctx, &format!("{what}: cannot read '{key}'")))
 }
 
-pub fn req_str<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<String> {
-  let v = field(ctx, obj, what, key)?;
-  match v.as_string() {
-    Some(s) => Ok(s.to_string()?),
-    None => Err(Exception::throw_type(ctx, &format!("{what}: '{key}' must be a string"))),
-  }
-}
-
-pub fn opt_str<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<Option<String>> {
+fn opt_field<'js, T>(
+  ctx: &Ctx<'js>,
+  obj: &Object<'js>,
+  what: &str,
+  key: &str,
+  expected: &str,
+  convert: impl FnOnce(Value<'js>) -> Option<T>,
+) -> JsResult<Option<T>> {
   let v = field(ctx, obj, what, key)?;
   if v.is_undefined() || v.is_null() {
     return Ok(None);
   }
-  match v.as_string() {
-    Some(s) => Ok(Some(s.to_string()?)),
-    None => Err(Exception::throw_type(ctx, &format!("{what}: '{key}' must be a string"))),
-  }
+  convert(v)
+    .map(Some)
+    .ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: '{key}' must be {expected}")))
 }
 
-/// Reads `InputText` from `common.d.ts`: a string or `{ text, entities }`.
-///
-/// Passes entities through unchanged. Hosts that support formatting convert them to spans; other
-/// hosts use the plain text.
+fn req_field<'js, T>(
+  ctx: &Ctx<'js>,
+  obj: &Object<'js>,
+  what: &str,
+  key: &str,
+  expected: &str,
+  convert: impl FnOnce(Value<'js>) -> Option<T>,
+) -> JsResult<T> {
+  opt_field(ctx, obj, what, key, expected, convert)?
+    .ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: '{key}' must be {expected}")))
+}
+
+fn to_int(v: &Value<'_>) -> Option<i32> {
+  v.as_int().or_else(|| v.as_float().filter(|f| f.fract() == 0.0).map(|f| f as i32))
+}
+
+pub fn req_str<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<String> {
+  req_field(ctx, obj, what, key, "a string", |v| v.as_string()?.to_string().ok())
+}
+
+pub fn opt_str<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<Option<String>> {
+  opt_field(ctx, obj, what, key, "a string", |v| v.as_string()?.to_string().ok())
+}
+
 pub fn read_input_text<'js>(
   ctx: &Ctx<'js>,
   value: &Value<'js>,
@@ -79,8 +97,6 @@ pub fn read_input_text<'js>(
   Ok((text.to_string()?, Some(entities)))
 }
 
-/// Writes [`read_input_text`] output as the text key and a `<key>Entities` key. Hosts that render
-/// spans read both; other hosts read the text only.
 pub fn write_input_text<'js>(out: &Object<'js>, key: &str, value: (String, Option<Value<'js>>)) -> JsResult<()> {
   out.set(key, value.0)?;
   if let Some(entities) = value.1 {
@@ -113,69 +129,31 @@ pub fn opt_text<'js>(
 }
 
 pub fn req_bool<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<bool> {
-  let v = field(ctx, obj, what, key)?;
-  v.as_bool().ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: '{key}' must be a boolean")))
+  req_field(ctx, obj, what, key, "a boolean", |v| v.as_bool())
 }
 
-pub fn opt_bool<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<bool> {
-  opt_bool_or(ctx, obj, what, key, false)
+pub fn opt_bool<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<Option<bool>> {
+  opt_field(ctx, obj, what, key, "a boolean", |v| v.as_bool())
 }
 
-pub fn opt_bool_or<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str, default: bool) -> JsResult<bool> {
-  let v = field(ctx, obj, what, key)?;
-  if v.is_undefined() || v.is_null() {
-    return Ok(default);
-  }
-  v.as_bool().ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: '{key}' must be a boolean")))
-}
-
-/// an optional whole number, for a field naming something counted rather than measured
 pub fn opt_int<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<Option<i32>> {
-  let v = field(ctx, obj, what, key)?;
-  if v.is_undefined() || v.is_null() {
-    return Ok(None);
-  }
-  v.as_int()
-    .or_else(|| v.as_float().filter(|f| f.fract() == 0.0).map(|f| f as i32))
-    .map(Some)
-    .ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: '{key}' must be a whole number")))
+  opt_field(ctx, obj, what, key, "a whole number", |v| to_int(&v))
 }
 
 pub fn req_num<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<f64> {
-  let v = field(ctx, obj, what, key)?;
-  if let Some(i) = v.as_int() {
-    return Ok(i as f64);
-  }
-  v.as_float().ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: '{key}' must be a number")))
+  req_field(ctx, obj, what, key, "a number", |v| v.as_number())
 }
 
 pub fn opt_num<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<Option<f64>> {
-  let v = field(ctx, obj, what, key)?;
-  if v.is_undefined() || v.is_null() {
-    return Ok(None);
-  }
-  if let Some(i) = v.as_int() {
-    return Ok(Some(i as f64));
-  }
-  v.as_float()
-    .map(Some)
-    .ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: '{key}' must be a number")))
+  opt_field(ctx, obj, what, key, "a number", |v| v.as_number())
 }
 
 pub fn req_fn<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<Function<'js>> {
-  let v = field(ctx, obj, what, key)?;
-  v.into_function()
-    .ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: '{key}' must be a function")))
+  req_field(ctx, obj, what, key, "a function", Value::into_function)
 }
 
 pub fn opt_fn<'js>(ctx: &Ctx<'js>, obj: &Object<'js>, what: &str, key: &str) -> JsResult<Option<Function<'js>>> {
-  let v = field(ctx, obj, what, key)?;
-  if v.is_undefined() || v.is_null() {
-    return Ok(None);
-  }
-  v.into_function()
-    .map(Some)
-    .ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: '{key}' must be a function")))
+  opt_field(ctx, obj, what, key, "a function", Value::into_function)
 }
 
 #[cfg(test)]
@@ -191,12 +169,9 @@ pub fn stringify_json<'js>(ctx: &Ctx<'js>, value: Value<'js>, message: &str) -> 
     .ok_or_else(|| Exception::throw_message(ctx, message))
 }
 
-/// a selected-item index: an integer inside the list, refusing a fraction and a NaN alike
 pub fn read_index<'js>(ctx: &Ctx<'js>, value: &Value<'js>, what: &str, len: usize) -> JsResult<i32> {
-  let index = value
-    .as_int()
-    .or_else(|| value.as_float().filter(|f| f.fract() == 0.0).map(|f| f as i32))
-    .ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: 'selected' must be an integer index")))?;
+  let index =
+    to_int(value).ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: 'selected' must be an integer index")))?;
   if index < 0 || index as usize >= len {
     return Err(Exception::throw_type(ctx, &format!("{what}: 'selected' out of range")));
   }

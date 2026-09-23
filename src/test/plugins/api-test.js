@@ -1,35 +1,7 @@
 // ==InuPlugin==
 // @name         api test
-// @author       teidesu
-// @version      1.0
 // @description  exercises localStorage / inu.ui.toast / inu.ui.dialog / inu.onUnload
-// @plugin-api   1
-// @platform     android
 // ==/InuPlugin==
-
-function pass(label, detail) {
-  console.log(detail === undefined ? `PASS ${label}` : `PASS ${label}: ${detail}`)
-}
-
-function fail(label, detail) {
-  console.error(`FAIL ${label}: ${detail}`)
-}
-
-function check(label, ok, detail) {
-  if (ok) pass(label, detail)
-  else fail(label, detail)
-}
-
-function expectThrows(label, body, code) {
-  try {
-    body()
-  } catch (e) {
-    check(label, e instanceof inu.PluginError && e.code === code, e && e.code)
-    return e
-  }
-  fail(label, `expected ${code}, nothing was thrown`)
-  return undefined
-}
 
 check('a key that was never set reads null', localStorage.getItem('never-written') === null)
 const runs = Number(localStorage.getItem('runs') ?? '0') + 1
@@ -76,13 +48,10 @@ localStorage.removeItem('getItem')
 
 inu.ui.toast(`api-test loaded (run #${runs})`)
 
-// the host reads title/message/buttons off a JSON snapshot, and stringify drops the callbacks a
-// declarative UIElement hangs off itself, so only `inu.android.nativeView` - a handle id and
-// nothing else - survives the crossing, and the rest are refused rather than silently dropped
-expectThrows(
-  'a declarative element cannot be a dialog body',
-  () => inu.ui.dialog({ title: 'api test', body: inu.ui.header('nope') }),
-  'unsupported',
+// the host reads a JSON snapshot, which drops callbacks, so only `inu.android.nativeView`
+// survives; the rest are refused rather than silently dropped
+expectThrow('a declarative element cannot be a dialog body', 'unsupported', () =>
+  inu.ui.dialog({ title: 'api test', body: inu.ui.header('nope') }),
 )
 
 inu.ui
@@ -96,7 +65,6 @@ inu.ui
   .then((result) => {
     check('a dialog settles with the button the user pressed', typeof result === 'string', result)
     inu.ui.toast(`dialog: ${result}`)
-    // the last half to report: the dialog only settles once the user has answered it
     console.log('api test done')
   })
 

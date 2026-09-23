@@ -7,13 +7,11 @@ use std::rc::Rc;
 use rquickjs::{Ctx, Result as JsResult, TypedArray, Value};
 
 use crate::api::error::PluginErrorCode;
-use crate::api::io::blob::{BlobHandle, BlobState};
+use crate::api::io::blob::BlobHandle;
 use crate::api::io::fs::FsState;
 use crate::sandbox::registry::RequestIds;
+use crate::utils::qjs::qjs_read_typed_bytes;
 
-const CHUNK_BYTES: u64 = 256 * 1024;
-
-/// a file this engine wrote out for the host, deleted with whatever holds it
 pub struct StagedFile(pub PathBuf);
 
 impl Drop for StagedFile {
@@ -22,30 +20,23 @@ impl Drop for StagedFile {
   }
 }
 
-/// A path for the host and whether staging created it. Plugin paths stay in place; staged blob
-/// copies are cleaned up by their owner.
 pub struct StagedSource {
   pub path: PathBuf,
   pub owned: bool,
 }
 
-/// Converts `Blob | Uint8Array | { path }` into a filesystem path for the host. Blob content lives
-/// in Rust and must be written out before the host can read it.
 pub struct SourceStager {
-  blobs: Rc<BlobState>,
   fs: RefCell<Option<Rc<FsState>>>,
   dir: PathBuf,
   prefix: &'static str,
   limit: u64,
-  /// the api this stages for, named in the message a source too big for it is refused with
   what: &'static str,
   next: RequestIds,
 }
 
 impl SourceStager {
-  pub fn new(blobs: Rc<BlobState>, dir: PathBuf, prefix: &'static str, limit: u64, what: &'static str) -> Self {
+  pub fn new(dir: PathBuf, prefix: &'static str, limit: u64, what: &'static str) -> Self {
     SourceStager {
-      blobs,
       fs: RefCell::new(None),
       dir,
       prefix,
@@ -62,16 +53,15 @@ impl SourceStager {
 
   pub fn stage<'js>(&self, ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<StagedSource> {
     if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
-      // SAFETY: no javascript runs while the slice is borrowed; an error thrown past the limit is
-      // built after its last use
-      let Some(bytes) = (unsafe { typed.as_bytes() }) else {
+      // an error thrown past the limit is built after the last use of the bytes
+      let written = qjs_read_typed_bytes(&typed, |bytes| {
+        self.check_limit(ctx, bytes.len() as u64)?;
+        self.write(ctx, |file| file.write_all(bytes))
+      });
+      let Some(written) = written else {
         return PluginErrorCode::InvalidArgument.throw(ctx, "this Uint8Array is detached");
       };
-      self.check_limit(ctx, bytes.len() as u64)?;
-      return Ok(StagedSource {
-        path: self.write(ctx, |file| file.write_all(bytes))?,
-        owned: true,
-      });
+      return Ok(StagedSource { path: written?, owned: true });
     }
     if rquickjs::Class::<BlobHandle>::from_value(value).is_ok() {
       return self.stage_blob(ctx, value);
@@ -91,33 +81,21 @@ impl SourceStager {
   }
 
   fn stage_blob<'js>(&self, ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<StagedSource> {
-    let Some(exported) = self.blobs.export_for_host(value) else {
+    let Some(export) = crate::api::io::blob::export_blob(value) else {
       return PluginErrorCode::HandleExpired.throw(ctx, "this blob has been disposed");
     };
-    let Some(id) = crate::api::io::blob::export_id_of(&exported) else {
-      return PluginErrorCode::Internal.throw(ctx, "this blob could not be handed over");
-    };
-    let Some(export) = self.blobs.resolve_export(id) else {
-      return PluginErrorCode::HandleExpired.throw(ctx, "this blob has been disposed");
-    };
-    let len = export.len();
-    self.check_limit(ctx, len)?;
+    self.check_limit(ctx, export.len())?;
     let path = self.write(ctx, |file| {
-      let mut at = 0u64;
-      while at < len {
-        let take = CHUNK_BYTES.min(len - at);
-        let chunk = export
-          .read(at, take)
-          .map_err(|_| std::io::Error::other("this blob's content is no longer readable"))?;
-        file.write_all(&chunk)?;
-        at += take;
-      }
-      Ok(())
+      export.write_to(file).map_err(|fault| std::io::Error::other(fault.message().to_string()))
     })?;
     Ok(StagedSource { path, owned: true })
   }
 
-  fn write<'js>(&self, ctx: &Ctx<'js>, fill: impl FnOnce(&mut fs::File) -> std::io::Result<()>) -> JsResult<PathBuf> {
+  pub(crate) fn write<'js>(
+    &self,
+    ctx: &Ctx<'js>,
+    fill: impl FnOnce(&mut fs::File) -> std::io::Result<()>,
+  ) -> JsResult<PathBuf> {
     if self.dir.as_os_str().is_empty() {
       return PluginErrorCode::Internal.throw(ctx, "this engine has no directory to stage a source in");
     }
@@ -133,7 +111,7 @@ impl SourceStager {
     Ok(path)
   }
 
-  fn check_limit(&self, ctx: &Ctx<'_>, len: u64) -> JsResult<()> {
+  pub(crate) fn check_limit(&self, ctx: &Ctx<'_>, len: u64) -> JsResult<()> {
     if len <= self.limit {
       return Ok(());
     }

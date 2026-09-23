@@ -13,7 +13,7 @@ enum class MessageActionSource(val wire: String, val placements: Int) {
     SELECTION("selection", PluginActions.MESSAGE_PLACEMENT_SELECTION),
 }
 
-/** Everything a `*ActionContext` is built from. Message snapshots are filtered per plugin. */
+/** message snapshots are filtered per plugin */
 class ActionSurface private constructor(
     private val json: String,
     internal val kind: Int,
@@ -21,11 +21,7 @@ class ActionSurface private constructor(
     dialogId: Long,
     private val messages: List<TLRPC.Message>? = null,
 ) {
-    /**
-     * an action never fires in a secret chat, which is the same rule
-     * [desu.inugram.helpers.plugins.telegram.PeerSpecs.dialogIdOf] enforces for every read - stated once
-     * here so no attach point can forget it
-     */
+    /** stated once here so no attach point can forget the secret-chat rule */
     internal val isSecret: Boolean = DialogObject.isEncryptedDialog(dialogId)
 
     internal fun getJson(permissions: PluginPermissions): String {

@@ -1,27 +1,8 @@
 // ==InuPlugin==
 // @name         events test
-// @author       teidesu
-// @version      1.0
 // @description  asserts inu.onNewMessage/onMessageEdited/onMessageDeleted fire once per arrival and agree with the raw update stream
 // @grant        onUpdate(new_message,edit_message,delete_message,updateNewMessage,updateNewChannelMessage,updateEditMessage,updateEditChannelMessage,updateDeleteMessages,updateDeleteChannelMessages)
-// @plugin-api   1
-// @platform     android
 // ==/InuPlugin==
-
-function pass(label, detail) {
-  console.log(detail === undefined ? `PASS ${label}` : `PASS ${label}: ${detail}`)
-}
-
-function fail(label, detail) {
-  console.error(`FAIL ${label}: ${detail}`)
-}
-
-function check(label, ok, detail) {
-  if (ok) pass(label, detail)
-  else fail(label, detail)
-}
-
-// -- the surface --
 
 check(
   'the three demuxed events exist',
@@ -44,17 +25,11 @@ try {
 }
 check('a handler has to be a function', refused === 'TypeError', refused)
 
-// registered and disposed before anything could arrive: every check below re-asserts it never ran
 let disposedRan = 0
 inu.onNewMessage(() => { disposedRan += 1 })()
 
-// -- the streams --
-//
-// every event is cross-checked against the raw updates it was demuxed out of, which is the part
-// that can actually fail: the raw handlers re-derive the ids and the dialog id independently, and
-// the counters catch an arrival delivered twice (a re-fed batch, or the difference catch-up
-// repeating what the live path already brought in).
-
+// each event is cross-checked against the raw updates it was demuxed from. the counters catch a
+// double delivery (a re-fed batch, or catch-up repeating the live path)
 const rawSeen = new Map()
 const demuxSeen = new Map()
 const rawDeletes = new Map()
@@ -72,9 +47,7 @@ function readIds(value) {
   return ids
 }
 
-// there is no end to an update stream, so "done" is every one of the three events having been
-// cross-checked at least once. it is deliberately not printed at the end of this file: everything
-// below arms a handler, and a completion line the assertions cannot precede would say nothing
+// an update stream has no end: "done" is every event cross-checked at least once
 const verified = new Set()
 
 function verifyOnce(label, key, kind, detail) {
@@ -92,8 +65,7 @@ function verifyOnce(label, key, kind, detail) {
   demuxSeen.delete(key)
 }
 
-// the comparison runs a microtask later so it does not depend on which of the two handlers the
-// dispatch happens to walk first: every handler of one arrival has run by then, and nothing else has
+// compared a microtask later, so the result does not depend on handler order
 function messageEvent(label, kind) {
   return (m, account) => {
     const key = `${account.id}:${kind}:${m.id}`

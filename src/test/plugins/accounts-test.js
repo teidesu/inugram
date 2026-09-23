@@ -1,38 +1,11 @@
 // ==InuPlugin==
 // @name         accounts test a very very very very very very very long name
-// @author       teidesu
-// @version      1.0
 // @icon         tg://addstickers?set=gabapentinoids
 // @description  asserts Account handles are pinned, withCurrentAccount follows switches and every dispatch carries one
 // @grant        account.read(self)
 // @grant        onUpdate(updateUserStatus)
 // @grant        invokeRpc(help.getConfig)
-// @plugin-api   1
-// @platform     android
 // ==/InuPlugin==
-
-function pass(label, detail) {
-  console.log(detail === undefined ? `PASS ${label}` : `PASS ${label}: ${detail}`)
-}
-
-function fail(label, detail) {
-  console.error(`FAIL ${label}: ${detail}`)
-}
-
-function check(label, ok, detail) {
-  if (ok) pass(label, detail)
-  else fail(label, detail)
-}
-
-function expectThrows(label, body, code) {
-  try {
-    body()
-  } catch (e) {
-    check(label, e instanceof inu.PluginError && e.code === code, e && `${e.code}: ${e.message}`)
-    return
-  }
-  fail(label, `expected ${code}, nothing was thrown`)
-}
 
 function describe(account) {
   return `#${account.id} (user ${account.userId}, current=${account.isCurrent()})`
@@ -41,11 +14,7 @@ function describe(account) {
 const list = inu.accounts()
 check('accounts() lists the logged-in slots', Array.isArray(list) && list.length > 0, `${list.length} slot(s)`)
 check('accounts() hands out account handles', list.every(a => typeof a.invokeRpc === 'function'))
-check(
-  'exactly one slot is current',
-  list.filter(a => a.isCurrent()).length === 1,
-  list.map(a => `${a.id}:${a.isCurrent()}`).join(','),
-)
+check('exactly one slot is current', list.filter(a => a.isCurrent()).length === 1, list.map(a => `${a.id}:${a.isCurrent()}`).join(','))
 check(
   'every slot answers whether it is premium',
   list.every(a => typeof a.isPremium() === 'boolean'),
@@ -54,10 +23,7 @@ check(
 
 const current = inu.account()
 check('account() defaults to the selected slot', current.isCurrent(), describe(current))
-check(
-  'account(id) agrees with accounts()',
-  list.every(info => inu.account(info.id).userId === info.userId),
-)
+check('account(id) agrees with accounts()', list.every(info => inu.account(info.id).userId === info.userId))
 
 let missing
 try {
@@ -66,14 +32,9 @@ try {
 } catch (e) {
   missing = e
 }
-check(
-  'account() of an empty slot throws not-found',
-  missing instanceof inu.PluginError && missing.code === 'not-found',
-  missing,
-)
+check('account() of an empty slot throws not-found', missing instanceof inu.PluginError && missing.code === 'not-found', missing)
 
-// the whole point of pinning: this handle keeps denoting the slot it was minted for, and only
-// isCurrent() moves. switch accounts in the app and watch the two lines below.
+// switch accounts in the app and watch the two lines below: only isCurrent() moves
 const pinnedSlot = current.id
 const pinnedUser = current.userId
 let sawChange = false
@@ -85,21 +46,16 @@ inu.onAccountsChanged((accounts) => {
     Array.isArray(accounts) && accounts.filter(a => a.isCurrent()).length === 1,
     accounts.map(a => `${a.id}:${a.isCurrent()}`).join(','),
   )
-  check(
-    'the pinned handle keeps its slot across the change',
-    current.id === pinnedSlot && current.userId === pinnedUser,
-    describe(current),
-  )
+  check('the pinned handle keeps its slot across the change', current.id === pinnedSlot && current.userId === pinnedUser, describe(current))
   check('and only isCurrent() moved', current.isCurrent() === (inu.account().id === pinnedSlot))
 })
 
-// the account form of invokeRpc sends on the handle it was called through, and one prototype
-// serves every slot, so a torn-off method has to fail by name rather than send on slot 0
+// one prototype serves every slot, so a torn-off method must fail by name rather than send on slot 0
 const pending = inu.account().invokeRpc({ _: 'help.getConfig' })
 check('invokeRpc through an account answers a promise', pending instanceof Promise)
 pending.catch(() => {})
 const detached = inu.account().invokeRpc
-expectThrows('a torn-off invokeRpc names no account', () => detached({ _: 'help.getConfig' }), 'invalid-argument')
+expectThrow('a torn-off invokeRpc names no account', 'invalid-argument', () => detached({ _: 'help.getConfig' }))
 
 let setups = 0
 const torn = []

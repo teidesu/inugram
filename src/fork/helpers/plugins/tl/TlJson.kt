@@ -2,8 +2,6 @@ package desu.inugram.helpers.plugins.tl
 
 import android.util.Base64
 import android.util.SparseArray
-import desu.inugram.core.plugins.TlFlags
-import desu.inugram.core.plugins.TlNames
 import java.lang.reflect.ParameterizedType
 import java.lang.reflect.Type
 import org.json.JSONArray
@@ -11,25 +9,12 @@ import org.json.JSONObject
 import org.telegram.tgnet.TLObject
 
 /**
- * JSON <-> TLObject, over the reflection [TlReflect] owns: constructing a real TLObject from a
- * plugin-authored `{_: "...", ...}` literal (reused by [TlHandles] for single-field coercion), and
- * `obj.toJSON()` snapshots. The live get/set path is [TlHandles]'s and does not come through here.
- *
- * Caveats (mirrored in sdk/types/common.d.ts):
- * - `long` fields are exposed as JSON strings to avoid losing int64 precision in JS numbers, except
- *   the ones [TlReflect.FieldInfo.isInt53] marks, which are numbers. A long accepts either back, and
- *   a number outside the safe integer range is refused: it has already lost precision in JS.
- * - stock annotates TL classes with non-wire `//custom` fields (`Message.dialog_id`, `attachPath`,
- *   `voiceTranscription`, ...); reflection can't tell them apart from wire fields, so they ride
- *   along in snapshots. `params`/`pollMediaAttachPaths` are the two whose types aren't TL-shaped;
- *   they map to JSON objects. Field types with no JSON mapping at all are skipped rather than
- *   throwing, so one exotic field can't sink a whole snapshot.
+ * The live get/set path is [TlHandles]'s. Mirrored in sdk/types/common.d.ts: longs are JSON strings
+ * except [TlReflect.FieldInfo.isInt53] ones, and either is accepted back; a number past the safe range
+ * is refused. Field types with no JSON mapping are skipped so one exotic field can't sink a snapshot.
  */
 object TlJson {
-    /**
-     * wraps a byte-array value in snapshot JSON, revived into a Uint8Array by rust
-     * (`tl_proxy::json_parse_tl`). Collision-safe: TL field names are Java identifiers.
-     */
+    /** revived into a Uint8Array by rust (`tl_proxy::json_parse_tl`). TL field names are java identifiers, so no collision */
     const val BYTES_KEY = "\$inuBytes"
 
     fun toJson(obj: TLObject, policy: TlFilter.Policy): JSONObject {
@@ -47,7 +32,6 @@ object TlJson {
         return json
     }
 
-    /** [int53] is the owning field's [TlReflect.FieldInfo.isInt53], which a vector hands its elements */
     internal fun valueToJson(value: Any, policy: TlFilter.Policy, int53: Boolean = false): Any? = when (value) {
         is Long -> if (int53) value else value.toString()
         is Int, is Short, is Byte, is Double, is Float, is Boolean, is String -> value
@@ -77,11 +61,10 @@ object TlJson {
         else -> null
     }
 
-
     fun fromJson(json: JSONObject): TLObject {
         val tlName = json.optString("_", "")
         if (tlName.isEmpty()) throw IllegalArgumentException("TlJson.fromJson: missing '_' type name")
-        val cls = TlReflect.classOf(tlName)
+        val cls = TlReflect.findTlClass(tlName)
             ?: throw IllegalArgumentException("TlJson.fromJson: unknown TL type '$tlName'")
         val instance = try {
             cls.getDeclaredConstructor().also { it.isAccessible = true }.newInstance()
@@ -114,13 +97,13 @@ object TlJson {
             java.lang.Long.TYPE, java.lang.Long::class.java -> when (jsonValue) {
                 is String -> jsonValue.toLong()
                 is Int -> jsonValue.toLong()
-                is Long -> jsonValue.takeIf { it in -MAX_SAFE_INTEGER..MAX_SAFE_INTEGER } ?: throw unsafeLong(path)
-                is Double -> jsonValue.takeIf { it % 1.0 == 0.0 && Math.abs(it) <= MAX_SAFE_INTEGER }?.toLong() ?: throw unsafeLong(path)
-                is Number -> throw unsafeLong(path)
+                is Long -> jsonValue.takeIf { it in -MAX_SAFE_INTEGER..MAX_SAFE_INTEGER } ?: throw IllegalArgumentException("TlJson.fromJson: a long at '$path' must be a safe integer or a decimal string")
+                is Double -> jsonValue.takeIf { it % 1.0 == 0.0 && Math.abs(it) <= MAX_SAFE_INTEGER }?.toLong() ?: throw IllegalArgumentException("TlJson.fromJson: a long at '$path' must be a safe integer or a decimal string")
+                is Number -> throw IllegalArgumentException("TlJson.fromJson: a long at '$path' must be a safe integer or a decimal string")
                 else -> throw expectedAt("long", path)
             }
             Integer.TYPE, Integer::class.java -> numberAt(jsonValue, "int", path).toInt()
-            // reflective Field.set on a primitive field requires the exactly-matching boxed width
+            // reflective Field.set on a primitive needs the exact boxed width
             java.lang.Short.TYPE -> numberAt(jsonValue, "int", path).toShort()
             java.lang.Byte.TYPE -> numberAt(jsonValue, "int", path).toByte()
             java.lang.Double.TYPE, java.lang.Double::class.java -> numberAt(jsonValue, "double", path).toDouble()
@@ -188,10 +171,6 @@ object TlJson {
     private fun expectedAt(what: String, path: String) =
         IllegalArgumentException("TlJson.fromJson: expected $what at '$path'")
 
-    /** `Number.MAX_SAFE_INTEGER`: past it a js number no longer names one integer */
+    /** past it a js number no longer names one integer */
     private const val MAX_SAFE_INTEGER = 9_007_199_254_740_991L
-
-    private fun unsafeLong(path: String) = IllegalArgumentException(
-        "TlJson.fromJson: a long at '$path' must be a safe integer or a decimal string",
-    )
 }

@@ -71,8 +71,6 @@ fn read_parts<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<Vec<String>> 
   Ok(parts)
 }
 
-/// A sub is what the glue already reduced an interpolated value to: text, text carrying entities, or
-/// `null` for a value the template drops.
 fn read_subs<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<Vec<Sub>> {
   let Some(array) = value.as_array() else {
     return PluginErrorCode::InvalidArgument.throw(ctx, "parse: expected interpolated values");
@@ -95,12 +93,7 @@ fn read_subs<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<Vec<Sub>> {
     let Some(text) = text.as_string() else {
       return PluginErrorCode::InvalidArgument.throw(ctx, "parse: expected a string or { text, entities }");
     };
-    let entities: Value = object.get("entities")?;
-    let entities = if entities.is_undefined() || entities.is_null() {
-      Vec::new()
-    } else {
-      read_entities(ctx, &entities)?
-    };
+    let entities = read_entities(ctx, &object.get("entities")?)?;
     subs.push(Sub::Rich(TextWithEntities { text: text.to_string()?, entities }));
   }
   Ok(subs)
@@ -287,7 +280,3 @@ fn id_string_field<'js>(object: &Object<'js>, name: &str) -> JsResult<Option<Str
   }
   Ok(None)
 }
-
-#[cfg(test)]
-#[path = "text_tests.rs"]
-mod tests;

@@ -2,66 +2,52 @@ use super::*;
 use rquickjs::{Context, Runtime};
 
 fn setup() -> (Runtime, Context) {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
+  let (rt, ctx) = crate::testing::harness::new_engine();
   ctx.with(|ctx| install_plugin_error(&ctx).unwrap());
   (rt, ctx)
 }
 
-fn describe(ctx: &Context, wire: &str) -> String {
-  ctx.with(|ctx| {
-    let value = wire_error_to_js(&ctx, wire).expect("expected an error wire").unwrap();
-    ctx.globals().set("e", value).unwrap();
-    ctx
-      .eval::<String, _>(
-        r#"JSON.stringify({
-                isPlugin: e instanceof inu.PluginError,
-                name: e.name,
-                code: e.code,
-                message: e.message,
-                grant: e.grant ?? null,
-                usage: e.usage ?? null,
-                quota: e.quota ?? null,
-                usageType: typeof e.usage,
-            })"#,
-      )
-      .unwrap()
-  })
-}
-
 #[test]
-fn plugin_error_wire_carries_grant_usage_and_quota() {
+fn a_plugin_error_wire_decodes_to_its_fields_and_leaves_empty_ones_absent() {
   let (_rt, ctx) = setup();
-  let got = describe(&ctx, "Pquota-exceeded\n\n1500\n1048576\nfs is full");
-  assert_eq!(
-    got,
-    r#"{"isPlugin":true,"name":"PluginError","code":"quota-exceeded","message":"fs is full","grant":null,"usage":1500,"quota":1048576,"usageType":"number"}"#,
-  );
-}
-
-#[test]
-fn plugin_error_wire_message_may_contain_newlines() {
-  let (_rt, ctx) = setup();
-  let got = describe(&ctx, "Pinternal\n\n\n\nline one\nline two\nline three");
-  assert_eq!(
-    got,
-    r#"{"isPlugin":true,"name":"PluginError","code":"internal","message":"line one\nline two\nline three","grant":null,"usage":null,"quota":null,"usageType":"undefined"}"#,
-  );
-}
-
-#[test]
-fn plugin_error_wire_empty_fields_become_absent_props() {
-  let (_rt, ctx) = setup();
-  let has_own = ctx.with(|ctx| {
-    let value = wire_error_to_js(&ctx, "Pnot-granted\nfs\n\n\nmissing grant: fs")
-      .expect("expected an error wire")
-      .unwrap();
-    ctx.globals().set("e", value).unwrap();
-    ctx
-      .eval::<String, _>(r#"JSON.stringify([e.grant, 'usage' in e, 'quota' in e, 'grant' in e])"#)
-      .unwrap()
-  });
-  assert_eq!(has_own, r#"["fs",false,false,true]"#);
+  for (host_channel, wire, want) in [
+    (
+      false,
+      "Pquota-exceeded\n\n1500\n1048576\nfs is full",
+      r#"[true,"PluginError","quota-exceeded","fs is full",null,1500,1048576,true,true]"#,
+    ),
+    (
+      false,
+      "Pinternal\n\n\n\nline one\nline two\nline three",
+      r#"[true,"PluginError","internal","line one\nline two\nline three",null,null,null,false,false]"#,
+    ),
+    (
+      false,
+      "Pnot-granted\nfs\n\n\nmissing grant: fs",
+      r#"[true,"PluginError","not-granted","missing grant: fs","fs",null,null,false,false]"#,
+    ),
+    (
+      true,
+      "Pquota-exceeded\nfs\n1500\n1024\nfs is full",
+      r#"[true,"PluginError","quota-exceeded","fs is full","fs",1500,1024,true,true]"#,
+    ),
+  ] {
+    let got = ctx.with(|ctx| {
+      let value = if host_channel {
+        host_error_to_js(&ctx, wire).unwrap()
+      } else {
+        wire_error_to_js(&ctx, wire).expect("expected an error wire").unwrap()
+      };
+      ctx.globals().set("e", value).unwrap();
+      ctx
+        .eval::<String, _>(
+          "JSON.stringify([e instanceof inu.PluginError, e.name, e.code, e.message, e.grant ?? null, \
+             e.usage ?? null, e.quota ?? null, 'usage' in e, 'quota' in e])",
+        )
+        .unwrap()
+    });
+    assert_eq!(got, want, "{wire:?}");
+  }
 }
 
 #[test]
@@ -94,21 +80,11 @@ fn malformed_plugin_error_wire_is_not_an_error_wire() {
 }
 
 #[test]
-fn a_bare_host_refusal_is_an_internal_plugin_error() {
-  let (_rt, ctx) = setup();
-  let got = ctx.with(|ctx| {
-    let value = host_error_to_js(&ctx, "Plugin host unavailable").unwrap();
-    ctx.globals().set("e", value).unwrap();
-    ctx.eval::<String, _>("e.name + '|' + e.message + '|' + (e instanceof inu.PluginError)").unwrap()
-  });
-  assert_eq!(got, "PluginError|Plugin host unavailable|true");
-}
-
-#[test]
 fn a_bare_host_message_keeps_its_leading_tag_letter() {
   let (_rt, ctx) = setup();
   ctx.with(|ctx| {
     for message in [
+      "Plugin host unavailable",
       "Expected receiver of type TLRPC$TL_message, but got java.lang.Long",
       "Error while assigning 'peer'",
       "Rate limited: try again later",
@@ -125,14 +101,51 @@ fn a_bare_host_message_keeps_its_leading_tag_letter() {
 }
 
 #[test]
-fn the_host_error_channel_still_decodes_a_plugin_error_wire() {
-  let (_rt, ctx) = setup();
-  let got = ctx.with(|ctx| {
-    let value = host_error_to_js(&ctx, "Pquota-exceeded\nfs\n1500\n1024\nfs is full").unwrap();
-    ctx.globals().set("e", value).unwrap();
-    ctx
-      .eval::<String, _>("[e instanceof inu.PluginError, e.code, e.grant, e.usage, e.quota, e.message].join('|')")
-      .unwrap()
+fn a_reason_that_raises_while_being_formatted_leaves_nothing_pending() {
+  let (rt, ctx, logs, log) = setup_rejection_tracker();
+  crate::testing::harness::eval_unit(&ctx, "Promise.reject(new Error('caught')).catch(() => {});");
+  crate::runtime::pump_jobs(&rt, &ctx, log.as_ref());
+  assert!(logs.borrow().is_empty(), "a caught rejection must not log, got: {:?}", logs.borrow());
+
+  crate::testing::harness::eval_unit(
+    &ctx,
+    r#"
+      Promise.reject({
+        toString() { throw new Error('nested'); },
+        get stack() { throw new Error('nested'); },
+      });
+    "#,
+  );
+  crate::runtime::pump_jobs(&rt, &ctx, log.as_ref());
+
+  assert!(!logs.borrow().is_empty(), "the rejection still has to be reported");
+  // the tracker returns straight into quickjs, so a raise left pending here would surface at
+  // whatever unrelated call touched the context next
+  ctx.with(|ctx| {
+    let leftover = ctx.catch();
+    assert_eq!(
+      leftover.type_of(),
+      rquickjs::Type::Uninitialized,
+      "formatting left an exception pending: {leftover:?}"
+    );
   });
-  assert_eq!(got, "true|quota-exceeded|fs|1500|1024|fs is full");
+}
+
+fn setup_rejection_tracker() -> (Runtime, Context, std::sync::Arc<crate::testing::harness::Logs>, crate::Log) {
+  let (rt, ctx) = crate::testing::harness::new_engine();
+  let logs = crate::testing::harness::Logs::new();
+  let log = crate::testing::harness::log_sink(&logs);
+  install_rejection_tracker(&rt, &ctx, log.clone()).unwrap();
+  (rt, ctx, logs, log)
+}
+
+#[test]
+fn a_rejection_made_on_another_thread_is_reported_by_the_next_pump() {
+  let (rt, ctx, logs, log) = setup_rejection_tracker();
+  let caller = ctx.clone();
+  std::thread::spawn(move || caller.with(|ctx| ctx.eval::<(), _>("Promise.reject(new Error('elsewhere'))").unwrap()))
+    .join()
+    .unwrap();
+  crate::runtime::pump_jobs(&rt, &ctx, log.as_ref());
+  assert!(logs.borrow().iter().any(|line| line.contains("elsewhere")), "got: {:?}", logs.borrow());
 }

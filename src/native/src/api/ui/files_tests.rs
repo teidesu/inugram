@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
-  api::io::fs::tests::{install_sandbox_globals, TestDir},
   testing::harness::DisposeOnDrop,
+  testing::harness::{install_sandbox_globals, TestDir},
 };
 use rquickjs::Context;
 use std::cell::RefCell;
@@ -30,15 +30,13 @@ struct Fixture {
 }
 
 fn setup(name: &str, grants: &[&str]) -> Fixture {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
+  let (rt, ctx) = crate::testing::harness::new_engine();
   let dir = TestDir::new(name);
   let host = Rc::new(TestFilesHost::default());
   let host_dyn: Rc<dyn FilesHost> = host.clone();
-  let grants = crate::sandbox::grants::TestGrantHost::new(grants).as_host();
+  let grants = crate::sandbox::grants::CachedGrantHost::new(grants);
   let state = ctx.with(|ctx| {
     let inu = crate::testing::harness::get_api_globals(&ctx);
-    crate::api::error::install_plugin_error(&ctx).unwrap();
     let blobs = install_sandbox_globals(&ctx, dir.path()).unwrap();
     let state =
       install_files(&ctx, host_dyn, blobs.clone(), dir.path().to_path_buf(), std::sync::Arc::new(|_: &str| {}), &inu)
@@ -46,7 +44,6 @@ fn setup(name: &str, grants: &[&str]) -> Fixture {
     let fs = crate::api::io::fs::install_fs(
       &ctx,
       grants,
-      blobs,
       dir.path(),
       crate::api::io::fs::DEFAULT_QUOTA_BYTES,
       false,
@@ -85,7 +82,6 @@ fn field(options: &str, name: &str) -> String {
   rest[..rest.find('"').unwrap()].to_string()
 }
 
-/// the request the host was handed last, and what the plugin asked for in it
 fn asked(f: &Fixture) -> (i32, i64, String) {
   f.host.asks.borrow().last().cloned().expect("the host was never asked")
 }
@@ -94,7 +90,6 @@ fn answer(f: &Fixture, request_id: i64, wire: &str) {
   f._state.settle(&f._rt, &f.ctx, request_id, wire);
 }
 
-/// pumps the microtask queue and reports what `globalThis.out` settled to
 fn settled(f: &Fixture) -> String {
   while f._rt.is_job_pending() {
     f._rt.execute_pending_job().ok();
@@ -109,10 +104,10 @@ fn pick(f: &Fixture, options: &str) -> i64 {
       r#"
         globalThis.out = 'pending'
         inu.ui.pickFile({options}).then(
-            v => {{ globalThis.picked = v; globalThis.out = Array.isArray(v) ? `[${{v.length}}]` : (v && v.name) }},
-            e => {{ globalThis.out = `${{e.code}}:${{e.message}}` }},
+          v => {{ globalThis.picked = v; globalThis.out = Array.isArray(v) ? `[${{v.length}}]` : (v && v.name) }},
+          e => {{ globalThis.out = `${{e.code}}:${{e.message}}` }},
         )
-        "#
+      "#
     ),
   );
   asked(f).1
@@ -144,7 +139,6 @@ fn what_the_picker_answers_becomes_a_file_over_the_copy_the_host_made() {
 
   assert_eq!(settled(&f), "Cool.ttf");
   assert_eq!(eval(&f, "`${picked.size}|${picked.type}|${picked instanceof File}`"), "16|font/ttf|true");
-  // and the content is readable, the copy being the plugin's for as long as it holds the file
   run(&f, "picked.text().then(t => { globalThis.out = t })");
   assert_eq!(settled(&f), "a font, honestly");
 }
@@ -191,7 +185,6 @@ fn an_answer_this_cannot_read_rejects_rather_than_leaving_the_promise_hanging() 
   answer(&f, request, "not json at all");
   assert!(settled(&f).starts_with("undefined:"), "a malformed answer did not reject");
 
-  // and a copy that is not there any more is a failure, not the cancellation an empty answer is
   let request = pick(&f, "{}");
   let gone = f.dir.path().join("gone.bin");
   answer(&f, request, &format!(r#"J[{{"path":"{}","name":"gone.bin","type":""}}]"#, gone.to_string_lossy()));
@@ -219,14 +212,6 @@ fn a_pick_the_host_refuses_rejects_with_what_it_said() {
 }
 
 #[test]
-fn a_pick_that_fails_after_the_dialog_rejects_too() {
-  let f = setup("pick-failed", &[]);
-  let request = pick(&f, "{}");
-  answer(&f, request, "Pinternal\n\n\n\npickFile: this file could not be read");
-  assert_eq!(settled(&f), "internal:pickFile: this file could not be read");
-}
-
-#[test]
 fn accept_takes_media_types_and_only_so_many_of_them() {
   let f = setup("pick-accept", &[]);
   assert_eq!(
@@ -245,10 +230,10 @@ fn save(f: &Fixture, content: &str, options: &str) -> i64 {
       r#"
         globalThis.out = 'pending'
         inu.ui.saveFile({content}, {options}).then(
-            v => {{ globalThis.out = String(v) }},
-            e => {{ globalThis.out = `${{e.code}}:${{e.message}}` }},
+          v => {{ globalThis.out = String(v) }},
+          e => {{ globalThis.out = `${{e.code}}:${{e.message}}` }},
         )
-        "#
+      "#
     ),
   );
   asked(f).1
@@ -267,7 +252,6 @@ fn a_save_hands_the_host_the_content_written_out_and_answers_whether_it_happened
 
   answer(&f, request, "B1");
   assert_eq!(settled(&f), "true");
-  // what was staged for the host is deleted with the request that staged it
   assert!(!staged.exists(), "{} was left behind", staged.display());
 }
 
@@ -296,7 +280,6 @@ fn a_named_file_is_saved_from_where_it_is_rather_than_copied_first() {
 
   answer(&f, request, "B1");
   assert_eq!(settled(&f), "true");
-  // and it stays where it is: only a copy this staged is this one's to delete
   assert!(f.dir.path().join("own.txt").exists());
 }
 

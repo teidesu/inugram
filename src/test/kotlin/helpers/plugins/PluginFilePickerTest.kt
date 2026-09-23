@@ -14,7 +14,7 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 
-/** a `file:` uri has no provider to report a size, which is exactly the case the running count exists for */
+/** a `file:` uri has no provider to report a size */
 class PluginFilePickerTest {
     private val sources = ArrayList<File>()
     private lateinit var plugin: Plugin

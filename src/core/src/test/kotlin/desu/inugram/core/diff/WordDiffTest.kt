@@ -29,50 +29,50 @@ class WordDiffTest {
 
     // single-direction edits inside a word — char-level via prefix/suffix peel
     @Test
-    fun simpleInsert() {
+    fun simple_insert() {
         assertEquals("dr[+i+]ve", diff("drve", "drive"))
     }
 
     @Test
-    fun simpleDelete() {
+    fun simple_delete() {
         assertEquals("test[-s-]", diff("tests", "test"))
     }
 
     @Test
-    fun morphologyEnding() {
+    fun morphology_ending() {
         assertEquals("run[-ning-][+s+]", diff("running", "runs"))
     }
 
     @Test
-    fun internalDeletes() {
+    fun internal_deletes() {
         assertEquals("ab[-X-]cd[-Y-]ef", diff("abXcdYef", "abcdef"))
     }
 
     // permutation-like edits (mixed-direction anchor) — block, no peel
     @Test
-    fun permutationShortWords() {
+    fun permutation_short_words() {
         assertEquals("[-почти-][+прости+]", diff("почти", "прости"))
     }
 
     @Test
-    fun permutationSwap() {
+    fun permutation_swap() {
         assertEquals("[-принято-][+приятно+]", diff("принято", "приятно"))
     }
 
     @Test
-    fun unrelatedWords() {
+    fun unrelated_words() {
         // tiny shared suffix shouldn't trigger peel
         assertEquals("[-конечно-][+временно+]", diff("конечно", "временно"))
     }
 
     // word-level swaps
     @Test
-    fun singleWordSwap() {
+    fun single_word_swap() {
         assertEquals("the [-cat-][+dog+] is happy", diff("the cat is happy", "the dog is happy"))
     }
 
     @Test
-    fun mergeAdjacentWordChanges() {
+    fun merge_adjacent_word_changes() {
         // multi-word change: should merge across whitespace bridges
         assertEquals(
             "i went [-shopping there-][+to a mall+]",
@@ -81,7 +81,7 @@ class WordDiffTest {
     }
 
     @Test
-    fun keepIntraWordAnchorAcrossWhitespace() {
+    fun keep_intra_word_anchor_across_whitespace() {
         // running/runs has intra-word EQ "run", so the merge across " " must NOT pull in fast/slow
         assertEquals(
             "run[-ning-][+s+] [-fast-][+slow+]",
@@ -90,7 +90,7 @@ class WordDiffTest {
     }
 
     @Test
-    fun longSharedContextStaysSeparate() {
+    fun long_shared_context_stays_separate() {
         // EQ between word changes is too long to absorb
         assertEquals(
             "the [-cat-][+dog+] is [-happy-][+grumpy+]",
@@ -100,7 +100,7 @@ class WordDiffTest {
 
     // whitespace at middle edges → block (avoids invisible leading-space deletion)
     @Test
-    fun whitespaceMidEdgeForcesBlock() {
+    fun whitespace_mid_edge_forces_block() {
         assertEquals(
             "в более холодны[-е-][+х+] [-края ехать-][+краях+]",
             diff("в более холодные края ехать", "в более холодных краях"),
@@ -109,56 +109,56 @@ class WordDiffTest {
 
     // edge cases
     @Test
-    fun fullReplace() {
+    fun full_replace() {
         assertEquals("[-abc-][+xyz+]", diff("abc", "xyz"))
     }
 
     @Test
-    fun pureInsertion() {
+    fun pure_insertion() {
         assertEquals("hello[+ world+]", diff("hello", "hello world"))
     }
 
     @Test
-    fun pureDeletion() {
+    fun pure_deletion() {
         assertEquals("hello[- world-]", diff("hello world", "hello"))
     }
 
     @Test
-    fun emptyOldText() {
+    fun empty_old_text() {
         assertEquals("[+hello+]", diff("", "hello"))
     }
 
     @Test
-    fun emptyNewText() {
+    fun empty_new_text() {
         assertEquals("[-hello-]", diff("hello", ""))
     }
 
     @Test
-    fun bothEmpty() {
+    fun both_empty() {
         assertEquals("", diff("", ""))
     }
 
     // single-char typo inside a word with whitespace context — peel + char-diff middle
     @Test
-    fun typoInsideWord() {
+    fun typo_inside_word() {
         assertEquals("hell[-o-][+p+] world", diff("hello world", "hellp world"))
     }
 
     // digits live in the same token class as letters
     @Test
-    fun numericTokenChange() {
+    fun numeric_token_change() {
         assertEquals("v1.[-2-][+3+]", diff("v1.2", "v1.3"))
     }
 
     // punctuation tokenizes as single-char tokens
     @Test
-    fun punctuationChange() {
+    fun punctuation_change() {
         assertEquals("hi[-!-][+?+]", diff("hi!", "hi?"))
     }
 
     // separate changes through a non-whitespace EQ stay separate (no merge)
     @Test
-    fun separateChangesAcrossWordEq() {
+    fun separate_changes_across_word_eq() {
         assertEquals(
             "a [-x-][+m+] b [-y-][+n+] c",
             diff("a x b y c", "a m b n c"),
@@ -167,12 +167,12 @@ class WordDiffTest {
 
     // 𝑥 (U+1D465) is a supplementary char (UTF-16 surrogate pair) — must not be split mid-pair
     @Test
-    fun supplementaryCharSwap() {
+    fun supplementary_char_swap() {
         assertEquals("[-x-][+𝑥+]", diff("x", "𝑥"))
     }
 
     @Test
-    fun supplementaryCharInsideWord() {
+    fun supplementary_char_inside_word() {
         assertEquals(
             "hi [-𝑥-][+𝑦+] world",
             diff("hi 𝑥 world", "hi 𝑦 world"),

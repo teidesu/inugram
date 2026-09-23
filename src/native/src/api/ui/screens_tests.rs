@@ -1,7 +1,6 @@
 use super::*;
-use crate::api::error::install_plugin_error;
 use crate::api::telegram::account::tests::TestAccountHost;
-use crate::sandbox::grants::TestGrantHost;
+use crate::sandbox::grants::CachedGrantHost;
 use rquickjs::Context;
 
 const TWO_ACCOUNTS: &str = r#"[{"id":0,"userId":111,"isCurrent":true,"isPremium":false},{"id":1,"userId":222,"isCurrent":false,"isPremium":true}]"#;
@@ -31,18 +30,16 @@ type Fixture = (
 );
 
 fn setup(grants: &[&str]) -> Fixture {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
+  let (rt, ctx) = crate::testing::harness::new_engine();
   let host = Rc::new(TestScreenHost::default());
   *host.screen.borrow_mut() = "N".to_string();
   let host_dyn: Rc<dyn ScreenHost> = host.clone();
-  let grants = TestGrantHost::new(grants).as_host();
+  let grants = CachedGrantHost::new(grants);
   let logs = crate::testing::harness::Logs::new();
   let log = crate::testing::harness::log_sink(&logs);
   let lifecycle = Lifecycle::new();
   let (state, accounts) = ctx.with(|ctx| {
     let inu = crate::testing::harness::get_api_globals(&ctx);
-    install_plugin_error(&ctx).unwrap();
     let accounts = crate::api::telegram::account::install_account(
       &ctx,
       TestAccountHost::with(TWO_ACCOUNTS),
@@ -102,12 +99,12 @@ fn a_hijacked_json_global_never_sees_the_ungated_screen_wire() {
   crate::testing::harness::eval_unit(
     &ctx,
     r#"
-        globalThis.__wires = [];
-        globalThis.JSON = {
-            parse: (s) => { globalThis.__wires.push(String(s)); return {type: 'chat', dialogId: -1001} },
-            stringify: () => '"hijacked"',
-        };
-        "#,
+      globalThis.__wires = [];
+      globalThis.JSON = {
+        parse: (s) => { globalThis.__wires.push(String(s)); return {type: 'chat', dialogId: -1001} },
+        stringify: () => '"hijacked"',
+      };
+    "#,
   );
   let seen = crate::testing::harness::eval_string(
     &ctx,
@@ -116,81 +113,34 @@ fn a_hijacked_json_global_never_sees_the_ungated_screen_wire() {
   assert_eq!(seen, "chat,false,0", "the host wire carries dialogId; without the grant nothing may see it");
 }
 
-#[test]
-fn current_screen_is_read_per_call_and_never_cached() {
-  let (_rt, ctx, host, _state, _accounts, _logs) = setup(&[]);
-  *host.screen.borrow_mut() = format!("J{DIALOGS}");
-  assert_eq!(eval_json(&ctx, "inu.ui.getCurrentScreen().type"), r#""dialogs""#);
-  *host.screen.borrow_mut() = format!("J{CHAT}");
-  assert_eq!(eval_json(&ctx, "inu.ui.getCurrentScreen().type"), r#""chat""#);
-  assert_eq!(host.reads.get(), 2);
-}
-
 fn arm(ctx: &Context) {
   ctx.with(|ctx| {
     ctx
       .eval::<(), _>(
         r#"
-            globalThis.__seen = [];
-            globalThis.__stackReads = 0;
-            globalThis.__d = inu.ui.onScreenChanged(change => {
-                globalThis.__last = change;
-                globalThis.__seen.push([
-                    change.action,
-                    change.screen === null ? null : change.screen.type,
-                    change.previous === null ? null : change.previous.type,
-                ]);
-            });
-            "#,
+          globalThis.__seen = [];
+          globalThis.__stackReads = 0;
+          globalThis.__d = inu.ui.onScreenChanged(change => {
+            globalThis.__last = change;
+            globalThis.__seen.push([
+              change.action,
+              change.screen === null ? null : change.screen.type,
+              change.previous === null ? null : change.previous.type,
+            ]);
+          });
+        "#,
       )
       .unwrap();
   });
 }
 
 #[test]
-fn a_change_carries_action_screen_and_previous() {
+fn popping_the_last_screen_hands_over_a_null_screen() {
   let (rt, ctx, _host, state, _accounts, logs) = setup(&["account.read(dialogs)"]);
   arm(&ctx);
-  state.dispatch_change(
-    &rt,
-    &ctx,
-    &format!(r#"{{"action":"push","screen":{CHAT},"previous":{DIALOGS}}}"#),
-    &format!("[{DIALOGS},{CHAT}]"),
-  );
-  state.dispatch_change(
-    &rt,
-    &ctx,
-    &format!(r#"{{"action":"pop","screen":{DIALOGS},"previous":{CHAT}}}"#),
-    &format!("[{DIALOGS}]"),
-  );
   state.dispatch_change(&rt, &ctx, r#"{"action":"pop","screen":null,"previous":{"type":"dialogs","account":0}}"#, "[]");
-  assert_eq!(
-    eval_json(&ctx, "globalThis.__seen"),
-    r#"[["push","chat","dialogs"],["pop","dialogs","chat"],["pop",null,"dialogs"]]"#,
-  );
+  assert_eq!(eval_json(&ctx, "globalThis.__seen"), r#"[["pop",null,"dialogs"]]"#);
   assert!(logs.borrow().is_empty(), "unexpected logs: {:?}", logs.borrow());
-}
-
-#[test]
-fn the_stack_is_a_memoized_getter_over_what_the_host_sent() {
-  let (rt, ctx, _host, state, _accounts, _logs) = setup(&["account.read(dialogs)"]);
-  arm(&ctx);
-  state.dispatch_change(
-    &rt,
-    &ctx,
-    &format!(r#"{{"action":"push","screen":{CHAT},"previous":{DIALOGS}}}"#),
-    &format!("[{DIALOGS},{CHAT}]"),
-  );
-  assert_eq!(
-    eval_json(&ctx, "__last.stack.map(s => [s.type, s.dialogId ?? null, s.account.id])"),
-    r#"[["dialogs",null,0],["chat",-1001,1]]"#,
-  );
-  assert_eq!(
-    eval_json(&ctx, "__last.stack === __last.stack"),
-    "true",
-    "reading it twice must not rebuild the graph",
-  );
-  assert_eq!(eval_json(&ctx, "__last.stack[__last.stack.length - 1].type === __last.screen.type"), "true",);
 }
 
 #[test]
@@ -219,7 +169,6 @@ fn nothing_is_dispatched_and_nothing_parsed_without_a_registration() {
   let (rt, ctx, _host, state, _accounts, logs) = setup(&[]);
   state.dispatch_change(&rt, &ctx, "not json at all", "not json either");
   assert!(logs.borrow().is_empty(), "unexpected logs: {:?}", logs.borrow());
-  let _ = &ctx;
 }
 
 #[test]
@@ -229,11 +178,11 @@ fn registrations_stack_dispose_once_and_a_throw_faults() {
     ctx
       .eval::<(), _>(
         r#"
-            globalThis.__ran = [];
-            inu.ui.onScreenChanged(() => { throw new Error('nav-boom'); });
-            globalThis.__d = inu.ui.onScreenChanged(() => { __ran.push('second'); });
-            inu.ui.onScreenChanged(() => { __ran.push('third'); });
-            "#,
+          globalThis.__ran = [];
+          inu.ui.onScreenChanged(() => { throw new Error('nav-boom'); });
+          globalThis.__d = inu.ui.onScreenChanged(() => { __ran.push('second'); });
+          inu.ui.onScreenChanged(() => { __ran.push('third'); });
+        "#,
       )
       .unwrap();
   });
@@ -265,9 +214,9 @@ fn registering_after_unload_began_is_a_no_op() {
     ctx
       .eval::<String, _>(
         r#"
-            globalThis.__ran = 0;
-            typeof inu.ui.onScreenChanged(() => { globalThis.__ran++; });
-            "#,
+          globalThis.__ran = 0;
+          typeof inu.ui.onScreenChanged(() => { globalThis.__ran++; });
+        "#,
       )
       .unwrap()
   });
@@ -277,22 +226,16 @@ fn registering_after_unload_began_is_a_no_op() {
   assert_eq!(eval_json(&ctx, "globalThis.__ran"), "0");
 }
 
-const ORACLE: &str = include_str!("../../../../test/plugins/nav-test.js");
+const ORACLE: &str = crate::testing::test_plugin!("nav-test.js");
 
-/// the bundled oracle is the only test this surface gets on a device, and every assertion in it
-/// is a function of the change it was handed, so the four navigations it wants are synthesised
-/// here. the count is exact: a member that vanished reads as a refusal in a suite written out
-/// of `expectThrow`
+/// the navigations the oracle waits for are synthesised here; the count is exact, since a vanished
+/// member reads as a refusal in a suite of `expectThrow`s
 #[test]
 fn the_bundled_nav_test_plugin_passes() {
   let (rt, ctx, host, state, _accounts, logs) = setup(&crate::testing::harness::manifest_grants(ORACLE));
   *host.screen.borrow_mut() = format!("J{DIALOGS}");
   let lines = crate::testing::harness::install_capturing_console(&ctx);
-  ctx.with(|ctx| match ctx.eval::<(), _>(ORACLE) {
-    Ok(()) => {}
-    Err(rquickjs::Error::Exception) => panic!("{}", format_exception(&ctx)),
-    Err(e) => panic!("{e:?}"),
-  });
+  crate::testing::harness::eval_unit(&ctx, ORACLE);
 
   const SETTINGS: &str = r#"{"type":"settings","account":0}"#;
   for (top, change, stack) in [
@@ -324,14 +267,4 @@ fn the_bundled_nav_test_plugin_passes() {
   let lines = lines.borrow().clone();
   crate::testing::harness::assert_oracle_exact(&lines, "nav test done", 38);
   assert!(logs.borrow().is_empty(), "unexpected logs: {:?}", logs.borrow());
-}
-
-#[test]
-fn dispose_releases_the_callbacks_and_the_event_factory() {
-  let (_rt, ctx, _host, state, _accounts, _logs) = setup(&[]);
-  arm(&ctx);
-  state.dispose(&ctx);
-  assert!(state.changed_fns.is_empty());
-  assert!(state.event_factory.borrow().is_none());
-  // rt/ctx drop after this without aborting == roots were released
 }

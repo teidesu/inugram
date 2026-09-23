@@ -3,7 +3,7 @@ import type { BuildOutcome } from './build.js'
 import { basename } from 'node:path'
 import { AsyncLock } from '@fuman/utils'
 import { configArgs, defineCommand, deviceArgs } from '../utils/args.js'
-import { createDevice, getPluginLogTag, HOST_LOG_TAG } from '../utils/device.js'
+import { Device, HOST_LOG_TAG, PLUGIN_LOG_TAG_PREFIX } from '../utils/device.js'
 import { readFileHash } from '../utils/fs.js'
 import { CliError, color, fail, step, success, warn } from '../utils/log.js'
 import { resolveManifestId } from '../utils/manifest.js'
@@ -59,7 +59,7 @@ export const devCmd = defineCommand({
       const known = config.plugins.map(plugin => `- ${color.bold(plugin.slug)}: ${plugin.manifest.name}`)
       throw new CliError(`there's more than one plugin, please specify one with ${color.blue('inu dev <name>')}:\n${known.join('\n')}`)
     }
-    const device = createDevice(args)
+    const device = new Device(args)
 
     await device.requireRunning()
     const ping = await device.ping()
@@ -73,7 +73,7 @@ export const devCmd = defineCommand({
     const channels = new Map<string, string>()
     for (const plugin of plugins) {
       const id = resolveManifestId(plugin.manifest)
-      if (id !== null) channels.set(getPluginLogTag(id), plugin.slug)
+      if (id !== null) channels.set(PLUGIN_LOG_TAG_PREFIX + id, plugin.slug)
     }
     const queue = new AsyncLock()
 
@@ -89,7 +89,7 @@ export const devCmd = defineCommand({
       try {
         for (const install of await device.install([file])) {
           reportInstall(install)
-          if (install.ok) channels.set(getPluginLogTag(install.plugin.pluginId ?? install.plugin.id), outcome.plugin.slug)
+          if (install.ok) channels.set(PLUGIN_LOG_TAG_PREFIX + (install.plugin.pluginId ?? install.plugin.id), outcome.plugin.slug)
         }
       } catch (error) {
         // a failed push must not stick: the next rebuild has to try again

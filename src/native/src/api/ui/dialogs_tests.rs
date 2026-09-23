@@ -1,18 +1,6 @@
 use super::*;
+use crate::runtime::pump_jobs;
 use crate::testing::harness::setup_apis as setup;
-use std::rc::Rc;
-
-struct BulletinIconHost;
-
-impl crate::api::ui::icons::IconHost for BulletinIconHost {
-  fn icon_resolves(&self, _kind: i32, _value: &str) -> bool {
-    true
-  }
-
-  fn common_icon(&self, name: &str) -> Option<String> {
-    (name == "info").then(|| "msg_info".to_string())
-  }
-}
 
 #[test]
 fn toast_reaches_host_coerced_to_string() {
@@ -26,7 +14,7 @@ fn toast_reaches_host_coerced_to_string() {
 fn icons(ctx: &rquickjs::Ctx<'_>) {
   crate::api::ui::icons::install_icons(
     ctx,
-    Rc::new(BulletinIconHost),
+    crate::api::ui::icons::tests::TestIconHost::without(&[]),
     None,
     &crate::testing::harness::get_api_globals(ctx),
   )
@@ -55,7 +43,6 @@ fn bulletin_reaches_host_with_ui_and_native_animation_icons() {
   );
 }
 
-/// the whole of what a bulletin can be told, in the order it is written out
 #[test]
 fn bulletin_carries_its_subtitle_avatars_duration_position_and_button() {
   let (_rt, ctx, host, _lifecycle, _state, _logs) = setup(&[]);
@@ -86,6 +73,7 @@ fn a_bulletin_needs_an_icon_and_checks_what_it_is_given() {
     ctx.eval::<(), _>("globalThis.AVATARS = { type: 'avatars', avatars: [1] }").unwrap();
     for bad in [
       "{ text: 'x' }",
+      "{ icon: AVATARS }",
       "{ text: 'x', icon: { type: 'avatars' } }",
       "{ text: 'x', icon: { type: 'avatars', avatars: [] } }",
       "{ text: 'x', icon: { type: 'avatars', avatars: [1, 2, 3, 4] } }",
@@ -146,23 +134,15 @@ fn dialog_input_text_crosses_as_text_plus_entities() {
 }
 
 #[test]
-fn bulletin_requires_text_and_an_icon() {
-  let (_rt, ctx, _host, _lifecycle, _state, _logs) = setup(&[]);
-  for source in ["inu.ui.bulletin({ icon: {} })", "inu.ui.bulletin({ text: 'x' })"] {
-    assert!(ctx.with(|ctx| ctx.eval::<(), _>(source).is_err()), "accepted {source}");
-  }
-}
-
-#[test]
 fn dialog_resolves_with_user_action() {
   let (rt, ctx, host, _lifecycle, state, _logs) = setup(&[]);
   ctx.with(|ctx| {
     ctx
       .eval::<(), _>(
         r#"
-            globalThis.__result = null;
-            inu.ui.dialog({ title: 'T', positive: 'OK' }).then(r => { globalThis.__result = r; });
-            "#,
+          globalThis.__result = null;
+          inu.ui.dialog({ title: 'T', positive: 'OK' }).then(r => { globalThis.__result = r; });
+        "#,
       )
       .unwrap();
   });
@@ -185,14 +165,16 @@ fn dialog_body_is_refused_rather_than_silently_dropped() {
   let code: String = ctx.with(|ctx| {
     ctx
       .eval(
-        r#"(() => {
-                   try {
-                       inu.ui.dialog({ title: 'T', body: { __inuUi: 'button' } });
-                       return 'did not throw';
-                   } catch (e) {
-                       return `${e instanceof inu.PluginError}:${e.code}`;
-                   }
-               })()"#,
+        r#"
+          (() => {
+            try {
+              inu.ui.dialog({ title: 'T', body: { __inuUi: 'button' } });
+              return 'did not throw';
+            } catch (e) {
+              return `${e instanceof inu.PluginError}:${e.code}`;
+            }
+          })()
+        "#,
       )
       .unwrap()
   });
@@ -202,22 +184,24 @@ fn dialog_body_is_refused_rather_than_silently_dropped() {
 }
 
 #[test]
-fn dialog_host_error_rejects() {
+fn a_host_that_cannot_show_a_modal_rejects_it() {
   let (rt, ctx, host, _lifecycle, state, _logs) = setup(&[]);
-  *host.fail_dialog.borrow_mut() = Some("no ui".to_string());
+  *host.fail_dialog.borrow_mut() = Some("no dialog".to_string());
+  *host.fail_chooser.borrow_mut() = Some("no chooser".to_string());
   ctx.with(|ctx| {
     ctx
       .eval::<(), _>(
         r#"
-            globalThis.__err = null;
-            inu.ui.dialog({}).catch(e => { globalThis.__err = e.message; });
-            "#,
+          globalThis.__errs = [];
+          inu.ui.dialog({}).catch(e => { globalThis.__errs.push(e.message); });
+          inu.ui.chooser({ items: ['a'] }).catch(e => { globalThis.__errs.push(e.message); });
+        "#,
       )
       .unwrap();
   });
   pump_jobs(&rt, &ctx, &|_| {});
-  let err: String = ctx.with(|ctx| ctx.eval("globalThis.__err").unwrap());
-  assert_eq!(err, "no ui");
+  let errs: String = crate::testing::harness::eval_json(&ctx, "globalThis.__errs");
+  assert_eq!(errs, r#"["no dialog","no chooser"]"#);
   assert!(state.pending.is_empty());
 }
 
@@ -235,9 +219,9 @@ fn chooser_serializes_one_shape_for_both_modes() {
     ctx
       .eval::<(), _>(
         r#"
-            inu.ui.chooser({ title: 'Pick', items: ['a', { text: 'b', subtitle: 'bee' }, { text: 'c', danger: true }], selected: 2 });
-            inu.ui.chooser({ items: ['a', 'b'], selected: [1, 0], multiple: true });
-            "#,
+          inu.ui.chooser({ title: 'Pick', items: ['a', { text: 'b', subtitle: 'bee' }, { text: 'c', danger: true }], selected: 2 });
+          inu.ui.chooser({ items: ['a', 'b'], selected: [1, 0], multiple: true });
+        "#,
       )
       .unwrap();
   });
@@ -260,13 +244,13 @@ fn chooser_resolves_an_index_a_list_or_null_by_mode() {
     ctx
       .eval::<(), _>(
         r#"
-            globalThis.__results = [];
-            const push = tag => r => { globalThis.__results.push([tag, r]); };
-            inu.ui.chooser({ items: ['a', 'b', 'c'] }).then(push('single'));
-            inu.ui.chooser({ items: ['a', 'b', 'c'], multiple: true }).then(push('multi'));
-            inu.ui.chooser({ items: ['a'] }).then(push('dismissed'));
-            inu.ui.chooser({ items: ['a', 'b'], multiple: true }).then(push('none'));
-            "#,
+          globalThis.__results = [];
+          const push = tag => r => { globalThis.__results.push([tag, r]); };
+          inu.ui.chooser({ items: ['a', 'b', 'c'] }).then(push('single'));
+          inu.ui.chooser({ items: ['a', 'b', 'c'], multiple: true }).then(push('multi'));
+          inu.ui.chooser({ items: ['a'] }).then(push('dismissed'));
+          inu.ui.chooser({ items: ['a', 'b'], multiple: true }).then(push('none'));
+        "#,
       )
       .unwrap();
   });
@@ -278,13 +262,12 @@ fn chooser_resolves_an_index_a_list_or_null_by_mode() {
   state.settle(&rt, &ctx, ids[2], "N");
   state.settle(&rt, &ctx, ids[3], "J[]");
 
-  let results: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__results)").unwrap());
+  let results: String = crate::testing::harness::eval_json(&ctx, "globalThis.__results");
   assert_eq!(results, r#"[["single",2],["multi",[0,2]],["dismissed",null],["none",[]]]"#);
   assert!(state.pending.is_empty());
 
-  // a second settle for the same request finds nothing and must not throw
   state.settle(&rt, &ctx, ids[0], "J[1]");
-  let unchanged: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__results.length)").unwrap());
+  let unchanged: String = crate::testing::harness::eval_json(&ctx, "globalThis.__results.length");
   assert_eq!(unchanged, "4");
 }
 
@@ -295,18 +278,18 @@ fn chooser_validates_its_options_eagerly() {
     ctx
       .eval::<String, _>(
         r#"
-            const out = [];
-            const tryIt = f => { try { f(); out.push('ok'); } catch (e) { out.push(e.message); } };
-            tryIt(() => inu.ui.chooser({ items: [] }));
-            tryIt(() => inu.ui.chooser({ items: ['a'], selected: 1 }));
-            tryIt(() => inu.ui.chooser({ items: ['a'], selected: -1 }));
-            tryIt(() => inu.ui.chooser({ items: ['a', 'b'], selected: [0], multiple: false }));
-            tryIt(() => inu.ui.chooser({ items: ['a', 'b'], selected: 0, multiple: true }));
-            tryIt(() => inu.ui.chooser({ items: [42] }));
-            tryIt(() => inu.ui.chooser({ items: [{ subtitle: 'no text' }] }));
-            tryIt(() => inu.ui.chooser({ items: 'a' }));
-            JSON.stringify(out);
-            "#,
+          const out = [];
+          const tryIt = f => { try { f(); out.push('ok'); } catch (e) { out.push(e.message); } };
+          tryIt(() => inu.ui.chooser({ items: [] }));
+          tryIt(() => inu.ui.chooser({ items: ['a'], selected: 1 }));
+          tryIt(() => inu.ui.chooser({ items: ['a'], selected: -1 }));
+          tryIt(() => inu.ui.chooser({ items: ['a', 'b'], selected: [0], multiple: false }));
+          tryIt(() => inu.ui.chooser({ items: ['a', 'b'], selected: 0, multiple: true }));
+          tryIt(() => inu.ui.chooser({ items: [42] }));
+          tryIt(() => inu.ui.chooser({ items: [{ subtitle: 'no text' }] }));
+          tryIt(() => inu.ui.chooser({ items: 'a' }));
+          JSON.stringify(out);
+        "#,
       )
       .unwrap()
   });
@@ -318,57 +301,17 @@ fn chooser_validates_its_options_eagerly() {
 }
 
 #[test]
-fn chooser_host_error_rejects() {
-  let (rt, ctx, host, _lifecycle, state, _logs) = setup(&[]);
-  *host.fail_chooser.borrow_mut() = Some("no ui".to_string());
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
-            globalThis.__err = null;
-            inu.ui.chooser({ items: ['a'] }).catch(e => { globalThis.__err = e.message; });
-            "#,
-      )
-      .unwrap();
-  });
-  pump_jobs(&rt, &ctx, &|_| {});
-  let err: String = ctx.with(|ctx| ctx.eval("globalThis.__err").unwrap());
-  assert_eq!(err, "no ui");
-  assert!(state.pending.is_empty());
-}
-
-#[test]
-fn dispose_releases_pending_dialog_and_unload_roots() {
-  let (_rt, ctx, _host, _lifecycle, state, _logs) = setup(&["onAppVisibilityChange"]);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
-            inu.onUnload(() => {});
-            inu.onAppVisibilityChange(() => {});
-            inu.ui.dialog({ title: 'stuck' });
-            inu.ui.chooser({ items: ['stuck'] });
-            "#,
-      )
-      .unwrap();
-  });
-  assert_eq!(state.pending.len(), 2);
-  state.dispose(&ctx);
-  // rt/ctx drop after this without aborting == roots were released
-}
-
-#[test]
 fn prompt_resolves_with_text_and_null() {
   let (rt, ctx, host, _lifecycle, state, _logs) = setup(&[]);
   ctx.with(|ctx| {
     ctx
       .eval::<(), _>(
         r#"
-            globalThis.__results = [];
-            inu.ui.prompt({ title: 'Name?', hint: 'h', value: 'v', selectAll: true })
-                .then(r => { globalThis.__results.push(r); });
-            inu.ui.prompt({ title: 'Again?' }).then(r => { globalThis.__results.push(r); });
-            "#,
+          globalThis.__results = [];
+          inu.ui.prompt({ title: 'Name?', hint: 'h', value: 'v', selectAll: true })
+            .then(r => { globalThis.__results.push(r); });
+          inu.ui.prompt({ title: 'Again?' }).then(r => { globalThis.__results.push(r); });
+        "#,
       )
       .unwrap();
   });
@@ -378,7 +321,7 @@ fn prompt_resolves_with_text_and_null() {
 
   state.settle(&rt, &ctx, prompts[0].0, "Salice");
   state.settle(&rt, &ctx, prompts[1].0, "N");
-  let results: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__results)").unwrap());
+  let results: String = crate::testing::harness::eval_json(&ctx, "globalThis.__results");
   assert_eq!(results, r#"["alice",null]"#);
   assert!(state.pending.is_empty());
 }
@@ -392,12 +335,12 @@ fn a_modal_answer_that_is_an_error_or_unreadable_rejects() {
     ctx
       .eval::<(), _>(
         r#"
-            globalThis.__results = [];
-            const push = tag => [r => globalThis.__results.push([tag, 'ok', r]), e => globalThis.__results.push([tag, e.code ?? e.name])];
-            inu.ui.dialog({}).then(...push('dialog'));
-            inu.ui.prompt({ title: 't' }).then(...push('prompt'));
-            inu.ui.chooser({ items: ['a'] }).then(...push('chooser'));
-            "#,
+          globalThis.__results = [];
+          const push = tag => [r => globalThis.__results.push([tag, 'ok', r]), e => globalThis.__results.push([tag, e.code ?? e.name])];
+          inu.ui.dialog({}).then(...push('dialog'));
+          inu.ui.prompt({ title: 't' }).then(...push('prompt'));
+          inu.ui.chooser({ items: ['a'] }).then(...push('chooser'));
+        "#,
       )
       .unwrap();
   });
@@ -405,17 +348,20 @@ fn a_modal_answer_that_is_an_error_or_unreadable_rejects() {
   state.settle(&rt, &ctx, dialog, "Punsupported\n\n\n\nno screen");
   state.settle(&rt, &ctx, prompt, "Zgarbage");
   state.settle(&rt, &ctx, chooser, "J[not json");
-  let results: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__results)").unwrap());
+  let results: String = crate::testing::harness::eval_json(&ctx, "globalThis.__results");
   assert_eq!(results, r#"[["dialog","unsupported"],["prompt","Error"],["chooser","SyntaxError"]]"#);
   assert!(state.pending.is_empty());
 }
 
 #[test]
 fn dispose_with_every_modal_open_releases_roots() {
-  let (_rt, ctx, host, _lifecycle, state, _logs) = setup(&[]);
+  let (_rt, ctx, host, _lifecycle, state, _logs) = setup(&["onAppVisibilityChange"]);
   ctx.with(|ctx| {
     ctx
-      .eval::<(), _>("inu.ui.dialog({}); inu.ui.prompt({ title: 'stuck' }); inu.ui.chooser({ items: ['a'] });")
+      .eval::<(), _>(
+        "inu.onUnload(() => {}); inu.onAppVisibilityChange(() => {}); \
+         inu.ui.dialog({}); inu.ui.prompt({ title: 'stuck' }); inu.ui.chooser({ items: ['a'] });",
+      )
       .unwrap();
   });
   assert_eq!((host.dialogs.borrow().len(), host.prompts.borrow().len(), host.choosers.borrow().len()), (1, 1, 1));

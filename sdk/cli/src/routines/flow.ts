@@ -7,23 +7,23 @@ import { isRegister, OPS } from './ops.js'
  * instead of silently changing the program's behavior.
  */
 
-function fieldsOf(node: Instruction): readonly string[] {
+function getOperandFields(node: Instruction): readonly string[] {
   const shape = OPS[node[0] as keyof typeof OPS]
   if (!shape) throw new Error(`routine: unknown instruction '${node[0]}'`)
   return shape.fields
 }
 
-function targetOf(node: Instruction): number | null {
-  const fields = fieldsOf(node)
+function getJumpTarget(node: Instruction): number | null {
+  const fields = getOperandFields(node)
   const at = fields.indexOf('target')
   return at < 0 ? null : node[at + 1] as number
 }
 
-function successorsOf(code: Instruction[], at: number): number[] {
+function listSuccessors(code: Instruction[], at: number): number[] {
   const node = code[at]
   const op = node[0]
   if (op === 'return' || op === 'throw') return []
-  const target = targetOf(node)
+  const target = getJumpTarget(node)
   if (target === null) return [at + 1]
   // `jump` and `loop` go nowhere else; the conditional jumps and `advance` also fall through
   return op === 'jump' || op === 'loop' ? [target] : [at + 1, target]
@@ -31,7 +31,7 @@ function successorsOf(code: Instruction[], at: number): number[] {
 
 function registersRead(node: Instruction): number[] {
   const found: number[] = []
-  const fields = fieldsOf(node)
+  const fields = getOperandFields(node)
   for (let field = 0; field < fields.length; field++) {
     const value = node[field + 1]
     if (value === undefined) continue
@@ -77,7 +77,7 @@ function computeWritten(code: Instruction[], tries: TryRegion[]): Map<number, Ui
       if (state === undefined) continue
       const out = state.slice()
       out[at] = 1
-      for (const next of successorsOf(code, at)) {
+      for (const next of listSuccessors(code, at)) {
         if (next < count && meet(next, out)) settled = false
       }
       // any instruction in a protected range may throw, so its handler is only ever sure of what
@@ -142,7 +142,7 @@ export function reuseInputReads(program: Pick<RoutineProgram, 'code' | 'tries'>,
 
   program.code = code.flatMap((node, at): Instruction[] => {
     if (aliases.has(at)) return []
-    const fields = fieldsOf(node)
+    const fields = getOperandFields(node)
     const mapped = node.slice(1).map((value, field) => {
       const kind = fields[field]
       if (kind === 'target') return positions[value as number]

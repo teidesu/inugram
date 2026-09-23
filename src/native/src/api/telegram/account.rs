@@ -9,9 +9,7 @@ use rquickjs::{Array, Ctx, Function, Object, Persistent, Result as JsResult, Run
 use crate::api::error::{call_callback, describe_js_error, PluginErrorCode};
 use crate::runtime::pump_jobs;
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
-use crate::sandbox::registry::{
-  make_disposer, noop_disposer, resolve_disposer, CallbackRegistry, Lifecycle, Registry, Token,
-};
+use crate::sandbox::registry::{make_disposer, noop_disposer, resolve_disposer, CallbackRegistry, Lifecycle, Registry};
 
 #[cfg(test)]
 use crate::api::error;
@@ -29,7 +27,7 @@ pub struct AccountInfo {
 }
 
 struct CurrentScope {
-  token: Token,
+  token: u32,
   callback: RefCell<Option<Persistent<Function<'static>>>>,
   teardown: RefCell<Option<Persistent<Function<'static>>>>,
   account: Cell<Option<(i32, i64)>>,
@@ -166,10 +164,6 @@ impl AccountState {
     })
   }
 
-  fn run_teardown<'js>(&self, ctx: &Ctx<'js>, teardown: &Function<'js>) {
-    call_callback(ctx, &self.log, "withCurrentAccount teardown", teardown, ());
-  }
-
   fn leave_scope<'js>(&self, ctx: &Ctx<'js>, scope: &Rc<CurrentScope>) {
     scope.account.set(None);
     let Some(teardown) = scope.teardown.borrow_mut().take() else {
@@ -178,7 +172,7 @@ impl AccountState {
     let Ok(teardown) = teardown.restore(ctx) else {
       return;
     };
-    self.run_teardown(ctx, &teardown);
+    call_callback(ctx, &self.log, "withCurrentAccount teardown", &teardown, ());
   }
 
   fn enter_scope(self: &Rc<Self>, ctx: &Ctx<'_>, scope: &Rc<CurrentScope>) {
@@ -203,7 +197,7 @@ impl AccountState {
     if self.is_live(scope) {
       *scope.teardown.borrow_mut() = Some(Persistent::save(ctx, teardown));
     } else {
-      self.run_teardown(ctx, &teardown);
+      call_callback(ctx, &self.log, "withCurrentAccount teardown", &teardown, ());
     }
   }
 
@@ -219,15 +213,7 @@ impl AccountState {
   }
 
   fn js_on_accounts_changed<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, cb: Function<'js>) -> JsResult<Function<'js>> {
-    if self.lifecycle.is_unloading() {
-      return noop_disposer(ctx);
-    }
-    let token = self.changed_fns.alloc();
-    self.changed_fns.register(ctx, token, None, cb);
-    let state = self.clone();
-    make_disposer(ctx, move |ctx| {
-      state.changed_fns.dispose(ctx, token);
-    })
+    CallbackRegistry::subscribe(ctx, self, &self.lifecycle, |s| &s.changed_fns, cb)
   }
 
   pub(crate) fn accounts_changed(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context) {
@@ -386,10 +372,9 @@ pub fn install_account<'js>(
   }
   {
     let state = state.clone();
-    globals.inu.set(
-      "accounts",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>| state.build_accounts(&ctx))?,
-    )?;
+    globals
+      .inu
+      .set("accounts", Function::new(ctx.clone(), move |ctx: Ctx<'js>| state.build_accounts(&ctx))?)?;
   }
   {
     let state = state.clone();

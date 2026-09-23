@@ -1,13 +1,12 @@
 package desu.inugram.helpers.plugins
 
-import desu.inugram.helpers.plugins.api.PluginLocalStorage
+import desu.inugram.helpers.plugins.io.PluginLocalStorage
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
 
-/** `localStorage` on a real engine: the store and its quota are rust's (`local_storage_tests.rs`), where it lives is this side's */
 class PluginLocalStorageTest {
     private val install = freshInstallId()
     private val other = freshInstallId()
@@ -25,8 +24,6 @@ class PluginLocalStorageTest {
 
     private fun startStorage(installId: String): Plugin =
         startEngine("storage", localStoragePath = PluginLocalStorage.pathFor(installId)).also { engines.add(it) }
-
-    private fun Plugin.js(code: String): String = engine!!.evaluate(code) ?: "null"
 
     @Test
     fun a_store_outlives_its_engine_and_is_its_install_s_alone() {

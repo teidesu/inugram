@@ -1,42 +1,12 @@
 // ==InuPlugin==
 // @name         globals test
-// @author       teidesu
-// @version      1.0
 // @description  asserts the sandbox globals: TextEncoder/TextDecoder, crypto, AbortController, structuredClone
 // @grant        invokeRpc(help.getConfig)
-// @plugin-api   1
-// @platform     android
 // ==/InuPlugin==
-
-function pass(label, detail) {
-  console.log(detail === undefined ? `PASS ${label}` : `PASS ${label}: ${detail}`)
-}
-
-function fail(label, detail) {
-  console.error(`FAIL ${label}: ${detail}`)
-}
-
-function check(label, ok, detail) {
-  if (ok) pass(label, detail)
-  else fail(label, detail)
-}
-
-function expectThrow(label, type, name, fn) {
-  let error
-  try {
-    fn()
-  } catch (e) {
-    error = e
-  }
-  if (error === undefined) return fail(label, 'did not throw')
-  check(label, error instanceof type && error.name === name, `${error.name}: ${error.message}`)
-}
-
-// -- TextEncoder / TextDecoder --
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
-// a 2-byte codepoint, a surrogate pair, and a NUL - the three things a naive encoder gets wrong
+// a 2-byte codepoint, a surrogate pair and a NUL: what a naive encoder gets wrong
 const sample = 'привет · café · 🐕 · \u0000 end'
 const bytes = encoder.encode(sample)
 
@@ -48,39 +18,26 @@ check('both report utf-8', encoder.encoding === 'utf-8' && decoder.encoding === 
 check('decode() takes an ArrayBuffer too', decoder.decode(bytes.buffer) === sample)
 check('the empty cases are empty', encoder.encode().length === 0 && decoder.decode() === '')
 // @ts-expect-error
-expectThrow('TextDecoder refuses a non-utf-8 label', RangeError, 'RangeError', () => new TextDecoder('utf-16'))
+expectThrow('TextDecoder refuses a non-utf-8 label', RangeError, () => new TextDecoder('utf-16'))
 
-// -- atob / btoa --
-// binary strings, unlike inu.utils.toBase64/fromBase64 - so a byte past 0x7f has to survive
-
+// binary strings, unlike inu.utils.toBase64, so a byte past 0x7f has to survive
 const binary = 'inu\x00\xff'
 check('btoa encodes a binary string', btoa(binary) === 'aW51AP8=', btoa(binary))
 check('atob undoes it', atob(btoa(binary)) === binary, JSON.stringify(atob(btoa(binary))))
 
-// -- crypto --
-
 const buffer = new Uint8Array(32)
 check('getRandomValues returns the array it was handed', crypto.getRandomValues(buffer) === buffer)
 check('getRandomValues actually fills it', buffer.some(byte => byte !== 0), buffer.slice(0, 4).join(','))
-check(
-  'two draws differ',
-  crypto.getRandomValues(new Uint8Array(32)).join(',') !== buffer.join(','),
-)
-expectThrow('getRandomValues refuses more than 65536 bytes', DOMException, 'QuotaExceededError', () => {
+check('two draws differ', crypto.getRandomValues(new Uint8Array(32)).join(',') !== buffer.join(','))
+expectDomException('getRandomValues refuses more than 65536 bytes', 'QuotaExceededError', () => {
   crypto.getRandomValues(new Uint8Array(65537))
 })
 // @ts-expect-error
-expectThrow('getRandomValues refuses a plain array', TypeError, 'TypeError', () => crypto.getRandomValues([1, 2, 3]))
+expectThrow('getRandomValues refuses a plain array', TypeError, () => crypto.getRandomValues([1, 2, 3]))
 
 const uuid = crypto.randomUUID()
-check(
-  'randomUUID is a v4 uuid',
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(uuid),
-  uuid,
-)
+check('randomUUID is a v4 uuid', /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(uuid), uuid)
 check('randomUUIDs differ', crypto.randomUUID() !== uuid)
-
-// -- AbortController --
 
 const controller = new AbortController()
 let aborts = 0
@@ -116,8 +73,6 @@ removed.abort('explicit reason')
 check('removeEventListener takes a listener off', removedCalls === 0, removedCalls)
 check('an explicit reason is kept as-is', removed.signal.reason === 'explicit reason', removed.signal.reason)
 
-// -- structuredClone --
-
 const source = {
   n: 1,
   s: 'x',
@@ -146,23 +101,22 @@ check('reference identity is preserved', twice.a === twice.b && twice.a !== shar
 clone.nested.list.push(4)
 check('mutating the copy leaves the original alone', source.nested.list.length === 3, source.nested.list.length)
 
-expectThrow('structuredClone refuses a function', DOMException, 'DataCloneError', () => structuredClone(() => {}))
-expectThrow('structuredClone refuses a promise', DOMException, 'DataCloneError', () => structuredClone(Promise.resolve(1)))
-expectThrow('structuredClone refuses a symbol', DOMException, 'DataCloneError', () => structuredClone(Symbol('x')))
-expectThrow('structuredClone refuses a weak collection', DOMException, 'DataCloneError', () => structuredClone(new WeakMap()))
+expectDomException('structuredClone refuses a function', 'DataCloneError', () => structuredClone(() => {}))
+expectDomException('structuredClone refuses a promise', 'DataCloneError', () => structuredClone(Promise.resolve(1)))
+expectDomException('structuredClone refuses a symbol', 'DataCloneError', () => structuredClone(Symbol('x')))
+expectDomException('structuredClone refuses a weak collection', 'DataCloneError', () => structuredClone(new WeakMap()))
 
 inu.invokeRpc({ _: 'help.getConfig' }).then(
   (config) => {
     if (config === null || config._ !== 'config') return fail('invokeRpc returned a view', `_ = ${config?._}`)
     pass('invokeRpc returned a view', `this_dc = ${config.this_dc}`)
 
-    expectThrow('structuredClone refuses a TL view', DOMException, 'DataCloneError', () => structuredClone(config))
-    // the walk reaches it wherever it sits, so wrapping one is not a way around that
-    expectThrow('structuredClone refuses an object holding a view', DOMException, 'DataCloneError', () => {
+    expectDomException('structuredClone refuses a TL view', 'DataCloneError', () => structuredClone(config))
+    expectDomException('structuredClone refuses an object holding a view', 'DataCloneError', () => {
       structuredClone({ inner: [config] })
     })
 
-    // `toJSON` is on every view the bridge hands over, but the generated tl typings don't carry it
+    // the generated tl typings lack `toJSON`
     const detached = /** @type {tl.RawConfig} */ (/** @type {any} */ (config).toJSON())
     const copy = structuredClone(detached)
     check(
@@ -171,8 +125,6 @@ inu.invokeRpc({ _: 'help.getConfig' }).then(
       copy._,
     )
 
-    // last line of the last half to run: a marker at the end of the file would print before the
-    // view half had a view to work with
     console.log('globals test done')
   },
   e => fail('invokeRpc help.getConfig', e),

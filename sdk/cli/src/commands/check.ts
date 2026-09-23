@@ -1,10 +1,10 @@
-import type { Message, PartialMessage } from 'esbuild'
+import type { Message } from 'esbuild'
 import type { ResolvedCliConfig, ResolvedPluginConfig } from '../utils/config.js'
 import { resolve } from 'node:path'
 import process from 'node:process'
 import * as esbuild from 'esbuild'
 import { configArgs, defineCommand } from '../utils/args.js'
-import { color, fail, renderMessages, success, warn } from '../utils/log.js'
+import { color, fail, printMessages, success, warn } from '../utils/log.js'
 import { collectManifestWarnings } from '../utils/manifest.js'
 import { loadProject } from '../utils/project.js'
 import { typecheckProject } from '../utils/typecheck.js'
@@ -31,10 +31,6 @@ async function checkBundle(config: ResolvedCliConfig, plugin: ResolvedPluginConf
     if (errors === undefined || errors.length === 0) throw error
     return { errors, warnings: [], inputs: [] }
   }
-}
-
-async function print(messages: PartialMessage[], kind: 'error' | 'warning') {
-  for (const frame of await renderMessages(messages, kind)) process.stdout.write(frame)
 }
 
 export const checkCmd = defineCommand({
@@ -64,8 +60,8 @@ export const checkCmd = defineCommand({
       for (const message of collectManifestWarnings(plugin.manifest, config.vocabulary)) {
         warn(`${name} ${message}`)
       }
-      await print(bundle.errors, 'error')
-      await print(bundle.warnings, 'warning')
+      await printMessages(bundle.errors, 'error')
+      await printMessages(bundle.warnings, 'warning')
       if (plugin.manifestIssues.length > 0 || bundle.errors.length > 0) {
         failed = true
         fail(`${name} did not check out`)
@@ -80,8 +76,8 @@ export const checkCmd = defineCommand({
         ? new Set([...plugins.map(plugin => plugin.entry), ...bundles.flatMap(bundle => bundle.inputs)])
         : undefined
       const { errors, warnings } = typecheckProject(config.root, files)
-      await print(errors, 'error')
-      await print(warnings, 'warning')
+      await printMessages(errors, 'error')
+      await printMessages(warnings, 'warning')
       if (errors.length > 0) {
         failed = true
         fail(`typecheck found ${errors.length} error${errors.length === 1 ? '' : 's'}`)

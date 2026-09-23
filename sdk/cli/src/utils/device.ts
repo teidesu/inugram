@@ -1,5 +1,6 @@
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { basename } from 'node:path'
+import { createInterface } from 'node:readline'
 import { promisify } from 'node:util'
 import { sleep } from '@fuman/utils'
 import * as v from 'valibot'
@@ -13,12 +14,8 @@ export const RELEASE_APP_ID = 'desu.inugram'
 const DROP_DIR_NAME = 'plugin-dev'
 const DEV_ACTION = 'desu.inugram.plugins.DEV'
 /** `PluginLog` tags: one channel per plugin, keyed by manifest id (install id without one), and one for the host */
-const PLUGIN_LOG_TAG_PREFIX = 'InuPlugin/'
+export const PLUGIN_LOG_TAG_PREFIX = 'InuPlugin/'
 export const HOST_LOG_TAG = 'InuPluginHost'
-
-export function getPluginLogTag(key: string): string {
-  return PLUGIN_LOG_TAG_PREFIX + key
-}
 
 /** The error returned by `PluginDevServer.fail` for any command. */
 const FailureSchema = v.object({
@@ -77,22 +74,13 @@ const RemoveSchema = v.object({
 })
 export type DevRemoval = v.InferOutput<typeof RemoveSchema>
 
-export interface DeviceOptions {
-  serial?: string
-  appId?: string
-}
-
-export function createDevice(args: { serial?: string, app: string }): Device {
-  return new Device({ serial: args.serial, appId: args.app })
-}
-
 export class Device {
   readonly appId: string
   private readonly serial: string[]
 
-  constructor(options: DeviceOptions = {}) {
-    this.appId = options.appId ?? RELEASE_APP_ID
-    this.serial = options.serial ? ['-s', options.serial] : []
+  constructor(args: { serial?: string, app: string }) {
+    this.appId = args.app
+    this.serial = args.serial ? ['-s', args.serial] : []
   }
 
   get dropDir(): string {
@@ -200,21 +188,15 @@ export class Device {
         continue
       }
       await new Promise<void>((resolve) => {
-        const child = execFile('adb', [...this.serial, 'logcat', '-v', 'brief', '--pid', pid])
+        const child = spawn('adb', [...this.serial, 'logcat', '-v', 'brief', '--pid', pid], { stdio: ['ignore', 'pipe', 'ignore'] })
         const stop = () => child.kill()
         signal.addEventListener('abort', stop, { once: true })
-        let buffer = ''
-        child.stdout?.on('data', (chunk: Buffer) => {
-          buffer += String(chunk)
-          const lines = buffer.split('\n')
-          buffer = lines.pop() ?? ''
-          for (const line of lines) {
-            // brief format: "D/InuPlugin/name(  pid): message"
-            const match = /^([VDIWEF])\/([^(]+)\(\s*\d+\):\s?(.*)$/.exec(line)
-            if (!match) continue
-            const [, level, tag, message] = match
-            onLine(level, tag.trim(), message)
-          }
+        createInterface({ input: child.stdout }).on('line', (line) => {
+          // brief format: "D/InuPlugin/name(  pid): message"
+          const match = /^([VDIWEF])\/([^(]+)\(\s*\d+\):\s?(.*)$/.exec(line)
+          if (!match) return
+          const [, level, tag, message] = match
+          onLine(level, tag.trim(), message)
         })
         child.on('close', () => {
           signal.removeEventListener('abort', stop)

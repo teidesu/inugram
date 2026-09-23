@@ -5,7 +5,6 @@ import desu.inugram.helpers.plugins.telegram.TakeoutSession
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
-import kotlin.test.assertTrue
 import org.json.JSONObject
 import org.junit.Before
 import org.junit.Test
@@ -13,11 +12,6 @@ import org.telegram.tgnet.SerializedData
 import org.telegram.tgnet.TLObject
 import org.telegram.tgnet.TLRPC
 
-/**
- * The takeout and raw halves of `invokeRpc`, which are the only requests the bridge builds out of
- * classes stock does not have. What they must get right is the wire, so every assertion here is on
- * the bytes the request serializes to rather than on its fields.
- */
 class PluginTakeoutTest {
     private val selfId = 100L
 
@@ -44,31 +38,18 @@ class PluginTakeoutTest {
         JSONObject().apply { for ((key, value) in pairs) put(key, value) }.toString()
 
     @Test
-    fun an_init_writes_the_flags_its_options_asked_for() {
+    fun an_init_writes_the_flags_its_options_asked_for_and_a_file_size_asks_for_files() {
         val plugin = granted()
-        assertNull(rpc(plugin).onTakeout(1L, 0, RpcListener.OP_TAKEOUT_INIT, "", initOptions("messageUsers" to true)))
-        drain()
-
-        // account.initTakeoutSession#8ef3eab0, flags = message_users only
-        assertEquals("b0eaf38e02000000", hex(serialize(connections().lastSent()!!.request)))
-    }
-
-    @Test
-    fun a_file_size_is_what_asks_for_files_at_all() {
-        val plugin = granted()
-        assertNull(
-            rpc(plugin).onTakeout(
-                1L,
-                0,
-                RpcListener.OP_TAKEOUT_INIT,
-                "",
-                initOptions("contacts" to true, "fileMaxSize" to 1500000),
-            ),
+        // account.initTakeoutSession#8ef3eab0: flags, then file_max_size as an int64
+        val cases = listOf(
+            initOptions("messageUsers" to true) to "b0eaf38e" + "02000000",
+            initOptions("contacts" to true, "fileMaxSize" to 1500000) to "b0eaf38e" + "21000000" + "60e3160000000000",
         )
-        drain()
-
-        // flags = contacts | files, then file_max_size as an int64
-        assertEquals("b0eaf38e" + "21000000" + "60e3160000000000", hex(serialize(connections().lastSent()!!.request)))
+        for ((options, expected) in cases) {
+            assertNull(rpc(plugin).onTakeout(1L, 0, RpcListener.OP_TAKEOUT_INIT, "", options))
+            drain()
+            assertEquals(expected, hex(serialize(connections().lastSent()!!.request)))
+        }
     }
 
     @Test
@@ -112,7 +93,6 @@ class PluginTakeoutTest {
         assertEquals(PluginWire.Value.Bool(true), PluginWire.decode(plugin.js.invokes.last().resultWire))
     }
 
-    /** the session is the plugin's to name, but the call it wraps is still one the host checks */
     @Test
     fun a_wrapped_call_the_plugin_may_not_make_is_refused_before_it_is_sent() {
         val plugin = granted()
@@ -151,15 +131,13 @@ class PluginTakeoutTest {
         val sent = connections().lastSent()!!
         assertEquals(hex(method), hex(serialize(sent.request)))
 
-        // the response is parsed the way stock parses one: magic first, then the request's own
-        // deserializer over the rest of the buffer
+        // parsed as stock does: magic first, then the request's own deserializer
         val answered = serialize(TLRPC.TL_boolTrue())
         val buffer = SerializedData(answered)
         val response = sent.request.deserializeResponse(buffer, buffer.readInt32(true), true)
 
         sent.answer(response, null)
         drain()
-        // bytes settle through their own entry, never as a wire string
         assertEquals(hex(answered), hex(plugin.js.invokeBytes.last().response))
     }
 
@@ -180,7 +158,6 @@ class PluginTakeoutTest {
         assertNull(connections().lastSent())
     }
 
-    /** the whole point of the api: stock has no class for it, so nothing but the bytes can describe it */
     @Test
     fun a_constructor_this_build_has_never_heard_of_still_goes_out() {
         val plugin = granted()

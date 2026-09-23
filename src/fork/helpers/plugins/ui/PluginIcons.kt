@@ -8,12 +8,14 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.util.Base64
+import android.util.LruCache
 import android.view.View
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.platform.PluginJvm
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.MediaDataController
+import org.telegram.messenger.R
 import org.telegram.messenger.SvgHelper
 import org.telegram.messenger.UserConfig
 import org.telegram.tgnet.TLRPC
@@ -27,15 +29,11 @@ import java.lang.ref.WeakReference
 import java.util.WeakHashMap
 
 /**
- * Resolves `inu.icons` and `inu.android.resourceIcon` specs into Drawables (Rust: `icons.rs`).
- * Native validates the spec; this class checks whether it resolves and renders it.
- *
- * [iconResolves] runs on globalQueue during icon creation. Resource lookups and SVG parsing
- * need no Activity. [setIcon] runs on the UI thread during row binding and uses the current
- * activity's resources, so configuration, theme, and icon-pack changes need no cache invalidation.
+ * Native validates the spec. [iconResolves] runs on the engine queue; [setIcon] runs on the ui thread with
+ * the current activity's resources, so config, theme and icon-pack changes need no invalidation.
  */
 object PluginIcons {
-    /** stock's own menu/settings drawables are 24dp */
+    /** stock's menu/settings drawables are 24dp */
     private const val ICON_DP = 24f
 
     private const val RESOURCE_CACHE_SIZE = 128
@@ -43,11 +41,45 @@ object PluginIcons {
 
     private const val KIND_RESOURCE = 0
     private const val KIND_SVG = 1
-    private const val KIND_RAW_ANIMATION = 2
+    const val KIND_RAW_ANIMATION = 2
 
-    private val resourceIds = lru<String, Int>(RESOURCE_CACHE_SIZE)
-    private val rawResourceIds = lru<String, Int>(RESOURCE_CACHE_SIZE)
-    private val svgMasks = lru<String, Bitmap>(SVG_CACHE_SIZE)
+    private val COMMON_ICONS: Map<String, Int> = mapOf(
+        "archive" to R.drawable.msg_archive,
+        "bookmark" to R.drawable.msg_saved,
+        "bot" to R.drawable.msg_bot,
+        "channel" to R.drawable.msg_channel,
+        "check" to R.drawable.ic_ab_done,
+        "close" to R.drawable.msg_close,
+        "copy" to R.drawable.msg_copy,
+        "delete" to R.drawable.msg_delete,
+        "download" to R.drawable.msg_download,
+        "edit" to R.drawable.msg_edit,
+        "eye" to R.drawable.msg_views,
+        "eyeOff" to R.drawable.msg_archive_hide,
+        "forward" to R.drawable.msg_forward,
+        "group" to R.drawable.msg_groups,
+        "info" to R.drawable.msg_info,
+        "link" to R.drawable.msg_link,
+        "lock" to R.drawable.msg_secret,
+        "minus" to R.drawable.msg_remove,
+        "more" to R.drawable.ic_ab_other,
+        "mute" to R.drawable.msg_mute,
+        "pin" to R.drawable.msg_pin,
+        "plus" to R.drawable.msg_add,
+        "refresh" to R.drawable.msg_retry,
+        "reply" to R.drawable.menu_reply,
+        "search" to R.drawable.msg_search,
+        "settings" to R.drawable.msg_settings,
+        "share" to R.drawable.msg_share,
+        "star" to R.drawable.msg_fave,
+        "translate" to R.drawable.msg_translate,
+        "unmute" to R.drawable.msg_unmute,
+        "user" to R.drawable.msg_contacts,
+    )
+
+    private val resourceIds = LruCache<String, Int>(RESOURCE_CACHE_SIZE)
+    private val rawResourceIds = LruCache<String, Int>(RESOURCE_CACHE_SIZE)
+    private val svgMasks = LruCache<String, Bitmap>(SVG_CACHE_SIZE)
     private val boundSpecs = WeakHashMap<RLottieImageView, String>()
     private val emojiBindings = WeakHashMap<RLottieImageView, WeakReference<EmojiBinding>>()
 
@@ -100,9 +132,9 @@ object PluginIcons {
     }
 
     fun iconResolves(kind: Int, value: String): Boolean = when (kind) {
-        KIND_RESOURCE -> resourceIdOf(value) != 0
-        KIND_SVG -> maskOf(value) != null
-        KIND_RAW_ANIMATION -> getRawAnimationResourceId(value) != 0
+        KIND_RESOURCE -> resolveIdentifier(resourceIds, value, "drawable") != 0
+        KIND_SVG -> loadSvgMask(value) != null
+        KIND_RAW_ANIMATION -> resolveIdentifier(rawResourceIds, value, "raw") != 0
         else -> false
     }
 
@@ -110,8 +142,8 @@ object PluginIcons {
         if (spec.isNullOrEmpty()) return null
         val payload = spec.substring(1)
         return when (spec[0]) {
-            'r' -> drawableOf(context, payload)
-            's' -> maskOf(payload)?.let { BitmapDrawable(context.resources, it) }
+            'r' -> loadDrawable(context, payload)
+            's' -> loadSvgMask(payload)?.let { BitmapDrawable(context.resources, it) }
             'j' -> payload.toLongOrNull()?.let { PluginJvm.objectAt(engine, it) as? Drawable }
             else -> null
         }
@@ -128,7 +160,7 @@ object PluginIcons {
         }
         if (animation == null) return false
         if (spec[0] == 'a') {
-            val id = getRawAnimationResourceId(animation.value)
+            val id = resolveIdentifier(rawResourceIds, animation.value, "raw")
             if (id == 0) return false
             val lottie = RLottieDrawable(
                 id,
@@ -253,10 +285,21 @@ object PluginIcons {
         }
     }
 
-    fun drawableOf(context: Context, name: String): Drawable? {
-        val id = resourceIdOf(name)
+    fun commonIconName(name: String): String? {
+        val id = COMMON_ICONS[name] ?: return null
+        return ApplicationLoader.applicationContext?.resources?.getResourceEntryName(id)
+    }
+
+    fun loadCommonDrawable(context: Context, name: String): Drawable? = COMMON_ICONS[name]?.let { loadDrawable(context, it) }
+
+    private fun loadDrawable(context: Context, name: String): Drawable? {
+        val id = resolveIdentifier(resourceIds, name, "drawable")
         if (id == 0) return null
-        // through the context's own Resources rather than Context.getDrawable, which resolves against the base ContextImpl and walks past LaunchActivity's IconsResources override
+        return loadDrawable(context, id)
+    }
+
+    private fun loadDrawable(context: Context, id: Int): Drawable? {
+        // Context.getDrawable resolves against the base ContextImpl, bypassing LaunchActivity's IconsResources override
         return try {
             context.resources.getDrawable(id, context.theme)
         } catch (e: Resources.NotFoundException) {
@@ -264,15 +307,9 @@ object PluginIcons {
         }
     }
 
-    private fun resourceIdOf(name: String): Int = identifierOf(resourceIds, name, "drawable")
-
-    fun getRawAnimationResourceId(name: String): Int = identifierOf(rawResourceIds, name, "raw")
-
-    private fun identifierOf(cache: MutableMap<String, Int>, name: String, type: String): Int {
+    private fun resolveIdentifier(cache: LruCache<String, Int>, name: String, type: String): Int {
         val context = ApplicationLoader.applicationContext ?: return 0
-        return synchronized(cache) {
-            cache.getOrPut(name) { context.resources.getIdentifier(name, type, context.packageName) }
-        }
+        return cache[name] ?: context.resources.getIdentifier(name, type, context.packageName).also { cache.put(name, it) }
     }
 
     private fun findSticker(set: TLRPC.TL_messages_stickerSet, selector: String): TLRPC.Document? = when (selector.firstOrNull()) {
@@ -287,25 +324,9 @@ object PluginIcons {
         else -> null
     }
 
-    /**
-     * The rasterized icon, tint-ready: every paint is forced opaque white, so a `SRC_IN` colour
-     * filter (which is how every cell tints its icon) reproduces it in the row's own colour.
-     *
-     * The bitmap is bounded by [ICON_DP] whatever the source declares - `SvgHelper` scales the
-     * document down to the size it was asked for - and null means the platform's xml reader could
-     * not make anything of it.
-     */
-    private fun maskOf(source: String): Bitmap? = synchronized(svgMasks) {
-        svgMasks[source] ?: run {
-            val size = AndroidUtilities.dp(ICON_DP)
-            val bitmap = SvgHelper.getBitmap(source, size, size, true) ?: return@run null
-            svgMasks[source] = bitmap
-            bitmap
-        }
+    /** paints are forced opaque white so a cell's `SRC_IN` tint reproduces it. null when the xml reader fails */
+    private fun loadSvgMask(source: String): Bitmap? = svgMasks[source] ?: run {
+        val size = AndroidUtilities.dp(ICON_DP)
+        SvgHelper.getBitmap(source, size, size, true)?.also { svgMasks.put(source, it) }
     }
-
-    private fun <K, V> lru(capacity: Int): LinkedHashMap<K, V> =
-        object : LinkedHashMap<K, V>(capacity, 0.75f, true) {
-            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<K, V>): Boolean = size > capacity
-        }
 }

@@ -3,7 +3,6 @@ package desu.inugram.helpers.plugins
 import java.util.ArrayDeque
 import java.util.concurrent.Executor
 
-/** runs what it is given one at a time, in order, on [delegate]'s threads rather than on a thread of its own */
 class SerialExecutor(private val delegate: Executor) : Executor {
     private val queued = ArrayDeque<Runnable>()
     private var running = false

@@ -2,7 +2,7 @@ use object::elf::{FileHeader64, SHT_DYNSYM, SHT_SYMTAB};
 use object::read::elf::{FileHeader, SectionHeader, Sym, SymbolTable};
 use object::LittleEndian;
 use std::collections::HashMap;
-use std::ffi::{c_char, c_void};
+use std::ffi::c_void;
 #[cfg(target_os = "android")]
 use std::ffi::{c_int, CStr};
 use std::fs;
@@ -78,19 +78,6 @@ fn decompress_xz(compressed: &[u8]) -> Option<Vec<u8>> {
   Some(out)
 }
 
-#[repr(C)]
-#[cfg_attr(not(target_os = "android"), allow(dead_code))]
-struct DlPhdrInfo {
-  addr: usize,
-  name: *const c_char,
-}
-
-#[cfg(target_os = "android")]
-extern "C" {
-  fn dl_iterate_phdr(callback: extern "C" fn(*mut DlPhdrInfo, usize, *mut c_void) -> c_int, data: *mut c_void)
-    -> c_int;
-}
-
 #[cfg(target_os = "android")]
 struct Search {
   wanted: &'static str,
@@ -98,26 +85,28 @@ struct Search {
 }
 
 #[cfg(target_os = "android")]
-extern "C" fn visit(info: *mut DlPhdrInfo, _size: usize, data: *mut c_void) -> c_int {
-  let search = unsafe { &mut *(data as *mut Search) };
-  let info = unsafe { &*info };
-  if info.name.is_null() {
+unsafe extern "C" fn visit(info: *mut libc::dl_phdr_info, _size: usize, data: *mut c_void) -> c_int {
+  // SAFETY: `find_loaded` passes its `Search` as `data`, and bionic hands over an entry valid for
+  // this call whose name, when set, is a C string
+  let (search, info) = unsafe { (&mut *(data as *mut Search), &*info) };
+  if info.dlpi_name.is_null() {
     return 0;
   }
-  let Ok(name) = (unsafe { CStr::from_ptr(info.name) }).to_str() else {
+  let Ok(name) = unsafe { CStr::from_ptr(info.dlpi_name) }.to_str() else {
     return 0;
   };
   if !name.ends_with(search.wanted) {
     return 0;
   }
-  search.found = Some((info.addr, name.to_string()));
+  search.found = Some((info.dlpi_addr as usize, name.to_string()));
   1
 }
 
 #[cfg(target_os = "android")]
 fn find_loaded(name: &'static str) -> Option<(usize, String)> {
   let mut search = Search { wanted: name, found: None };
-  unsafe { dl_iterate_phdr(visit, &mut search as *mut Search as *mut c_void) };
+  // SAFETY: `visit` reads `data` as the `Search` it is given here, which outlives the call
+  unsafe { libc::dl_iterate_phdr(Some(visit), &mut search as *mut Search as *mut c_void) };
   search.found
 }
 
