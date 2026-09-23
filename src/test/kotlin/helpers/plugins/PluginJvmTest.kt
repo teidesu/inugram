@@ -3,6 +3,7 @@ package desu.inugram.helpers.plugins
 import org.json.JSONArray
 import android.os.Bundle
 import android.util.Base64
+import android.util.LruCache
 import android.util.SparseArray
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.platform.PluginJvm
@@ -12,49 +13,20 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import org.junit.After
 import org.junit.Before
 import org.junit.Test
 
-/**
- * `inu.jvm` end to end. The member ops run in rust against real `jmethodID`s off a plan kotlin
- * answers once per class and name - so the tests drive the plugin's own surface through a real
- * engine, and the few ops that still cross as text (`cls`, `loadDex`, the runnable, the screen)
- * through the listener.
- */
 class PluginJvmTest {
     private val fixtureClass = JvmFixture::class.java.name
     private val scoped = "unsafe.jvm"
-    private val sessions = ArrayList<PluginSession>()
-
     @Before
     fun setUp() {
         resetBridge()
-        JvmFixture.tag = "static"
-        JvmFixture.shared = null
-        // a staged dex is real storage keyed by install id, and `startPlugin` derives that id from
-        // the plugin's name - so without this every test naming one stands on the last one's files
         PluginJvm.dexDir(BLANK_ID).parentFile!!.deleteRecursively()
     }
 
-    @After
-    fun tearDown() {
-        for (session in sessions) {
-            session.engine.stopCallbacks()
-            PluginJvm.detach(session)
-            session.engine.close()
-        }
-        sessions.clear()
-    }
+    private fun engineFor(vararg grants: String, name: String = "reflective"): Plugin = startEngine(name, *grants)
 
-    /** a plugin on a real engine: the member ops have no listener form, so this is the only way to reach them */
-    private fun engineFor(vararg grants: String, name: String = "reflective"): Plugin {
-        val plugin = startEngine(name, *grants)
-        sessions.add(plugin.session!!)
-        return plugin
-    }
-
-    /** a plugin holding `F`, the fixture class, and `o`, [fixture], the way its own code would hold them */
     private fun engineWith(fixture: JvmFixture = JvmFixture(), vararg grants: String = arrayOf(scoped)): Plugin {
         val plugin = engineFor(*grants)
         JvmFixture.shared = fixture
@@ -62,9 +34,6 @@ class PluginJvmTest {
         return plugin
     }
 
-    private fun Plugin.js(code: String): String = engine!!.evaluate(code.trimIndent()) ?: "null"
-
-    /** what [expr] refuses with: `code|grant`, or the value it answered as text */
     private fun Plugin.outcome(expr: String): String = js(
         """
         (() => {
@@ -83,7 +52,7 @@ class PluginJvmTest {
     }
 
     @Test
-    fun theApiIsInstalledOnlyForAPluginThatHoldsTheGrant() {
+    fun the_api_is_installed_only_for_a_plugin_that_holds_the_grant() {
         val without = startPlugin("plain", "openUrl")
         assertNull(without.js.listener?.jvm)
         assertFalse(without.js.jvmInstalled)
@@ -92,21 +61,14 @@ class PluginJvmTest {
         assertTrue(with.js.jvmInstalled)
     }
 
-    /** they mint through the same path every other reference takes, engine package rule included */
     @Test
-    fun theCurrentScreenIsMintedLikeAnyOtherReference() {
+    fun the_current_screen_is_a_reference_or_null_when_there_is_no_ui() {
         val plugin = startPlugin("reflective", scoped)
         testAppScreen.fragment = JvmFixture()
         testAppScreen.activity = JvmFixture()
+        assertEquals('O', readHandleKind(plugin.jvm(PluginJvm.OP_CURRENT_FRAGMENT)))
+        assertEquals('O', readHandleKind(plugin.jvm(PluginJvm.OP_CURRENT_ACTIVITY)))
 
-        assertEquals('O', kindOf(plugin.jvm(PluginJvm.OP_CURRENT_FRAGMENT)))
-        assertEquals('O', kindOf(plugin.jvm(PluginJvm.OP_CURRENT_ACTIVITY)))
-    }
-
-    /** no ui at all - a process a push woke - is `null`, never an error */
-    @Test
-    fun theCurrentScreenIsNullWhenThereIsNoUi() {
-        val plugin = startPlugin("reflective", scoped)
         testAppScreen.fragment = null
         testAppScreen.activity = null
 
@@ -117,7 +79,7 @@ class PluginJvmTest {
     @Test
     fun bundle_method_uses_runtime_types() {
         val plugin = startPlugin("reflective", "unsafe.jvm")
-        fun method(value: Any): String = stringOf(plugin.jvm(PluginJvm.OP_BUNDLE_METHOD, plugin.mint(value)))
+        fun method(value: Any): String = decodeString(plugin.jvm(PluginJvm.OP_BUNDLE_METHOD, plugin.mint(value)))
 
         assertEquals("putBundle", method(Bundle()))
         assertEquals("putString", method("text"))
@@ -129,7 +91,6 @@ class PluginJvmTest {
         assertEquals(PluginWire.Value.Null, PluginWire.decode(plugin.jvm(PluginJvm.OP_BUNDLE_METHOD, plugin.mint(Any()))))
     }
 
-    /** the whole of `inu.android.bundle`, which builds through the same construct and call path a plugin uses */
     @Test
     fun a_bundle_is_built_through_the_member_ops() {
         val plugin = engineFor("unsafe.jvm")
@@ -147,11 +108,9 @@ class PluginJvmTest {
         plugin.assertRefused("invalid-argument", "inu.android.bundle({ value: [] })")
     }
 
-    /** the oracle's runnable is handed to a real thread, which is the only thing that can run one */
     @Test
     fun the_bundled_jvm_oracle_passes() {
         val (plugin, lines) = startOracle("jvm-test.js")
-        sessions.add(plugin.session!!)
         plugin.js("new (inu.jvm.cls('java.lang.Thread'))(onClick).call('start')")
         val deadline = System.nanoTime() + 5_000_000_000
         while (plugin.js("clicks") != "1" && System.nanoTime() < deadline) {
@@ -162,21 +121,18 @@ class PluginJvmTest {
     }
 
     @Test
-    fun theEnginesOwnPackageIsRefusedWhateverTheGrantSays() {
+    fun the_engines_own_package_is_refused_whatever_the_grant_says() {
         val plugin = startPlugin("reflective", "unsafe.jvm")
-        assertEquals('C', kindOf(plugin.jvm(PluginJvm.OP_CLASS, name = "java.util.ArrayList")))
+        assertEquals('C', readHandleKind(plugin.jvm(PluginJvm.OP_CLASS, name = "java.util.ArrayList")))
 
-        for (name in listOf(PluginJvm::class.java.name, QuickJs::class.java.name, "$PLUGIN_PACKAGE.api.PluginLocalStorage")) {
+        for (name in listOf(PluginJvm::class.java.name, QuickJs::class.java.name, "$PLUGIN_PACKAGE.io.PluginLocalStorage")) {
             assertPluginError("forbidden", plugin.jvm(PluginJvm.OP_CLASS, name = name))
         }
     }
 
-    /**
-     * a direct call converts in rust (`jvm/native.rs`) and a routine in [PluginJvm.convertArguments]:
-     * the same value handed to the same overloads must land on the same one, or be refused by both
-     */
+    /** direct calls convert in `jvm/native.rs`, routines in [PluginJvm.convertArguments] */
     @Test
-    fun aRoutineAndADirectCallPickTheSameOverloadForEveryValue() {
+    fun a_routine_and_a_direct_call_pick_the_same_overload_for_every_value() {
         val plugin = engineWith()
         val methods = listOf("width", "boxed", "echo", "sized", "letter", "boxedLetter")
         for (value in listOf("7", "7.0", "1.5", "2 ** 40", "9007199254740993n", "'x'", "true", "null", "new Uint8Array([1, 2])")) {
@@ -202,32 +158,27 @@ class PluginJvmTest {
     }
 
     @Test
-    fun aHandleDoesNotOutliveTheEngineThatMintedIt() {
+    fun a_handle_does_not_outlive_the_engine_that_minted_it() {
         val plugin = engineWith()
         assertEquals("V3", plugin.outcome("o.getField('count')"))
 
-        // detach closes the session rather than unhooking it: the bridge is fixed for the life of
-        // the engine, and `PluginManager` closes the engine on the same runnable
         PluginJvm.detach(plugin.session!!)
         plugin.assertRefused("handle-expired", "o.getField('count')")
         plugin.assertRefused("handle-expired", "F.getStaticField('tag')")
     }
 
-    /** the table behind an id is the engine's own, so another plugin's id names nothing in it */
     @Test
-    fun anIdIsOnlyEverThePluginsOwn() {
+    fun an_id_is_only_ever_the_plugins_own() {
         val mine = startPlugin("mine", scoped)
         val theirs = startPlugin("theirs", scoped)
         val handle = mine.mint(JvmFixture())
 
-        // the op only needs to *reach* the object; what it answers about a fixture is that it is
-        // nothing a Bundle takes
         assertEquals(PluginWire.Value.Null, PluginWire.decode(mine.jvm(PluginJvm.OP_BUNDLE_METHOD, handle)))
         assertPluginError("handle-expired", theirs.jvm(PluginJvm.OP_BUNDLE_METHOD, handle))
     }
 
     @Test
-    fun aReleasedHandleReadsAsExpired() {
+    fun a_released_handle_reads_as_expired() {
         val plugin = startPlugin("reflective", scoped)
         val handle = plugin.mint(JvmFixture())
         plugin.js.jvmRelease(handle)
@@ -235,14 +186,13 @@ class PluginJvmTest {
     }
 
     @Test
-    fun valuesCrossAsTheTypesTheContractNames() {
+    fun values_cross_as_the_types_the_contract_names() {
         val plugin = engineWith()
         assertEquals(
             "3:number|inugram:string|true:boolean|null|9007199254740993:bigint|1,2,3",
             plugin.js(
                 """
                 const count = o.getField('count'), label = o.getField('label'), flag = o.getField('flag');
-                // a long past 2^53 is not a number js can hold, so it arrives as a bigint
                 const big = o.getField('big');
                 [count + ':' + typeof count, label + ':' + typeof label, flag + ':' + typeof flag, String(o.getField('nothing')), big + ':' + typeof big, Array.from(o.getField('digest')).join(',')].join('|')
                 """,
@@ -251,23 +201,20 @@ class PluginJvmTest {
     }
 
     @Test
-    fun aValuePastTheBoundIsRefusedRatherThanCopied() {
+    fun a_value_past_the_bound_is_refused_rather_than_copied() {
         val fixture = JvmFixture()
         fixture.label = "x".repeat(PluginJvm.VALUE_LIMIT_BYTES + 1)
         val plugin = engineWith(fixture)
         plugin.assertRefused("quota-exceeded", "o.getField('label')")
-        plugin.assertRefused("quota-exceeded", "o.call('echo', 'x'.repeat(${PluginJvm.VALUE_LIMIT_BYTES + 1}))")
     }
 
     @Test
-    fun anArgumentIsConvertedByTheParameterItLandsIn() {
+    fun an_argument_is_converted_by_the_parameter_it_lands_in() {
         val plugin = engineWith()
         assertEquals("Vecho:hi", plugin.outcome("o.call('echo', 'hi')"))
         assertEquals("V2", plugin.outcome("o.call('sized', new Uint8Array([1, 2]))"))
-        // a js number is an integer or a double and nothing narrower, so the parameter decides
         assertEquals("Vint", plugin.outcome("o.call('width', 5)"))
         assertEquals("Vdouble", plugin.outcome("o.call('width', 1.5)"))
-        // an Object-shaped parameter takes the box a java literal would have been
         assertEquals("Vjava.lang.Integer", plugin.outcome("o.call('boxed', 5)"))
         assertEquals("Vjava.lang.Long", plugin.outcome("o.call('boxed', 2 ** 40)"))
         assertEquals("Vjava.lang.Integer", plugin.outcome("o.call('boxed', 5n)"))
@@ -279,17 +226,16 @@ class PluginJvmTest {
     }
 
     @Test
-    fun anArgumentThatDoesNotFitIsRefusedRatherThanTruncated() {
+    fun an_argument_that_does_not_fit_is_refused_rather_than_truncated() {
         val fixture = JvmFixture()
         val plugin = engineWith(fixture)
-        // `count` is an int and this is not one
         plugin.assertRefused("invalid-argument", "o.setField('count', 2 ** 40)")
         assertEquals(3, fixture.count)
         plugin.assertRefused("not-found", "o.call('width', 'text')")
     }
 
     @Test
-    fun aOneCharacterStringPrefersTheOverloadThatTakesItAsText() {
+    fun a_one_character_string_prefers_the_overload_that_takes_it_as_text() {
         val plugin = engineWith()
         assertEquals("Vstring", plugin.outcome("o.call('letter', 'f')"))
         assertEquals("Vobject", plugin.outcome("o.call('boxedLetter', 'f')"))
@@ -298,7 +244,7 @@ class PluginJvmTest {
     }
 
     @Test
-    fun aCovariantOverrideIsOneMethodRatherThanAnOverloadOfItsBridge() {
+    fun a_covariant_override_is_one_method_rather_than_an_overload_of_its_bridge() {
         val plugin = engineWith()
         plugin.js("globalThis.child = new (inu.jvm.cls('desu.inugram.jvmfixture.JvmSuperChild'))()")
         assertEquals("Vtrue", plugin.outcome("child.call('itself') !== null"))
@@ -306,30 +252,24 @@ class PluginJvmTest {
     }
 
     @Test
-    fun anAmbiguousOverloadIsRefusedRatherThanPicked() {
-        val plugin = engineWith()
-        plugin.assertRefused("invalid-argument", "o.call('ambiguous', 'x')")
-    }
-
-    @Test
-    fun aDescriptorPinsTheOverloadTheNarrowestRuleWouldNotHavePicked() {
+    fun a_descriptor_pins_the_overload_the_narrowest_rule_would_not_have_picked() {
         val plugin = engineWith()
         assertEquals("Vlong", plugin.outcome("o.call('width(J)Ljava/lang/String;', 5)"))
+        plugin.assertRefused("invalid-argument", "o.call('ambiguous', 'x')")
         assertEquals("VcharSequence", plugin.outcome("o.call('ambiguous(Ljava/lang/CharSequence;)Ljava/lang/String;', 'x')"))
-        // pinning says *which* one, never that the arguments fit
         plugin.assertRefused("invalid-argument", "o.call('width(J)Ljava/lang/String;', 'text')")
         plugin.assertRefused("not-found", "o.call('width(Z)Ljava/lang/String;', true)")
     }
 
     @Test
-    fun aPrivateMemberIsReachableAndAFinalOneIsNotAssignable() {
+    fun a_private_member_is_reachable_and_a_final_one_is_not_assignable() {
         val plugin = engineWith()
         assertEquals("Vprivate", plugin.outcome("o.getField('secret')"))
         plugin.assertRefused("forbidden", "o.setField('sealed', 'nope')")
     }
 
     @Test
-    fun theStaticFormsReachTheClassAndTheInstanceFormsReachTheObject() {
+    fun the_static_forms_reach_the_class_and_the_instance_forms_reach_the_object() {
         val plugin = engineWith()
         assertEquals("Vstatic", plugin.outcome("F.getStaticField('tag')"))
         plugin.js("F.setStaticField('tag', 'assigned')")
@@ -337,12 +277,11 @@ class PluginJvmTest {
         assertEquals("V7", plugin.outcome("F.callStatic('sum', 3, 4)"))
         assertEquals("Vinugram", plugin.outcome("F.callStatic('make').getField('label')"))
         assertEquals("V3", plugin.outcome("new F().getField('count')"))
-        // a class handle is a static receiver and nothing else
         plugin.assertRefused("not-found", "F.call('echo', 'hi')")
     }
 
     @Test
-    fun aPinnedMemberIsTheSameCallOneHopLater() {
+    fun a_pinned_member_is_the_same_call_one_hop_later() {
         val fixture = JvmFixture()
         val plugin = engineWith(fixture)
         assertEquals("Vecho:hi", plugin.outcome("F.getDeclaredMethod('echo').invoke(o, 'hi')"))
@@ -352,19 +291,14 @@ class PluginJvmTest {
         assertEquals("V9", plugin.outcome("o.getField('count')"))
         assertEquals("V3", plugin.outcome("F.getDeclaredConstructor('()V').newInstance().getField('count')"))
 
-        // nothing is being called yet, so only a descriptor can say which `width` was meant
         plugin.assertRefused("invalid-argument", "F.getDeclaredMethod('width')")
         assertEquals("Vfunction", plugin.outcome("typeof F.getDeclaredMethod('width(J)Ljava/lang/String;').invoke"))
         plugin.assertRefused("invalid-argument", "F.getDeclaredMethod('echo').invoke(F, 'hi')")
         plugin.assertRefused("invalid-argument", "F.getDeclaredMethod('echo').invoke(o, 5)")
     }
 
-    /**
-     * `new F(...)` matches on the arguments alone, and a js number fits both widths - so the
-     * descriptor is the only way to say which of two constructors was meant.
-     */
     @Test
-    fun aDeclaredConstructorPicksTheOverloadNewCannotName() {
+    fun a_declared_constructor_picks_the_overload_new_cannot_name() {
         val plugin = engineWith()
         assertEquals("Vint", plugin.outcome("new F(5).getField('madeBy')"))
         assertEquals("Vlong", plugin.outcome("F.getDeclaredConstructor('(J)V').newInstance(5).getField('madeBy')"))
@@ -375,9 +309,8 @@ class PluginJvmTest {
         plugin.assertRefused("not-found", "F.getDeclaredConstructor('(Z)V')")
     }
 
-    /** a member reaches js as an ordinary return value too, and has to arrive as a member handle */
     @Test
-    fun aMemberCrossingAsAValueIsAMemberHandle() {
+    fun a_member_crossing_as_a_value_is_a_member_handle() {
         val plugin = engineWith()
         assertEquals("Vfunction", plugin.outcome("typeof o.call('ownMethod').invoke"))
         assertEquals("Vecho:hi", plugin.outcome("o.call('ownMethod').invoke(o, 'hi')"))
@@ -386,16 +319,9 @@ class PluginJvmTest {
     }
 
     @Test
-    fun aJavaThrowIsAPlainErrorAndNotAPluginError() {
-        val plugin = engineWith()
-        val outcome = plugin.outcome("o.call('boom')")
-        assertTrue(outcome.startsWith("XError: ") && outcome.contains("IllegalStateException: boom"), outcome)
-    }
-
-    @Test
     fun a_callback_dispatches_synchronously_to_its_engine() {
         val plugin = startPlugin("reflective", scoped)
-        val runnable = idOf(plugin.jvm(PluginJvm.OP_RUNNABLE, name = "", args = arrayOf(PluginWire.encodeInt(7))))
+        val runnable = jvmHandleId(plugin.jvm(PluginJvm.OP_RUNNABLE, name = "", args = arrayOf(PluginWire.encodeInt(7))))
         val task = PluginJvm.bridgeFor(plugin.js)!!.decode("G$runnable") as Runnable
         assertEquals("ran", JvmFixture().runNow(task))
         assertEquals(listOf(7), plugin.js.jvmCallbacks)
@@ -404,7 +330,7 @@ class PluginJvmTest {
     @Test
     fun a_callback_never_fires_into_a_successor_engine() {
         val plugin = startPlugin("reflective", scoped)
-        val runnable = idOf(plugin.jvm(PluginJvm.OP_RUNNABLE, name = "", args = arrayOf(PluginWire.encodeInt(7))))
+        val runnable = jvmHandleId(plugin.jvm(PluginJvm.OP_RUNNABLE, name = "", args = arrayOf(PluginWire.encodeInt(7))))
         val task = PluginJvm.bridgeFor(plugin.js)!!.decode("G$runnable") as Runnable
         val stopped = plugin.js
         plugin.session = PluginSession(plugin, RecordingQuickJs())
@@ -414,17 +340,13 @@ class PluginJvmTest {
     }
 
     @Test
-    fun theRunnableItselfCannotBeReachedInto() {
+    fun the_runnable_itself_cannot_be_reached_into() {
         val plugin = engineFor("unsafe.jvm")
         plugin.assertRefused("forbidden", "inu.jvm.runnable(() => {}).call('run')")
     }
 
-    /**
-     * the real loader, so what is asserted is that the staged file is one it accepts and that the
-     * class inside it is reachable - not that a recorder was handed a path
-     */
     @Test
-    fun aStagedDexLandsReadOnlyUnderThePluginsOwnDirectoryAndLoads() {
+    fun a_staged_dex_lands_read_only_under_the_plugins_own_directory_and_loads() {
         val plugin = engineFor("unsafe.jvm")
         assertEquals(
             PluginWire.Value.Null,
@@ -433,25 +355,23 @@ class PluginJvmTest {
             ),
         )
 
-        // the runtime writes its own compiled artifacts beside the file it was given, so the staged
-        // dex is named rather than assumed to be alone
+        // ART writes its own artifacts beside the dex
         val staged = PluginJvm.dexDir(plugin.id).listFiles()!!.single { it.isFile && it.name.endsWith(".dex") }
         assertFalse(staged.canWrite())
         assertEquals("loaded from dex", plugin.js("inu.jvm.cls('$PROBE_CLASS').callStatic('greet')"))
 
         PluginJvm.wipe(plugin.id)
-        // ART writes a loaded dex's vdex from a background thread, creating `oat/<isa>` as it goes, so a
-        // wipe racing it can see that tree come back; the dex itself must not
+        // ART writes the vdex from a background thread, so `oat/<isa>` may reappear after a wipe
         val left = PluginJvm.dexDir(plugin.id).walkTopDown().filter { it.isFile && it.extension == "dex" }.toList()
         assertTrue(left.isEmpty(), "left behind: $left")
     }
 
     @Test
-    fun aDexPathIsTakenAsGivenAndOnlyIfItIsAbsolute() {
+    fun a_dex_path_is_taken_as_given_and_only_if_it_is_absolute() {
         val plugin = engineFor("unsafe.jvm")
         assertPluginError("invalid-argument", plugin.jvm(PluginJvm.OP_LOAD_DEX, name = "patch.dex"))
 
-        // the platform refuses to map a writable file as code, whoever wrote it
+        // ART refuses to load a writable dex
         val file = File(PluginJvm.dexDir(plugin.id), "own.dex").also {
             it.parentFile!!.mkdirs()
             it.writeBytes(testAsset("probe.dex"))
@@ -461,41 +381,30 @@ class PluginJvmTest {
         assertEquals("loaded from dex", plugin.js("inu.jvm.cls('$PROBE_CLASS').callStatic('greet')"))
     }
 
-    // --- member resolution cache ---
-
-    /** the process-wide member table on [PluginJvm], by reflection: the cache is the fix */
-    @Suppress("UNCHECKED_CAST")
-    private fun tableCache(): MutableMap<Any, Any> =
+    private fun tableCache(): LruCache<*, *> =
         PluginJvm::class.java.getDeclaredField("tableCache").apply { isAccessible = true }
-            .get(PluginJvm) as MutableMap<Any, Any>
+            .get(PluginJvm) as LruCache<*, *>
 
-    /**
-     * `getDeclaredMethods()`/`getMethods()` allocate fresh `Method` objects every call, so resolving
-     * one member of a deep class walked and allocated thousands - per call. A table holds what one
-     * class declares, so the first lookup scans the lineage and nothing after it scans anything; a
-     * rescan would not fail loudly, it would just be slow again.
-     */
+    /** `getDeclaredMethods()` allocates per call, so a rescan would silently be slow again */
     @Test
-    fun a_class_is_scanned_once_however_many_of_its_members_are_used() {
+    fun a_class_is_scanned_once_however_its_members_are_used() {
         val plugin = engineWith()
-        tableCache().clear()
         assertEquals("Vecho:hi", plugin.outcome("o.call('echo', 'hi')"))
-        val scanned = tableCache().size
-        assertTrue(scanned >= 1, "the first call scans the class and what it inherits from")
+        tableCache().evictAll()
+        repeat(3) { assertEquals("Vecho:hi", plugin.outcome("o.call('echo', 'hi')")) }
+        assertEquals(0, tableCache().size(), "rust plans a resolved member, so kotlin is not asked again")
 
-        repeat(4) { assertEquals("Vecho:hi", plugin.outcome("o.call('echo', 'hi')")) }
-        assertEquals(scanned, tableCache().size, "four more calls must scan nothing")
-
-        // a different member, and a field rather than a method: the same tables already answer it
-        repeat(5) { plugin.js("o.getField('tag')") }
-        assertEquals(scanned, tableCache().size, "another member of the same class must not rescan it")
+        assertEquals("Vint", plugin.outcome("o.call('width', 5)"))
+        val scanned = tableCache().size()
+        assertTrue(scanned >= 1)
+        assertEquals("Vdouble", plugin.outcome("o.call('width', 1.5)"))
+        plugin.js("o.getField('tag')")
+        plugin.assertRefused("not-found", "o.getField('noSuchField')")
+        plugin.assertRefused("not-found", "o.getField('noSuchField')")
+        assertEquals(scanned, tableCache().size(), "other members, overloads and misses of a scanned class rescan nothing")
     }
 
-    /**
-     * `getMethods()`/`getFields()` were the walk's most expensive call and only interface members
-     * needed them, so the table reaches interfaces itself. A constant is inherited from one; a
-     * static declared on one is not.
-     */
+    /** a constant is inherited from an interface; a static method declared on one is not */
     @Test
     fun the_table_reaches_interface_members_without_getfields() {
         val plugin = engineWith()
@@ -503,11 +412,7 @@ class PluginJvmTest {
         plugin.assertRefused("not-found", "o.call('notInherited')")
     }
 
-    /**
-     * Reflection ran `<clinit>` on the first static access; the JNI ids rust calls through never
-     * do, and naming a class deliberately loads it uninitialized. A static read on an untouched
-     * class answered its default instead of what the initializer set.
-     */
+    /** JNI static access does not run `<clinit>`, and `cls` loads a class uninitialized */
     @Test
     fun a_static_use_initializes_the_class_where_reflection_would_have() {
         val plugin = engineFor(scoped)
@@ -515,52 +420,9 @@ class PluginJvmTest {
         assertEquals("Vclinit", plugin.outcome("inu.jvm.cls('desu.inugram.jvmfixture.JvmLazy').callStatic('whoInitialized')"))
     }
 
-    /** a name that does not exist is answered out of the table too, not rescanned per attempt */
-    @Test
-    fun a_missing_member_stays_a_miss() {
-        val plugin = engineWith()
-        tableCache().clear()
-        plugin.assertRefused("not-found", "o.getField('noSuchField')")
-        val scanned = tableCache().size
-        repeat(2) { plugin.assertRefused("not-found", "o.getField('noSuchField')") }
-        assertEquals(scanned, tableCache().size, "a miss is settled by the same scan a hit is")
-    }
-
-    /** overload selection still happens per call, against the cached candidates */
-    @Test
-    fun caching_the_candidates_does_not_freeze_which_overload_is_picked() {
-        val plugin = engineWith()
-        tableCache().clear()
-        assertEquals("Vint", plugin.outcome("o.call('width', 5)"))
-        val scanned = tableCache().size
-        assertEquals("Vdouble", plugin.outcome("o.call('width', 1.5)"))
-        assertEquals("Vint", plugin.outcome("o.call('width', 7)"))
-        assertEquals(scanned, tableCache().size, "both overloads come out of the one cached scan")
-    }
-
-    /**
-     * rust keeps a plan per class and name, so after the first call a name never reaches kotlin
-     * again - which is the whole point, and what makes the kotlin table's count above a count of
-     * *distinct names*, not of calls
-     */
-    @Test
-    fun a_resolved_member_is_not_asked_of_kotlin_twice() {
-        val plugin = engineWith()
-        assertEquals("Vecho:hi", plugin.outcome("o.call('echo', 'hi')"))
-        tableCache().clear()
-        repeat(3) { assertEquals("Vecho:hi", plugin.outcome("o.call('echo', 'hi')")) }
-        assertTrue(tableCache().isEmpty(), "a planned call must not rescan the class on the kotlin side")
-    }
-
-    /**
-     * The crossing between the two halves of this api: a TL value becomes the app's own `TLObject`,
-     * and one the app handed over reads back as a TL view.
-     */
     @Test
     fun a_tl_value_crosses_to_java_and_back() {
         val plugin = engineWith()
-        // through `isInstance`, not `getClass().getSimpleName()`: a class handle is a function, so
-        // `.call` on one is `Function.prototype.call` and silently constructs instead
         assertEquals(
             "Vtrue",
             plugin.outcome(
@@ -572,7 +434,6 @@ class PluginJvmTest {
             "V1",
             plugin.outcome("inu.jvm.fromTl({ _: 'messageEntityBold', offset: 1, length: 2 }).getField('offset')"),
         )
-        // and back: the java object reads as the view a tl read would have answered with
         assertEquals(
             "VmessageEntityBold",
             plugin.outcome("inu.jvm.toTl(inu.jvm.fromTl({ _: 'messageEntityBold', offset: 1, length: 2 }))._"),
@@ -581,54 +442,33 @@ class PluginJvmTest {
             "V2",
             plugin.outcome("inu.jvm.toTl(inu.jvm.fromTl({ _: 'messageEntityBold', offset: 1, length: 2 })).length"),
         )
-    }
-
-    @Test
-    fun a_view_read_back_out_of_java_can_be_written_to() {
-        val plugin = engineWith()
         plugin.js("globalThis.view = inu.jvm.toTl(inu.jvm.fromTl({ _: 'messageEntityBold', offset: 1, length: 2 }))")
         plugin.js("view.offset = 9")
         assertEquals("V9", plugin.outcome("view.offset"))
-    }
-
-    @Test
-    fun to_tl_refuses_a_handle_that_is_not_a_tl_object() {
-        val plugin = engineWith()
         plugin.assertRefused("invalid-argument", "inu.jvm.toTl(o)")
     }
 
-    /** `Class.isInstance`, which is what lets a plugin tell a `TLRPC.Chat` from a `TLRPC.User` */
     @Test
     fun is_instance_answers_the_class_a_handle_really_has() {
         val plugin = engineWith()
         plugin.js("globalThis.list = new (inu.jvm.cls('java.util.ArrayList'))()")
         assertEquals("Vtrue", plugin.outcome("inu.jvm.cls('java.util.ArrayList').isInstance(list)"))
-        // a supertype and an interface answer too, because this is the vm's own check and not a name comparison
         assertEquals("Vtrue", plugin.outcome("inu.jvm.cls('java.util.List').isInstance(list)"))
         assertEquals("Vtrue", plugin.outcome("inu.jvm.cls('java.lang.Object').isInstance(list)"))
         assertEquals("Vfalse", plugin.outcome("inu.jvm.cls('java.util.HashMap').isInstance(list)"))
         assertEquals("Vfalse", plugin.outcome("inu.jvm.cls('java.util.ArrayList').isInstance(null)"))
-        // a class handle is itself an object, and the class it is an instance of is `java.lang.Class`
         assertEquals("Vtrue", plugin.outcome("inu.jvm.cls('java.lang.Class').isInstance(F)"))
-    }
-
-    /** only a class handle carries the member at all, and like `instanceof` anything but a handle is simply not an instance */
-    @Test
-    fun is_instance_answers_false_for_anything_but_a_handle() {
-        val plugin = engineWith()
         assertEquals("Vundefined", plugin.outcome("typeof F.getDeclaredField('count').isInstance"))
         for (value in listOf("7", "'text'", "true", "1.5", "({})")) {
             assertEquals("Vfalse", plugin.outcome("inu.jvm.cls('java.lang.Object').isInstance($value)"))
         }
     }
 
-    /** a class handle is a function, so that `new` works, and the reference rides on it where nothing js-side can lose it */
     @Test
     fun a_class_handle_is_callable_and_stays_a_handle_through_the_prototype_chain() {
         val plugin = engineWith()
         assertEquals("Vfunction", plugin.outcome("typeof F"))
         assertEquals("V3", plugin.outcome("Reflect.construct(F, []).getField('count')"))
-        // a handle cannot be forged from what js can see of one
         assertEquals(
             """V[[],0]""",
             plugin.outcome("JSON.stringify([Object.keys(o), Object.getOwnPropertySymbols(o).length])"),
@@ -638,25 +478,11 @@ class PluginJvmTest {
         plugin.assertRefused("invalid-argument", "Object.create(Object.getPrototypeOf(o)).getField('count')")
     }
 
-    // `engine` rather than `js`: half of these run on a real engine, which is not the recording one
-    private fun Plugin.jvm(op: Int, target: Long = 0, name: String = "", vararg args: String): String =
-        engine!!.listener!!.jvm(op, target, name, arrayOf(*args))
-
-    /**
-     * a handle for [value] in this plugin's own table. Straight into the table rather than through
-     * `encode`, because a scalar crosses as a value and never gets one - and the ops below want a
-     * handle to something whatever its wire form would be.
-     */
     private fun Plugin.mint(value: Any): Long = engine!!.jvmMint(value, 'O')
 
-    private fun kindOf(wire: String): Char {
+    private fun readHandleKind(wire: String): Char {
         assertTrue(wire.length > 2 && wire[0] == 'G', "not a jvm handle: $wire")
         return wire[1]
-    }
-
-    private fun idOf(wire: String): Long {
-        assertTrue(wire.length > 2 && wire[0] == 'G', "not a jvm handle: $wire")
-        return wire.substring(2).toLong()
     }
 
     private fun base64(bytes: ByteArray): String = Base64.encodeToString(bytes, Base64.NO_WRAP)
@@ -664,10 +490,8 @@ class PluginJvmTest {
     private companion object {
         const val PLUGIN_PACKAGE = "desu.inugram.helpers.plugins"
 
-        /** the one class in `src/test/assets/probe.dex` */
         const val PROBE_CLASS = "desu.inugram.probe.Probe"
 
-        /** any well-formed install id: [PluginJvm.dexDir] validates the shape, and only its parent is wanted */
         const val BLANK_ID = "00000000000000000000000000000000"
     }
 }

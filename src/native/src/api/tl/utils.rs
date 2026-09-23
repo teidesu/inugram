@@ -5,6 +5,7 @@ use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, TypedArray,
 use std::rc::Rc;
 
 use crate::api::error::PluginErrorCode;
+use crate::utils::qjs::{qjs_load_prelude, qjs_read_typed_bytes};
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/utils.qbc"));
 
@@ -89,48 +90,30 @@ pub fn install_utils_with_host<'js>(
       })?;
     utils.set("formatDate", f)?;
   }
-  {
-    let host = host.clone();
-    utils.set(
-      "formatNumber",
-      Function::new(
-        ctx.clone(),
-        move |ctx: Ctx<'js>, value: Value<'js>, options: Opt<Value<'js>>| -> JsResult<String> {
-          let value = format_integer(&ctx, &value, "formatNumber", i64::MIN, i64::MAX)?;
-          let compact = match options.0 {
-            Some(options) if !options.is_undefined() && !options.is_null() => {
-              options.as_object().is_some_and(|options| options.get::<_, bool>("compact").unwrap_or(false))
-            }
-            _ => false,
-          };
-          Ok(host.format(if compact { FORMAT_COMPACT_NUMBER } else { FORMAT_NUMBER }, value))
-        },
-      )?,
-    )?;
-  }
-  {
-    let host = host.clone();
-    utils.set(
-      "formatFileSize",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, value: Value<'js>| -> JsResult<String> {
-        Ok(host.format(FORMAT_FILE_SIZE, format_integer(&ctx, &value, "formatFileSize", i64::MIN, i64::MAX)?))
-      })?,
-    )?;
-  }
-  {
-    let host = host.clone();
-    utils.set(
-      "formatDuration",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, value: Value<'js>| -> JsResult<String> {
-        Ok(host.format(FORMAT_DURATION, format_integer(&ctx, &value, "formatDuration", 0, i32::MAX as i64)?))
-      })?,
-    )?;
-  }
+  set_fn!(utils, "formatNumber", ctx, host, move |ctx: Ctx<'js>,
+                                                  value: Value<'js>,
+                                                  options: Opt<Value<'js>>|
+        -> JsResult<String> {
+    let value = format_integer(&ctx, &value, "formatNumber", i64::MIN, i64::MAX)?;
+    let compact = match options.0 {
+      Some(options) if !options.is_undefined() && !options.is_null() => {
+        options.as_object().is_some_and(|options| options.get::<_, bool>("compact").unwrap_or(false))
+      }
+      _ => false,
+    };
+    Ok(host.format(if compact { FORMAT_COMPACT_NUMBER } else { FORMAT_NUMBER }, value))
+  });
+  set_fn!(utils, "formatFileSize", ctx, host, move |ctx: Ctx<'js>, value: Value<'js>| -> JsResult<String> {
+    Ok(host.format(FORMAT_FILE_SIZE, format_integer(&ctx, &value, "formatFileSize", i64::MIN, i64::MAX)?))
+  });
+  set_fn!(utils, "formatDuration", ctx, host, move |ctx: Ctx<'js>, value: Value<'js>| -> JsResult<String> {
+    Ok(host.format(FORMAT_DURATION, format_integer(&ctx, &value, "formatDuration", 0, i32::MAX as i64)?))
+  });
 
   let plugin_error = globals.plugin_error.clone();
   let text = crate::api::tl::text::install_text(ctx)?;
 
-  let factory = crate::utils::prelude::load(ctx, PRELUDE)?;
+  let factory = qjs_load_prelude(ctx, PRELUDE)?;
   let shared: Object = factory.call((utils.clone(), plugin_error, text))?;
 
   globals.inu.set("utils", utils)?;
@@ -166,11 +149,8 @@ fn read_bytes<'js>(ctx: &Ctx<'js>, value: &Value<'js>, what: &str) -> JsResult<V
   let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) else {
     return Err(Exception::throw_type(ctx, &format!("{what}: expected a Uint8Array")));
   };
-  // SAFETY: no javascript runs while the slice is borrowed
-  let Some(bytes) = (unsafe { typed.as_bytes() }) else {
-    return Err(Exception::throw_type(ctx, &format!("{what}: the array is detached")));
-  };
-  Ok(bytes.to_vec())
+  qjs_read_typed_bytes(&typed, <[u8]>::to_vec)
+    .ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: the array is detached")))
 }
 
 #[cfg(test)]

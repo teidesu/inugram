@@ -45,11 +45,8 @@ object PluginPlatform {
     }
 
     /**
-     * Open external URLs without `Browser.openUrl`, which adds the account's `autologin_token`
-     * for hosts in `autologinDomains`. Using it would bypass the takeover filter that removes
-     * those domains from `config`. Telegram links use entry points that never add the token.
-     *
-     * Does nothing without a UI, since Android blocks background activity starts.
+     * not `Browser.openUrl`, which adds `autologin_token` for `autologinDomains` and so would bypass the
+     * takeover filter hiding those domains. No-op without ui: android blocks background activity starts.
      */
     private fun openUrl(url: String, log: PluginLog) {
         AndroidUtilities.runOnUIThread {
@@ -75,10 +72,8 @@ object PluginPlatform {
     }
 
     /**
-     * Reads synchronously off globalQueue; `getPrimaryClip` is a Binder call with no view access.
-     *
-     * Read the clip's text directly. `coerceToText` could dereference a `content://` URI using the
-     * app's permissions, exposing providers beyond the copied text. URI-only clips return "".
+     * `getPrimaryClip` is a Binder call with no view access. Not `coerceToText`: it could dereference a
+     * `content://` uri with the app's permissions. Uri-only clips return "".
      */
     private fun readClipboard(log: PluginLog): String = try {
         val manager = ApplicationLoader.applicationContext

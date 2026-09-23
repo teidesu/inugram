@@ -17,10 +17,6 @@ import org.telegram.messenger.FileLoader
 import org.telegram.messenger.NotificationCenter
 import org.telegram.tgnet.TLRPC
 
-/**
- * The media transfers: what `getMessageFile` answers, how a download is observed, and that a
- * finished transfer lets go of the notification centre it registered with.
- */
 class PluginMediaTest {
     private val alice = 222L
     private lateinit var scratch: File
@@ -36,45 +32,20 @@ class PluginMediaTest {
     private fun granted(vararg extra: String) =
         startPlugin("media", "account.read(messages)", "account.write(send)", *extra)
 
-    private fun document() = TLRPC.TL_document().apply {
-        id = 99L
-        access_hash = 1L
-        dc_id = 2
-        size = 11L
-        mime_type = "text/plain"
-        attributes.add(TLRPC.TL_documentAttributeFilename().apply { file_name = "note.txt" })
-    }
-
     private fun noMedia(): TLRPC.TL_message = TLRPC.TL_message().apply {
         id = 1
         message = "hi"
     }.synced()
 
-    private fun withMedia(id: Int = 4242): TLRPC.TL_message = TLRPC.TL_message().apply {
-        this.id = id
-        message = ""
-        // synced at both levels: a flag bit is per object, and a media whose `document`
-        // bit is clear round-trips through TlJson without one
-        media = TLRPC.TL_messageMediaDocument().apply { document = document() }.synced()
-    }.synced()
-
     private fun messageWire(message: TLRPC.Message): String =
         PluginWire.encodeJson(TlJson.toJson(message, TlFilter.Policy(takeover = true, drafts = true)).toString())
-
-    private fun write(
-        plugin: Plugin,
-        op: Int,
-        arg: JSONObject,
-        values: Array<String>,
-        requestId: Long = 1L,
-    ): String? = plugin.js.listener!!.accountWrite(0, requestId, op, arg.toString(), values)
 
     private fun onDisk(name: String, content: String): File =
         File(scratch, name).apply { writeText(content) }
 
     private fun centre() = NotificationCenter.getInstance(0)
 
-    private fun fileNameOf(message: TLRPC.Message): String =
+    private fun readDocumentAttachName(message: TLRPC.Message): String =
         FileLoader.getAttachFileName((message.media as TLRPC.TL_messageMediaDocument).document)
 
     @Test
@@ -89,18 +60,13 @@ class PluginMediaTest {
         assertTrue(json.getBoolean("exists"))
 
         assertEquals("N", plugin.js.listener!!.messageFile(0, messageWire(noMedia())))
-    }
 
-    @Test
-    fun a_message_whose_media_has_not_been_downloaded_says_where_it_would_go() {
-        val plugin = granted()
-        val message = withMedia()
         TestApp.fileLoader(0).paths[message.id] = File(scratch, "missing.txt")
-        val json = JSONObject(
+        val missing = JSONObject(
             (PluginWire.decode(plugin.js.listener!!.messageFile(0, messageWire(message))) as PluginWire.Value.Json).json,
         )
-        assertTrue(json.getString("path").endsWith("missing.txt"))
-        assertTrue(!json.getBoolean("exists"), "a path that is not there must not read as downloaded")
+        assertTrue(missing.getString("path").endsWith("missing.txt"))
+        assertTrue(!missing.getBoolean("exists"), "a path that is not there must not read as downloaded")
     }
 
     @Test
@@ -133,7 +99,7 @@ class PluginMediaTest {
         assertTrue(load.parent is TLRPC.Message, "the message is the parent, or a stale file reference cannot be refreshed")
         assertTrue(pluginObserverCount(centre()) > 0, "nothing is listening for the transfer")
 
-        val name = fileNameOf(message)
+        val name = readDocumentAttachName(message)
         centre().postOnUi(NotificationCenter.fileLoadProgressChanged, name, 4L, 11L)
         centre().postOnUi(NotificationCenter.fileLoadProgressChanged, name, 11L, 11L)
         settle()
@@ -171,7 +137,7 @@ class PluginMediaTest {
         TestApp.fileLoader(0).paths[message.id] = File(scratch, "note.txt")
         assertNull(write(plugin, PluginWrites.OP_DOWNLOAD_MEDIA, JSONObject(), arrayOf(messageWire(message))))
 
-        centre().postOnUi(NotificationCenter.fileLoadFailed, fileNameOf(message), 0)
+        centre().postOnUi(NotificationCenter.fileLoadFailed, readDocumentAttachName(message), 0)
         settle()
         assertPluginError("internal", plugin.js.writeResults.single().resultWire)
         assertEquals(0, pluginObserverCount(centre()))
@@ -202,34 +168,9 @@ class PluginMediaTest {
     private fun stagedWire(file: File, name: String, mime: String): String =
         "F" + JSONObject().put("path", file.absolutePath).put("name", name).put("mime", mime).toString()
 
-    /** what stock's operation posts once the last part is in, for every caller waiting on the path */
     private fun uploaded(path: String, id: Long = 5L) {
         val input = TLRPC.TL_inputFile().apply { this.id = id; parts = 1 }
         centre().postOnUi(NotificationCenter.fileUploaded, path, input, null, null, null, 5L)
-    }
-
-    @Test
-    fun an_upload_takes_the_staged_path_and_is_named_as_the_plugin_asked() {
-        val plugin = granted()
-        val staged = onDisk("transfer-1.bin", "12345")
-
-        assertNull(
-            write(
-                plugin,
-                PluginWrites.OP_UPLOAD_FILE,
-                JSONObject().put("fileName", "chosen.dat"),
-                arrayOf(stagedWire(staged, "payload.bin", "application/octet-stream")),
-            ),
-        )
-        settle()
-        assertEquals(listOf(staged.absolutePath), TestApp.fileLoader(0).uploads)
-
-        uploaded(staged.absolutePath)
-        settle()
-        val json = JSONObject((PluginWire.decode(plugin.js.writeResults.single().resultWire) as PluginWire.Value.Json).json)
-        assertEquals("inputFile", json.getString("_"))
-        assertEquals("chosen.dat", json.getString("name"))
-        assertEquals(0, pluginObserverCount(centre()), "a finished upload kept listening")
     }
 
     @Test
@@ -240,9 +181,11 @@ class PluginMediaTest {
             write(plugin, PluginWrites.OP_UPLOAD_FILE, JSONObject(), arrayOf(stagedWire(staged, "payload.bin", ""))),
         )
         settle()
+        assertEquals(listOf(staged.absolutePath), TestApp.fileLoader(0).uploads)
         uploaded(staged.absolutePath)
         settle()
         val json = JSONObject((PluginWire.decode(plugin.js.writeResults.single().resultWire) as PluginWire.Value.Json).json)
+        assertEquals("inputFile", json.getString("_"))
         assertEquals("payload.bin", json.getString("name"))
     }
 
@@ -284,9 +227,7 @@ class PluginMediaTest {
         assertNull(write(plugin, PluginWrites.OP_UPLOAD_FILE, named("one.dat"), arrayOf(wire), requestId = 1))
         assertNull(write(plugin, PluginWrites.OP_UPLOAD_FILE, named("two.dat"), arrayOf(wire), requestId = 2))
         settle()
-        // stock is what runs one operation per path (`uploadOperationPaths`), and a recorder standing
-        // in for it cannot have that state - so what is asserted here is the path both requests
-        // named, and the settling below is the rule that depends on there being one operation
+        // stock runs one operation per path (`uploadOperationPaths`), which the recorder cannot model
         assertEquals(setOf(staged.absolutePath), TestApp.fileLoader(0).uploads.toSet())
 
         uploaded(staged.absolutePath)
@@ -310,12 +251,7 @@ class PluginMediaTest {
         assertTrue(TestApp.fileLoader(0).uploads.isEmpty())
     }
 
-    /**
-     * the carve-out `common.d.ts` states: the request a write api sends is the plugin's and stays
-     * out of the chains, while the transfer it causes is the app's - stock runs one operation per
-     * file for every caller waiting on it, so there is no such thing as this plugin's `upload.
-     * saveFilePart`.
-     */
+    // stock runs one upload operation per file for every caller waiting on it
     @Test
     fun the_send_a_media_api_makes_is_the_plugin_s_and_the_transfer_it_causes_is_the_app_s() {
         val watcher = startPlugin("watcher", "interceptRpc(messages.sendMedia)", "interceptRpc(upload.saveFilePart)")
@@ -332,7 +268,6 @@ class PluginMediaTest {
             ),
         )
         settle()
-        // stock's loader is what sends the parts, from the operation it started above
         connections().sendRequest(TLRPC.TL_upload_saveFilePart(), { _, _ -> })
         settle()
         assertEquals(
@@ -352,7 +287,7 @@ class PluginMediaTest {
     }
 
     @Test
-    fun a_transfer_still_running_when_its_plugin_goes_away_lets_go_of_the_centre() {
+    fun a_transfer_still_running_when_its_plugin_goes_away_lets_go_of_the_centre_and_never_settles() {
         val plugin = granted()
         val message = withMedia()
         TestApp.fileLoader(0).paths[message.id] = File(scratch, "note.txt")
@@ -372,26 +307,10 @@ class PluginMediaTest {
 
         PluginMedia.detach(plugin.session!!)
         settle()
-        assertEquals(
-            0,
-            pluginObserverCount(centre()),
-            "a transfer only settles from an event, and there is no event for one stock never started",
-        )
-    }
+        assertEquals(0, pluginObserverCount(centre()), "a transfer stock never started has no event to settle it")
 
-    @Test
-    fun a_plugin_that_came_back_is_not_settled_by_the_transfer_the_one_before_it_started() {
-        val plugin = granted()
-        val message = withMedia()
-        val target = File(scratch, "note.txt")
-        TestApp.fileLoader(0).paths[message.id] = target
-        assertNull(write(plugin, PluginWrites.OP_DOWNLOAD_MEDIA, JSONObject(), arrayOf(messageWire(message))))
-        settle()
-
-        PluginMedia.detach(plugin.session!!)
-        settle()
-        target.writeText("hello world")
-        centre().postOnUi(NotificationCenter.fileLoaded, fileNameOf(message), target)
+        File(scratch, "note.txt").writeText("hello world")
+        centre().postOnUi(NotificationCenter.fileLoaded, readDocumentAttachName(message), File(scratch, "note.txt"))
         settle()
         assertTrue(plugin.js.writeResults.isEmpty(), "a dropped transfer answered anyway")
     }

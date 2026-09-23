@@ -1,25 +1,8 @@
 // ==InuPlugin==
 // @name         visibility test
-// @author       teidesu
-// @version      1.0
 // @description  asserts onAppVisibilityChange reports transitions only and that timers throttle while hidden
 // @grant        onAppVisibilityChange
-// @plugin-api   1
-// @platform     android
 // ==/InuPlugin==
-
-function pass(label, detail) {
-  console.log(detail === undefined ? `PASS ${label}` : `PASS ${label}: ${detail}`)
-}
-
-function fail(label, detail) {
-  console.error(`FAIL ${label}: ${detail}`)
-}
-
-function check(label, ok, detail) {
-  if (ok) pass(label, detail)
-  else fail(label, detail)
-}
 
 const PERIOD_MS = 100
 let ticks = 0
@@ -42,7 +25,7 @@ const disposer = inu.onAppVisibilityChange((mode) => {
   if (last !== null) check('transitions only: never the same state twice', mode !== last, `${last} -> ${mode}`)
   last = mode
 
-  // only the coarse pair says the app has no ui, and only it throttles the timer wheel
+  // only the coarse pair throttles the timer wheel
   if (mode === 'background') {
     coarse++
     hiddenAt = performance.now()
@@ -51,8 +34,7 @@ const disposer = inu.onAppVisibilityChange((mode) => {
     coarse++
     const hiddenFor = performance.now() - hiddenAt
     const ran = ticks - ticksAtHide
-    // hidden, the whole wheel gets one tick a second (one a minute past five), and everything due
-    // at it fires together - so a 100ms interval that ran ten times a second is the regression
+    // hidden, the wheel ticks once a second (once a minute past five) and fires everything due together
     const allowed = Math.ceil(hiddenFor / 1000) + 2
     check(
       `a ${PERIOD_MS}ms interval is throttled while the app is hidden`,

@@ -3,25 +3,19 @@ package desu.inugram.helpers.plugins.telegram
 import desu.inugram.helpers.plugins.PluginLog
 import desu.inugram.helpers.plugins.SessionResource
 import desu.inugram.core.plugins.PluginRefusal
-import android.os.SystemClock
-import desu.inugram.core.plugins.BoundedIdentitySet
 import desu.inugram.core.plugins.BoundedLru
 import desu.inugram.core.plugins.DispatchDeadline
 import desu.inugram.core.plugins.GrantCatalog
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.core.plugins.ScopeMatch
-import desu.inugram.core.plugins.TlNames
-import desu.inugram.core.plugins.TlTables
 import desu.inugram.helpers.plugins.EngineDispatch
-import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.PluginManager
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.RpcListener
-import desu.inugram.helpers.plugins.tl.TlFilter
 import desu.inugram.helpers.plugins.tl.TlHandles
-import desu.inugram.helpers.plugins.tl.TlJson
-import java.util.Collections
+import desu.inugram.helpers.plugins.tl.TlNames
+import desu.inugram.core.plugins.TlTables
 import java.util.IdentityHashMap
 import java.util.concurrent.ConcurrentHashMap
 import java.util.regex.Pattern
@@ -44,26 +38,13 @@ import org.telegram.tgnet.RequestDelegateTimestamp
 import org.telegram.tgnet.TLObject
 import org.telegram.tgnet.TLRPC
 import org.telegram.tgnet.WriteToSocketDelegate
-import org.telegram.tgnet.tl.TL_update
 import org.telegram.ui.ChatActivity
 
-internal fun encodeRpcErrorWire(error: TLRPC.TL_error): String = PluginWire.encodeRpcError(error.code, error.text ?: "")
 
 /**
- * Connects `inu.interceptRpc` and `inu.invokeRpc` to stock requests. [PluginUpdates] owns
- * incoming updates; the two share [TlHandles] and queue rules.
- *
- * Chain operations run on [EngineDispatch.scheduler] without locks. [onNext] and [onComplete]
- * post work instead of reentering the engine inside a JNI upcall. Reentry would borrow the
- * runtime's `RefCell` twice and panic across JNI, aborting the process. Even two registrations
- * for one method can trigger this without the queue hop.
- *
- * Responses return to the app on [Utilities.stageQueue], where stock mutates pts/seq and runs
- * the delegate-less `Updates` tail through `processUpdates`.
- *
- * Interceptor handles are writable and expire with their scope. `invokeRpc` results are writable
- * and live with the plugin; the app does not read them, and `disableFree` transfers cleanup
- * to the handle table.
+ * Chain ops run on [EngineDispatch.scheduler]. [onNext]/[onComplete] post instead of reentering the
+ * engine inside a JNI upcall: reentry double-borrows the runtime's `RefCell` and aborts the process.
+ * Responses return on [Utilities.stageQueue], where stock mutates pts/seq.
  */
 object PluginRpc : SessionResource {
     private class Interceptor(
@@ -71,25 +52,15 @@ object PluginRpc : SessionResource {
         val callbackId: Int,
         val strict: Boolean,
         val scope: String,
-        /** presentation waits for the verdict up to its grace deadline */
         val filter: SendFilter?,
     )
 
     private class SendFilter(val text: Pattern?, val textIsSticky: Boolean, val isEdit: Boolean?) {
         fun matches(method: String, request: TLObject): Boolean {
             if (isEdit != null && isEdit != (method == "messages.editMessage")) return false
-            return matchesText(
-                when (request) {
-                    is TLRPC.TL_messages_sendMessage -> request.message
-                    is TLRPC.TL_messages_sendMedia -> request.message
-                    is TLRPC.TL_messages_sendMultiMedia -> request.multi_media.firstOrNull()?.message
-                    is TLRPC.TL_messages_editMessage -> request.message
-                    else -> null
-                }
-            )
+            return matchesText(collectTexts(request)?.firstOrNull()?.text)
         }
 
-        /** everything this can decide before the request exists, which is everything but the method */
         fun matchesSend(text: String?): Boolean = isEdit != true && matchesText(text)
 
         private fun matchesText(value: String?): Boolean {
@@ -113,7 +84,6 @@ object PluginRpc : SessionResource {
     private class OptimisticMessages(
         val account: Int,
         val messages: List<MessageObject>,
-        /** the draft this send is about to clear, when it has one, so a verdict can still clear it */
         val draft: DraftKey?,
     )
 
@@ -135,12 +105,8 @@ object PluginRpc : SessionResource {
     }
 
     /**
-     * one top-level dispatch's deadline, shared by its whole chain. Send-message chains get a
-     * longer budget because their promise is the user's visible pending send. The deadline is
-     * suspended while a request is really in flight, so a slow server is not charged to plugins.
-     *
-     * [SystemClock.uptimeMillis] because that is what `Handler.postDelayed` counts in: it does not
-     * advance in deep sleep, and any other clock would drift from the armed timer.
+     * suspended while a request is in flight, so server latency is not charged to plugins.
+     * uptimeMillis because that is what `Handler.postDelayed` counts in.
      */
     private class RpcChain(
         val scopeId: Long,
@@ -157,9 +123,9 @@ object PluginRpc : SessionResource {
         val stages = ArrayList<Long>()
         val deadline = DispatchDeadline(EngineDispatch.scheduler, deadlineMillis) { expireChain(scopeId) }
         var completed = false
-        // the passthrough response stock's free was suppressed for; that chain's finalize is the only consumer
+        // response whose stock free was suppressed; freed only by this chain's finalize
         var ownedResponse: TLObject? = null
-        // what that chain decided, until its finalize reads it. plugin queue only
+        // plugin queue only
         var verdict: ChainVerdict? = null
 
         var passthrough: PassthroughResult? = null
@@ -168,18 +134,15 @@ object PluginRpc : SessionResource {
 
         var sent: SentRequest? = null
 
-        /** what `message.setMedia()` named, put on the local message instead of a passthrough */
         var media: PluginSendMorph.Media? = null
     }
 
     /**
-     * Stock frees request NativeByteBuffers after serialization, including `upload.saveFilePart`
-     * and secret-chat payloads. Suppress that free while stages may retain request views across
-     * `await next()`, then free once the chain retires.
+     * stock frees request NativeByteBuffers after serialization, including `upload.saveFilePart`.
+     * Suppressed while stages may hold request views across `await next()`, freed when the chain retires.
      *
-     * [leased] survives retries: CONNECTION_NOT_INITED resends the same object with a new token
-     * without calling the delegate. Release only on response or native cancellation, when no
-     * further send can occur.
+     * [leased] survives retries: CONNECTION_NOT_INITED resends the same object with a new token and no
+     * delegate call. Released only on response or native cancellation.
      */
     private class SentRequest(val request: TLObject) {
         var leased = true
@@ -200,19 +163,11 @@ object PluginRpc : SessionResource {
 
     private const val GUID_MEMORY = 512
     private const val SYNTHETIC_CODE = -1000
-    /**
-     * what a verdict is dressed as for the app, whose request delegate has no other vocabulary for
-     * "this send did not happen". Minted where the app is answered, and read by nothing: the error
-     * carries a verdict to the composer's error path, it does not name one.
-     */
+    /** only routes a verdict to the composer's error path; nothing matches on this text */
     private const val MORPHED_TEXT = "MESSAGE_MORPHED_BY_PLUGIN"
     private const val DROPPED_TEXT = "MESSAGE_DROPPED_BY_PLUGIN"
 
-    /**
-     * how long an armed verdict waits for the error path it was armed for. Nothing but a queue hop
-     * stands between the two, so this is only reached when that path never ran at all, and it is
-     * what keeps neither the entry nor a `setMedia` copy waiting on a send that is not coming.
-     */
+    /** only reached when the error path the verdict was armed for never runs */
     private const val VERDICT_TTL_MILLIS = 30_000L
     private const val TIMEOUT_TEXT = "INTERCEPTOR_TIMEOUT"
     private const val ABANDONED_TEXT = "INTERCEPTOR_ABANDONED"
@@ -221,32 +176,23 @@ object PluginRpc : SessionResource {
     internal val ABANDONED_WIRE = PluginWire.encodeRpcError(SYNTHETIC_CODE, ABANDONED_TEXT)
     private val CANCELLED_WIRE = PluginWire.encodeRpcError(SYNTHETIC_CODE, CANCELLED_TEXT)
 
-    // fast-path gate read from arbitrary stageQueue threads before paying for a globalQueue hop
     @Volatile private var hasInterceptors = false
 
-    // published copy-on-write, so reads off globalQueue need no synchronization
     @Volatile private var interceptorsByMethod: Map<String, List<Interceptor>> = emptyMap()
 
-    // its own space: rust keeps interceptRpc and interceptUpdate dispatches in different tables
+    // rust keeps interceptRpc and interceptUpdate dispatch ids in separate tables
     private var nextDispatchId = 1L
     private val pendingDispatches = HashMap<Long, PendingDispatch>()
     private val chains = HashMap<Long, RpcChain>()
 
-    // [tokenKey] -> scope id, so an app-side cancel can find the chain still walking for that request
     private val chainsByToken = HashMap<Long, Long>()
-    // [tokenKey] -> guid, for binds landing before there was a chain to hang them on: the app binds
-    // synchronously, usually before the request reached `sendRequestInternal`. bounded so a burst
-    // of requests cannot grow it while their chains wait to be armed
+    // the app binds synchronously, usually before the request reaches `sendRequestInternal`.
+    // bounded so a burst of requests waiting to be armed cannot grow it
     private val guidByToken = BoundedLru<Long, Int>(GUID_MEMORY)
 
     /**
-     * what a chain decided about the request itself, as opposed to what it answered for it.
-     *
-     * A *response* is a middleware's to substitute - catching what `next()` rejected with and
-     * answering something else is what middleware is for. A *verdict* is not: it is the decision
-     * that this send is not happening, and by the time it is made the app already owes the local
-     * message an unwind. So it is recorded on the chain where it is decided and read where the app
-     * is answered, and a stage above the deciding one cannot revoke it by swallowing a rejection.
+     * a middleware may substitute a response, not a verdict: once a verdict is made the app owes the
+     * local message an unwind, so an outer stage must not revoke it by swallowing the rejection
      */
     private sealed interface ChainVerdict {
         object Dropped : ChainVerdict
@@ -254,33 +200,20 @@ object PluginRpc : SessionResource {
         class TakenOver(val media: PluginSendMorph.Media) : ChainVerdict
     }
 
-    /**
-     * [sendKey] -> the verdict the composer's error path owes a local message. Armed as the app is
-     * answered and consumed by [handleDroppedSend]; what the error itself says is only how that
-     * path is reached, never how it decides.
-     */
     private val sendVerdicts = ConcurrentHashMap<Long, ChainVerdict>()
 
-    /** every account mints its local ids out of the same descending sequence, so an id alone names two messages */
-    private fun sendKey(account: Int, id: Int): Long = (account.toLong() shl 32) or (id.toLong() and 0xffffffffL)
+    /** all accounts mint local ids from the same sequence */
+    private fun accountKey(account: Int, id: Int): Long = (account.toLong() shl 32) or (id.toLong() and 0xffffffffL)
 
-    // requests we re-issued (chain passthrough / invokeRpc), which must not re-enter maybeIntercept.
-    // a *lease* rather than something the first send consumes: on CONNECTION_NOT_INITED stock
-    // re-sends the very object with a fresh token and no delegate call, so a lease ending at the
-    // first send would let the retry start a second chain over a request the first still holds -
-    // every middleware twice, and the nested finalize freeing the response the outer one will walk.
+    // requests we re-issued, kept out of maybeIntercept. A lease, not consumed by the first send: on
+    // CONNECTION_NOT_INITED stock re-sends the same object with a new token and no delegate call.
     // counted, because one instance can be leased twice
     private val bypassed = IdentityHashMap<TLObject, Int>()
 
-    /** read on every request stock makes, so the lock behind it is only taken once one can matter */
     @Volatile private var hasBypass = false
     private val optimisticMessagesByRequest = IdentityHashMap<TLObject, OptimisticMessages>()
 
-    /**
-     * whether [optimisticMessagesByRequest] holds anything. A binding made while a chain was
-     * registered is still owed its release when the chain is gone by the time stock sends, so
-     * [maybeIntercept]'s fast path reads this too.
-     */
+    /** a binding can outlive its chain and is still owed a release, so the fast path reads this too */
     @Volatile private var hasOptimistic = false
 
     @JvmStatic
@@ -289,11 +222,7 @@ object PluginRpc : SessionResource {
 
     @JvmStatic
     fun bindOptimisticMessages(request: TLObject, account: Int, messages: ArrayList<MessageObject>) {
-        // as in [maybeIntercept]: with nothing running there is no lease to claim, no send held and
-        // no chain to bind to, so the name lookup below is not worth doing
         if (!hasInterceptors && !hasBypass) return
-        // a send a plugin asked the composer to draw is still a plugin's own write, so it takes the
-        // same lease [sendWithoutInterceptors] takes, released when that send settles
         if (messages.any { PluginOptimisticSend.claimRequest(request, it) }) markBypassed(request)
         val method = TlNames.classNameToTlName(request.javaClass)
         if (interceptorsByMethod[method].orEmpty().none { it.scope == SEND_SCOPE && it.filter?.matches(method, request) != false }) {
@@ -307,30 +236,26 @@ object PluginRpc : SessionResource {
     }
 
     /**
-     * stock clears the dialog's draft a few lines after the call this is made from, so this is the
-     * last moment a draft that is about to go can still be seen. Only its key is kept: what a
-     * verdict owes the server is an empty draft, never the one the user typed.
+     * stock clears the draft right after this call. Only the key is kept: a verdict owes the server an
+     * empty draft, never the typed one.
      */
     private fun draftAwaitingClear(account: Int, message: MessageObject): DraftKey? {
         val dialogId = message.dialogId
         if (dialogId == 0L) return null
-        val threadId = draftThreadOf(message.messageOwner)
+        val threadId = getDraftThreadId(message.messageOwner)
         val existing = MediaDataController.getInstance(account).getDraft(dialogId, threadId) ?: return null
         return if (existing is TLRPC.TL_draftMessageEmpty) null else DraftKey(dialogId, threadId)
     }
 
-    /** bit 1 of a reply header is what carries the topic's root id, which is the draft's own thread */
-    private fun draftThreadOf(message: TLRPC.Message?): Long {
+    /** reply header flag bit 1 carries the topic root id */
+    private fun getDraftThreadId(message: TLRPC.Message?): Long {
         val replyTo = message?.reply_to ?: return 0L
         return if ((replyTo.flags and 2) != 0) replyTo.reply_to_top_id.toLong() else 0L
     }
 
     /**
-     * stock clears the local draft as it hands a send to the network, but the server's own copy
-     * goes with the `clear_draft` flag on the request itself - the one a verdict means never goes
-     * out. The re-send a takeover makes carries `clear_draft = false` too, stock reading a retry as
-     * a send whose draft went with the first attempt. So the server is told here instead, or the
-     * draft comes back on the next sync and the command the user sent reappears in the composer.
+     * the server draft is cleared by the request's `clear_draft`, which a verdict never sends, and a
+     * takeover re-send has `clear_draft = false`. Without this the draft returns on the next sync.
      */
     private fun clearServerDraft(account: Int, draft: DraftKey) {
         AndroidUtilities.runOnUIThread {
@@ -339,10 +264,6 @@ object PluginRpc : SessionResource {
         }
     }
 
-    /**
-     * whether a middleware could still claim a send the composer has only just minted, decided off
-     * what a [SendFilter] can read before there is a request: [PluginSendHold] parks a draw on it.
-     */
     internal fun maySendBeIntercepted(text: String?): Boolean {
         if (!hasInterceptors) return false
         return SEND_METHODS.any { method ->
@@ -352,13 +273,7 @@ object PluginRpc : SessionResource {
         }
     }
 
-    /**
-     * `message.setMedia()`: the chain this dispatch belongs to puts the media on its local message
-     * instead of sending the request it is walking. Refused when the dispatch is not this plugin's
-     * own live one, when there is no local message to put it on - a send a plugin built itself has
-     * none - and when that message is itself the answer to a `setMedia`, which is what stops a
-     * middleware answering its own re-send forever.
-     */
+    /** a message that is itself a `setMedia` answer is refused, or a middleware could answer its own re-send forever */
     internal fun holdMedia(session: PluginSession, dispatchId: Long, media: PluginSendMorph.Media) {
         val pending = pendingDispatches[dispatchId]
         if (pending == null || pending.session !== session) {
@@ -371,12 +286,10 @@ object PluginRpc : SessionResource {
         if (PluginSendMorph.isMorphed(message)) {
             PluginWire.refuse("unsupported", "setMedia: this message already took its media from a plugin")
         }
-        // a second setMedia replaces the first, whose copy nothing will claim
         budget.media?.upload?.discard()
         budget.media = media
     }
 
-    /** whether a chain's verdict, rather than a failed send, is what this message is being answered with */
     @JvmStatic
     fun handleDroppedSend(
         helper: SendMessagesHelper,
@@ -385,7 +298,7 @@ object PluginRpc : SessionResource {
         scheduled: Boolean,
     ): Boolean {
         if (sendVerdicts.isEmpty()) return false
-        val verdict = sendVerdicts.remove(sendKey(account, message.id)) ?: return false
+        val verdict = sendVerdicts.remove(accountKey(account, message.id)) ?: return false
         return when (verdict) {
             is ChainVerdict.Dropped -> {
                 removeDroppedMessage(helper, account, message, scheduled)
@@ -395,10 +308,9 @@ object PluginRpc : SessionResource {
         }
     }
 
-    /** the same for an edit, whose unwind is the composer putting the message back as it was */
     @JvmStatic
     fun handleDroppedEdit(account: Int, messageId: Int): Boolean =
-        !sendVerdicts.isEmpty() && sendVerdicts.remove(sendKey(account, messageId)) is ChainVerdict.Dropped
+        !sendVerdicts.isEmpty() && sendVerdicts.remove(accountKey(account, messageId)) is ChainVerdict.Dropped
 
     @JvmStatic
     fun handleDroppedSends(
@@ -407,12 +319,11 @@ object PluginRpc : SessionResource {
         messages: ArrayList<MessageObject>,
         scheduled: Boolean,
     ): Boolean =
-        // `count`, not `any`: every message owed a verdict must get one, short-circuiting skips the rest
+        // `count`, not `any`: every message owed a verdict must get one
         !sendVerdicts.isEmpty() &&
             messages.count { handleDroppedSend(helper, account, it.messageOwner, scheduled) } > 0
 
-    /** which chat list a local message belongs to, the way stock picks one before it touches storage */
-    private fun chatModeOf(message: TLRPC.Message, scheduled: Boolean): Int = when {
+    private fun getChatMode(message: TLRPC.Message, scheduled: Boolean): Int = when {
         scheduled -> ChatActivity.MODE_SCHEDULED
         MessageObject.isWelcomeMessage(message) -> ChatActivity.MODE_WELCOME_MESSAGES
         message.quick_reply_shortcut_id != 0 || message.quick_reply_shortcut != null -> ChatActivity.MODE_QUICK_REPLIES
@@ -420,7 +331,7 @@ object PluginRpc : SessionResource {
     }
 
     private fun removeDroppedMessage(helper: SendMessagesHelper, account: Int, message: TLRPC.Message, scheduled: Boolean) {
-        val mode = chatModeOf(message, scheduled)
+        val mode = getChatMode(message, scheduled)
         MessagesController.getInstance(account).deleteMessages(
             arrayListOf(message.id),
             null,
@@ -436,7 +347,7 @@ object PluginRpc : SessionResource {
     }
 
     fun listenerFor(session: PluginSession): RpcListener {
-        // snapshot: the account-less `inu.invokeRpc` names no account, and a plugin's requests must not jump slots on a switch
+        // snapshot: a plugin's requests must not jump accounts on a switch
         val invokeAccount = UserConfig.selectedAccount
         val onHost = EngineDispatch.createHostDispatcher { session.isCurrent() }
         return object : RpcListener {
@@ -469,11 +380,8 @@ object PluginRpc : SessionResource {
     }
 
     /**
-     * drops the plugin's interceptors and fails any dispatch waiting on its own middleware, so
-     * [maybeIntercept]'s finalize-exactly-once contract still holds. The plugin's handle table
-     * outlives this and is released by [TlHandles.releaseAll], since the abandons below reject
-     * inside this plugin too and a continuation touching its own request view must not find every
-     * field expired.
+     * the handle table is released later by [TlHandles.releaseAll]: abandoned continuations may still
+     * read their own request view
      */
     override fun detach(session: PluginSession) {
         publishInterceptors(
@@ -481,7 +389,7 @@ object PluginRpc : SessionResource {
                 .mapValues { (_, list) -> list.filter { it.session !== session } }
                 .filterValues { it.isNotEmpty() }
         )
-        // ascending dispatch id is chain order, so each chain's shallowest stage takes the ones below it down
+        // ascending dispatch id is chain order
         val stale = pendingDispatches.filterValues { it.session === session }.keys.sorted()
         for (dispatchId in stale) {
             val pending = pendingDispatches.remove(dispatchId) ?: continue
@@ -505,10 +413,8 @@ object PluginRpc : SessionResource {
         requestToken: Int,
         currentAccount: Int,
     ): Boolean {
-        // nothing to intercept, leased or bound: the app's own request path costs three volatile
-        // reads rather than the locks below
         if (!hasInterceptors && !hasBypass && !hasOptimistic) return false
-        // a leased request is ours however the entry got here, including stock's own re-send
+        // includes stock's own re-send of a leased request
         if (isBypassed(request)) return unintercepted(request)
         if (!hasInterceptors) return unintercepted(request)
         val tlName = TlNames.classNameToTlName(request.javaClass)
@@ -518,38 +424,33 @@ object PluginRpc : SessionResource {
             ?: return unintercepted(request)
         val optimisticMessages = takeOptimisticMessages(request)
         val params = OriginalParams(flags, datacenterId, connectionType, immediate, requestToken, onQuickAck, onWriteToSocket)
-        val requestKey = tokenKey(currentAccount, requestToken)
+        val requestKey = accountKey(currentAccount, requestToken)
         EngineDispatch.scheduler.postRunnable {
             val scopeId = TlHandles.newScope()
-            // what a verdict on this chain unwinds: the messages the composer drew, or - for an
-            // edit, which draws none - the one the request names, read before a stage can rewrite it
+            // an edit draws no message: unwind the one the request names, read before a stage can rewrite it
             val unwound = optimisticMessages?.messages?.map { it.id }
                 ?: listOfNotNull((request as? TLRPC.TL_messages_editMessage)?.id)
             lateinit var operation: RpcChain
             val finalize: (TLObject?, TLRPC.TL_error?, Long) -> Unit = finalize@{ chainResponse, chainError, responseTime ->
                 if (operation.completed) return@finalize
                 operation.completed = true
-                // the chain's own decision, told to the app here rather than through the value the
-                // stages above answered with - which is theirs to substitute, and this is not
                 val verdict = operation.verdict
                 operation.verdict = null
                 armVerdict(optimisticMessages?.account ?: currentAccount, unwound, verdict)
                 if (verdict != null) optimisticMessages?.draft?.let { clearServerDraft(optimisticMessages.account, it) }
                 val response = if (verdict == null) chainResponse else null
-                // the composer's error path is the one that unwinds a local send, and it needs an error to run
+                // the composer's error path unwinds a local send and needs an error to run
                 val error = when (verdict) {
                     null -> chainError
                     is ChainVerdict.Dropped -> syntheticError(DROPPED_TEXT)
                     is ChainVerdict.TakenOver -> syntheticError(MORPHED_TEXT)
                 }
-                // a drop is the one outcome whose local message is about to be deleted rather than drawn
                 optimisticMessages?.let { PluginSendHold.settle(it.account, it.messages, verdict !is ChainVerdict.Dropped) }
-                // earns its keep when the *first* stage's plugin is stopped, the ones below it still running
                 collapseChain(scopeId, ABANDONED_WIRE)
                 chainsByToken.remove(requestKey)
                 val owned = operation.ownedResponse
                 operation.ownedResponse = null
-                // stageQueue, where processUpdates() is documented to run and mutates pts/seq without locking
+                // processUpdates() mutates pts/seq without locking
                 Utilities.stageQueue.postRunnable {
                     // mirrors the stock else-if in sendRequestInternal's listen() callback
                     when {
@@ -566,7 +467,7 @@ object PluginRpc : SessionResource {
             chainsByToken[requestKey] = scopeId
             // armed after the queue hop, so an app-side backlog isn't charged to the plugins
             operation = RpcChain(scopeId, connectionsManager, chain, tlName, request, optimisticMessages, params, currentAccount, finalize)
-            operation.guid = takeGuid(requestKey)
+            operation.guid = guidByToken.remove(requestKey) ?: 0
             chains[scopeId] = operation
             operation.deadline.resume()
             dispatchChain(operation, 0, request, finalize)
@@ -574,7 +475,6 @@ object PluginRpc : SessionResource {
         return true
     }
 
-    /** no chain will walk this request, so a draw parked on the chance of one is owed its release */
     private fun unintercepted(request: TLObject): Boolean {
         takeOptimisticMessages(request)?.let { PluginSendHold.release(it.account, it.messages) }
         return false
@@ -586,24 +486,19 @@ object PluginRpc : SessionResource {
         }
 
     /**
-     * the token only reaches native once the passthrough sends it, so stock's `cancelRequest` finds
-     * nothing and, with the budget suspended, nothing would ever settle the chain. The app is
-     * deliberately not answered - stock drops a cancelled request's delegate too.
-     *
-     * Called from inside `cancelRequest`'s own stageQueue runnable, so it is ordered behind the
-     * `sendRequestInternal` the app's `sendRequest` posted there: a cancel issued the moment the
-     * token was handed over would otherwise find no chain armed, and the passthrough would then
-     * send a request the app cancelled.
+     * the token reaches native only once the passthrough sends it, so stock's `cancelRequest` finds
+     * nothing. The app is not answered: stock drops a cancelled request's delegate too.
+     * Runs inside `cancelRequest`'s stageQueue runnable, ordered behind the app's `sendRequestInternal`.
      */
     @JvmStatic
     fun onRequestCancelled(account: Int, requestToken: Int, notifyServer: Boolean, onCancelled: Runnable?) {
         if (!hasInterceptors) return
         EngineDispatch.scheduler.postRunnable {
-            cancelChain(tokenKey(account, requestToken), notifyServer, onCancelled)
+            cancelChain(accountKey(account, requestToken), notifyServer, onCancelled)
         }
     }
 
-    /** native only knows the requests whose chain already passed through; the ones still walking are cancelled here */
+    /** native only knows requests whose chain already passed through */
     @JvmStatic
     fun onRequestsCancelledForGuid(account: Int, guid: Int) {
         if (!hasInterceptors || guid == 0) return
@@ -612,24 +507,24 @@ object PluginRpc : SessionResource {
             val keys = chainsByToken.keys.filter { key ->
                 key ushr 32 == account64 && chains[chainsByToken[key]]?.guid == guid
             }
-            // notifying is what native's own guid cancel does (cancelRequestInternal(_, _, true, ...))
+            // native's own guid cancel notifies too (cancelRequestInternal(_, _, true, ...))
             for (key in keys) cancelChain(key, true, null)
         }
     }
 
-    /** stock binds the guid straight to native, which for an intercepted request is a token native has never seen */
+    /** stock binds the guid in native, which never saw an intercepted request's token */
     @JvmStatic
     fun onRequestBoundToGuid(account: Int, requestToken: Int, guid: Int) {
         if (!hasInterceptors || guid == 0) return
-        val key = tokenKey(account, requestToken)
+        val key = accountKey(account, requestToken)
         EngineDispatch.scheduler.postRunnable {
             val budget = chainsByToken[key]?.let { chains[it] }
             if (budget == null) {
-                rememberGuid(key, guid)
+                guidByToken.put(key, guid)
                 return@postRunnable
             }
             budget.guid = guid
-            // the passthrough raced it; re-issue behind the send, on the queue it was posted to
+            // the passthrough raced it; re-issue behind the send
             if (budget.sent != null) {
                 Utilities.stageQueue.postRunnable {
                     ConnectionsManager.native_bindRequestToGuid(account, requestToken, guid)
@@ -639,10 +534,8 @@ object PluginRpc : SessionResource {
     }
 
     /**
-     * answers for the cancellation callback stock could not place: `listenCancel` hangs it off the
-     * native callbacks the passthrough registers, so a request that never got that far leaves the
-     * caller waiting forever (`FileLoadOperation` counts them down before a download is cancelled).
-     * Which of the three cases this is can only be decided on stageQueue.
+     * stock's `listenCancel` hangs the callback off native callbacks the passthrough registers, so an
+     * unsent request would leave the caller waiting forever (`FileLoadOperation` counts them down)
      */
     private fun cancelChain(key: Long, notifyServer: Boolean, onCancelled: Runnable?) {
         val scopeId = chainsByToken.remove(key) ?: return
@@ -656,11 +549,10 @@ object PluginRpc : SessionResource {
         }
         val sent = budget?.sent
         if (sent == null) {
-            // no send was even posted, and the collapse means none can follow
             onCancelled?.let { Utilities.stageQueue.postRunnable(it) }
             return
         }
-        // native has the request or is about to be told not to want it; the delegate that would have ended the lease is not coming
+        // the delegate that would end the lease is not coming
         endBypassLease(sent)
         val connectionsManager = budget.connectionsManager
         val requestToken = key.toInt()
@@ -669,25 +561,12 @@ object PluginRpc : SessionResource {
                 onCancelled?.run()
                 return@postRunnable
             }
-            // the send won the race with stock's own cancel. re-issued now the token is real -
-            // redundant if the send had long happened, but cancelling a token native holds is
-            // idempotent and the two are indistinguishable from here
+            // the send won the race with stock's cancel; cancelling a token native holds is idempotent
             connectionsManager.cancelRequest(requestToken, notifyServer, onCancelled)
         }
     }
 
-    private fun tokenKey(account: Int, requestToken: Int): Long =
-        (account.toLong() shl 32) or (requestToken.toLong() and 0xffffffffL)
-
-    private fun rememberGuid(key: Long, guid: Int) = guidByToken.put(key, guid)
-
-    private fun takeGuid(key: Long): Int = guidByToken.remove(key) ?: 0
-
-    /**
-     * [scope] empty is the raw form, where each method is its own grant scope; otherwise it is the
-     * api the engine gated on and [methods] is that api's fixed list. The takeover refusal applies
-     * to both: it is a property of the method, not of how it was reached.
-     */
+    /** empty [scope] is the raw form, where each method is its own grant scope */
     private fun registerIntercept(
         session: PluginSession,
         methods: Array<String>,
@@ -733,9 +612,7 @@ object PluginRpc : SessionResource {
             return PluginWire.encodePluginError("invalid-argument", "invalid send filter: ${e.message ?: e.toString()}")
         }
         val updated = interceptorsByMethod.toMutableMap()
-        // one registration is one stage however often its list names a method - a repeat would run
-        // the middleware twice per request off a single `next()`, against one budget, and
-        // `releaseScope` twice. Same reason the update registrations take `types.toSet()`
+        // a repeated method would run the middleware twice per `next()` and release the scope twice
         for (method in methods.toSet()) {
             updated[method] = (updated[method].orEmpty()) + Interceptor(session, callbackId, strict, scope, filter)
         }
@@ -755,11 +632,7 @@ object PluginRpc : SessionResource {
         EngineDispatch.scheduler.postRunnable { publishInterceptors(interceptorsByMethod) }
     }
 
-    /**
-     * chain order is derived here on every publish rather than being registration order, since
-     * `common.d.ts` promises the order the user drags. The sort is stable, so a plugin registering
-     * twice keeps its own stages in registration order.
-     */
+    /** `common.d.ts` promises the user's drag order. Stable sort keeps one plugin's stages in registration order */
     private fun publishInterceptors(updated: Map<String, List<Interceptor>>) {
         val order = PluginManager.orderIndex()
         interceptorsByMethod = updated.mapValues { (_, list) ->
@@ -767,8 +640,6 @@ object PluginRpc : SessionResource {
         }
         hasInterceptors = interceptorsByMethod.isNotEmpty()
     }
-
-    internal fun releasePluginSend(request: TLObject) = releaseBypass(request)
 
     private fun markBypassed(request: TLObject) {
         synchronized(bypassed) {
@@ -780,7 +651,7 @@ object PluginRpc : SessionResource {
     private fun isBypassed(request: TLObject): Boolean =
         synchronized(bypassed) { bypassed.containsKey(request) }
 
-    private fun releaseBypass(request: TLObject) {
+    internal fun releaseBypass(request: TLObject) {
         synchronized(bypassed) {
             val count = bypassed[request] ?: return
             if (count > 1) bypassed[request] = count - 1 else bypassed.remove(request)
@@ -789,10 +660,8 @@ object PluginRpc : SessionResource {
     }
 
     /**
-     * a request the *plugin* originated, kept out of every chain by the same lease [invokeRpc]
-     * takes: a plugin that rewrites sends and a plugin that sends would otherwise be an infinite
-     * loop. Held until the delegate answers, which is what proves stock cannot re-send this
-     * instance.
+     * plugin-originated requests skip every chain, or a rewriting plugin and a sending plugin loop.
+     * The lease holds until the delegate answers, after which stock cannot re-send this instance.
      */
     internal fun sendWithoutInterceptors(
         account: Int,
@@ -814,8 +683,8 @@ object PluginRpc : SessionResource {
     }
 
     /**
-     * refused regardless of grants: install-time validation only sees the scopes a grant *names*,
-     * so an unscoped `@grant invokeRpc` would otherwise reach `auth.exportLoginToken`.
+     * install-time validation only sees the scopes a grant names, so an unscoped `invokeRpc` grant
+     * would otherwise reach `auth.exportLoginToken`
      */
     private fun takeoverRefusal(permissions: desu.inugram.core.plugins.PluginPermissions, method: String): String? {
         if (!GrantCatalog.isTakeoverMethod(method)) return null
@@ -823,7 +692,6 @@ object PluginRpc : SessionResource {
         return PluginWire.encodePluginError("forbidden", "'$method' is an account-takeover method and is never available to plugins")
     }
 
-    /** what every `invokeRpc`-shaped call is gated on, in order: a takeover method stays refused whatever grant named it */
     private fun invokeRefusal(session: PluginSession, tlName: String): String? {
         takeoverRefusal(session.permissions, tlName)?.let { return it }
         if (!session.permissions.allows("invokeRpc", tlName, ScopeMatch.EXACT)) {
@@ -839,18 +707,14 @@ object PluginRpc : SessionResource {
         finalize: (TLObject?, TLRPC.TL_error?, Long) -> Unit,
     ) {
         if (index >= operation.chain.size) {
-            // the chain is gone, so the app has already been answered - or, for a cancel,
-            // deliberately not. Sending anyway would also strand this [SentRequest]: nothing holds
-            // it, so the collapse could neither cancel it, end its lease, nor free the request
+            // the app was already answered (or deliberately not, on cancel), and nothing could free this send
             val armed = chains[operation.scopeId] ?: return
             val media = armed.media
-            // the caption is the send's own text as the chain left it, which is where a media request carries one
-            if (media != null) captionOf(request)?.let { (text, entities) ->
-                media.caption = text
-                media.entities = entities
+            if (media != null) collectTexts(request)?.firstOrNull()?.let {
+                media.caption = it.text
+                media.entities = it.entities
             }
             if (media != null && armed.optimisticMessages?.messages?.size == 1) {
-                // the media moves to the verdict, so a collapse no longer owes its copy a delete
                 armed.media = null
                 armed.verdict = ChainVerdict.TakenOver(media)
                 finalize(null, null, operation.connectionsManager.currentTimeMillis)
@@ -860,11 +724,9 @@ object PluginRpc : SessionResource {
             val sent = SentRequest(request)
             armed.sent = sent
             sendPassthrough(operation.connectionsManager, operation.account, sent, operation.params, armed.guid, armed.optimisticMessages) { response, error, responseTime ->
-                // whatever it answered, this request cannot reach sendRequestInternal again
                 endBypassLease(sent)
                 val budget = chains[operation.scopeId]
                 if (budget == null) {
-                    // the chain collapsed while the request was out, so nothing will consume this response
                     releaseUnowned(response)
                     return@sendPassthrough
                 }
@@ -906,14 +768,12 @@ object PluginRpc : SessionResource {
     }
 
     /**
-     * abandons every stage deepest first, dropping each from [pendingDispatches] *before* telling
-     * its engine, so a rejection continuation re-entering [onNext]/[onComplete] finds nothing. Only
-     * once all are abandoned are the scope's handles invalidated - the other order leaves that same
-     * continuation reading handle-expired off every field of its own request.
+     * deepest first, each removed from [pendingDispatches] before its engine is told, so a rejection
+     * continuation finds nothing. Handles are released only after all are abandoned, or that
+     * continuation reads handle-expired off its own request.
      */
     private fun collapseChain(scopeId: Long, reasonWire: String): RpcChain? {
         val budget = chains.remove(scopeId) ?: return null
-        // a setMedia the chain never reached the end of: its copy is owned by nothing else
         budget.media?.upload?.discard()
         budget.media = null
         budget.deadline.cancel()
@@ -921,28 +781,20 @@ object PluginRpc : SessionResource {
             val pending = pendingDispatches.remove(dispatchId) ?: continue
             pending.session.takeIf { it.isCurrent() }?.engine?.abandonDispatch(dispatchId, reasonWire)
         }
-        // covers handles stashed across an await; each stage minted into its own plugin's table
         for (interceptor in budget.chain) interceptor.session.tl.releaseScope(scopeId)
-        // the free stock does the instant it has serialized a request, deferred to here because no
-        // view can read it any more. Keyed on the chain, not the send: a stage that short-circuits
-        // owes the free too. On stageQueue, which orders it behind a send this chain may still have
-        // queued there - freeing from the plugin queue could hand the buffers back mid-serializeToStream.
-        // The lease is deliberately not dropped with it: a collapse does not end the flight
+        // stock's deferred free of the serialized request. On stageQueue, behind any send this chain queued
+        // there, or the buffers go back mid-serializeToStream. The lease stays: a collapse doesn't end the flight
         budget.sent?.cancelled = true
-        // a middleware may have handed next() a request it built, and that is the instance disableFree went on
+        // a middleware may pass next() its own request, and disableFree went on that instance
         val sent = budget.sent?.request?.takeIf { it !== budget.request }
         Utilities.stageQueue.postRunnable {
-            budget.request.disableFree = false
-            budget.request.freeResources()
-            sent?.let {
-                it.disableFree = false
-                it.freeResources()
-            }
+            releaseUnowned(budget.request)
+            releaseUnowned(sent)
         }
         return budget
     }
 
-    /** settling a stage answers *upward*, so without this the ones below keep advancing and the real request still goes out */
+    /** settling a stage answers upward; the stages below would keep advancing to the real send */
     private fun abandonBelow(dispatchId: Long, pending: PendingDispatch, reasonWire: String) {
         val budget = chains[pending.operation.scopeId] ?: return
         val at = budget.stages.indexOf(dispatchId)
@@ -956,12 +808,9 @@ object PluginRpc : SessionResource {
     }
 
     /**
-     * every stage but the deepest is parked in `await next()` and innocent, so only that one is
-     * named. The request *fails* rather than falling through: earlier stages have already rewritten
-     * it in place, and passing it on would make any stall a reliable interceptor bypass.
-     *
-     * Unless the passthrough already answered - a synthetic timeout there would report a committed
-     * `messages.sendMessage` as failed and earn a duplicate when the user re-sends.
+     * only the deepest stage is named; the rest wait in `await next()`. Fails rather than falling
+     * through: stages already rewrote the request, so passing it on would make a stall an interceptor bypass.
+     * Skipped once the passthrough answered, or a committed send is reported failed and duplicated on retry.
      */
     private fun expireChain(scopeId: Long) {
         val running = chains[scopeId]?.stages?.reversed()?.firstNotNullOfOrNull { pendingDispatches[it] }
@@ -978,11 +827,11 @@ object PluginRpc : SessionResource {
     private fun onNext(dispatchId: Long, requestWire: String): String? {
         val pending = pendingDispatches[dispatchId] ?: return PluginWire.encodePluginError("internal", "next(): unknown dispatch")
         val nextRequest = try {
-            decodeTlObject(pending.session.tl, requestWire)
+            pending.session.tl.objectFromWire(requestWire)
         } catch (e: Exception) {
             return decodeFailureWire("next()", e)
         }
-        // next() may rewrite fields but never the method: the app awaits that method's response type, and a swap would turn any interceptRpc grant into an unscoped send primitive
+        // never the method: the app awaits that method's response type, and a swap would make any interceptRpc grant an unscoped send
         val nextMethod = TlNames.classNameToTlName(nextRequest.javaClass)
         if (nextMethod != pending.operation.method) {
             return PluginWire.encodePluginError(
@@ -1000,7 +849,7 @@ object PluginRpc : SessionResource {
             ) { response, error, responseTime ->
                 pending.responseTime = responseTime
                 EngineDispatch.scheduler.postRunnable {
-                    // once the chain has collapsed this stage is gone, and completing it would mint into a released scope
+                    // completing a collapsed stage would mint into a released scope
                     if (pendingDispatches[dispatchId] !== pending) return@postRunnable
                     val result = PassthroughResult(response, error, responseTime)
                     pending.nextResult = result
@@ -1031,9 +880,7 @@ object PluginRpc : SessionResource {
             return
         }
         settleStage(dispatchId, pending) {
-            // read once, here, where the stage that authored it is known: a verdict is typed onto
-            // the chain rather than left as an error for the app to recognize by its text, which
-            // any stage above this one could have written for itself
+            // typed here, where the authoring stage is known: error text alone could be written by any outer stage
             if (isDropVerdict(error) && pending.operation.chain[pending.index].scope == SEND_SCOPE) {
                 chains[pending.operation.scopeId]?.verdict = ChainVerdict.Dropped
             }
@@ -1041,19 +888,14 @@ object PluginRpc : SessionResource {
         }
     }
 
-    /** what the send prelude answers a `drop` with, which only a send interceptor's own stage may say */
     private fun isDropVerdict(error: TLRPC.TL_error?): Boolean =
         error?.code == SYNTHETIC_CODE && error.text == DROPPED_TEXT
 
-    /**
-     * a verdict reaches the app as one entry per message it unwinds, which is what the composer's
-     * error path is handed. A [ChainVerdict.TakenOver] names exactly one by construction, the chain
-     * end having recorded it only for a send that drew a single message.
-     */
+    /** [ChainVerdict.TakenOver] is only recorded for a send that drew a single message */
     private fun armVerdict(account: Int, ids: List<Int>, verdict: ChainVerdict?) {
         if (verdict == null) return
         for (id in ids) {
-            val key = sendKey(account, id)
+            val key = accountKey(account, id)
             sendVerdicts[key] = verdict
             EngineDispatch.scheduler.postRunnable({ discardVerdict(sendVerdicts.remove(key)) }, VERDICT_TTL_MILLIS)
         }
@@ -1099,14 +941,13 @@ object PluginRpc : SessionResource {
     }
 
     /**
-     * drops the stage only once the posted settle runs: a due expiry timer sorts *ahead* of a
-     * runnable posted now, so a stage removed before the hop would be invisible to [collapseChain]
-     * and would answer the app a second time.
+     * a due expiry timer sorts ahead of a runnable posted now, so a stage removed before the hop would
+     * be invisible to [collapseChain] and answer the app twice
      */
     private fun settleStage(dispatchId: Long, pending: PendingDispatch, settle: () -> Unit) {
         EngineDispatch.scheduler.postRunnable {
             if (pendingDispatches.remove(dispatchId) !== pending) return@postRunnable
-            // a stage that called next() without awaiting it settles with live stages beneath it, which would keep walking toward the real send
+            // next() without await settles with live stages beneath it, which would keep walking toward the real send
             abandonBelow(dispatchId, pending, ABANDONED_WIRE)
             settle()
         }
@@ -1125,15 +966,13 @@ object PluginRpc : SessionResource {
         finalize: (TLObject?, TLRPC.TL_error?, Long) -> Unit,
     ) {
         syncOptimisticMessages(sent.request, optimisticMessages)
-        // the chain kept it, so what the composer minted is drawn - behind the rewrite above, which took the same ui hop
         optimisticMessages?.let { PluginSendHold.release(it.account, it.messages) }
         markBypassed(sent.request)
-        // stock frees the request the moment it has serialized it, gutting the writable view a parked stage holds. ownership moves to the chain; the free is in collapseChain
+        // stock frees the request after serializing it, gutting the view a parked stage holds. freed in collapseChain
         sent.request.disableFree = true
         Utilities.stageQueue.postRunnable {
-            // a cancel landed while this was queued: nothing will read the response, so it must not go out
             if (sent.cancelled) {
-                // serialized with every other lease transition; the delegate that normally does it will never run
+                // the delegate that normally ends the lease will never run
                 EngineDispatch.scheduler.postRunnable { endBypassLease(sent) }
                 return@postRunnable
             }
@@ -1142,7 +981,7 @@ object PluginRpc : SessionResource {
                 sent.request,
                 null,
                 RequestDelegateTimestamp { response, error, responseTime ->
-                    // stock frees the response the moment this delegate returns, handing upload.getFile's NativeByteBuffer back to a pool - gutting the object the chain is about to walk up
+                    // stock frees the response when this delegate returns, handing upload.getFile's NativeByteBuffer back to a pool
                     response?.disableFree = true
                     EngineDispatch.scheduler.postRunnable { finalize(response, error, responseTime) }
                 },
@@ -1154,29 +993,22 @@ object PluginRpc : SessionResource {
                 params.immediate,
                 params.requestToken,
             )
-            // native learns the token only now. stock's own bindRequestToGuid is skipped because it would come straight back through onRequestBoundToGuid
+            // stock's own bindRequestToGuid would come straight back through onRequestBoundToGuid
             if (guid != 0) ConnectionsManager.native_bindRequestToGuid(account, params.requestToken, guid)
         }
     }
 
-    /** where each of the send methods carries its text, so a caption survives whatever the chain made of it */
-    private fun captionOf(request: TLObject): Pair<String, ArrayList<TLRPC.MessageEntity>>? = when (request) {
-        is TLRPC.TL_messages_sendMessage -> request.message to ArrayList(request.entities)
-        is TLRPC.TL_messages_sendMedia -> request.message to ArrayList(request.entities)
-        is TLRPC.TL_messages_sendMultiMedia ->
-            request.multi_media.firstOrNull()?.let { it.message to ArrayList(it.entities) }
+    private fun collectTexts(request: TLObject): List<OptimisticText>? = when (request) {
+        is TLRPC.TL_messages_sendMessage -> listOf(OptimisticText(request.message, ArrayList(request.entities)))
+        is TLRPC.TL_messages_sendMedia -> listOf(OptimisticText(request.message, ArrayList(request.entities)))
+        is TLRPC.TL_messages_sendMultiMedia -> request.multi_media.map { OptimisticText(it.message, ArrayList(it.entities)) }
+        is TLRPC.TL_messages_editMessage -> listOf(OptimisticText(request.message, ArrayList(request.entities)))
         else -> null
     }
 
     private fun syncOptimisticMessages(request: TLObject, optimisticMessages: OptimisticMessages?) {
         optimisticMessages ?: return
-        val texts = when (request) {
-            is TLRPC.TL_messages_sendMessage -> listOf(OptimisticText(request.message, ArrayList(request.entities)))
-            is TLRPC.TL_messages_sendMedia -> listOf(OptimisticText(request.message, ArrayList(request.entities)))
-            is TLRPC.TL_messages_sendMultiMedia -> request.multi_media.map { OptimisticText(it.message, ArrayList(it.entities)) }
-            is TLRPC.TL_messages_editMessage -> listOf(OptimisticText(request.message, ArrayList(request.entities)))
-            else -> return
-        }
+        val texts = collectTexts(request) ?: return
         AndroidUtilities.runOnUIThread {
             optimisticMessages.messages.zip(texts).forEach { (message, text) ->
                 message.messageOwner.message = text.text
@@ -1189,7 +1021,7 @@ object PluginRpc : SessionResource {
                 message.updateMessageText()
                 message.resetLayout()
                 if (message.type != MessageObject.TYPE_TEXT) message.generateCaption()
-                val mode = chatModeOf(message.messageOwner, message.scheduled)
+                val mode = getChatMode(message.messageOwner, message.scheduled)
                 MessagesStorage.getInstance(optimisticMessages.account).putMessages(
                     arrayListOf(message.messageOwner),
                     false,
@@ -1216,13 +1048,13 @@ object PluginRpc : SessionResource {
         requestWire: String,
     ): String? {
         val request = try {
-            decodeTlObject(session.tl, requestWire)
+            session.tl.objectFromWire(requestWire)
         } catch (e: Exception) {
             return decodeFailureWire("invokeRpc", e)
         }
         val tlName = TlNames.classNameToTlName(request.javaClass)
         invokeRefusal(session, tlName)?.let { return it }
-        // last, so a takeover method stays refused whichever slot it was aimed at. The slot is not the host's to trust: a plugin can call `invokeRpc` through any object carrying an `id`
+        // last, so a takeover stays refused whatever the slot; a plugin can call `invokeRpc` through any object carrying an `id`
         val account = try {
             invokeAccountOrRefusal("invokeRpc", slot, startedOn)
         } catch (e: Exception) {
@@ -1235,10 +1067,8 @@ object PluginRpc : SessionResource {
     }
 
     /**
-     * every settled `invokeRpc`-shaped call, whatever built the request. [settle] runs on the
-     * engine's own runnable and owes the engine exactly one answer; a path that does not hand its
-     * response to [TlHandles] must release it there rather than leaving stock's suppressed free
-     * unanswered.
+     * [settle] runs on the engine's runnable and owes it exactly one answer. A response not handed to
+     * [TlHandles] must be released there.
      */
     private fun sendInvoke(
         session: PluginSession,
@@ -1247,7 +1077,7 @@ object PluginRpc : SessionResource {
         settle: (TLObject?, TLRPC.TL_error?) -> Unit,
     ) {
         sendWithoutInterceptors(account, request, 0) { response, error ->
-            // stageQueue, where freeResources() runs the moment this delegate returns - before the runnable below mints a handle. ownership moves here
+            // freeResources() runs when this delegate returns, before the runnable below mints a handle
             response?.disableFree = true
             EngineDispatch.onEngine(session, onDropped = { releaseUnowned(response) }) {
                 settle(response, error)
@@ -1255,7 +1085,6 @@ object PluginRpc : SessionResource {
         }
     }
 
-    /** the slot a call names, or the refusal wire for one that names no live account */
     private fun invokeAccountOrRefusal(prefix: String, slot: Int, startedOn: Int): Int {
         val account = if (slot == QuickJs.ANY_ACCOUNT) startedOn else slot
         if (!UserConfig.isValidAccount(account)) {
@@ -1265,9 +1094,7 @@ object PluginRpc : SessionResource {
     }
 
     /**
-     * `inu.invokeRaw`. The bytes are a whole method, so the only thing the host can say about them
-     * is the constructor they open with - which is enough to keep the takeover refusal honest, and
-     * is all it is used for. A payload naming a constructor no layer this build knows is sent as
+     * only the leading constructor is checked, for the takeover refusal. An unknown constructor is sent as
      * written: reaching a method stock has no class for is the point of the api.
      */
     private fun invokeRaw(
@@ -1281,8 +1108,8 @@ object PluginRpc : SessionResource {
         val request = RawTlRequest(method)
         val constructor = request.constructorId()
             ?: return PluginWire.encodePluginError("invalid-argument", "invokeRaw: a method is at least its 4-byte constructor id")
-        // an empty answer is the api working as intended: a constructor no layer this build knows is exactly what a plugin comes here for. Every name claiming the id is asked, since a legacy variant sharing it is named apart from the live constructor
-        for (named in TlTables.namesOf(constructor)) takeoverRefusal(session.permissions, named)?.let { return it }
+        // every name for the id is checked: a legacy variant can share it
+        for (named in TlTables.getConstructorNames(constructor)) takeoverRefusal(session.permissions, named)?.let { return it }
         val account = try {
             invokeAccountOrRefusal("invokeRaw", slot, startedOn)
         } catch (e: Exception) {
@@ -1291,7 +1118,7 @@ object PluginRpc : SessionResource {
         sendInvoke(session, account, request) { response, error ->
             releaseUnowned(response)
             when {
-                error != null -> settleInvoke(session, invokeId, "invokeRaw") { encodeRpcErrorWire(error) }
+                error != null -> settleInvoke(session, invokeId, "invokeRaw") { PluginWire.encodeRpcError(error.code, error.text ?: "") }
                 response is RawTlResponse -> session.engine.settleBytes(QuickJs.SETTLE_INVOKE, invokeId, response.bytes)
                 else -> settleInvoke(session, invokeId, "invokeRaw") { PluginWire.encodeNull() }
             }
@@ -1299,12 +1126,7 @@ object PluginRpc : SessionResource {
         return null
     }
 
-    /**
-     * every takeout op. A session is its id and nothing else, so the host keeps no state for one:
-     * the plugin carries the id it was given, and a forged one is refused by the server rather than
-     * by us. What is checked here is that the plugin may open a session at all, and - for a wrapped
-     * call - that it could have made that same call unwrapped.
-     */
+    /** the host keeps no takeout state: the plugin carries the session id and the server refuses forged ones */
     private fun takeout(
         session: PluginSession,
         slot: Int,
@@ -1330,7 +1152,7 @@ object PluginRpc : SessionResource {
                 }
 
                 RpcListener.OP_TAKEOUT_INVOKE -> {
-                    val query = decodeTlObject(session.tl, arg)
+                    val query = session.tl.objectFromWire(arg)
                     val queryName = TlNames.classNameToTlName(query.javaClass)
                     invokeRefusal(session, queryName)?.let { return it }
                     request = TakeoutWrapper(parseTakeoutId(takeoutId), query)
@@ -1348,9 +1170,8 @@ object PluginRpc : SessionResource {
         return null
     }
 
-    /** already on the plugin queue: [sendInvoke] made the hop, and checked the session on the way */
     private fun settleInvoke(session: PluginSession, invokeId: Long, what: String, produce: () -> String) {
-        session.engine.settle(QuickJs.SETTLE_INVOKE, invokeId, EngineDispatch.wireOf(what, produce))
+        session.engine.settle(QuickJs.SETTLE_INVOKE, invokeId, EngineDispatch.produceWire(what, produce))
     }
 
     private fun buildTakeoutInit(options: JSONObject): TakeoutInitRequest = TakeoutInitRequest().apply {
@@ -1368,40 +1189,18 @@ object PluginRpc : SessionResource {
 
     private fun encodeTakeoutId(response: TLObject?, error: TLRPC.TL_error?): String {
         releaseUnowned(response)
-        if (error != null) return encodeRpcErrorWire(error)
+        if (error != null) return PluginWire.encodeRpcError(error.code, error.text ?: "")
         if (response !is TakeoutSession) return PluginWire.encodeNull()
         return PluginWire.encodeLongAsString(response.id)
     }
 
     private fun encodeTakeoutFinished(response: TLObject?, error: TLRPC.TL_error?): String {
         releaseUnowned(response)
-        if (error != null) return encodeRpcErrorWire(error)
+        if (error != null) return PluginWire.encodeRpcError(error.code, error.text ?: "")
         return PluginWire.encodeBool(response is TLRPC.TL_boolTrue)
     }
 
     private class TlResultError(val error: TLRPC.TL_error) : Exception("${error.code}: ${error.text}")
-
-
-    private fun decodeTlObject(tl: TlHandles, wire: String): TLObject = when (val decoded = PluginWire.decode(wire)) {
-        is PluginWire.Value.Handle -> {
-            if (tl.isReadOnly(decoded.id)) PluginWire.refuse("forbidden", TlHandles.READ_ONLY_MESSAGE)
-            tl.resolveTlObject(decoded.id)
-                ?: PluginWire.refuse("handle-expired", PluginWire.HANDLE_EXPIRED_MESSAGE)
-        }
-        is PluginWire.Value.Json -> constructTlObject(JSONObject(decoded.json))
-        else -> PluginWire.refuse("invalid-argument", "expected a TL object")
-    }
-
-    private fun constructTlObject(json: JSONObject): TLObject {
-        val tlName = json.optString("_", "")
-        if (tlName.isEmpty()) PluginWire.refuse("invalid-argument", "a constructed TL object needs a '_' type name")
-        if (TlTables.idsOf(tlName) == null) PluginWire.refuse("unknown-constructor", "unknown TL type '$tlName'")
-        return try {
-            TlJson.fromJson(json)
-        } catch (e: Exception) {
-            PluginWire.refuse("invalid-argument", e.message ?: e.toString())
-        }
-    }
 
     private fun decodeFailureWire(prefix: String, e: Exception): String {
         val refused = (e as? PluginRefusal)?.let { PluginWire.decode(it.wire) as? PluginWire.Value.PluginErr }
@@ -1418,21 +1217,20 @@ object PluginRpc : SessionResource {
             tl.resolveTlObject(decoded.id)
                 ?: throw TlResultError(syntheticError(PluginWire.HANDLE_EXPIRED_MESSAGE))
         }
-        is PluginWire.Value.Json -> constructTlObject(JSONObject(decoded.json))
+        is PluginWire.Value.Json -> tl.constructTlObject(JSONObject(decoded.json))
         else -> throw IllegalArgumentException("unsupported result payload")
     }
 
     private fun encodeChainResult(tl: TlHandles, response: TLObject?, error: TLRPC.TL_error?, scopeId: Long): String {
-        if (error != null) return encodeRpcErrorWire(error)
+        if (error != null) return PluginWire.encodeRpcError(error.code, error.text ?: "")
         if (response == null) return PluginWire.encodeNull()
         return tl.mintWireForScope(response, scopeId)
     }
 
     private fun encodeInvokeResult(tl: TlHandles, response: TLObject?, error: TLRPC.TL_error?): String {
         if (error != null) {
-            // stock's free was suppressed before we knew it wouldn't be handed over, so nothing else will free it
             releaseUnowned(response)
-            return encodeRpcErrorWire(error)
+            return PluginWire.encodeRpcError(error.code, error.text ?: "")
         }
         if (response == null) return PluginWire.encodeNull()
         return tl.mintWireForPlugin(response, readOnly = false, owned = true)
@@ -1444,7 +1242,6 @@ object PluginRpc : SessionResource {
         response.freeResources()
     }
 
-    /** [owned] is the passthrough response this chain took ownership of, which a stage may have replaced; either way both are freed exactly once */
     private fun freeChainResponse(response: TLObject?, owned: TLObject?) {
         releaseUnowned(owned)
         if (response === owned || response == null) return

@@ -8,11 +8,6 @@ import org.telegram.tgnet.tl.TL_update
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * With no plugin running - the default, the engine being off - every hook stock calls into answers
- * from a flag rather than reaching a lock, a map or the plugin queue. The flags are what this pins;
- * that each hook reads one is a matter of reading the call sites, not of timing them here.
- */
 class PluginIdleCostTest {
     @Before
     fun setUp() = resetBridge()

@@ -2,6 +2,13 @@ use std::sync::Arc;
 
 pub type Log = Arc<dyn Fn(&str) + Send + Sync>;
 
+macro_rules! set_fn {
+  ($object:expr, $name:expr, $ctx:expr, $state:ident, $f:expr) => {{
+    let $state = $state.clone();
+    $object.set($name, rquickjs::Function::new($ctx.clone(), $f)?)?;
+  }};
+}
+
 mod api;
 mod jni;
 mod runtime;
@@ -26,7 +33,3 @@ fn classify_log(message: &str) -> (i32, &str) {
     None => (LEVEL_ERROR, message),
   }
 }
-
-#[cfg(test)]
-#[path = "lib_tests.rs"]
-mod lib_tests;

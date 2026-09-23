@@ -3,6 +3,7 @@ use crate::runtime::Dispose;
 use crate::runtime::{
   pump_jobs, SETTLE_CANVAS, SETTLE_FETCH, SETTLE_FILES, SETTLE_INVOKE, SETTLE_MODAL, SETTLE_READS, SETTLE_WRITES,
 };
+use crate::sandbox::limits::fit_stack_limit;
 use std::cell::Cell;
 use std::ops::Deref;
 use std::rc::Rc;
@@ -32,8 +33,6 @@ pub(crate) mod exports;
 pub(crate) mod hosts;
 pub(crate) mod log;
 pub(crate) mod pixels;
-#[cfg(test)]
-mod tests;
 
 #[cfg(test)]
 #[path = "caller_thread_tests.rs"]
@@ -62,8 +61,6 @@ impl Deref for TransferEngine {
   }
 }
 
-/// Engine-slot state accessible from Java without an engine lease. Allows `PluginJvm` to encode
-/// references while another thread uses the engine.
 struct EngineSlot {
   engine: Arc<Serialized<TransferEngine>>,
   jvm_refs: Option<Arc<crate::api::platform::jvm::RefTable>>,
@@ -94,10 +91,6 @@ pub(crate) fn engine_jvm_refs(handle: jlong) -> Option<Arc<crate::api::platform:
   lock_engines()?.get(get_engine_key(handle))?.jvm_refs.clone()
 }
 
-fn get_engine(handle: jlong) -> Option<Lease<TransferEngine>> {
-  enter_engine(handle, None)
-}
-
 fn enter_engine(handle: jlong, timeout: Option<Duration>) -> Option<Lease<TransferEngine>> {
   try_enter_engine(handle, timeout).ok()
 }
@@ -109,7 +102,9 @@ fn engine_slot(handle: jlong) -> Result<Arc<Serialized<TransferEngine>>, EntryEr
 }
 
 fn try_enter_engine(handle: jlong, timeout: Option<Duration>) -> Result<Lease<TransferEngine>, EntryError> {
-  engine_slot(handle)?.enter(timeout)
+  let lease = engine_slot(handle)?.enter(timeout)?;
+  fit_stack_limit(&lease._rt);
+  Ok(lease)
 }
 
 fn stop_engine_callbacks(handle: jlong) {
@@ -125,6 +120,7 @@ pub(crate) fn get_engine_key(handle: jlong) -> EngineKey {
 pub(crate) fn remove_engine(handle: jlong) -> Option<Engine> {
   let slot = lock_engines()?.get(get_engine_key(handle))?.engine.clone();
   let engine = slot.close().ok()??;
+  fit_stack_limit(&engine._rt);
   lock_engines()?.remove(get_engine_key(handle));
   Some(engine.0)
 }

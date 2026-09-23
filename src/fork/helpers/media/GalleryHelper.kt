@@ -55,12 +55,12 @@ object GalleryHelper {
 
     private fun containsSignature(blob: ByteArray): Boolean {
         for (sig in MOTION_SIGNATURES) {
-            if (indexOf(blob, sig) >= 0) return true
+            if (findSequence(blob, sig) >= 0) return true
         }
         return false
     }
 
-    private fun indexOf(haystack: ByteArray, needle: ByteArray): Int {
+    private fun findSequence(haystack: ByteArray, needle: ByteArray): Int {
         if (needle.isEmpty() || haystack.size < needle.size) return -1
         val end = haystack.size - needle.size
         outer@ for (i in 0..end) {

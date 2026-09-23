@@ -11,7 +11,6 @@ data class ActionRegistration<T : Any>(
     val dynamicFields: Int,
 )
 
-/** Rows belong to an engine. A reload can reuse a token. */
 class ActionRegistry<T : Any>(private val perKindLimit: Int = DEFAULT_PER_KIND_LIMIT) {
     private data class Registration(
         val token: Int,

@@ -6,7 +6,7 @@ import org.junit.Test
 
 class OwnerRegistryTest {
     @Test
-    fun removingAnOwnersLastItemForgetsTheOwner() {
+    fun removing_an_owners_last_item_forgets_the_owner() {
         val registry = OwnerRegistry<String, Int>()
         registry.add("a", 1)
         registry.add("a", 2)
@@ -18,7 +18,7 @@ class OwnerRegistryTest {
     }
 
     @Test
-    fun takeHandsOverEverythingOnceAndLeavesOtherOwnersAlone() {
+    fun take_hands_over_everything_once_and_leaves_other_owners_alone() {
         val registry = OwnerRegistry<String, Int>()
         registry.add("a", 1)
         registry.add("a", 1)
@@ -29,7 +29,7 @@ class OwnerRegistryTest {
     }
 
     @Test
-    fun takeWhereTakesEveryPickedOwner() {
+    fun take_where_takes_every_picked_owner() {
         val registry = OwnerRegistry<String, Int>()
         registry.add("install-1/a", 1)
         registry.add("install-1/b", 2)
@@ -39,7 +39,7 @@ class OwnerRegistryTest {
     }
 
     @Test
-    fun concurrentAddsAreAllKept() {
+    fun concurrent_adds_are_all_kept() {
         val registry = OwnerRegistry<String, Int>()
         val threads = (0 until 8).map { t -> Thread { repeat(1000) { registry.add("a", t) } } }
         threads.forEach(Thread::start)

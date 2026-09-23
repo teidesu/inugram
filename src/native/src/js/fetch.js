@@ -1,10 +1,9 @@
 (natives, PluginError, timers) => {
   const { setTimeout, clearTimeout } = timers
 
-  const invalid = message => new PluginError('invalid-argument', message)
 
 
-  let listOf
+  let getHeaderList
   let freeze
 
   // names and values are checked natively, so `Headers` and the send path share one set of rules
@@ -13,7 +12,7 @@
     #immutable = false
 
     static {
-      listOf = headers => headers.#list
+      getHeaderList = headers => headers.#list
       freeze = (headers) => {
         headers.#immutable = true
         return headers
@@ -142,7 +141,7 @@
   // the host names each header once, lowercased, with every value it saw
   const createResponseHeaders = (raw) => {
     const headers = new Headers()
-    const list = listOf(headers)
+    const list = getHeaderList(headers)
     if (raw !== undefined && raw !== null) {
       for (const name of Object.keys(raw)) {
         for (const value of raw[name]) list.push([name, value])
@@ -154,13 +153,13 @@
   const flattenHeaders = (init) => {
     const flat = []
     if (init === undefined || init === null) return flat
-    for (const [name, value] of listOf(new Headers(init))) flat.push(name, value)
+    for (const [name, value] of getHeaderList(new Headers(init))) flat.push(name, value)
     return flat
   }
 
   const bodies = new WeakMap()
 
-  const bodyOf = (response) => {
+  const getResponseBody = (response) => {
     const blob = bodies.get(response)
     if (blob === undefined) throw new TypeError('not a Response')
     return blob
@@ -181,29 +180,29 @@
     }
 
     blob() {
-      return Promise.resolve(bodyOf(this))
+      return Promise.resolve(getResponseBody(this))
     }
 
     bytes() {
-      return bodyOf(this).bytes()
+      return getResponseBody(this).bytes()
     }
 
     arrayBuffer() {
-      return bodyOf(this).arrayBuffer()
+      return getResponseBody(this).arrayBuffer()
     }
 
     text() {
-      return bodyOf(this).text()
+      return getResponseBody(this).text()
     }
 
     json() {
-      return bodyOf(this).text().then(JSON.parse)
+      return getResponseBody(this).text().then(JSON.parse)
     }
   }
 
   const readInit = (init) => {
     if (init === undefined || init === null) return {}
-    if (typeof init !== 'object') throw invalid('fetch: the second argument must be an options object')
+    if (typeof init !== 'object') throw new PluginError('invalid-argument', 'fetch: the second argument must be an options object')
     return init
   }
 
@@ -211,7 +210,7 @@
     const raw = init.timeout
     if (raw === undefined || raw === null) return undefined
     if (typeof raw !== 'number' || !Number.isFinite(raw) || raw <= 0) {
-      throw invalid('fetch: timeout must be a positive number of milliseconds')
+      throw new PluginError('invalid-argument', 'fetch: timeout must be a positive number of milliseconds')
     }
     return raw
   }
@@ -220,7 +219,7 @@
     const signal = init.signal
     if (signal === undefined || signal === null) return undefined
     if (typeof signal.addEventListener !== 'function' || typeof signal.aborted !== 'boolean') {
-      throw invalid('fetch: signal must be an AbortSignal')
+      throw new PluginError('invalid-argument', 'fetch: signal must be an AbortSignal')
     }
     return signal
   }

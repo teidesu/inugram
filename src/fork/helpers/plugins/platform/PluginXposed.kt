@@ -7,7 +7,6 @@ import desu.inugram.helpers.plugins.EngineDispatch
 
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.JvmListener
-import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginLog
 import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.QuickJs
@@ -19,21 +18,12 @@ import java.lang.reflect.Member
 import java.lang.reflect.Method
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
-import org.telegram.messenger.Utilities
 
 /**
- * Implements `inu.xposed` (Rust: `xposed::XposedHost`), per `android.xposed.d.ts`.
  * Rust owns callback registries; Kotlin shares physical ART hooks across plugins.
  *
- * Keep [Native] private: exposing hook installation would let `unsafe.jvm` bypass the Xposed
- * grant. LSPlant can reach [Hooker], which only dispatches existing sites and cannot install hooks.
- *
- * JS and native phases run synchronously on the hooked thread. Rust serializes engine entry;
- * busy or recursive entry skips JS phases. Promise jobs run on the plugin queue. Recursion
- * suppression applies only to the plugin's callback phases; the original method and other
- * plugins' layers still dispatch. One plugin cannot mix JS and native hooks at a site.
- *
- * Shares values through [PluginJvm.ValueBridge] instead of keeping a second handle table.
+ * Phases run synchronously on the hooked thread. Busy or recursive entry skips JS phases. Recursion
+ * suppression covers the plugin's callback phases only; the original and other plugins' layers still dispatch.
  */
 object PluginXposed : SessionResource {
 
@@ -54,7 +44,7 @@ object PluginXposed : SessionResource {
 
     const val GRANT = "unsafe.xposed"
 
-    /** reached through the C binding `patches-native/lsplant-c-abi.patch` adds. `private` because holding one of these *is* the grant: `nativeHook` rewrites an ART entry point and asks nobody */
+    /** reached through the C binding `patches-native/lsplant-c-abi.patch` adds. private: `nativeHook` rewrites ART entry points unchecked */
     private object Native {
         external fun nativeInit(): Boolean
         external fun nativeHook(target: Member, hooker: Any, callback: Method): Member?
@@ -64,7 +54,7 @@ object PluginXposed : SessionResource {
         external fun nativeDisableProfileSaver(): Boolean
     }
 
-    /** set at first use rather than at boot: `nativeInit` prefetches ART symbols and installs hooks of its own, a cost no plugin should pay for unasked */
+    /** lazy: `nativeInit` prefetches ART symbols and installs its own hooks */
     private var ready: Boolean? = null
 
     @Synchronized
@@ -80,9 +70,8 @@ object PluginXposed : SessionResource {
     }
 
     /**
-     * The hooker only invokes an existing site; it cannot install hooks.
-     * Its closure retains the backup even if the last registration is removed mid-call.
-     * [callback] must be `public Object callback(Object[])`; that signature is lsplant's.
+     * its closure retains the backup even if the last registration is removed mid-call.
+     * [callback] must be `public Object callback(Object[])`: lsplant's signature
      */
     internal class Hooker(private val dispatch: (Array<Any?>) -> Any?) {
         @Suppress("unused")
@@ -91,7 +80,7 @@ object PluginXposed : SessionResource {
 
     private val sharedSites = HashMap<Member, SharedSite>()
 
-    /** lsplant's backup is always a `Method`, a constructor's included: invoking it on a receiver runs the original `<init>` on that object */
+    /** lsplant's backup is always a `Method`, a constructor's included: invoking it runs the original `<init>` on the receiver */
     private class SharedSite(val target: Member) {
         @Volatile var backup: Method? = null
         @Volatile var registrations: List<Site> = emptyList()
@@ -129,13 +118,13 @@ object PluginXposed : SessionResource {
     private fun allocateInstance(cls: Class<*>): Any =
         Native.nativeAllocateInstance(cls) ?: refuse("internal", "xposed: could not allocate ${cls.name}")
 
-    /** [jvm] is a hard dependency rather than an implicit grant: every entry point takes a handle only `inu.jvm` mints */
+    /** every entry point takes a handle only `inu.jvm` mints */
     fun listenerFor(session: PluginSession, jvm: JvmListener?): XposedListener? {
         if (!session.permissions.has(GRANT) || jvm == null) return null
         return Session(session)
     }
 
-    /** an ART entry point stays rewritten, so a site left behind dispatches into an engine that is gone */
+    /** an ART entry point stays rewritten, so a site left behind dispatches into a gone engine */
     override fun detach(session: PluginSession) {
         (session.engine.listener?.xposed as? Session)?.close()
     }
@@ -145,10 +134,9 @@ object PluginXposed : SessionResource {
     private class Site(val session: Session, val id: Long, val shared: SharedSite, val native: Boolean) {
         val target: Member get() = shared.target
         @Volatile var nativeHooks: List<NativeHook> = emptyList()
-        /** -1 until the engine reports: a site whose hooks are still being registered dispatches both phases */
+        /** -1 until the engine reports: a site still registering dispatches both phases */
         @Volatile var jsBefores = -1
         @Volatile var filter: PluginJvmRoutine? = null
-        /** the dispatch path's liveness check, so a hooked call needs no lookup in [Session.sites] */
         @Volatile var live = true
     }
 
@@ -157,7 +145,7 @@ object PluginXposed : SessionResource {
         private val nextSite = AtomicLong(1)
         private val nextDispatch = AtomicLong(1)
         private val budgetMs = session.engine.xposedBudgetMs()
-        /** one cell per thread rather than a boxed value: a hooked call reads it and writes it twice */
+        /** read and written twice per hooked call, so no boxing */
         private val dispatching = ThreadLocal.withInitial { BooleanArray(1) }
         @Volatile private var closed = false
 
@@ -170,7 +158,7 @@ object PluginXposed : SessionResource {
         } catch (e: PluginRefusal) {
             e.wire
         } catch (e: Throwable) {
-            values.wireOf(e) ?: PluginWire.encodePluginError("internal", "xposed: ${e.javaClass.simpleName}: ${e.message}")
+            PluginWire.encodePluginError("internal", "xposed: ${e.javaClass.simpleName}: ${e.message}")
         }
 
         private fun run(op: Int, target: Long, name: String, args: Array<String>): String = when (op) {
@@ -207,7 +195,7 @@ object PluginXposed : SessionResource {
             else -> refuse("invalid-argument", "xposed: unknown op $op")
         }
 
-        /** declared rather than inherited: hooking a method the class did not declare would rewrite the superclass's entry point, which is every subclass at once */
+        /** hooking an undeclared method would rewrite the superclass's entry point, hitting every subclass */
         private fun overloads(cls: Class<*>, name: String): List<Member> {
             val found: List<Member> = if (name.isEmpty()) {
                 cls.declaredConstructors.toList()
@@ -263,18 +251,14 @@ object PluginXposed : SessionResource {
             if (PluginJvm.isEnginePackage(declaring)) {
                 refuse("forbidden", "xposed: $declaring is the plugin engine's own bridge")
             }
-            // lsplant's generated stub boxes its own primitive arguments through these classes
-            // (Integer.valueOf -> new Integer), so a hook on one re-enters the stub before any
-            // callback dispatch and overflows the stack on whatever thread boxes next
+            // lsplant's stub boxes primitive arguments through these classes (Integer.valueOf -> new Integer), so a
+            // hook on one re-enters the stub and overflows the stack
             if (declaring in BOX_CLASSES) {
                 refuse("unsupported", "xposed: $declaring backs primitive boxing, which the hook stub itself uses, so a hook here would recurse until the stack is gone")
             }
         }
 
-        /**
-         * One physical ART hook per method, with a session-local site for each plugin.
-         * Member.equals merges independent reflective lookups. Rust retains its per-site refcounts.
-         */
+        /** Member.equals merges independent reflective lookups. rust keeps per-site refcounts */
         private fun installOne(member: Member, native: Boolean): Long {
             val (site, plugins) = synchronized(sharedSites) {
                 if (closed) refuse("handle-expired", "xposed: session has closed")
@@ -282,7 +266,7 @@ object PluginXposed : SessionResource {
                 val shared = sharedSites[member] ?: SharedSite(member).also { entry ->
                     val isStatic = java.lang.reflect.Modifier.isStatic(member.modifiers)
                     val hooker = Hooker { args ->
-                        // args[0] is the receiver for an instance method; static methods have no placeholder.
+                        // args[0] is the receiver for an instance method; static methods have no placeholder
                         if (isStatic) entry.dispatch(null, args)
                         else entry.dispatch(args[0], args.copyOfRange(1, args.size))
                     }
@@ -325,7 +309,6 @@ object PluginXposed : SessionResource {
             return PluginWire.encodeNull()
         }
 
-        /** Resolve the shared backup even when only another plugin registered this method. */
         private fun callOriginal(member: Member, args: Array<String>): String {
             val backup = synchronized(sharedSites) { sharedSites[member]?.backup } ?: return invoke(member, args)
             checkTarget(member)
@@ -337,7 +320,7 @@ object PluginXposed : SessionResource {
             return values.encode(allocateInstance(cls))
         }
 
-        /** [target] is the member the plugin named; [member] is what actually runs, its backup when hooked. A hooked constructor answers with the receiver it initialised. */
+        /** [member] is what runs, the backup when hooked. A hooked constructor answers with the receiver it initialised */
         private fun invoke(member: Member, args: Array<String>, target: Member = member): String {
             val decoded = args.map { values.decode(it) }
             val parameters = (target as? Executable)?.parameterTypes
@@ -350,16 +333,14 @@ object PluginXposed : SessionResource {
                 val result = callMember(member, receiver, rest)
                 values.encode(if (constructing) receiver else result)
             } catch (e: InvocationTargetException) {
-                // the method's own outcome, handed back as a throwable rather than reported as this bridge failing
+                // the method's own outcome, not a bridge failure
                 "T" + values.encode(e.targetException)
             }
         }
 
         /**
-         * The bridge's own failures may not escape here: this frame belongs to whichever stock
-         * method the user just invoked, so a [PluginRefusal] thrown while encoding an argument would
-         * surface as a `RuntimeException` out of app code. A failed layer continues through the
-         * remaining plugins instead, eventually reaching the original exactly once.
+         * this frame belongs to a stock method, so a [PluginRefusal] escaping would surface as a `RuntimeException`
+         * out of app code. A failed layer continues through the rest, reaching the original exactly once.
          */
         fun dispatch(entry: Site, receiver: Any?, args: Array<Any?>, next: (Array<Any?>) -> Any?): Any? {
             if (closed || !entry.live) return next(args)
@@ -421,7 +402,7 @@ object PluginXposed : SessionResource {
             var owed = false
             try {
                 val before = try {
-                    runCallbackPhase(guard) { session.engine.xposedBefore(id, site, invocationOf(entry, receiver, args)) }
+                    runCallbackPhase(guard) { session.engine.xposedBefore(id, site, buildInvocation(entry, receiver, args)) }
                 } catch (error: Throwable) {
                     session.log.e("xposed", "before failed at ${entry.target}; continuing", error)
                     null
@@ -430,7 +411,7 @@ object PluginXposed : SessionResource {
                 val wantsAfter = before.firstOrNull() == "P1"
                 owed = wantsAfter
                 if (before.firstOrNull() == "A") {
-                    val answer = answerOf(before.getOrNull(1) ?: PluginWire.encodeNull(), site, "before")
+                    val answer = decodeHookAnswer(before.getOrNull(1) ?: PluginWire.encodeNull(), site, "before")
                         ?: return next(args)
                     val converted = try { convertReturn(entry, answer) } catch (error: Throwable) {
                         session.log.e("xposed", "invalid before result at ${entry.target}; continuing", error)
@@ -445,9 +426,9 @@ object PluginXposed : SessionResource {
                     Array<Any?>(args.size) { index ->
                         val wire = before[index + 1]
                         if (wire == KEEP_ARGUMENT) args[index]
-                        else requireNotNull(PluginJvm.convertArguments(arrayOf(parameters[index]), listOf(values.decode(wire)))) {
+                        else requireNotNull(PluginJvm.convert(values.decode(wire), parameters[index])) {
                             "xposed: invalid argument $index"
-                        }[0]
+                        }.value
                     }
                 } catch (e: Throwable) {
                     session.log.e("xposed", "site $site (${entry.target}): unreadable arguments; calling with the app's", e)
@@ -458,7 +439,7 @@ object PluginXposed : SessionResource {
                 try { value = next(callArgs) } catch (e: Throwable) { thrown = e }
                 if (!wantsAfter || closed || !entry.live) return settle(value, thrown)
 
-                val settled = settledInvocationOf(entry, receiver, args, value, thrown)
+                val settled = buildSettledInvocation(entry, receiver, args, value, thrown)
                 val after = try {
                     runCallbackPhase(guard) { session.engine.xposedAfter(id, settled, thrown != null) }
                 } catch (error: Throwable) {
@@ -477,7 +458,7 @@ object PluginXposed : SessionResource {
             var value: Any? = null
             try { value = next(args) } catch (e: Throwable) { thrown = e }
             if (closed || !entry.live) return settle(value, thrown)
-            val invocation = settledInvocationOf(entry, receiver, args, value, thrown)
+            val invocation = buildSettledInvocation(entry, receiver, args, value, thrown)
             val after = try {
                 runCallbackPhase(guard) { session.engine.xposedAfterOnly(entry.id, invocation, thrown != null) }
             } catch (error: Throwable) {
@@ -491,7 +472,7 @@ object PluginXposed : SessionResource {
 
         private fun settleAfter(entry: Site, value: Any?, thrown: Throwable?, after: String?): Any? {
             if (after == null || after == QuickJs.NOT_DISPATCHED) return settle(value, thrown)
-            val answer = answerOf(after, entry.id, "after") ?: return settle(value, thrown)
+            val answer = decodeHookAnswer(after, entry.id, "after") ?: return settle(value, thrown)
             val converted = try { convertReturn(entry, answer) } catch (error: Throwable) {
                 session.log.e("xposed", "invalid after result at ${entry.target}; preserving the outcome", error)
                 return settle(value, thrown)
@@ -499,7 +480,7 @@ object PluginXposed : SessionResource {
             return converted.getOrThrow()
         }
 
-        private fun invocationOf(entry: Site, receiver: Any?, args: Array<Any?>, tail: Int = 0): Array<Any?> {
+        private fun buildInvocation(entry: Site, receiver: Any?, args: Array<Any?>, tail: Int = 0): Array<Any?> {
             val invocation = arrayOfNulls<Any?>(args.size + 2 + tail)
             invocation[0] = entry.target
             invocation[1] = receiver
@@ -507,20 +488,20 @@ object PluginXposed : SessionResource {
             return invocation
         }
 
-        private fun settledInvocationOf(
+        private fun buildSettledInvocation(
             entry: Site,
             receiver: Any?,
             args: Array<Any?>,
             value: Any?,
             thrown: Throwable?,
-        ): Array<Any?> = invocationOf(entry, receiver, args, tail = 1).also { it[it.size - 1] = thrown ?: value }
+        ): Array<Any?> = buildInvocation(entry, receiver, args, tail = 1).also { it[it.size - 1] = thrown ?: value }
 
         private fun release(id: Long) {
             EngineDispatch.scheduler.postRunnable { session.engine.xposedRelease(id) }
         }
 
-        /** a hook answering with a throwable is the plugin's decision and the app's to receive, while a wire this side could not decode is ours and may not surface in app code as one */
-        private fun answerOf(wire: String, site: Long, phase: String): Result<Any?>? {
+        /** a thrown answer is the plugin's decision; an undecodable wire is ours and must not surface in app code */
+        private fun decodeHookAnswer(wire: String, site: Long, phase: String): Result<Any?>? {
             val thrown = wire.removePrefix("T")
             return try {
                 if (thrown.length != wire.length) {
@@ -537,12 +518,8 @@ object PluginXposed : SessionResource {
             }
         }
 
-        private fun convertReturn(entry: Site, answer: Result<Any?>): Result<Any?> = answer.map { value ->
-            val type = (entry.target as? Method)?.returnType ?: return@map null
-            if (type == Void.TYPE) return@map null
-            PluginJvm.convertArguments(arrayOf(type), listOf(value))?.single()
-                ?: throw IllegalArgumentException("xposed: cannot return that from ${type.name}")
-        }
+        private fun convertReturn(entry: Site, answer: Result<Any?>): Result<Any?> =
+            answer.map { convertReturnValue(entry.target, it) }
 
         fun close() {
             val open = synchronized(sharedSites) {

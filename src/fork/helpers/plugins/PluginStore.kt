@@ -11,27 +11,17 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Owns installed files: one `<install id>.js` per install, plus its plugin ID, order, and enabled
- * state in `PLUGINS_STATE`. [PluginManager] owns running engines and runtime failures; this class
- * handles file loading and persistence.
- *
- * [PluginInstalls.mintId] creates an install ID independently of the manifest. It keys
- * `localStorage` and `fs` storage, preserving data across renames and preventing another plugin
- * from claiming it by name. The ID is the file name, so losing `PLUGINS_STATE` loses order and
- * flags, never the link between a plugin and its storage.
+ * The install id is the file name and keys `localStorage`/`fs`, so storage survives renames and cannot
+ * be claimed by name. Losing `PLUGINS_STATE` loses order and flags, never the storage link.
  */
 object PluginStore {
 
     val dir: File by lazy { PluginFs.storeDir() }
 
-    /** kept out of [load]'s answer: a file that failed to load this boot must still be persisted */
+    /** a file that failed to load this boot must still be persisted */
     private var unloaded: List<PluginInstall> = emptyList()
 
-    /**
-     * Every install on disk that loads, in persisted order, or null when the directory could not be
-     * listed. Null is not "there are no plugins": the persisted state is kept as it is, and nothing
-     * may treat the missing installs as gone.
-     */
+    /** null is not "no plugins": persisted state is kept and missing installs must not be treated as gone */
     fun load(): List<Plugin>? {
         val files = dir.list()
         if (files == null) {
@@ -61,13 +51,11 @@ object PluginStore {
                 }
             )
         }
-        // a file we could not load this boot keeps its record, or fixing it later would land it on a
-        // fresh id and an empty store
+        // fixing it later must not land it on a fresh id and empty store
         unloaded = installs.filter { install -> loaded.none { it.id == install.id } }
         return loaded
     }
 
-    /** every install with a source file: the ones [plugins] holds and the ones that did not load */
     fun installIds(plugins: List<Plugin>): Set<String> =
         plugins.mapTo(HashSet()) { it.id }.apply { unloaded.mapTo(this) { it.id } }
 
@@ -86,23 +74,14 @@ object PluginStore {
         JSONObject().put("id", id).put("enabled", enabled).putOpt("pluginId", pluginId)
             .apply { if (dev) put("dev", true) }
 
-    /**
-     * Finds a record that failed to load this boot but whose file claims [pluginId].
-     * Re-importing a fixed file must reuse its install ID to recover its `localStorage`/`fs` storage.
-     * Keep the record unloaded until the caller completes the import and calls [dropUnloaded],
-     * so a failed import does not lose it.
-     */
+    /** kept until the caller finishes the import and calls [dropUnloaded], so a failed import does not lose it */
     fun findUnloaded(pluginId: String): PluginInstall? = unloaded.firstOrNull { it.pluginId == pluginId }
 
-    /** hands a record found by [findUnloaded] over to the caller, so [persist] writes it only once */
     fun dropUnloaded(install: PluginInstall) {
         unloaded = unloaded - install
     }
 
-    /**
-     * Writes source through a temporary file. If [file] is an existing install, a failed write
-     * must preserve its only on-disk copy.
-     */
+    /** an existing install's only copy must survive a failed write */
     fun writeSource(file: File, source: String): Boolean {
         val tmp = File(file.parentFile, "${file.name}.tmp")
         return try {
@@ -116,10 +95,7 @@ object PluginStore {
         }
     }
 
-    /**
-     * [plugin]'s source written out for sharing, under [into]. Named the way a plugin file is
-     * written and read back: `.inu.js` is what the install flow and the dev server both expect.
-     */
+    /** `.inu.js` is what the install flow and the dev server expect */
     fun exportTo(into: File, plugin: Plugin): File {
         val base = plugin.manifest.name.replace(Regex("[^A-Za-z0-9._-]"), "_").ifBlank { "plugin" }
         val file = File(into, "$base.inu.js")
@@ -128,9 +104,7 @@ object PluginStore {
         return file
     }
 
-    fun fileFor(installId: String): File = File(dir, PluginInstalls.fileName(installId))
-
-    /** a record that does not parse is skipped rather than failing the rest: the file keeps its id either way */
+    /** the file keeps its id either way */
     private fun readPersisted(): List<PluginInstall> {
         val raw = InuConfig.PLUGINS_STATE.value
         if (raw.isBlank()) return emptyList()

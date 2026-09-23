@@ -1,36 +1,16 @@
 // ==InuPlugin==
 // @name         timers test
-// @author       teidesu
-// @version      1.0
 // @description  asserts timers fire, clear, are paced in the foreground and do not outlive an unload
-// @plugin-api   1
-// @platform     android
 // ==/InuPlugin==
 
-function pass(label, detail) {
-  console.log(detail === undefined ? `PASS ${label}` : `PASS ${label}: ${detail}`)
-}
-
-function fail(label, detail) {
-  console.error(`FAIL ${label}: ${detail}`)
-}
-
-function check(label, ok, detail) {
-  if (ok) pass(label, detail)
-  else fail(label, detail)
-}
-
-// the two timed halves below both report from a callback, so "done" is the latch rather than the
-// last line of the file
+// both timed halves report from a callback, so "done" is the latch
 let halvesLeft = 2
 function halfDone() {
   if (--halvesLeft === 0) console.log('timers test done')
 }
 
-// -- did the previous run's timers die with it? --
-
-// the previous run wrote `pending` from its onUnload iff it still held a live timer at that point,
-// and that timer would have written the same number under `leaked` had it run anyway
+// the previous run wrote `pending` from onUnload iff it still held a live timer, which would
+// have written the same number under `leaked` had it run
 const generation = String(Number(localStorage.getItem('generation') ?? '0') + 1)
 localStorage.setItem('generation', generation)
 const pending = localStorage.getItem('pending')
@@ -41,15 +21,11 @@ localStorage.removeItem('leaked')
 if (pending === null) {
   console.log('no unload evidence yet: reload this plugin to check that its timers died with it')
 } else {
-  check(
-    'a timer armed by the previous run did not survive its unload',
-    leaked !== pending,
-    `pending=${pending} leaked=${leaked}`,
-  )
+  check('a timer armed by the previous run did not survive its unload', leaked !== pending, `pending=${pending} leaked=${leaked}`)
 }
 
 let survivor = false
-// long enough that reloading beats it; if it does fire first, this run simply records no evidence
+// long enough that reloading beats it; firing first just records no evidence
 setTimeout(() => {
   survivor = true
   localStorage.setItem('leaked', generation)
@@ -57,13 +33,10 @@ setTimeout(() => {
 
 inu.onUnload(() => {
   if (!survivor) localStorage.setItem('pending', generation)
-  // the wheel refuses new work from the moment unloading starts, so this registers nothing and
-  // there is no id to clear
+  // the wheel refuses new work once unloading starts, so this registers nothing
   const late = setTimeout(() => localStorage.setItem('leaked', generation), 0)
   check('setTimeout inside onUnload registers nothing', late === 0, `id=${late}`)
 })
-
-// -- firing and clearing --
 
 const fired = []
 setTimeout(() => fired.push('kept'), 40)
@@ -83,10 +56,7 @@ setTimeout(() => {
   halfDone()
 }, 800)
 
-// -- foreground pacing --
-
-// the loop the host-side pacing exists for: every hop re-arms, so nothing inside the engine ever
-// sees a callback that overruns. unpaced this walks the whole chain in about a millisecond
+// every hop re-arms, so no callback inside the engine overruns. unpaced this walks the chain in ~1ms
 const HOPS = 25
 let left = HOPS
 const startedAt = performance.now()

@@ -5,14 +5,14 @@ use std::rc::Rc;
 use rquickjs::object::Accessor;
 use rquickjs::{Array, Ctx, Exception, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
-use crate::api::error::{call_callback, format_exception, PluginErrorCode};
+use crate::api::error::{call_callback, describe_js_error, format_exception, PluginErrorCode};
 use crate::api::platform::jvm::JvmState;
 use crate::api::telegram::account::AccountState;
 use crate::api::tl::proxy::json_parse_tl;
 use crate::api::ui::icons::{icon_from_value, Icon};
 use crate::runtime::pump_jobs;
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
-use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry, Token};
+use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry};
 use crate::utils::arguments::{field, opt_fn, req_fn, req_str, stringify_json};
 
 pub const KIND_GLOBAL: i32 = 0;
@@ -68,54 +68,18 @@ enum Label {
 }
 
 enum ActionIcon {
-  Static { spec: String, retained: Option<Persistent<Value<'static>>> },
+  Static { spec: String, _retained: Option<Persistent<Value<'static>>> },
   Dynamic(Persistent<Function<'static>>),
 }
 
 struct ActionDef {
-  token: Token,
+  token: u32,
   placements: i32,
   label: Label,
   icon: Option<ActionIcon>,
   retained_icons: RefCell<Vec<Persistent<Value<'static>>>>,
   visible: Option<Persistent<Function<'static>>>,
   callback: Persistent<Function<'static>>,
-}
-
-impl ActionDef {
-  fn release(self, ctx: &Ctx<'_>) {
-    release_registration(ctx, self.label, self.icon);
-    for p in self.retained_icons.into_inner() {
-      let _ = p.restore(ctx);
-    }
-    if let Some(p) = self.visible {
-      let _ = p.restore(ctx);
-    }
-    let _ = self.callback.restore(ctx);
-  }
-}
-
-fn release_icon(ctx: &Ctx<'_>, icon: Option<ActionIcon>) {
-  match icon {
-    Some(ActionIcon::Static { retained: Some(p), .. }) => {
-      let _ = p.restore(ctx);
-    }
-    Some(ActionIcon::Dynamic(p)) => {
-      let _ = p.restore(ctx);
-    }
-    _ => {}
-  }
-}
-
-fn release_label(ctx: &Ctx<'_>, label: Label) {
-  if let Label::Dynamic(p) = label {
-    let _ = p.restore(ctx);
-  }
-}
-
-fn release_registration(ctx: &Ctx<'_>, label: Label, icon: Option<ActionIcon>) {
-  release_label(ctx, label);
-  release_icon(ctx, icon);
 }
 
 pub struct ActionState {
@@ -129,10 +93,6 @@ pub struct ActionState {
 }
 
 impl ActionState {
-  fn has_draft_grant(&self) -> bool {
-    self.grants.is_granted(DRAFT_GRANT, Some(DRAFT_SCOPE), MATCH_EXACT)
-  }
-
   fn registry(&self, kind: i32) -> Option<&Registry<Rc<ActionDef>>> {
     self.kinds.get(kind as usize)
   }
@@ -196,35 +156,15 @@ impl ActionState {
     } else if let Some(f) = icon.as_function() {
       Some(ActionIcon::Dynamic(Persistent::save(ctx, f.clone())))
     } else {
-      match icon_from_value(ctx, icon, what, state.jvm.as_ref()) {
-        Ok(Some(Icon { spec, retained_value })) => Some(ActionIcon::Static {
-          spec,
-          retained: retained_value.map(|value| Persistent::save(ctx, value)),
-        }),
-        Ok(None) => None,
-        Err(e) => {
-          release_label(ctx, label);
-          return Err(e);
-        }
-      }
+      icon_from_value(ctx, icon, what, state.jvm.as_ref())?.map(|Icon { spec, retained_value }| ActionIcon::Static {
+        spec,
+        _retained: retained_value.map(|value| Persistent::save(ctx, value)),
+      })
     };
-    let visible = match opt_fn(ctx, &opts, what, "visible") {
-      Ok(visible) => visible,
-      Err(e) => {
-        release_registration(ctx, label, icon);
-        return Err(e);
-      }
-    };
-    let callback = match req_fn(ctx, &opts, what, "callback") {
-      Ok(callback) => callback,
-      Err(e) => {
-        release_registration(ctx, label, icon);
-        return Err(e);
-      }
-    };
+    let visible = opt_fn(ctx, &opts, what, "visible")?;
+    let callback = req_fn(ctx, &opts, what, "callback")?;
 
     if state.lifecycle.is_unloading() {
-      release_registration(ctx, label, icon);
       return noop_disposer(ctx);
     }
 
@@ -246,7 +186,6 @@ impl ActionState {
     if let Some(err) =
       state.host.action_register(kind, token, &id, placements, static_text, static_icon, dynamic_fields)
     {
-      release_registration(ctx, label, icon);
       return Err(ctx.throw(crate::api::error::host_error_to_js(ctx, &err)?));
     }
     let def = Rc::new(ActionDef {
@@ -260,21 +199,15 @@ impl ActionState {
     });
     if let Some(previous) = registry.insert(token, Some(id), def) {
       state.host.action_unregister(kind, previous.token);
-      if let Ok(previous) = Rc::try_unwrap(previous) {
-        previous.release(ctx);
-      }
     }
 
     let state = state.clone();
-    make_disposer(ctx, move |ctx| {
+    make_disposer(ctx, move |_ctx| {
       let Some(registry) = state.registry(kind) else {
         return;
       };
-      if let Some(def) = registry.remove(token) {
+      if registry.remove(token).is_some() {
         state.host.action_unregister(kind, token);
-        if let Ok(def) = Rc::try_unwrap(def) {
-          def.release(ctx);
-        }
       }
     })
   }
@@ -353,7 +286,7 @@ impl ActionState {
       return Ok((out, placement));
     }
     if kind == KIND_EDITOR {
-      if self.has_draft_grant() {
+      if self.grants.is_granted(DRAFT_GRANT, Some(DRAFT_SCOPE), MATCH_EXACT) {
         let draft: Value = parsed.get("draft")?;
         out.set("draft", draft)?;
       } else {
@@ -420,12 +353,8 @@ impl ActionState {
   ) -> Option<(Object<'js>, i32)> {
     match self.build_context(ctx, kind, surface_json) {
       Ok(obj) => Some(obj),
-      Err(rquickjs::Error::Exception) => {
-        (self.log)(&format!("{}: bad surface: {}", kind_name(kind), format_exception(ctx)));
-        None
-      }
       Err(e) => {
-        (self.log)(&format!("{}: bad surface: {e:?}", kind_name(kind)));
+        (self.log)(&format!("{}: bad surface: {}", kind_name(kind), describe_js_error(ctx, e)));
         None
       }
     }
@@ -509,7 +438,7 @@ impl ActionState {
         if let Some(value) = retained_value {
           let mut retained = def.retained_icons.borrow_mut();
           if retained.len() == 4 {
-            let _ = retained.remove(0).restore(ctx);
+            retained.remove(0);
           }
           retained.push(Persistent::save(ctx, value));
         }
@@ -528,10 +457,9 @@ impl ActionState {
     kind: i32,
     surface_json: &str,
   ) -> Option<String> {
-    let state = self;
     let out = context.with(|ctx| {
-      let Some(registry) = state.registry(kind) else {
-        (state.log)(&format!("render: unknown action kind {kind}"));
+      let Some(registry) = self.registry(kind) else {
+        (self.log)(&format!("render: unknown action kind {kind}"));
         return None;
       };
       let defs = registry.values();
@@ -542,22 +470,22 @@ impl ActionState {
       let (context, placement) = if settings {
         (Value::new_null(ctx.clone()), ALL_PLACEMENTS)
       } else {
-        let (context, placement) = state.surface_context(&ctx, kind, surface_json)?;
+        let (context, placement) = self.surface_context(&ctx, kind, surface_json)?;
         (context.into_value(), placement)
       };
-      match state.try_render(&ctx, kind, registry, defs, &context, placement, settings) {
+      match self.try_render(&ctx, kind, registry, defs, &context, placement, settings) {
         Ok(json) => Some(json),
         Err(rquickjs::Error::Exception) => {
-          (state.log)(&crate::fault(format_args!("{}: render failed: {}", kind_name(kind), format_exception(&ctx))));
+          (self.log)(&crate::fault(format_args!("{}: render failed: {}", kind_name(kind), format_exception(&ctx))));
           None
         }
         Err(e) => {
-          (state.log)(&format!("{}: render failed: {e:?}", kind_name(kind)));
+          (self.log)(&format!("{}: render failed: {e:?}", kind_name(kind)));
           None
         }
       }
     });
-    pump_jobs(rt, context, state.log.as_ref());
+    pump_jobs(rt, context, self.log.as_ref());
     out
   }
 
@@ -569,12 +497,11 @@ impl ActionState {
     token: u32,
     surface_json: &str,
   ) {
-    let state = self;
-    if state.lifecycle.is_unloading() {
+    if self.lifecycle.is_unloading() {
       return;
     }
     context.with(|ctx| {
-      let Some(registry) = state.registry(kind) else {
+      let Some(registry) = self.registry(kind) else {
         return;
       };
       let Some(def) = registry.get(token) else {
@@ -583,32 +510,27 @@ impl ActionState {
       let callback = match def.callback.clone().restore(&ctx) {
         Ok(f) => f,
         Err(e) => {
-          (state.log)(&format!("{}: failed to restore callback: {e:?}", kind_name(kind)));
+          (self.log)(&format!("{}: failed to restore callback: {e:?}", kind_name(kind)));
           return;
         }
       };
-      let Some((context_obj, placement)) = state.surface_context(&ctx, kind, surface_json) else {
+      let Some((context_obj, placement)) = self.surface_context(&ctx, kind, surface_json) else {
         return;
       };
       if def.placements & placement == 0 {
         return;
       }
-      call_callback(&ctx, &state.log, &format!("{} callback", kind_name(kind)), &callback, (context_obj,));
+      call_callback(&ctx, &self.log, &format!("{} callback", kind_name(kind)), &callback, (context_obj,));
     });
-    pump_jobs(rt, context, state.log.as_ref());
+    pump_jobs(rt, context, self.log.as_ref());
   }
 }
 
 impl Dispose for ActionState {
   fn dispose(&self, context: &rquickjs::Context) {
-    let state = self;
-    context.with(|ctx| {
-      for registry in &state.kinds {
-        for def in registry.remove_matching(|_| true) {
-          if let Ok(def) = Rc::try_unwrap(def) {
-            def.release(&ctx);
-          }
-        }
+    context.with(|_| {
+      for registry in &self.kinds {
+        drop(registry.remove_matching(|_| true));
       }
     });
   }

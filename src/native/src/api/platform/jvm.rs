@@ -10,13 +10,13 @@ use rquickjs::{
   Runtime, TypedArray, Value,
 };
 
-use crate::api::error::{format_exception, report_callback_error, wire_error_to_js, PluginErrorCode};
+use crate::api::error::{format_exception, report_callback_error, throw_wire_error, PluginErrorCode};
 use crate::api::tl::proxy::{encode_bytes_wire, TlViews, ViewLife};
 use crate::runtime::pump_jobs;
 use crate::sandbox::grants::{GrantHost, MATCH_NAMESPACE};
 use crate::sandbox::registry::{CallbackRegistry, Lifecycle};
 use crate::utils::arguments::array_values;
-use crate::utils::prelude;
+use crate::utils::qjs::{qjs_load_prelude, qjs_read_typed_bytes};
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/jvm.qbc"));
 
@@ -38,8 +38,7 @@ pub trait JvmHost {
 const HIDDEN_REF: &str = "__inuJvmRef";
 const HANDLE_EXPIRED: &str = "jvm: that handle was released; a plugin's handles do not outlive it";
 
-/// what a js value is a handle of: a `JvmRef` instance, or a class function carrying one
-pub(crate) fn ref_of<'js>(value: &Value<'js>) -> Option<Class<'js, JvmRef>> {
+pub(crate) fn get_jvm_ref<'js>(value: &Value<'js>) -> Option<Class<'js, JvmRef>> {
   let object = value.as_object()?;
   if let Some(handle) = Class::<JvmRef>::from_object(object) {
     return Some(handle);
@@ -94,12 +93,8 @@ struct Prelude {
 }
 
 pub(super) fn throw_too_big<'js, T>(ctx: &Ctx<'js>, what: &str, size: usize, limit: usize) -> JsResult<T> {
-  {
-    let message: &str = &format!("jvm: {what} is {size} bytes, over the {limit} this bridge carries");
-    let usage = size as i64;
-    let quota = limit as i64;
-    PluginErrorCode::QuotaExceeded(usage, quota).throw(ctx, message)
-  }
+  PluginErrorCode::QuotaExceeded(size as i64, limit as i64)
+    .throw(ctx, &format!("jvm: {what} is {size} bytes, over the {limit} this bridge carries"))
 }
 
 impl JvmState {
@@ -144,7 +139,7 @@ impl JvmState {
   }
 
   fn body_result_to_wire<'js>(&self, ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<String> {
-    match ref_of(value) {
+    match get_jvm_ref(value) {
       Some(handle) => Ok(self.copy_wire(handle.borrow().id)),
       None => self.arg_to_wire(ctx, value),
     }
@@ -219,7 +214,6 @@ impl JvmState {
     factory.call((program, captures))
   }
 
-  /// member access runs through cached jni ids, and there is no text form of it to fall back to
   fn native<'js>(&self, ctx: &Ctx<'js>) -> JsResult<&Native> {
     match self.native.as_deref() {
       Some(native) => Ok(native),
@@ -227,12 +221,10 @@ impl JvmState {
     }
   }
 
-  pub(crate) fn handle_id<'js>(&self, _ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<i64> {
-    Ok(ref_of(value).map(|handle| handle.borrow().id).unwrap_or(-1))
+  pub(crate) fn handle_id(&self, value: &Value<'_>) -> Option<i64> {
+    get_jvm_ref(value).map(|handle| handle.borrow().id)
   }
 
-  /// a second id for the reference behind `id`, for a handoff whose original the other side
-  /// releases
   fn copy_wire(&self, id: i64) -> String {
     match self.refs.copy(id) {
       Some(copy) => format!("GO{copy}"),
@@ -255,8 +247,6 @@ impl JvmState {
     }
   }
 
-  /// the js object for a table entry: a class is a callable the prelude builds, the rest are
-  /// `JvmRef` instances on the prototype their kind gets
   pub(crate) fn make_handle<'js>(&self, ctx: &Ctx<'js>, spec: HandleSpec) -> JsResult<Value<'js>> {
     let handle = JvmRef::new(self.refs.clone(), spec.id);
     handle.class_key.set(spec.class_key);
@@ -298,7 +288,7 @@ impl JvmState {
   }
 
   fn handle_arg<'js>(&self, ctx: &Ctx<'js>, value: &Value<'js>, what: &str) -> JsResult<Class<'js, JvmRef>> {
-    match ref_of(value) {
+    match get_jvm_ref(value) {
       Some(handle) => Ok(handle),
       None => {
         PluginErrorCode::InvalidArgument.throw(ctx, &format!("{what}: expected a java class, object, method or field"))
@@ -310,8 +300,6 @@ impl JvmState {
     values.iter().map(|value| read_arg(ctx, value)).collect()
   }
 
-  /// what every member operation starts with: the grant, the handle the name is looked up on, and
-  /// the jni side that does the looking
   fn member_target<'js>(
     &self,
     ctx: &Ctx<'js>,
@@ -356,15 +344,9 @@ impl JvmState {
   }
 }
 
-fn bounded_bytes(bytes: &[u8], limit: usize) -> bool {
-  bytes.len() <= limit
-}
-
 impl JvmState {
   pub(crate) fn wire_to_value<'js>(&self, ctx: &Ctx<'js>, wire: &str) -> JsResult<Value<'js>> {
-    if let Some(built) = wire_error_to_js(ctx, wire) {
-      return Err(ctx.throw(built?));
-    }
+    throw_wire_error(ctx, wire)?;
     let mut chars = wire.chars();
     let Some(tag) = chars.next() else {
       return PluginErrorCode::Internal.throw(ctx, "jvm: the host answered with an empty wire");
@@ -434,7 +416,7 @@ impl JvmState {
     } else if TypedArray::<u8>::from_value(value.clone()).is_ok() {
       "putByteArray"
     } else {
-      let Some(handle) = ref_of(value) else {
+      let Some(handle) = get_jvm_ref(value) else {
         return PluginErrorCode::InvalidArgument
           .throw(ctx, &format!("bundle: '{key}' has unsupported type {}", value.type_of()));
       };
@@ -456,7 +438,7 @@ impl JvmState {
     let Some(values) = values.as_object() else {
       return PluginErrorCode::InvalidArgument.throw(ctx, "bundle: expected an object");
     };
-    if values.as_array().is_some() || ref_of(&values.clone().into_value()).is_some() {
+    if values.as_array().is_some() || get_jvm_ref(&values.clone().into_value()).is_some() {
       return PluginErrorCode::InvalidArgument.throw(ctx, "bundle: expected an object");
     }
     let class = self.js_cls(ctx, "android.os.Bundle".to_string())?;
@@ -495,336 +477,242 @@ pub fn install_jvm<'js>(
   });
 
   let natives = Object::new(ctx.clone())?;
-  {
-    let state = state.clone();
-    natives.set(
-      "defineClass",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, definition: String, values: Array<'js>| {
-        let this = &state;
-        this.grants.check_grant(&ctx, GRANT, None, MATCH_NAMESPACE)?;
-        if definition.len() > VALUE_LIMIT_BYTES {
-          return throw_too_big(&ctx, "class definition", definition.len(), VALUE_LIMIT_BYTES);
+  set_fn!(natives, "defineClass", ctx, state, move |ctx: Ctx<'js>, definition: String, values: Array<'js>| {
+    state.grants.check_grant(&ctx, GRANT, None, MATCH_NAMESPACE)?;
+    if definition.len() > VALUE_LIMIT_BYTES {
+      return throw_too_big(&ctx, "class definition", definition.len(), VALUE_LIMIT_BYTES);
+    }
+    let mut tokens = Vec::new();
+    let result = (|| {
+      let mut wires = Vec::new();
+      let mut bytes = 0usize;
+      for value in array_values(&ctx, &values, "defineClass")? {
+        let is_handle = get_jvm_ref(&value).is_some();
+        let wire = if let Some(callback) = value.as_function().filter(|_| !is_handle) {
+          let token = state.callbacks.alloc();
+          state.callbacks.register(&ctx, token, callback.clone());
+          tokens.push(token);
+          format!("I{token}")
+        } else {
+          state.arg_to_wire(&ctx, &value)?
+        };
+        bytes = bytes.saturating_add(wire.len());
+        if bytes > VALUE_LIMIT_BYTES {
+          return throw_too_big(&ctx, "class captures", bytes, VALUE_LIMIT_BYTES);
         }
-        let mut tokens = Vec::new();
-        let result = (|| {
-          let mut wires = Vec::new();
-          let mut bytes = 0usize;
-          for value in array_values(&ctx, &values, "defineClass")? {
-            let is_handle = ref_of(&value).is_some();
-            let wire = if let Some(callback) = value.as_function().filter(|_| !is_handle) {
-              let token = this.callbacks.alloc();
-              this.callbacks.register(&ctx, token, None, callback.clone());
-              tokens.push(token);
-              format!("I{token}")
-            } else {
-              this.arg_to_wire(&ctx, &value)?
-            };
-            bytes = bytes.saturating_add(wire.len());
-            if bytes > VALUE_LIMIT_BYTES {
-              return throw_too_big(&ctx, "class captures", bytes, VALUE_LIMIT_BYTES);
-            }
-            wires.push(wire);
-          }
-          let prepared = this.ask(&ctx, OP_PREPARE_CLASS, 0, &definition, &wires)?;
-          let json = String::from_js(&ctx, prepared)?;
-          let metadata = Object::from_js(&ctx, (&ctx).json_parse(json)?)?;
-          let ticket: String = metadata.get("ticket")?;
-          let ticket = ticket.parse::<i64>().map_err(|_| rquickjs::Error::Unknown)?;
-          let result = (|| {
-            let name: String = metadata.get("name")?;
-            let superclass: String = metadata.get("superclass")?;
-            let interfaces: Vec<String> = metadata.get("interfaces")?;
-            let fields: Vec<Vec<String>> = metadata.get("fields")?;
-            let methods: Vec<Vec<String>> = metadata.get("methods")?;
-            let bytes = match dex::build(&name, &superclass, &interfaces, &fields, &methods) {
-              Ok(bytes) => bytes,
-              Err(error) => return PluginErrorCode::InvalidArgument.throw(&ctx, &format!("defineClass: {error}")),
-            };
-            let wire = encode_bytes_wire(&bytes);
-            let handle = this.ask(&ctx, OP_LOAD_CLASS, ticket, "", &[wire])?;
-            // the host names a class the plugin did not, so the name goes back with the handle
-            let pair = Array::new(ctx.clone())?;
-            pair.set(0, handle)?;
-            pair.set(1, name)?;
-            Ok(pair.into_value())
-          })();
-          if result.is_err() {
-            this.host.jvm(OP_CANCEL_CLASS, ticket, "", &[]);
-          }
-          result
-        })();
-        if result.is_err() {
-          for token in tokens {
-            this.callbacks.dispose(&ctx, token);
-          }
-        }
-        result
-      })?,
-    )?;
-  }
+        wires.push(wire);
+      }
+      let prepared = state.ask(&ctx, OP_PREPARE_CLASS, 0, &definition, &wires)?;
+      let json = String::from_js(&ctx, prepared)?;
+      let metadata = Object::from_js(&ctx, (&ctx).json_parse(json)?)?;
+      let ticket: String = metadata.get("ticket")?;
+      let ticket = ticket.parse::<i64>().map_err(|_| rquickjs::Error::Unknown)?;
+      let result = (|| {
+        let name: String = metadata.get("name")?;
+        let superclass: String = metadata.get("superclass")?;
+        let interfaces: Vec<String> = metadata.get("interfaces")?;
+        let fields: Vec<Vec<String>> = metadata.get("fields")?;
+        let methods: Vec<Vec<String>> = metadata.get("methods")?;
+        let bytes = match dex::build(&name, &superclass, &interfaces, &fields, &methods) {
+          Ok(bytes) => bytes,
+          Err(error) => return PluginErrorCode::InvalidArgument.throw(&ctx, &format!("defineClass: {error}")),
+        };
+        let wire = encode_bytes_wire(&bytes);
+        let handle = state.ask(&ctx, OP_LOAD_CLASS, ticket, "", &[wire])?;
+        // the host names a class the plugin did not, so the name goes back with the handle
+        let pair = Array::new(ctx.clone())?;
+        pair.set(0, handle)?;
+        pair.set(1, name)?;
+        Ok(pair.into_value())
+      })();
+      if result.is_err() {
+        state.host.jvm(OP_CANCEL_CLASS, ticket, "", &[]);
+      }
+      result
+    })();
+    if result.is_err() {
+      for token in tokens {
+        state.callbacks.dispose(&ctx, token);
+      }
+    }
+    result
+  });
   let ops = Object::new(ctx.clone())?;
   for (name, op) in [("routine", OP_ROUTINE), ("xposedRoutine", OP_XPOSED_ROUTINE)] {
     ops.set(name, op)?;
   }
-  {
-    let state = state.clone();
-    natives.set(
-      "op",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, op: i32, target: i64, name: String, args: Array<'js>| {
-        let this = &state;
-        this.grants.check_grant(&ctx, GRANT, None, MATCH_NAMESPACE)?;
-        if op == OP_XPOSED_ROUTINE {
-          this.grants.check_grant(&ctx, "unsafe.xposed", None, MATCH_NAMESPACE)?;
-        }
-        if name.len() > VALUE_LIMIT_BYTES {
-          return throw_too_big(&ctx, "operation definition", name.len(), VALUE_LIMIT_BYTES);
-        }
-        let mut wires = Vec::new();
-        let mut wire_bytes = 0usize;
-        for arg in array_values(&ctx, &args, "jvm")? {
-          let wire = this.arg_to_wire(&ctx, &arg)?;
-          wire_bytes = wire_bytes.saturating_add(wire.len());
-          if (op == OP_ROUTINE || op == OP_XPOSED_ROUTINE) && wire_bytes > VALUE_LIMIT_BYTES {
-            return throw_too_big(&ctx, "routine captures", wire_bytes, VALUE_LIMIT_BYTES);
-          }
-          wires.push(wire);
-        }
-        this.ask(&ctx, op, target, &name, &wires)
-      })?,
-    )?;
-  }
-  {
-    let state = state.clone();
-    natives.set(
-      "call",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, name: String, args: Rest<Value<'js>>| {
-        state.js_call(&ctx, target, name, args)
-      })?,
-    )?;
-  }
-  {
-    let state = state.clone();
-    natives.set(
-      "callSuper",
-      Function::new(
-        ctx.clone(),
-        move |ctx: Ctx<'js>, cls: Value<'js>, receiver: Value<'js>, name: String, args: Rest<Value<'js>>| {
-          let this = &state;
-          let (native, cls) = this.member_target(&ctx, &cls, "callSuper")?;
-          let receiver = read_arg(&ctx, &receiver)?;
-          let args = this.read_args(&ctx, &args.0)?;
-          let outcome = native.call_super(&ctx, &cls, &receiver, &name, &args)?;
-          this.outcome_to_value(&ctx, outcome)
-        },
-      )?,
-    )?;
-  }
-  {
-    let state = state.clone();
-    natives.set(
-      "construct",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, args: Rest<Value<'js>>| {
-        state.js_construct(&ctx, target, args)
-      })?,
-    )?;
-  }
-  {
-    let state = state.clone();
-    natives.set(
-      "get",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, name: String| {
-        let this = &state;
-        let (native, target) = this.member_target(&ctx, &target, "getField")?;
-        let outcome = native.get(&ctx, &target, &name)?;
-        this.outcome_to_value(&ctx, outcome)
-      })?,
-    )?;
-  }
-  {
-    let state = state.clone();
-    natives.set(
-      "set",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, name: String, value: Value<'js>| {
-        let this = &state;
-        let (native, target) = this.member_target(&ctx, &target, "setField")?;
-        native.set(&ctx, &target, &name, &read_arg(&ctx, &value)?)
-      })?,
-    )?;
-  }
-  {
-    let state = state.clone();
-    natives.set(
-      "method",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, name: String| {
-        let this = &state;
-        let (native, target) = this.member_target(&ctx, &target, "getDeclaredMethod")?;
-        let outcome = native.method(&ctx, &target, &name)?;
-        this.outcome_to_value(&ctx, outcome)
-      })?,
-    )?;
-  }
-  {
-    let state = state.clone();
-    natives.set(
-      "field",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, name: String| {
-        let this = &state;
-        let (native, target) = this.member_target(&ctx, &target, "getDeclaredField")?;
-        let outcome = native.field(&ctx, &target, &name)?;
-        this.outcome_to_value(&ctx, outcome)
-      })?,
-    )?;
-  }
-  {
-    let state = state.clone();
-    natives.set(
-      "invoke",
-      Function::new(
-        ctx.clone(),
-        move |ctx: Ctx<'js>, target: Value<'js>, receiver: Value<'js>, args: Rest<Value<'js>>| {
-          let this = &state;
-          let (native, target) = this.member_target(&ctx, &target, "invoke")?;
-          let receiver = read_arg(&ctx, &receiver)?;
-          let args = this.read_args(&ctx, &args.0)?;
-          let outcome = native.invoke_pinned(&ctx, &target, &receiver, &args)?;
-          this.outcome_to_value(&ctx, outcome)
-        },
-      )?,
-    )?;
-  }
-  {
-    let state = state.clone();
-    natives.set(
-      "memberGet",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, receiver: Value<'js>| {
-        let this = &state;
-        let (native, target) = this.member_target(&ctx, &target, "get")?;
-        let receiver = read_arg(&ctx, &receiver)?;
-        let outcome = native.member_get(&ctx, &target, &receiver)?;
-        this.outcome_to_value(&ctx, outcome)
-      })?,
-    )?;
-  }
-  {
-    let state = state.clone();
-    natives.set(
-      "memberSet",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, receiver: Value<'js>, value: Value<'js>| {
-        let this = &state;
-        let (native, target) = this.member_target(&ctx, &target, "set")?;
-        let receiver = read_arg(&ctx, &receiver)?;
-        native.member_set(&ctx, &target, &receiver, &read_arg(&ctx, &value)?)
-      })?,
-    )?;
-  }
-  {
-    let state = state.clone();
-    natives.set(
-      "isInstance",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, target: Value<'js>, value: Value<'js>| {
-        let this = &state;
-        this.grants.check_grant(&ctx, GRANT, None, MATCH_NAMESPACE)?;
-        let target = this.handle_arg(&ctx, &target, "isInstance")?;
-        // anything but a java handle names no java object, so like `instanceof` it is simply not one
-        match ref_of(&value) {
-          Some(value) => this.native(&ctx)?.is_instance(&ctx, &target, &Arg::Ref(value)),
-          None => Ok(false),
-        }
-      })?,
-    )?;
-  }
-  natives.set("isRef", Function::new(ctx.clone(), |value: Value<'js>| ref_of(&value).is_some())?)?;
+  set_fn!(natives, "op", ctx, state, move |ctx: Ctx<'js>,
+                                           op: i32,
+                                           target: i64,
+                                           name: String,
+                                           args: Array<'js>| {
+    state.grants.check_grant(&ctx, GRANT, None, MATCH_NAMESPACE)?;
+    if op == OP_XPOSED_ROUTINE {
+      state.grants.check_grant(&ctx, "unsafe.xposed", None, MATCH_NAMESPACE)?;
+    }
+    if name.len() > VALUE_LIMIT_BYTES {
+      return throw_too_big(&ctx, "operation definition", name.len(), VALUE_LIMIT_BYTES);
+    }
+    let mut wires = Vec::new();
+    let mut wire_bytes = 0usize;
+    for arg in array_values(&ctx, &args, "jvm")? {
+      let wire = state.arg_to_wire(&ctx, &arg)?;
+      wire_bytes = wire_bytes.saturating_add(wire.len());
+      if (op == OP_ROUTINE || op == OP_XPOSED_ROUTINE) && wire_bytes > VALUE_LIMIT_BYTES {
+        return throw_too_big(&ctx, "routine captures", wire_bytes, VALUE_LIMIT_BYTES);
+      }
+      wires.push(wire);
+    }
+    state.ask(&ctx, op, target, &name, &wires)
+  });
+  set_fn!(natives, "call", ctx, state, move |ctx: Ctx<'js>,
+                                             target: Value<'js>,
+                                             name: String,
+                                             args: Rest<Value<'js>>| {
+    state.js_call(&ctx, target, name, args)
+  });
+  set_fn!(
+    natives,
+    "callSuper",
+    ctx,
+    state,
+    move |ctx: Ctx<'js>, cls: Value<'js>, receiver: Value<'js>, name: String, args: Rest<Value<'js>>| {
+      let (native, cls) = state.member_target(&ctx, &cls, "callSuper")?;
+      let receiver = read_arg(&ctx, &receiver)?;
+      let args = state.read_args(&ctx, &args.0)?;
+      let outcome = native.call_super(&ctx, &cls, &receiver, &name, &args)?;
+      state.outcome_to_value(&ctx, outcome)
+    }
+  );
+  set_fn!(
+    natives,
+    "construct",
+    ctx,
+    state,
+    move |ctx: Ctx<'js>, target: Value<'js>, args: Rest<Value<'js>>| { state.js_construct(&ctx, target, args) }
+  );
+  set_fn!(natives, "get", ctx, state, move |ctx: Ctx<'js>, target: Value<'js>, name: String| {
+    let (native, target) = state.member_target(&ctx, &target, "getField")?;
+    let outcome = native.get(&ctx, &target, &name)?;
+    state.outcome_to_value(&ctx, outcome)
+  });
+  set_fn!(natives, "set", ctx, state, move |ctx: Ctx<'js>,
+                                            target: Value<'js>,
+                                            name: String,
+                                            value: Value<'js>| {
+    let (native, target) = state.member_target(&ctx, &target, "setField")?;
+    native.set(&ctx, &target, &name, &read_arg(&ctx, &value)?)
+  });
+  set_fn!(natives, "method", ctx, state, move |ctx: Ctx<'js>, target: Value<'js>, name: String| {
+    let (native, target) = state.member_target(&ctx, &target, "getDeclaredMethod")?;
+    let outcome = native.method(&ctx, &target, &name)?;
+    state.outcome_to_value(&ctx, outcome)
+  });
+  set_fn!(natives, "field", ctx, state, move |ctx: Ctx<'js>, target: Value<'js>, name: String| {
+    let (native, target) = state.member_target(&ctx, &target, "getDeclaredField")?;
+    let outcome = native.field(&ctx, &target, &name)?;
+    state.outcome_to_value(&ctx, outcome)
+  });
+  set_fn!(
+    natives,
+    "invoke",
+    ctx,
+    state,
+    move |ctx: Ctx<'js>, target: Value<'js>, receiver: Value<'js>, args: Rest<Value<'js>>| {
+      let (native, target) = state.member_target(&ctx, &target, "invoke")?;
+      let receiver = read_arg(&ctx, &receiver)?;
+      let args = state.read_args(&ctx, &args.0)?;
+      let outcome = native.invoke_pinned(&ctx, &target, &receiver, &args)?;
+      state.outcome_to_value(&ctx, outcome)
+    }
+  );
+  set_fn!(natives, "memberGet", ctx, state, move |ctx: Ctx<'js>, target: Value<'js>, receiver: Value<'js>| {
+    let (native, target) = state.member_target(&ctx, &target, "get")?;
+    let receiver = read_arg(&ctx, &receiver)?;
+    let outcome = native.member_get(&ctx, &target, &receiver)?;
+    state.outcome_to_value(&ctx, outcome)
+  });
+  set_fn!(
+    natives,
+    "memberSet",
+    ctx,
+    state,
+    move |ctx: Ctx<'js>, target: Value<'js>, receiver: Value<'js>, value: Value<'js>| {
+      let (native, target) = state.member_target(&ctx, &target, "set")?;
+      let receiver = read_arg(&ctx, &receiver)?;
+      native.member_set(&ctx, &target, &receiver, &read_arg(&ctx, &value)?)
+    }
+  );
+  set_fn!(natives, "isInstance", ctx, state, move |ctx: Ctx<'js>, target: Value<'js>, value: Value<'js>| {
+    state.grants.check_grant(&ctx, GRANT, None, MATCH_NAMESPACE)?;
+    let target = state.handle_arg(&ctx, &target, "isInstance")?;
+    // anything but a java handle names no java object, so like `instanceof` it is simply not one
+    match get_jvm_ref(&value) {
+      Some(value) => state.native(&ctx)?.is_instance(&ctx, &target, &Arg::Ref(value)),
+      None => Ok(false),
+    }
+  });
+  natives.set("isRef", Function::new(ctx.clone(), |value: Value<'js>| get_jvm_ref(&value).is_some())?)?;
   natives.set("hiddenRef", HIDDEN_REF)?;
-  {
-    let state = state.clone();
-    natives.set("cls", Function::new(ctx.clone(), move |ctx: Ctx<'js>, name: String| state.js_cls(&ctx, name))?)?;
-  }
-  {
-    let state = state.clone();
-    natives.set(
-      "fromTl",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, value: Value<'js>| {
-        let this = &state;
-        let ctx: &Ctx<'js> = &ctx;
-        this.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
-        let wire = crate::api::tl::proxy::js_value_to_wire(ctx, value)?;
-        this.ask(ctx, OP_FROM_TL, 0, &wire, &[])
-      })?,
-    )?;
-  }
-  {
-    let state = state.clone();
-    natives.set(
-      "toTl",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, value: Value<'js>| {
-        let this = &state;
-        this.grants.check_grant(&ctx, GRANT, None, MATCH_NAMESPACE)?;
-        let handle = this.handle_arg(&ctx, &value, "toTl")?;
-        let Some(views) = this.views.as_ref() else {
-          return PluginErrorCode::Unsupported.throw(&ctx, "jvm: this build has no tl view table");
-        };
-        let id = handle.borrow().id;
-        let wire = this.host.jvm(OP_TO_TL, id, "", &[]);
-        if let Some(built) = wire_error_to_js(&ctx, &wire) {
-          return Err((&ctx).throw(built?));
+  set_fn!(natives, "cls", ctx, state, move |ctx: Ctx<'js>, name: String| state.js_cls(&ctx, name));
+  set_fn!(natives, "fromTl", ctx, state, move |ctx: Ctx<'js>, value: Value<'js>| {
+    let ctx: &Ctx<'js> = &ctx;
+    state.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
+    let wire = crate::api::tl::proxy::js_value_to_wire(ctx, value)?;
+    state.ask(ctx, OP_FROM_TL, 0, &wire, &[])
+  });
+  set_fn!(natives, "toTl", ctx, state, move |ctx: Ctx<'js>, value: Value<'js>| {
+    state.grants.check_grant(&ctx, GRANT, None, MATCH_NAMESPACE)?;
+    let handle = state.handle_arg(&ctx, &value, "toTl")?;
+    let Some(views) = state.views.as_ref() else {
+      return PluginErrorCode::Unsupported.throw(&ctx, "jvm: this build has no tl view table");
+    };
+    let id = handle.borrow().id;
+    let wire = state.host.jvm(OP_TO_TL, id, "", &[]);
+    views.wire_to_js_value(&ctx, &wire, ViewLife::Plugin)
+  });
+  set_fn!(natives, "runnable", ctx, state, move |ctx: Ctx<'js>,
+                                                 callback: Function<'js>|
+        -> JsResult<Value<'js>> {
+    let ctx: &Ctx<'js> = &ctx;
+    state.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
+    let token = state.callbacks.alloc();
+    let handle = state.ask(ctx, OP_RUNNABLE, 0, "", &[format!("I{token}")])?;
+    if !state.lifecycle.is_unloading() || state.lifecycle.is_cleaning_up() {
+      if state.lifecycle.is_cleaning_up() {
+        state.cleanup_callbacks.borrow_mut().insert(token);
+      }
+      state.callbacks.register(ctx, token, callback);
+    }
+    Ok(handle)
+  });
+  set_fn!(natives, "loadDex", ctx, state, move |ctx: Ctx<'js>, source: Value<'js>| {
+    let ctx: &Ctx<'js> = &ctx;
+    state.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
+    if let Some(path) = source.as_string() {
+      let path = path.to_string()?;
+      state.ask(ctx, OP_LOAD_DEX, 0, &path, &[])?;
+      return Ok(());
+    }
+    if let Ok(typed) = TypedArray::<u8>::from_value(source.clone()) {
+      // an error thrown past the limit is built after the last use of the bytes
+      let wire = qjs_read_typed_bytes(&typed, |bytes| {
+        if bytes.len() > DEX_LIMIT_BYTES {
+          return throw_too_big(ctx, "a dex", bytes.len(), DEX_LIMIT_BYTES);
         }
-        views.wire_to_js_value(&ctx, &wire, ViewLife::Plugin)
-      })?,
-    )?;
-  }
-  {
-    let state = state.clone();
-    natives.set(
-      "runnable",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, callback: Function<'js>| -> JsResult<Value<'js>> {
-        let this = &state;
-        let ctx: &Ctx<'js> = &ctx;
-        this.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
-        let token = this.callbacks.alloc();
-        let handle = this.ask(ctx, OP_RUNNABLE, 0, "", &[format!("I{token}")])?;
-        if !this.lifecycle.is_unloading() || this.lifecycle.is_cleaning_up() {
-          if this.lifecycle.is_cleaning_up() {
-            this.cleanup_callbacks.borrow_mut().insert(token);
-          }
-          this.callbacks.register(ctx, token, None, callback);
-        }
-        Ok(handle)
-      })?,
-    )?;
-  }
-  {
-    let state = state.clone();
-    natives.set(
-      "loadDex",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, source: Value<'js>| {
-        let this = &state;
-        let ctx: &Ctx<'js> = &ctx;
-        this.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
-        if let Some(path) = source.as_string() {
-          let path = path.to_string()?;
-          this.ask(ctx, OP_LOAD_DEX, 0, &path, &[])?;
-          return Ok(());
-        }
-        if let Ok(typed) = TypedArray::<u8>::from_value(source.clone()) {
-          // SAFETY: no javascript runs while the slice is borrowed; the host is asked only after its
-          // last use
-          if let Some(bytes) = unsafe { typed.as_bytes() } {
-            if !bounded_bytes(bytes, DEX_LIMIT_BYTES) {
-              return throw_too_big(ctx, "a dex", bytes.len(), DEX_LIMIT_BYTES);
-            }
-            let wire = encode_bytes_wire(&bytes);
-            this.ask(ctx, OP_LOAD_DEX, 0, "", &[wire])?;
-            return Ok(());
-          }
-        }
-        PluginErrorCode::InvalidArgument.throw(ctx, "loadDex: expected an absolute path or a Uint8Array")
-      })?,
-    )?;
-  }
+        Ok(encode_bytes_wire(bytes))
+      });
+      if let Some(wire) = wire {
+        state.ask(ctx, OP_LOAD_DEX, 0, "", &[wire?])?;
+        return Ok(());
+      }
+    }
+    PluginErrorCode::InvalidArgument.throw(ctx, "loadDex: expected an absolute path or a Uint8Array")
+  });
 
   let plugin_error = globals.plugin_error.clone();
 
-  let factory = prelude::load(ctx, PRELUDE)?;
+  let factory = qjs_load_prelude(ctx, PRELUDE)?;
   let built: Object = factory.call((natives, plugin_error, ops))?;
   let jvm: Object = built.get("jvm")?;
   let protos: Object = built.get("protos")?;
@@ -870,16 +758,15 @@ impl JvmState {
   }
 
   pub fn dispatch_callback(self: &Rc<Self>, rt: &Runtime, context: &Context, callback_id: u32) {
-    let state = self;
     context.with(|ctx| {
-      let Some(callback) = state.callbacks.restore(&ctx, callback_id) else {
+      let Some(callback) = self.callbacks.restore(&ctx, callback_id) else {
         return;
       };
       if let Err(error) = callback.call::<_, Value>(()) {
-        report_callback_error(&state.log, &ctx, "jvm.runnable callback", error);
+        report_callback_error(&self.log, &ctx, "jvm.runnable callback", error);
       }
     });
-    pump_jobs(rt, context, state.log.as_ref());
+    pump_jobs(rt, context, self.log.as_ref());
   }
 
   pub(crate) fn refs(&self) -> &Arc<RefTable> {
@@ -889,19 +776,12 @@ impl JvmState {
 
 impl Dispose for JvmState {
   fn dispose(&self, context: &rquickjs::Context) {
-    let state = self;
     context.with(|ctx| {
-      state.callbacks.release_all(&ctx);
-      if let Some(prelude) = state.prelude.borrow_mut().take() {
-        let _ = prelude.mint_class.restore(&ctx);
-        let _ = prelude.object_proto.restore(&ctx);
-        let _ = prelude.method_proto.restore(&ctx);
-        let _ = prelude.constructor_proto.restore(&ctx);
-        let _ = prelude.field_proto.restore(&ctx);
-        let _ = prelude.xposed_routine.restore(&ctx);
-      }
+      self.callbacks.release_all(&ctx);
+      let prelude = self.prelude.borrow_mut().take();
+      drop(prelude);
     });
-    state.refs.close();
+    self.refs.close();
   }
 }
 

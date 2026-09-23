@@ -129,6 +129,17 @@ jobs:
       - name: typecheck (plugin contract + bundled plugins)
         run: pnpm run typecheck-plugins
 
+      # the two typings files the tl generator writes, which the sdk publish in release.yml needs and
+      # cannot make without a worktree of its own
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}-sdk
+          path: |
+            sdk/types/android.tl.d.ts
+            sdk/types/tl-names.txt
+          if-no-files-found: error
+          retention-days: 1
+
       - name: compute build info
         id: info
         env:

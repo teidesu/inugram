@@ -1,10 +1,4 @@
-import type { Instruction, RoutineProgram } from './ops.js'
-
-const IDENTIFIER = /^[a-z_$][\w$]*$/i
-
-function emitKey(key: string): string {
-  return IDENTIFIER.test(key) ? key : JSON.stringify(key)
-}
+import type { RoutineProgram } from './ops.js'
 
 function escapeTemplate(text: string): string {
   return text.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${').replace(/\r/g, '\\r')
@@ -30,22 +24,18 @@ export function dedentRoutineSource(source: string): string {
   return lines.map(line => line.slice(margin.length)).join('\n')
 }
 
-function emitInstruction(node: Instruction): string {
-  return `[${node.map(field => JSON.stringify(field)).join(', ')}]`
-}
-
 export function emitProgram(program: RoutineProgram, indent = ''): string {
   const code = program.code.length === 0
     ? '[]'
-    : `[\n${program.code.map(node => `    ${emitInstruction(node)},`).join('\n')}\n  ]`
+    : `[\n${program.code.map(node => `    [${node.map(field => JSON.stringify(field)).join(', ')}],`).join('\n')}\n  ]`
   return [
     '{',
-    `  ${emitKey('v')}: ${program.v},`,
-    `  ${emitKey('source')}: ${emitSource(program.source, `${indent}  `)},`,
-    `  ${emitKey('captures')}: ${JSON.stringify(program.captures)},`,
-    `  ${emitKey('slots')}: ${program.slots},`,
-    `  ${emitKey('code')}: ${code},`,
-    `  ${emitKey('tries')}: ${JSON.stringify(program.tries)},`,
+    `  v: ${program.v},`,
+    `  source: ${emitSource(program.source, `${indent}  `)},`,
+    `  captures: ${JSON.stringify(program.captures)},`,
+    `  slots: ${program.slots},`,
+    `  code: ${code},`,
+    `  tries: ${JSON.stringify(program.tries)},`,
     '}',
   ].join('\n')
 }

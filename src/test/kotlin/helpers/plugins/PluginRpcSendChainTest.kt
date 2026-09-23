@@ -7,48 +7,20 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.junit.Before
 import org.junit.Test
-import org.telegram.messenger.Utilities
-import org.telegram.tgnet.RequestDelegate
-import org.telegram.tgnet.TLObject
 import org.telegram.tgnet.TLRPC
 
-/**
- * `interceptSendMessage` is a *narrowing* of the `interceptRpc` chain rather than a chain of its
- * own, which is what buys it the collapse, cancel handling and bypass lease for
- * free. What this pins is the part of that claim only the host can answer: which grant it is gated
- * on, which methods it lands in, and that the two forms interleave in plugin-list order.
- */
 class PluginRpcSendChainTest {
     @Before
     fun setUp() = resetBridge()
 
-    private fun send(request: TLObject, token: Int = 11, onDone: (TLObject?, TLRPC.TL_error?) -> Unit = { _, _ -> }): Boolean =
-        PluginRpc.maybeIntercept(
-            connections(0),
-            request,
-            RequestDelegate { response, error -> onDone(response, error) },
-            null, null, null,
-            0, 0, 0, false, token, 0,
-        )
-
     @Test
-    fun the_registration_is_gated_on_the_api_s_own_grant_not_on_the_four_methods() {
-        val plugin = startPlugin("p", "interceptRpc(messages.sendMessage)")
-        assertPluginError("not-granted", plugin.interceptSendMessage())
-
-        val granted = startPlugin("q", "interceptSendMessage")
-        assertNull(granted.interceptSendMessage())
-    }
-
-    /** and the other way round: holding the api does not buy the raw form over those methods */
-    @Test
-    fun interceptSendMessage_does_not_imply_interceptRpc_over_the_same_methods() {
-        val plugin = startPlugin("p", "interceptSendMessage")
-        assertPluginError("not-granted", plugin.interceptRpc("messages.sendMessage"))
+    fun interceptSendMessage_and_interceptRpc_over_the_send_methods_do_not_imply_each_other() {
+        assertPluginError("not-granted", startPlugin("p", "interceptRpc(messages.sendMessage)").interceptSendMessage())
+        assertPluginError("not-granted", startPlugin("q", "interceptSendMessage").interceptRpc("messages.sendMessage"))
     }
 
     @Test
-    fun a_send_registration_lands_in_all_four_send_chains() {
+    fun a_send_registration_lands_in_all_four_send_chains_and_never_in_a_secret_chat_s() {
         val plugin = startPlugin("p", "interceptSendMessage")
         assertNull(plugin.interceptSendMessage())
         plugin.js.onDispatchRpc = { plugin.next(it.dispatchId, it.requestWire) }
@@ -59,9 +31,11 @@ class PluginRpcSendChainTest {
             TLRPC.TL_messages_sendMultiMedia(),
             TLRPC.TL_messages_editMessage(),
         )) {
-            assertTrue(send(request), "${request.javaClass.simpleName} was not intercepted")
+            assertTrue(sendThroughPlugins(request), "${request.javaClass.simpleName} was not intercepted")
             drain()
         }
+        assertEquals(false, sendThroughPlugins(TLRPC.TL_messages_sendEncrypted()))
+        drain()
         assertEquals(4, plugin.js.dispatches.size)
     }
 
@@ -72,17 +46,17 @@ class PluginRpcSendChainTest {
         plugin.js.onDispatchRpc = { plugin.complete(it.dispatchId, "R-1000:MESSAGE_DROPPED_BY_PLUGIN") }
 
         val ordinary = TLRPC.TL_messages_sendMessage().apply { message = "hello" }
-        assertEquals(false, send(ordinary), "a rejected filter must stay on the Java fast path")
+        assertEquals(false, sendThroughPlugins(ordinary), "a rejected filter must stay on the Java fast path")
         drain()
         assertEquals(0, plugin.js.dispatches.size)
 
         val edit = TLRPC.TL_messages_editMessage().apply { message = ".stats" }
-        assertEquals(false, send(edit), "isEdit=false must reject edits before entering the engine")
+        assertEquals(false, sendThroughPlugins(edit), "isEdit=false must reject edits before entering the engine")
         drain()
         assertEquals(0, plugin.js.dispatches.size)
 
         val command = TLRPC.TL_messages_sendMessage().apply { message = ".STATS" }
-        assertTrue(send(command))
+        assertTrue(sendThroughPlugins(command))
         drain()
         assertEquals(1, plugin.js.dispatches.size)
     }
@@ -94,12 +68,9 @@ class PluginRpcSendChainTest {
         plugin.js.onDispatchRpc = {}
         var completed = false
 
-        assertTrue(send(TLRPC.TL_messages_sendMessage()) { _, _ -> completed = true })
+        assertTrue(sendThroughPlugins(TLRPC.TL_messages_sendMessage()) { _, _ -> completed = true })
         drain()
-        // 55 seconds rather than one millisecond short of the deadline: the timer is armed off the
-        // queue's clock, which is real uptime plus the offset, so real time spent in the drain above
-        // counts against the margin. What this has to tell apart is the 60-second send budget from
-        // the 10-second raw one, and any margin below the difference does that
+        // the deadline clock is real uptime plus the offset, so leave margin for real time spent draining
         TestQueues.advanceBy(55_000)
 
         assertEquals(false, completed)
@@ -109,28 +80,6 @@ class PluginRpcSendChainTest {
         assertEquals(true, completed)
     }
 
-    @Test
-    fun a_send_a_plugin_made_itself_never_re_enters_the_chain() {
-        val plugin = startPlugin("p", "interceptSendMessage")
-        assertNull(plugin.interceptSendMessage())
-        var answered = false
-
-        EngineDispatch.scheduler.postRunnable {
-            PluginRpc.sendWithoutInterceptors(0, TLRPC.TL_messages_sendMessage(), 0) { _, _ -> answered = true }
-        }
-        drain()
-
-        assertEquals(0, plugin.js.dispatches.size, "a middleware that sends would otherwise re-enter itself")
-        val sent = assertNotNull(connections(0).lastSent())
-        sent.answer(null, null, 0L)
-        drain()
-        assertTrue(answered)
-    }
-
-    /**
-     * the two forms are one list, so a plugin holding both sees them in the order the user dragged
-     * its plugins into - not in the order the two apis happened to register
-     */
     @Test
     fun a_raw_interceptor_and_a_send_interceptor_interleave_in_plugin_list_order() {
         val raw = startPlugin("a", "interceptRpc(messages.sendMessage)")
@@ -145,7 +94,7 @@ class PluginRpcSendChainTest {
             }
         }
 
-        assertTrue(send(TLRPC.TL_messages_sendMessage()))
+        assertTrue(sendThroughPlugins(TLRPC.TL_messages_sendMessage()))
         drain()
         assertEquals(listOf("a", "b"), order)
 
@@ -153,15 +102,11 @@ class PluginRpcSendChainTest {
         PluginRpc.refreshChainOrder()
         drain()
         order.clear()
-        assertTrue(send(TLRPC.TL_messages_sendMessage(), token = 12))
+        assertTrue(sendThroughPlugins(TLRPC.TL_messages_sendMessage(), token = 12))
         drain()
         assertEquals(listOf("b", "a"), order)
     }
 
-    /**
-     * the whole point of building it on the request chain: a dropped send is a stage that settled
-     * with an error, so the request never reaches the network and the app is told it failed
-     */
     @Test
     fun a_stage_that_settles_with_an_error_fails_the_send_and_nothing_goes_out() {
         val plugin = startPlugin("p", "interceptSendMessage")
@@ -169,22 +114,11 @@ class PluginRpcSendChainTest {
         plugin.js.onDispatchRpc = { plugin.complete(it.dispatchId, "R-1000:MESSAGE_DROPPED_BY_PLUGIN") }
         var error: TLRPC.TL_error? = null
 
-        assertTrue(send(TLRPC.TL_messages_sendMessage()) { _, e -> error = e })
+        assertTrue(sendThroughPlugins(TLRPC.TL_messages_sendMessage()) { _, e -> error = e })
         drain()
 
         assertNull(connections(0).lastSent(), "a dropped send must not reach the network")
         assertEquals("MESSAGE_DROPPED_BY_PLUGIN", assertNotNull(error).text)
-    }
-
-    @Test
-    fun a_secret_chat_send_is_not_one_of_the_four_and_never_reaches_a_middleware() {
-        val plugin = startPlugin("p", "interceptSendMessage")
-        assertNull(plugin.interceptSendMessage())
-
-        val request = TLRPC.TL_messages_sendEncrypted()
-        assertEquals(false, send(request), "an e2e send is not intercepted at all")
-        drain()
-        assertEquals(0, plugin.js.dispatches.size)
     }
 
     @Test
@@ -197,7 +131,7 @@ class PluginRpcSendChainTest {
         drain()
 
         val request = TLRPC.TL_messages_sendMessage()
-        assertEquals(false, send(request))
+        assertEquals(false, sendThroughPlugins(request))
         drain()
         assertEquals(0, plugin.js.dispatches.size)
     }

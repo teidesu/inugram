@@ -5,12 +5,8 @@ import org.telegram.tgnet.OutputSerializedData
 import org.telegram.tgnet.TLObject
 
 /**
- * What `inu.invokeRaw` sends: a method stock has no class for, as the bytes the plugin serialized
- * itself. The payload is the whole method - constructor id first - because that is what a TL method
- * is, and stock's `sendRequestInternal` writes it into the request body verbatim.
- *
- * The response comes back the same way: [RawTlResponse] carries the constructor and everything
- * after it, copied out of the buffer stock reuses the moment the delegate returns.
+ * Stock's `sendRequestInternal` writes the payload verbatim. [RawTlResponse] copies the response out of
+ * the buffer stock reuses when the delegate returns.
  */
 class RawTlRequest(private val payload: ByteArray) : TLObject() {
     override fun serializeToStream(stream: OutputSerializedData) = stream.writeBytes(payload)
@@ -26,7 +22,6 @@ class RawTlRequest(private val payload: ByteArray) : TLObject() {
         return RawTlResponse(bytes)
     }
 
-    /** the constructor the payload opens with, or `null` when it is too short to name one */
     fun constructorId(): Int? {
         if (payload.size < Int.SIZE_BYTES) return null
         return (payload[0].toInt() and 0xFF) or

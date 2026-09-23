@@ -7,15 +7,14 @@ import android.os.Bundle
 import android.os.IBinder
 import android.os.Parcelable
 import android.util.Base64
+import android.util.LruCache
 import android.util.Size
 import android.util.SizeF
 import android.util.SparseArray
 import dalvik.system.DexClassLoader
 import desu.inugram.core.plugins.PluginWire
-import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.io.PluginPaths
 import desu.inugram.helpers.plugins.JvmListener
-import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.QuickJs
 import java.io.File
@@ -29,15 +28,12 @@ import java.lang.reflect.Modifier
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import org.json.JSONArray
-import org.telegram.messenger.Utilities
 import org.telegram.tgnet.TLObject
+import org.telegram.ui.LaunchActivity
 
 /**
- * Kotlin bindings for `inu.jvm` (Rust: `jvm.rs`).
- *
- * The grant is unscoped. Direct access to [ENGINE_PACKAGE] is rejected to avoid exposing engine
- * objects while a reflected call holds the engine lease. This is not a sandbox boundary:
- * `java.lang.reflect` can bypass the check.
+ * Direct access to [ENGINE_PACKAGE] is refused so engine objects aren't exposed while a reflected call
+ * holds the engine lease. Not a sandbox boundary: `java.lang.reflect` bypasses it.
  */
 object PluginJvm : SessionResource {
     private object Native {
@@ -50,7 +46,7 @@ object PluginJvm : SessionResource {
         ): Any?
     }
 
-    // keep in sync with rust `jvm::OP_*` and `jvm.js`; member access is rust's own, through cached jni ids, and never reaches this side
+    // keep in sync with rust `jvm::OP_*` and `jvm.js`; member access goes through rust's cached jni ids instead
     const val OP_CLASS = 0
     const val OP_RUNNABLE = 10
     const val OP_LOAD_DEX = 11
@@ -79,7 +75,6 @@ object PluginJvm : SessionResource {
     /** keep in sync with rust `jvm::DEX_LIMIT_BYTES` and the number `android.jvm.d.ts` states */
     const val DEX_LIMIT_BYTES = 8L * 1024 * 1024
 
-    /** the one hop that would put the engine's own objects in a plugin's hands, refused wherever a name crosses */
     internal const val ENGINE_PACKAGE = "desu.inugram.helpers.plugins."
 
     internal fun isEnginePackage(name: String): Boolean = name.startsWith(ENGINE_PACKAGE)
@@ -93,17 +88,21 @@ object PluginJvm : SessionResource {
     private const val KIND_CONSTRUCTOR = 'K'
     private const val KIND_FIELD = 'F'
 
-    /** handed in rather than read here, so a test can put a screen in front of the api without an `Activity` */
     interface AppScreen {
         fun currentFragment(): Any?
         fun currentActivity(): Any?
     }
 
-    /** nothing at all for a plugin without the grant: the api is the whole app */
-    fun listenerFor(session: PluginSession, screen: AppScreen): JvmListener? =
+    /** a snapshot would strongly reference a screen the user already left */
+    private object LiveAppScreen : AppScreen {
+        override fun currentFragment(): Any? = LaunchActivity.getSafeLastFragment()
+
+        override fun currentActivity(): Any? = LaunchActivity.instance?.takeIf { !it.isFinishing }
+    }
+
+    fun listenerFor(session: PluginSession, screen: AppScreen = LiveAppScreen): JvmListener? =
         if (session.permissions.has(GRANT)) Session(session, screen) else null
 
-    /** [Session.checkClass] already let this be minted, which is the only way a handle exists */
     fun objectAt(engine: QuickJs, handle: Long): Any? = (engine.listener?.jvm as? Session)?.objectAt(handle)
 
     override fun detach(session: PluginSession) {
@@ -112,17 +111,12 @@ object PluginJvm : SessionResource {
 
     fun dexDir(installId: String): File = PluginPaths.scopedFile(installId, ROOT)
 
-    /** **only on uninstall**: a class cannot be unloaded, so a merely-stopped plugin's code may still be running */
+    /** only on uninstall: a class cannot be unloaded, so a stopped plugin's code may still run */
     fun wipe(installId: String) = PluginPaths.wipe(installId, ::dexDir)
 
     fun sweepOrphans(live: Set<String>) = PluginPaths.sweepOrphans(ROOT, live) { it }
 
-    /**
-     * `inu.xposed` takes a `JavaMethod` at every entry point and hands a hook java values, so it
-     * borrows this table rather than keeping a second one - which is what makes a `JavaObject` a
-     * hook is handed something `inu.jvm` can call methods on. Every member applies the same scope
-     * check the op reaching it would.
-     */
+    /** `inu.xposed` borrows this table, so a hook's `JavaObject` is callable through `inu.jvm` */
     internal interface ValueBridge {
         fun memberAt(target: Long): Member
 
@@ -132,43 +126,33 @@ object PluginJvm : SessionResource {
 
         fun encode(value: Any?): String
 
-        /** forget a handle [encode] minted that never reached the engine, so the reference it holds goes with it */
         fun release(wire: String)
-
-        fun wireOf(failure: Throwable): String?
     }
 
     internal fun bridgeFor(engine: QuickJs): ValueBridge? = engine.listener?.jvm as? ValueBridge
 
     /**
-     * A wire the engine never took stays minted in the reference table with nothing to drop it, so
-     * whoever encoded a batch releases it when the engine did not take it. A scalar minted nothing
-     * and releasing one is a no-op, which is what lets a caller hand back everything it encoded.
-     *
-     * Callers are app code's own frames, such as a notification observer, so the bridge already
-     * being gone is one more thing that may not surface there.
+     * a wire the engine never took stays in the reference table with nothing to drop it. Releasing a
+     * scalar is a no-op, so callers can hand back everything they encoded.
      */
     internal fun releaseUntaken(engine: QuickJs, wires: List<String>) {
         val bridge = bridgeFor(engine) ?: return
         for (wire in wires) runCatching { bridge.release(wire) }
     }
 
-    private fun checkStringSize(value: String, what: String) {
-        val size = value.toByteArray(Charsets.UTF_8).size
-        if (size > VALUE_LIMIT_BYTES) tooBig(what, size.toLong())
-    }
-
-    private fun tooBig(what: String, size: Long): Nothing =
+    private fun checkValueSize(what: String, size: Int) {
+        if (size <= VALUE_LIMIT_BYTES) return
         throw PluginRefusal(
             PluginWire.encodePluginError(
                 "quota-exceeded",
                 "jvm: $what is $size bytes, over the $VALUE_LIMIT_BYTES this bridge carries",
-                usage = size,
+                usage = size.toLong(),
                 quota = VALUE_LIMIT_BYTES.toLong(),
             )
         )
+    }
 
-    internal open class Session(val session: PluginSession, private val screen: AppScreen) :
+    internal class Session(val session: PluginSession, private val screen: AppScreen) :
         JvmListener, ValueBridge {
         private val nextTicket = AtomicLong(1)
         private val loaders = ArrayList<ClassLoader>()
@@ -186,7 +170,7 @@ object PluginJvm : SessionResource {
         } catch (e: PluginRefusal) {
             e.wire
         } catch (e: InvocationTargetException) {
-            // a java exception is not part of this api's taxonomy, so it arrives as a plain Error rather than a PluginError
+            // a java exception is outside this api's taxonomy, so it is a plain Error
             PluginWire.encodeError(describe(e.cause ?: e))
         } catch (e: Throwable) {
             PluginWire.encodeError("jvm: ${describe(e)}")
@@ -210,7 +194,7 @@ object PluginJvm : SessionResource {
                     }
                 }
                 val prepared = try {
-                    PluginJvmClass.prepare(name, decodeArgs(args), { type -> Class.forName(type, false, parent).also(::checkClass) }, parent, session.plugin.id) { callback, self, arguments ->
+                    PluginJvmClass.prepare(name, args.map(::decodeArg), { type -> Class.forName(type, false, parent).also(::checkClass) }, parent, session.plugin.id) { callback, self, arguments ->
                         check(live && session.isCurrent()) { "defineClass: plugin has unloaded" }
                         val inputs = ArrayList<String>()
                         try {
@@ -262,7 +246,7 @@ object PluginJvm : SessionResource {
             OP_CURRENT_FRAGMENT -> encodeValue(screen.currentFragment())
             OP_CURRENT_ACTIVITY -> encodeValue(screen.currentActivity())
             OP_BUNDLE_METHOD -> encodeValue(bundleMethod(at(target)))
-            OP_FROM_TL -> encodeValue(session.tl.objectFromWire(name, "jvm: fromTl"))
+            OP_FROM_TL -> encodeValue(session.tl.objectFromWire(name, allowReadOnly = true))
             OP_TO_TL -> {
                 val value = at(target) as? TLObject
                     ?: refuse("invalid-argument", "jvm: that handle is not a TLObject")
@@ -339,14 +323,14 @@ object PluginJvm : SessionResource {
                 RESOLVE_METHODS -> {
                     val cls = target as? Class<*> ?: refuse("invalid-argument", "jvm: that handle is not a class")
                     val descriptor = descriptorIn(name)
-                    var candidates = candidateMethods(cls, simpleName(name))
+                    var candidates = cachedMethods(cls, simpleName(name))
                     if (descriptor != null) candidates = candidates.filter { it.descriptor == descriptor }
                     if (candidates.isEmpty()) refuse("not-found", "jvm: ${cls.name} has no method named $name")
                     methodsAnswer(cls, candidates)
                 }
                 RESOLVE_CONSTRUCTORS -> {
                     val cls = target as? Class<*> ?: refuse("invalid-argument", "jvm: that handle is not a class")
-                    var candidates = cachedConstructors(cls)
+                    var candidates = getMemberTable(cls).constructors
                     if (name.isNotEmpty()) candidates = candidates.filter { it.descriptor == name }
                     if (candidates.isEmpty()) refuse("not-found", "jvm: ${cls.name} has no constructor $name")
                     methodsAnswer(cls, candidates)
@@ -369,8 +353,8 @@ object PluginJvm : SessionResource {
             arrayOf("E", PluginWire.encodeError("jvm: ${describe(e)}"))
         }
 
-        /** the verdict on the declaring class, per member: rust applies it to the one it picks */
-        private fun refusalOf(member: Member): String? = try {
+        /** rust applies it to the member it picks */
+        private fun findRefusal(member: Member): String? = try {
             checkMember(member)
             null
         } catch (e: PluginRefusal) {
@@ -387,28 +371,27 @@ object PluginJvm : SessionResource {
                 answer.add(info.descriptor)
                 answer.add(Modifier.isStatic(info.member.modifiers))
                 answer.add(Modifier.isAbstract(info.member.modifiers))
-                answer.add(refusalOf(info.member))
+                answer.add(findRefusal(info.member))
             }
             return answer.toTypedArray()
         }
 
-        /** the class named is the declaring one: it is what a refusal or a final-field message names */
         private fun fieldAnswer(field: Field): Array<Any?> {
             return arrayOf(
                 "F",
                 field.declaringClass.name,
                 field,
                 field.type,
-                descriptorOf(field.type),
+                buildDescriptor(field.type),
                 Modifier.isStatic(field.modifiers),
                 Modifier.isFinal(field.modifiers),
-                refusalOf(field),
+                findRefusal(field),
                 field.type.name,
                 field.name,
             )
         }
 
-        /** an array is checked by its element type: `[Ljava.lang.String;` is not a name any namespace list can hold */
+        /** `[Ljava.lang.String;` is not a name any namespace list holds */
         private fun checkClass(cls: Class<*>) {
             var element = cls
             while (element.isArray) element = element.componentType!!
@@ -433,22 +416,20 @@ object PluginJvm : SessionResource {
             return member
         }
 
-        override fun classAt(target: Long): Class<*> = classHandleAt(target).also { checkClass(it) }
+        override fun classAt(target: Long): Class<*> =
+            (at(target) as? Class<*> ?: refuse("invalid-argument", "jvm: that handle is not a class")).also { checkClass(it) }
 
         override fun decode(wire: String): Any? = decodeArg(wire)
 
         override fun encode(value: Any?): String = encodeValue(value)
 
         override fun release(wire: String) {
-            // a throwable answer rides under a `T`, and its handle is the one that would be left behind
             val handle = wire.removePrefix("T")
             if (!handle.startsWith("G")) return
             handle.drop(2).toLongOrNull()?.let { session.engine.jvmRelease(it) }
         }
 
-        override fun wireOf(failure: Throwable): String? = (failure as? PluginRefusal)?.wire
-
-        /** the table is rust's, and a mint it refuses is one whose engine has already closed */
+        /** rust refuses a mint once its engine has closed */
         private fun mint(value: Any, kind: Char): String {
             val id = session.engine.jvmMint(value, kind)
             if (id == 0L) expired()
@@ -460,12 +441,6 @@ object PluginJvm : SessionResource {
 
         private fun at(target: Long): Any = objectAt(target) ?: expired()
 
-        private fun classHandleAt(target: Long): Class<*> = at(target) as? Class<*>
-            ?: refuse("invalid-argument", "jvm: that handle is not a class")
-
-        private fun decodeArgs(args: Array<String>): List<Any?> = args.map { decodeArg(it) }
-
-        /** the scalars are [PluginWire]'s own; `G<id>` carries no kind, because the table that answers it is the one that minted it */
         private fun decodeArg(wire: String): Any? {
             if (wire.isEmpty()) refuse("invalid-argument", "jvm: empty argument wire")
             if (wire[0] == 'G') {
@@ -475,7 +450,7 @@ object PluginJvm : SessionResource {
             }
             return when (val decoded = PluginWire.decode(wire)) {
                 is PluginWire.Value.Null -> null
-                is PluginWire.Value.Str -> decoded.value.also { checkStringSize(it, "a string argument") }
+                is PluginWire.Value.Str -> decoded.value.also { checkValueSize("a string argument", it.toByteArray(Charsets.UTF_8).size) }
                 is PluginWire.Value.IntNum -> decoded.value
                 is PluginWire.Value.DoubleNum -> decoded.value
                 is PluginWire.Value.Bool -> decoded.value
@@ -484,15 +459,13 @@ object PluginJvm : SessionResource {
             }
         }
 
-        /** what may cross at all, whether it then crosses as a handle or stays on this side: a value within the size limit, of a class that is not the engine's own */
         private fun checkValue(value: Any?) {
             when (value) {
                 null, is Boolean, is Byte, is Short, is Int, is Long, is Float, is Double, is Char -> {}
-                is String -> checkStringSize(value, "a string")
-                is ByteArray -> if (value.size > VALUE_LIMIT_BYTES) tooBig("a byte[]", value.size.toLong())
-                // a `Class` is checked as the class it *names*, or every one would be checked as `java.lang.Class`
+                is String -> checkValueSize("a string", value.toByteArray(Charsets.UTF_8).size)
+                is ByteArray -> checkValueSize("a byte[]", value.size)
+                // checked as the class it names, not `java.lang.Class`
                 is Class<*> -> checkClass(value)
-                // and a member by the class it *declares*
                 is Member -> checkMember(value)
                 else -> checkClass(value.javaClass)
             }
@@ -512,7 +485,6 @@ object PluginJvm : SessionResource {
             is Long -> PluginWire.encodeInt(value)
             is Float -> PluginWire.encodeDouble(value.toDouble())
             is Double -> PluginWire.encodeDouble(value)
-            // a char is one character of text rather than its code point: that is what goes back into a `char` parameter unchanged
             is Char -> PluginWire.encodeString(value.toString())
             is String -> PluginWire.encodeString(value)
             is ByteArray -> PluginWire.encodeBytes(Base64.encodeToString(value, Base64.NO_WRAP))
@@ -527,7 +499,7 @@ object PluginJvm : SessionResource {
             for (loader in loaders) {
                 runCatching { return Class.forName(name, false, loader) }
             }
-            // deliberately without initializing: naming a class must not be what runs its static block
+            // without initializing: naming a class must not run its static block
             return try {
                 Class.forName(name, false, PluginJvm::class.java.classLoader)
             } catch (e: ClassNotFoundException) {
@@ -540,8 +512,7 @@ object PluginJvm : SessionResource {
         private fun findField(cls: Class<*>, name: String): Field {
             val field = cachedField(cls, name)
                 ?: refuse("not-found", "jvm: ${cls.name} has no field named $name")
-            // on the member the scan picked, never inside it: the scan is shared between plugins
-            // and this is the gate that is not
+            // the scan is shared between plugins, this gate is not
             checkMember(field)
             field.isAccessible = true
             return field
@@ -560,16 +531,12 @@ object PluginJvm : SessionResource {
             return null
         }
 
-        /**
-         * What a routine's java instructions run through. The table is rust's, so encoding a result
-         * here would be a mint and a release across jni per operation.
-         */
+        /** the table is rust's, so encoding a result here would be a jni mint and release per operation */
         private inline fun bridged(block: () -> Any?): Any? {
             val result = try {
                 block()
             } catch (e: InvocationTargetException) {
-                // reflection wraps whatever the callee threw, and a routine's `catch` binds what it
-                // catches: the wrapper is this side's, not the plugin's
+                // reflection wraps what the callee threw, and a routine's `catch` must bind the original
                 throw e.cause ?: e
             }
             return checkedOperand(result)
@@ -581,29 +548,29 @@ object PluginJvm : SessionResource {
             block(cls, target.takeUnless { it is Class<*> })
         }
 
-        internal open fun getMember(target: Any, name: String): Any? =
+        internal fun getMember(target: Any, name: String): Any? =
             onMember(target) { cls, receiver -> readField(findField(cls, name), receiver) }
 
-        internal open fun setMember(target: Any, name: String, value: Any?): Any? =
+        internal fun setMember(target: Any, name: String, value: Any?): Any? =
             onMember(target) { cls, receiver -> writeField(findField(cls, name), receiver, listOf(value)) }
 
-        internal open fun callMember(target: Any, name: String, args: List<Any?>): Any? =
+        internal fun callMember(target: Any, name: String, args: List<Any?>): Any? =
             onMember(target) { cls, receiver -> callMethod(cls, receiver, name, args) }
 
-        internal open fun newInstanceOf(target: Any, args: List<Any?>): Any? = bridged { construct(target, args) }
+        internal fun createInstance(target: Any, args: List<Any?>): Any? = bridged { construct(target, args) }
 
-        internal open fun callSuper(target: Any, receiver: Any?, name: String, args: List<Any?>): Any? =
+        internal fun callSuper(target: Any, receiver: Any?, name: String, args: List<Any?>): Any? =
             bridged { callSuperMethod(target, receiver, name, args) }
 
-        internal open fun getElement(target: Any, index: Int): Any? = bridged { readElement(target, index) }
+        internal fun getElement(target: Any, index: Int): Any? = bridged { readElement(target, index) }
 
-        internal open fun setElement(target: Any, index: Int, value: Any?): Any? =
+        internal fun setElement(target: Any, index: Int, value: Any?): Any? =
             bridged { writeElement(target, index, value) }
 
-        internal open fun getArrayLength(target: Any): Any? = bridged { arrayLength(target) }
+        internal fun getArrayLength(target: Any): Any? = bridged { arrayLength(target) }
 
-        internal open fun iterate(target: Any): Iterator<*> = try {
-            iteratorOf(target)
+        internal fun iterate(target: Any): Iterator<*> = try {
+            openIterator(target)
         } catch (e: InvocationTargetException) {
             throw e.cause ?: e
         }
@@ -612,7 +579,7 @@ object PluginJvm : SessionResource {
             val info = when (target) {
                 is Class<*> -> {
                     checkClass(target)
-                    pick(cachedConstructors(target).filter { matches(it.params, args) }, "${target.name} constructor", args)
+                    pick(getMemberTable(target).constructors.filter { matches(it.params, args) }, "${target.name} constructor", args)
                 }
                 is java.lang.reflect.Constructor<*> -> MemberInfo(target).also {
                     if (!matches(it.params, args)) {
@@ -646,7 +613,7 @@ object PluginJvm : SessionResource {
             return null
         }
 
-        private fun iteratorOf(target: Any): Iterator<*> {
+        private fun openIterator(target: Any): Iterator<*> {
             checkClass(target.javaClass)
             if (target.javaClass.isArray) {
                 val length = java.lang.reflect.Array.getLength(target)
@@ -692,12 +659,12 @@ object PluginJvm : SessionResource {
         private fun resolve(cls: Class<*>, name: String, args: List<Any?>, staticOnly: Boolean): MemberInfo {
             val descriptor = descriptorIn(name)
             val simple = simpleName(name)
-            var candidates = candidateMethods(cls, simple)
+            var candidates = cachedMethods(cls, simple)
             if (staticOnly) candidates = candidates.filter { Modifier.isStatic(it.member.modifiers) }
             if (descriptor != null) {
                 candidates = candidates.filter { it.descriptor == descriptor }
                 if (candidates.isEmpty()) refuse("not-found", "jvm: ${cls.name} has no method $name")
-                // pinning an overload says *which* one, never that the arguments fit: without this `convertAll` turns whatever does not convert into a null and java reports it from somewhere else
+                // pinning an overload doesn't mean the arguments fit: `convertAll` would null out non-converting ones
                 candidates = candidates.filter { matches(it.params, args) }
                 if (candidates.isEmpty()) {
                     refuse("invalid-argument", "jvm: ${cls.name}.$name does not take these arguments")
@@ -730,8 +697,6 @@ object PluginJvm : SessionResource {
             return narrowest[0]
         }
 
-        private fun candidateMethods(cls: Class<*>, name: String): List<MemberInfo> = cachedMethods(cls, name)
-
         private fun readRoutineResult(wire: String): Any? {
             if (wire.startsWith("L")) return readArrayResult(JSONArray(wire.substring(1)))
             if (!wire.startsWith("G")) return decodeArg(wire)
@@ -739,7 +704,7 @@ object PluginJvm : SessionResource {
             return try { at(id) } finally { session.engine.jvmRelease(id) }
         }
 
-        /** every copied handle in the list is this side's to release, including the ones after an item that fails */
+        /** every copied handle is ours to release, including those after a failing item */
         private fun readArrayResult(wires: JSONArray): Array<Any?> {
             val result = arrayOfNulls<Any?>(wires.length())
             var failure: Throwable? = null
@@ -759,11 +724,7 @@ object PluginJvm : SessionResource {
             return result
         }
 
-        /**
-         * a routine reads java values without a wire between them, so this is where the wire's own
-         * checks and its one conversion happen: a char is one character of text everywhere a
-         * plugin can see one, and a routine must not be the place it is not.
-         */
+        /** routines read java values without a wire, so the wire's checks and char conversion happen here */
         internal fun checkedOperand(value: Any?): Any? {
             checkValue(value)
             return if (value is Char) value.toString() else value
@@ -772,7 +733,7 @@ object PluginJvm : SessionResource {
         private fun createRoutine(definition: String, args: Array<String>, hookMode: Boolean = false): String {
             routinees.removeAll { it.get() == null }
             if (routinees.size >= 512) refuse("quota-exceeded", "routine: at most 512 live routinees")
-            val values = decodeArgs(args).map { if (it is ByteArray) it.copyOf() else it }
+            val values = args.map(::decodeArg).map { if (it is ByteArray) it.copyOf() else it }
             val routine = try {
                 PluginJvmRoutine(definition, values, this, hookMode)
             } catch (e: Exception) {
@@ -785,13 +746,12 @@ object PluginJvm : SessionResource {
         private fun mintRunnable(args: Array<String>): String {
             val callbackId = (decodeArg(args.firstOrNull() ?: "N") as? Long)
                 ?: refuse("internal", "jvm: runnable without a callback id")
-            // not the app's object but one the engine made at the plugin's request. Reaching *into* it is still refused, being in [ENGINE_PACKAGE]
+            // reaching into it is still refused, being in [ENGINE_PACKAGE]
             return mint(JsRunnable(this, callbackId.toInt()), KIND_OBJECT)
         }
 
-        /** Native admission serializes callbacks and refuses recursive entry. */
         fun fire(callbackId: Int) {
-            // `live` on top of the engine identity: a disposed runnable java kept hold of
+            // java may keep hold of a disposed runnable
             if (live && session.isCurrent()) session.engine.jvmCallback(callbackId)
         }
 
@@ -809,7 +769,7 @@ object PluginJvm : SessionResource {
                     )
                 )
             }
-            // the platform's verifier owns dex validation, and reports by failing to define the class rather than by refusing the file
+            // the platform verifier fails the class definition rather than refusing the file
             loaders.add(DexClassLoader(file.absolutePath, null, null, PluginJvm::class.java.classLoader))
             return PluginWire.encodeNull()
         }
@@ -833,23 +793,23 @@ object PluginJvm : SessionResource {
             val dir = dexDir(session.plugin.id)
             if (!dir.isDirectory && !dir.mkdirs()) refuse("internal", "loadDex: could not make ${dir.path}")
             val file = File(dir, "staged_${dexCount++}.dex")
-            // the counter restarts per engine while the directory outlives it, so after a reload this name is a read-only file the previous session left
+            // the counter restarts per engine while the directory outlives it, so a reload finds the previous read-only file
             file.delete()
             file.writeBytes(bytes)
-            // android's w^x guidance for anything the runtime is about to map as code
+            // android w^x guidance for anything mapped as code
             file.setReadOnly()
             return file
         }
     }
 
-    /** deliberately tiny: everything reachable from it is refused by [Session.checkClass] anyway, being in [ENGINE_PACKAGE] */
+    /** everything reachable from it is in [ENGINE_PACKAGE] and refused anyway */
     private class JsRunnable(private val session: Session, private val callbackId: Int) : Runnable {
         override fun run() {
             session.fire(callbackId)
         }
     }
 
-    private class Converted(val value: Any?)
+    internal class Converted(val value: Any?)
 
     internal fun convertArguments(types: Array<Class<*>>, args: List<Any?>): Array<Any?>? =
         if (matches(types, args)) convertAll(types, args) else null
@@ -860,8 +820,8 @@ object PluginJvm : SessionResource {
     private fun matches(types: Array<Class<*>>, args: List<Any?>): Boolean =
         types.size == args.size && types.indices.all { convert(args[it], types[it]) != null }
 
-    /** a js number is an integer or a double and nothing narrower, so the parameter's type decides - and one that does not fit exactly is refused rather than truncated */
-    private fun convert(value: Any?, type: Class<*>): Converted? {
+    /** a js number is an integer or a double; one that doesn't fit the parameter exactly is refused, not truncated */
+    internal fun convert(value: Any?, type: Class<*>): Converted? {
         if (value == null) return if (type.isPrimitive) null else Converted(null)
         return when (value) {
             is Boolean -> if (type == Boolean::class.javaPrimitiveType || type == java.lang.Boolean::class.java ||
@@ -899,7 +859,7 @@ object PluginJvm : SessionResource {
         Long::class.javaPrimitiveType, java.lang.Long::class.java -> Converted(value)
         Float::class.javaPrimitiveType, java.lang.Float::class.java -> Converted(value.toFloat())
         Double::class.javaPrimitiveType, java.lang.Double::class.java -> Converted(value.toDouble())
-        // an `Object`-shaped parameter takes the box a java literal would have: `Integer` when it fits, `Long` when it does not
+        // the box a java literal would get: `Integer` when it fits, `Long` otherwise
         else -> {
             val boxed: Any = if (value in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong()) value.toInt() else value
             if (type.isInstance(boxed)) Converted(boxed) else null
@@ -913,12 +873,7 @@ object PluginJvm : SessionResource {
         else -> if (type.isInstance(value)) Converted(value) else null
     }
 
-    /** a narrower numeric parameter wins and a more derived reference type beats a less derived one; anything still tied is refused rather than picked */
-    /**
-     * A js string is a `String` before it is anything else, so an overload that takes it as text
-     * wins over one that only fits by reading it as a `char`, the way java's strict phase wins
-     * over its conversions. Keep in step with rust `Native::converts_text_to_char`.
-     */
+    /** a text overload beats one fitting only via `char`, like java's strict phase. Keep in step with rust `Native::converts_text_to_char` */
     private fun convertsTextToChar(types: Array<Class<*>>, args: List<Any?>): Boolean =
         types.indices.any {
             args[it] is String &&
@@ -969,30 +924,18 @@ object PluginJvm : SessionResource {
     }
 
     /**
-     * Caches member resolution process-wide, one table per declaring class.
-     *
-     * ART allocates new arrays and `Method` objects for each `getDeclaredMethods()` and `getMethods()`
-     * call. Resolving a deep class can allocate thousands of objects. On-device measurements showed
-     * ~5 ms for a `TextView` call versus ~0.1 ms for a constructor, which skips this scan.
-     *
-     * Each table holds only declared members. Lookups combine superclass and interface tables,
-     * most derived first, so all widgets reuse `View`'s table. Cache by class rather than member
-     * because one scan costs the same for one name or all names. Walk interface tables directly;
-     * `getMethods()` would merge and deduplicate public members already covered by the superclass scan.
-     *
-     * Permission checks and overload selection remain per call, allowing tables to be shared
-     * between plugins. Use a bounded LRU: weak keys would stay alive through their `Method` values,
-     * and an unbounded cache would retain every class a plugin touched or defined.
+     * ART allocates fresh arrays and `Method` objects on every `getDeclaredMethods()`/`getMethods()`, which
+     * for a deep class is thousands of objects (~5 ms for a `TextView` call vs ~0.1 ms for a constructor).
+     * Tables hold declared members only and lookups compose them most-derived first, so widgets share
+     * `View`'s table. Interfaces are walked directly: `getMethods()` would re-merge the superclass scan.
+     * Checks and overload selection stay per call, so tables are shared between plugins. Bounded LRU:
+     * weak keys stay alive through their `Method` values.
      */
     private const val CLASS_CACHE_LIMIT = 256
 
-    /**
-     * `Executable.getParameterTypes()` allocates a fresh array every call, and every invoke asks for
-     * it twice - once to check the arguments fit and once to convert them. The descriptor is a
-     * string built from it, and a pinned call names one. Both are settled when the table is built.
-     */
+    /** `Executable.getParameterTypes()` allocates a fresh array every call, and an invoke needs it twice */
     private class MemberInfo(val member: Executable, val descriptor: String, val params: Array<Class<*>>) {
-        constructor(member: Executable) : this(member, descriptorOf(member), member.parameterTypes)
+        constructor(member: Executable) : this(member, buildDescriptor(member), member.parameterTypes)
 
         val method: Method get() = member as Method
     }
@@ -1004,14 +947,9 @@ object PluginJvm : SessionResource {
         val superclass: Class<*>? = cls.superclass
         val interfaces: Array<Class<*>> = cls.interfaces
 
-        /**
-         * the tables a lookup on *this* class composes, settled on first use: the walk is the same
-         * every time, and a routine or a hook resolves a member per call rather than per class.
-         * Racing threads compute the same lists, so the write needs no lock.
-         */
+        /** racing threads compute the same lists, so the write needs no lock */
         @Volatile var lineage: Lineage? = null
 
-        /** what a lookup composes out of [lineage] for one name; an empty list is "this class has none" */
         val composedMethods = ConcurrentHashMap<String, List<MemberInfo>>()
         val composedFields = ConcurrentHashMap<String, List<Field>>()
 
@@ -1022,20 +960,14 @@ object PluginJvm : SessionResource {
         }
     }
 
-    private val tableCache: MutableMap<Class<*>, MemberTable> = java.util.Collections.synchronizedMap(
-        object : LinkedHashMap<Class<*>, MemberTable>(64, 0.75f, true) {
-            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Class<*>, MemberTable>): Boolean =
-                size > CLASS_CACHE_LIMIT
-        },
-    )
+    private val tableCache = LruCache<Class<*>, MemberTable>(CLASS_CACHE_LIMIT)
 
-    private fun tableOf(cls: Class<*>): MemberTable = tableCache.getOrPut(cls) { MemberTable(cls) }
+    private fun getMemberTable(cls: Class<*>): MemberTable = tableCache[cls] ?: MemberTable(cls).also { tableCache.put(cls, it) }
 
-    /** the superclass chain, most derived first, then every interface any of them implements */
     private class Lineage(val chain: List<MemberTable>, val interfaces: List<MemberTable>)
 
-    private fun lineageOf(cls: Class<*>): Lineage {
-        val table = tableOf(cls)
+    private fun getLineage(cls: Class<*>): Lineage {
+        val table = getMemberTable(cls)
         table.lineage?.let { return it }
         val chain = ArrayList<MemberTable>()
         val interfaces = LinkedHashMap<Class<*>, MemberTable>()
@@ -1043,7 +975,7 @@ object PluginJvm : SessionResource {
         while (current != null) {
             chain.add(current)
             collectInterfaces(current, interfaces)
-            current = current.superclass?.let { tableOf(it) }
+            current = current.superclass?.let { getMemberTable(it) }
         }
         return Lineage(chain, interfaces.values.toList()).also { table.lineage = it }
     }
@@ -1051,54 +983,50 @@ object PluginJvm : SessionResource {
     private fun collectInterfaces(table: MemberTable, out: MutableMap<Class<*>, MemberTable>) {
         for (itf in table.interfaces) {
             if (out.containsKey(itf)) continue
-            val itfTable = tableOf(itf)
+            val itfTable = getMemberTable(itf)
             out[itf] = itfTable
             collectInterfaces(itfTable, out)
         }
     }
 
     private fun cachedMethods(cls: Class<*>, name: String): List<MemberInfo> {
-        val table = tableOf(cls)
+        val table = getMemberTable(cls)
         table.composedMethods[name]?.let { return it }
-        val lineage = lineageOf(cls)
-        // keyed by parameters alone: a covariant override is the same method to a caller, not an overload of
-        // the one it overrides, and a bridge only forwards to the real method it stands beside
+        val lineage = getLineage(cls)
+        // keyed by parameters: a covariant override is the same method to a caller, and a bridge only forwards
         val byParameters = LinkedHashMap<String, MemberInfo>()
-        // the most derived override wins, so the chain is walked downwards-first
         for (table in lineage.chain) for (info in table.methods[name].orEmpty()) {
             if (info.method.isBridge) continue
-            byParameters.putIfAbsent(parametersOf(info.descriptor), info)
+            byParameters.putIfAbsent(extractParameters(info.descriptor), info)
         }
-        // defaults, which are not on the superclass chain; an interface's static and private methods are not inherited
+        // an interface's static and private methods are not inherited
         for (table in lineage.interfaces) for (info in table.methods[name].orEmpty()) {
             val modifiers = info.member.modifiers
             if (Modifier.isStatic(modifiers) || Modifier.isPrivate(modifiers) || info.method.isBridge) continue
-            byParameters.putIfAbsent(parametersOf(info.descriptor), info)
+            byParameters.putIfAbsent(extractParameters(info.descriptor), info)
         }
         return byParameters.values.toList().also { table.composedMethods[name] = it }
     }
 
-    private fun parametersOf(descriptor: String): String = descriptor.substring(0, descriptor.indexOf(')') + 1)
-
-    private fun cachedConstructors(cls: Class<*>): List<MemberInfo> = tableOf(cls).constructors
+    private fun extractParameters(descriptor: String): String = descriptor.substring(0, descriptor.indexOf(')') + 1)
 
     private fun cachedField(cls: Class<*>, name: String): Field? {
-        val table = tableOf(cls)
+        val table = getMemberTable(cls)
         table.composedFields[name]?.let { return it.firstOrNull() }
-        val lineage = lineageOf(cls)
+        val lineage = getLineage(cls)
         val found = lineage.chain.firstNotNullOfOrNull { it.fields[name] }
             ?: lineage.interfaces.firstNotNullOfOrNull { it.fields[name] }
         table.composedFields[name] = listOfNotNull(found)
         return found
     }
 
-    private fun descriptorOf(member: Executable): String {
-        val params = member.parameterTypes.joinToString("") { descriptorOf(it) }
-        val returns = if (member is Method) descriptorOf(member.returnType) else "V"
+    private fun buildDescriptor(member: Executable): String {
+        val params = member.parameterTypes.joinToString("") { buildDescriptor(it) }
+        val returns = if (member is Method) buildDescriptor(member.returnType) else "V"
         return "($params)$returns"
     }
 
-    internal fun descriptorOf(type: Class<*>): String = when {
+    internal fun buildDescriptor(type: Class<*>): String = when {
         type == Void.TYPE -> "V"
         type == Boolean::class.javaPrimitiveType -> "Z"
         type == Byte::class.javaPrimitiveType -> "B"
@@ -1108,11 +1036,9 @@ object PluginJvm : SessionResource {
         type == Long::class.javaPrimitiveType -> "J"
         type == Float::class.javaPrimitiveType -> "F"
         type == Double::class.javaPrimitiveType -> "D"
-        type.isArray -> "[${descriptorOf(type.componentType!!)}"
+        type.isArray -> "[${buildDescriptor(type.componentType!!)}"
         else -> "L${type.name.replace('.', '/')};"
     }
-
-    private fun describe(member: Method): String = "${member.declaringClass.name}.${member.name}${descriptorOf(member)}"
 
     private fun describe(error: Throwable): String {
         val message = error.message

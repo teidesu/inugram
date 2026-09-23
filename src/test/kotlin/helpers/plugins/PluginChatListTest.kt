@@ -12,14 +12,7 @@ import org.telegram.messenger.DialogObject
 import org.telegram.messenger.MessagesController
 import org.telegram.tgnet.TLRPC
 
-/**
- * `getDialogsCached`/`getChatFoldersCached`: the chat list the app already holds.
- *
- * They are asynchronous for one reason, which is the subject here - `allDialogs`, `dialogsByFolder`
- * and `dialogFilters` belong to the ui thread, so the read hops to it, copies, and settles back on
- * globalQueue. Everything below drives that whole exchange through [settle] rather than reading
- * anything itself.
- */
+// stock's `allDialogs`, `dialogsByFolder` and `dialogFilters` belong to the ui thread
 class PluginChatListTest {
     // not `self`: inside a `TL_user` builder that name is the object's own boolean field
     private val selfId = 100L
@@ -34,18 +27,15 @@ class PluginChatListTest {
 
     private var nextRequestId = 1L
 
-    /** one whole exchange: the fetch, the ui hop it posts, and the settle that comes back */
     private fun fetch(plugin: Plugin, op: Int, args: String): String {
         val requestId = nextRequestId++
         plugin.js.readResults.clear()
         val inline = plugin.js.listener!!.accountFetch(0, requestId, op, "", args, "")
-        // a refusal answers inline and never posts; everything else parks
         if (inline != null) return inline
         settle()
         return plugin.js.readResults.single { it.requestId == requestId }.resultWire
     }
 
-    /** `archive`, `chatFolderId`, `limit` - the selector `reads.js` builds */
     private fun cached(plugin: Plugin, archive: Int = 0, folder: Int? = null, limit: Int = 0): List<String> {
         val wire = fetch(plugin, PluginReads.OP_DIALOGS_CACHED, "{\"archive\":$archive,\"chatFolderId\":${folder ?: "null"},\"limit\":$limit}")
         if (wire.isEmpty()) return emptyList()
@@ -65,7 +55,6 @@ class PluginChatListTest {
         folder_id = folderId
     }
 
-    /** seeds the app's own lists on the thread that owns them */
     private fun seed(main: List<TLRPC.Dialog>, archived: List<TLRPC.Dialog> = emptyList()) = onUi {
         val controller = MessagesController.getInstance(0)
         controller.allDialogs.clear()
@@ -100,11 +89,7 @@ class PluginChatListTest {
         assertEquals(2, cached(plugin, limit = 2).size)
     }
 
-    /**
-     * `TL_dialogFolder` is the archive *row* the app splices into `allDialogs`. It has no peer at
-     * all, so a plugin typing the answer as `tl.TypeDialog` would be handed something that cannot
-     * answer `dialogId`.
-     */
+    // `TL_dialogFolder` is the archive row stock splices into `allDialogs`, and has no peer
     @Test
     fun the_archive_row_is_not_a_dialog() {
         val plugin = granted()
@@ -116,12 +101,6 @@ class PluginChatListTest {
         assertEquals(1, cached(plugin).size)
     }
 
-    /**
-     * common.d.ts: "secret chats, which plugin code never reaches at all". Their dialog ids are
-     * *positive*, so nothing about the shape of one keeps it out - and `PeerSpecs.dialogIdOf`
-     * answers `null` for one, so a dialog handed out here would carry an id the rest of the
-     * surface refuses back.
-     */
     @Test
     fun no_cached_read_reaches_a_secret_chat() {
         val plugin = granted()
@@ -175,7 +154,6 @@ class PluginChatListTest {
         assertEquals(4, folder.getInt("unreadCount"))
         assertEquals(1, folder.getInt("dialogCount"))
         assertFalse(folder.getBoolean("isDefault"))
-        // by pin position, not by whatever order the sparse array holds them in
         assertEquals("[222,333]", folder.getJSONArray("pinned").toString())
     }
 

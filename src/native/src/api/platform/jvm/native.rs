@@ -1,11 +1,4 @@
-//! Calls JVM members using cached `jmethodID`s, `jvalue` arguments, and one JNI invocation.
-//!
-//! Kotlin's `PluginJvm.jvmResolve` resolves names once per class and name. Rust caches that plan
-//! and handles overload selection, conversion, invocation, and result wrapping without string
-//! encoding.
-//!
-//! Keep conversions aligned with `PluginJvm.convert`, which handles routines, `defineClass` bodies,
-//! and Xposed results on Java threads. `jvm-test.js` and `PluginJvmTest` check that they agree.
+//! Keep conversions aligned with `PluginJvm.convert`; `jvm-test.js` and `PluginJvmTest` check they agree.
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -24,18 +17,18 @@ use rquickjs::{Class, Coerced, Ctx, FromJs, IntoJs, Result as JsResult, TypedArr
 
 use super::refs::{Entry, JvmRef, RefTable, KIND_CLASS, KIND_CONSTRUCTOR, KIND_FIELD, KIND_METHOD, KIND_OBJECT};
 use super::VALUE_LIMIT_BYTES;
-use crate::api::error::{wire_error_to_js, PluginErrorCode};
+use crate::api::error::{throw_wire_error, PluginErrorCode};
 use crate::jni::env::with_current_env;
+use crate::utils::qjs::qjs_read_typed_bytes;
 
 pub(crate) const RESOLVE_METHODS: i32 = 0;
 pub(crate) const RESOLVE_CONSTRUCTORS: i32 = 1;
 pub(crate) const RESOLVE_FIELD: i32 = 2;
 pub(crate) const RESOLVE_MEMBER: i32 = 3;
 
-/// member, parameter classes, descriptor, static, abstract, refusal: what `PluginJvm.methodsAnswer` lays out
+/// `PluginJvm.methodsAnswer` layout: member, parameter classes, descriptor, static, abstract, refusal
 const CANDIDATE_WIDTH: usize = 6;
 
-/// the kotlin side of resolution, reached through the bridge; `None` in a harness without a vm
 pub trait JvmReflectHost {
   /// `PluginJvm.jvmResolve`: an `Object[]` whose layout `Native::read_plan` reads
   fn jvm_resolve<'l>(
@@ -66,32 +59,16 @@ impl From<jni::errors::Error> for OpError {
 
 type OpResult<T> = Result<T, OpError>;
 
-fn throw<T>(ctx: &Ctx<'_>, code: PluginErrorCode<'_>, message: &str) -> OpResult<T> {
-  Err(OpError::Js(code.throw::<()>(ctx, message).unwrap_err()))
-}
-
 fn throw_wire<T>(ctx: &Ctx<'_>, wire: &str) -> OpResult<T> {
-  match wire_error_to_js(ctx, wire) {
-    Some(built) => Err(OpError::Js(ctx.throw(built?))),
-    None => throw(ctx, PluginErrorCode::Internal, &format!("jvm: unreadable refusal: {wire}")),
-  }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum BoxKind {
-  Bool,
-  Byte,
-  Char,
-  Short,
-  Int,
-  Long,
-  Float,
-  Double,
+  throw_wire_error(ctx, wire)?;
+  PluginErrorCode::Internal
+    .throw(ctx, &format!("jvm: unreadable refusal: {wire}"))
+    .map_err(OpError::Js)
 }
 
 pub(crate) struct RefParam {
   cls: Global<JClass<'static>>,
-  exact_box: Option<BoxKind>,
+  exact_box: Option<Primitive>,
   accepts_string: bool,
   accepts_bytes: bool,
   accepts_boolean: bool,
@@ -101,77 +78,77 @@ pub(crate) struct RefParam {
 }
 
 pub(crate) enum ParamKind {
-  Bool,
-  Byte,
-  Char,
-  Short,
-  Int,
-  Long,
-  Float,
-  Double,
+  Prim(Primitive),
   Ref(RefParam),
 }
 
 impl ParamKind {
   fn numeric_rank(&self) -> Option<u8> {
     match self {
-      ParamKind::Byte => Some(0),
-      ParamKind::Short | ParamKind::Char => Some(1),
-      ParamKind::Int => Some(2),
-      ParamKind::Long => Some(3),
-      ParamKind::Float => Some(4),
-      ParamKind::Double => Some(5),
+      ParamKind::Prim(Primitive::Byte) => Some(0),
+      ParamKind::Prim(Primitive::Short | Primitive::Char) => Some(1),
+      ParamKind::Prim(Primitive::Int) => Some(2),
+      ParamKind::Prim(Primitive::Long) => Some(3),
+      ParamKind::Prim(Primitive::Float) => Some(4),
+      ParamKind::Prim(Primitive::Double) => Some(5),
       _ => None,
     }
   }
 
-  fn is_primitive(&self) -> bool {
-    !matches!(self, ParamKind::Ref(_))
-  }
-
   fn java_type(&self) -> JavaType {
     match self {
-      ParamKind::Bool => JavaType::Primitive(Primitive::Boolean),
-      ParamKind::Byte => JavaType::Primitive(Primitive::Byte),
-      ParamKind::Char => JavaType::Primitive(Primitive::Char),
-      ParamKind::Short => JavaType::Primitive(Primitive::Short),
-      ParamKind::Int => JavaType::Primitive(Primitive::Int),
-      ParamKind::Long => JavaType::Primitive(Primitive::Long),
-      ParamKind::Float => JavaType::Primitive(Primitive::Float),
-      ParamKind::Double => JavaType::Primitive(Primitive::Double),
+      ParamKind::Prim(p) => JavaType::Primitive(*p),
       ParamKind::Ref(_) => JavaType::Object,
     }
   }
 }
 
-#[derive(Clone, Copy)]
-pub(crate) enum RetKind {
-  Void,
-  Bool,
-  Byte,
-  Char,
-  Short,
-  Int,
-  Long,
-  Float,
-  Double,
-  Object,
+/// `PluginJvm.convert`'s range rules: a js integer fits a `p` it does not truncate in
+fn int_fits(p: Primitive, v: i64) -> bool {
+  match p {
+    Primitive::Byte => i8::try_from(v).is_ok(),
+    Primitive::Short => i16::try_from(v).is_ok(),
+    Primitive::Int => i32::try_from(v).is_ok(),
+    Primitive::Char => u16::try_from(v).is_ok(),
+    Primitive::Long | Primitive::Float | Primitive::Double => true,
+    Primitive::Boolean | Primitive::Void => false,
+  }
 }
 
-impl RetKind {
-  fn java_type(self) -> JavaType {
-    match self {
-      RetKind::Void => JavaType::Primitive(Primitive::Void),
-      RetKind::Bool => JavaType::Primitive(Primitive::Boolean),
-      RetKind::Byte => JavaType::Primitive(Primitive::Byte),
-      RetKind::Char => JavaType::Primitive(Primitive::Char),
-      RetKind::Short => JavaType::Primitive(Primitive::Short),
-      RetKind::Int => JavaType::Primitive(Primitive::Int),
-      RetKind::Long => JavaType::Primitive(Primitive::Long),
-      RetKind::Float => JavaType::Primitive(Primitive::Float),
-      RetKind::Double => JavaType::Primitive(Primitive::Double),
-      RetKind::Object => JavaType::Object,
-    }
+fn float_fits(p: Primitive, v: f64) -> bool {
+  match p {
+    Primitive::Double => true,
+    Primitive::Float => !(v.is_finite() && v.abs() > f32::MAX as f64),
+    _ => false,
+  }
+}
+
+fn int_value(p: Primitive, v: i64) -> JValue<'static> {
+  match p {
+    Primitive::Byte => JValue::Byte(v as i8),
+    Primitive::Short => JValue::Short(v as i16),
+    Primitive::Char => JValue::Char(v as u16),
+    Primitive::Int => JValue::Int(v as i32),
+    Primitive::Long => JValue::Long(v),
+    Primitive::Float => JValue::Float(v as f32),
+    Primitive::Double => JValue::Double(v as f64),
+    Primitive::Boolean | Primitive::Void => JValue::Bool(false),
+  }
+}
+
+fn float_value(p: Primitive, v: f64) -> JValue<'static> {
+  match p {
+    Primitive::Float => JValue::Float(v as f32),
+    _ => JValue::Double(v),
+  }
+}
+
+/// the box `Integer` or `Long` a js integer takes when the parameter names no box of its own
+fn int_box(v: i64) -> Primitive {
+  if int_fits(Primitive::Int, v) {
+    Primitive::Int
+  } else {
+    Primitive::Long
   }
 }
 
@@ -188,12 +165,11 @@ enum MethodId {
 }
 
 pub(crate) struct Candidate {
-  /// the `Method`/`Constructor` object itself: what a pinned handle is minted from
   pub(crate) member: Global<JObject<'static>>,
   id: MethodId,
   owner: Global<JClass<'static>>,
   params: Vec<ParamKind>,
-  ret: RetKind,
+  ret: JavaType,
   descriptor: String,
   is_abstract: bool,
   refusal: Option<String>,
@@ -241,8 +217,6 @@ struct Plan {
   picks: RefCell<HashMap<PickKey, Rc<Candidate>>>,
 }
 
-/// everything `matches` looks at in an argument: an int by which widths hold it, a double by
-/// whether a float does, a string by whether it is one char, a handle by its runtime class
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
 enum ArgShape {
   Null,
@@ -260,11 +234,10 @@ struct PickKey {
   shapes: Vec<ArgShape>,
 }
 
-/// how an instance of a class crosses: settled once per class, so a result costs one class lookup
 #[derive(Clone, Copy)]
 enum Shape {
   String,
-  Boxed(BoxKind),
+  Boxed(Primitive),
   Bytes,
   Class,
   Method,
@@ -273,15 +246,17 @@ enum Shape {
   Object,
 }
 
+type Resolved = (String, Vec<Rc<Candidate>>, Option<Rc<FieldPlan>>);
+type PlanTable<P> = HashMap<String, Result<Rc<P>, String>>;
+
 struct ClassInfo {
   cls: Global<JClass<'static>>,
   shape: Option<Shape>,
-  methods: HashMap<String, Result<Rc<Plan>, String>>,
-  constructors: HashMap<String, Result<Rc<Plan>, String>>,
-  fields: HashMap<String, Result<Rc<FieldPlan>, String>>,
+  methods: PlanTable<Plan>,
+  constructors: PlanTable<Plan>,
+  fields: PlanTable<FieldPlan>,
 }
 
-/// the handful of platform classes and members every call may need, looked up once per process
 struct WellKnown {
   string: Global<JClass<'static>>,
   class: Global<JClass<'static>>,
@@ -289,7 +264,7 @@ struct WellKnown {
   constructor: Global<JClass<'static>>,
   field: Global<JClass<'static>>,
   byte_array: Global<JClass<'static>>,
-  boxes: [(BoxKind, Global<JClass<'static>>, JStaticMethodID, JMethodID); 8],
+  boxes: [(Primitive, Global<JClass<'static>>, JStaticMethodID, JMethodID); 8],
   to_string: JMethodID,
   get_declaring_class: JMethodID,
   system: Global<JClass<'static>>,
@@ -301,17 +276,13 @@ struct WellKnown {
 
 static WELL_KNOWN: OnceLock<Option<WellKnown>> = OnceLock::new();
 
-fn signature(text: &str) -> jni::errors::Result<RuntimeMethodSignature> {
-  RuntimeMethodSignature::from_str(text)
-}
-
 fn find(env: &mut Env, name: &str) -> jni::errors::Result<Global<JClass<'static>>> {
   let cls = env.find_class(JNIString::from(name))?;
   env.new_global_ref(&cls)
 }
 
 fn method_id(env: &mut Env, cls: &Global<JClass<'static>>, name: &str, sig: &str) -> jni::errors::Result<JMethodID> {
-  let parsed = signature(sig)?;
+  let parsed = RuntimeMethodSignature::from_str(sig)?;
   env.get_method_id(cls, JNIString::from(name), MethodSignature::from(&parsed))
 }
 
@@ -321,37 +292,45 @@ fn static_method_id(
   name: &str,
   sig: &str,
 ) -> jni::errors::Result<JStaticMethodID> {
-  let parsed = signature(sig)?;
+  let parsed = RuntimeMethodSignature::from_str(sig)?;
   env.get_static_method_id(cls, JNIString::from(name), MethodSignature::from(&parsed))
 }
 
-/// Reads IDs from reflected members without initializing their declaring class. Unlike
-/// `GetMethodID`, this preserves `Class.getDeclaredMethod` behavior and does not run static
-/// initializers.
-fn reflected_method_id(env: &mut Env, member: &JObject) -> jni::errors::Result<jni::sys::jmethodID> {
+/// `obj.<id>()` for a cached no-argument, object-returning method of a class `obj` is an instance of
+fn call_object<'l>(env: &mut Env<'l>, obj: &JObject, id: JMethodID) -> jni::errors::Result<JObject<'l>> {
+  // SAFETY: `id` was looked up on `obj`'s class with signature `()L...;`, which is what is called
+  unsafe { env.call_method_unchecked(obj, id, JavaType::Object, &[]) }?.l()
+}
+
+/// The id of a `java.lang.reflect.Method` or `Constructor`. Unlike `GetMethodID`, this does not run
+/// the declaring class's static initializers. jni does not wrap `FromReflectedMethod`.
+fn reflected_method_id(env: &mut Env, member: &JObject) -> jni::errors::Result<JMethodID> {
   let raw = env.get_raw();
+  // SAFETY: `member` is a live reflected method or constructor, and the id is checked for null
   let id = unsafe { ((**raw).v1_2.FromReflectedMethod)(raw, member.as_raw()) };
   if id.is_null() {
     return Err(jni::errors::Error::NullPtr("FromReflectedMethod"));
   }
-  Ok(id)
+  // SAFETY: a non-null id `FromReflectedMethod` handed out
+  Ok(unsafe { JMethodID::from_raw(id) })
 }
 
-fn reflected_field_id(env: &mut Env, field: &JObject) -> OpResult<jni::sys::jfieldID> {
+fn reflected_field_id(env: &mut Env, field: &JObject) -> jni::errors::Result<jni::sys::jfieldID> {
   let raw = env.get_raw();
+  // SAFETY: `field` is a live `java.lang.reflect.Field`, and the id is checked for null
   let id = unsafe { ((**raw).v1_2.FromReflectedField)(raw, field.as_raw()) };
   if id.is_null() {
-    return Err(OpError::Jni(jni::errors::Error::NullPtr("FromReflectedField")));
+    return Err(jni::errors::Error::NullPtr("FromReflectedField"));
   }
   Ok(id)
 }
 
 impl WellKnown {
   fn load(env: &mut Env) -> jni::errors::Result<Self> {
-    let boxed = |env: &mut Env, kind: BoxKind, name: &str, prim: &str, unbox: &str| {
+    let boxed = |env: &mut Env, kind: Primitive, name: &str, unbox: &str| {
       let cls = find(env, name)?;
-      let value_of = static_method_id(env, &cls, "valueOf", &format!("({prim})L{name};"))?;
-      let unbox = method_id(env, &cls, unbox, &format!("(){prim}"))?;
+      let value_of = static_method_id(env, &cls, "valueOf", &format!("({kind})L{name};"))?;
+      let unbox = method_id(env, &cls, unbox, &format!("(){kind}"))?;
       Ok::<_, jni::errors::Error>((kind, cls, value_of, unbox))
     };
     let object = find(env, "java/lang/Object")?;
@@ -374,14 +353,14 @@ impl WellKnown {
       field: find(env, "java/lang/reflect/Field")?,
       byte_array: find(env, "[B")?,
       boxes: [
-        boxed(env, BoxKind::Bool, "java/lang/Boolean", "Z", "booleanValue")?,
-        boxed(env, BoxKind::Byte, "java/lang/Byte", "B", "byteValue")?,
-        boxed(env, BoxKind::Char, "java/lang/Character", "C", "charValue")?,
-        boxed(env, BoxKind::Short, "java/lang/Short", "S", "shortValue")?,
-        boxed(env, BoxKind::Int, "java/lang/Integer", "I", "intValue")?,
-        boxed(env, BoxKind::Long, "java/lang/Long", "J", "longValue")?,
-        boxed(env, BoxKind::Float, "java/lang/Float", "F", "floatValue")?,
-        boxed(env, BoxKind::Double, "java/lang/Double", "D", "doubleValue")?,
+        boxed(env, Primitive::Boolean, "java/lang/Boolean", "booleanValue")?,
+        boxed(env, Primitive::Byte, "java/lang/Byte", "byteValue")?,
+        boxed(env, Primitive::Char, "java/lang/Character", "charValue")?,
+        boxed(env, Primitive::Short, "java/lang/Short", "shortValue")?,
+        boxed(env, Primitive::Int, "java/lang/Integer", "intValue")?,
+        boxed(env, Primitive::Long, "java/lang/Long", "longValue")?,
+        boxed(env, Primitive::Float, "java/lang/Float", "floatValue")?,
+        boxed(env, Primitive::Double, "java/lang/Double", "doubleValue")?,
       ],
       to_string: method_id(env, &object, "toString", "()Ljava/lang/String;")?,
       get_declaring_class: method_id(env, &member, "getDeclaringClass", "()Ljava/lang/Class;")?,
@@ -403,23 +382,9 @@ impl WellKnown {
       .as_ref()
   }
 
-  fn boxed(&self, kind: BoxKind) -> &(BoxKind, Global<JClass<'static>>, JStaticMethodID, JMethodID) {
+  fn boxed(&self, kind: Primitive) -> &(Primitive, Global<JClass<'static>>, JStaticMethodID, JMethodID) {
     self.boxes.iter().find(|entry| entry.0 == kind).expect("every box kind is loaded")
   }
-}
-
-fn box_of(descriptor: &str) -> Option<BoxKind> {
-  Some(match descriptor.as_bytes().first()? {
-    b'Z' => BoxKind::Bool,
-    b'B' => BoxKind::Byte,
-    b'C' => BoxKind::Char,
-    b'S' => BoxKind::Short,
-    b'I' => BoxKind::Int,
-    b'J' => BoxKind::Long,
-    b'F' => BoxKind::Float,
-    b'D' => BoxKind::Double,
-    _ => return None,
-  })
 }
 
 fn refuse_call(env: &mut Env, message: &str) -> jni::errors::Error {
@@ -429,9 +394,7 @@ fn refuse_call(env: &mut Env, message: &str) -> jni::errors::Error {
   jni::errors::Error::JavaException
 }
 
-/// `PluginJvm.Native.nativeCallNonvirtual`: runs exactly [method] on [receiver], the way a routine's
-/// `callSuper` needs it. The arguments are already converted to [params] on the kotlin side, but a
-/// mismatch here is memory corruption rather than an exception, so each one is checked again.
+/// A mismatched argument here is memory corruption, not an exception, so each is checked again
 pub(crate) fn call_nonvirtual_boxed<'l>(
   env: &mut Env<'l>,
   method: &JObject,
@@ -443,28 +406,31 @@ pub(crate) fn call_nonvirtual_boxed<'l>(
   let Some(known) = WellKnown::get(env) else {
     return Err(refuse_call(env, "jvm: the platform classes did not load"));
   };
-  let owner = unsafe { env.call_method_unchecked(method, known.get_declaring_class, JavaType::Object, &[])? }.l()?;
-  let owner = unsafe { JClass::from_raw(env, owner.into_raw() as jni::sys::jclass) };
+  let owner = call_object(env, method, known.get_declaring_class)?;
+  let owner = env.cast_local::<JClass>(owner)?;
   if receiver.is_null() || !env.is_instance_of(receiver, &owner)? {
     return Err(refuse_call(env, "jvm: that receiver is not an instance of the class declaring the method"));
   }
-  let (param_descriptors, ret_descriptor) = Native::split_descriptor(descriptor);
-  if param_descriptors.len() != params.len(env)? || param_descriptors.len() != args.len(env)? {
+  let Ok(signature) = RuntimeMethodSignature::from_str(descriptor) else {
+    return Err(refuse_call(env, "jvm: that is not a method descriptor"));
+  };
+  let signature = signature.method_signature();
+  if signature.args().len() != params.len(env)? || signature.args().len() != args.len(env)? {
     return Err(refuse_call(env, "jvm: the arguments do not match the method"));
   }
-  let mut values = Vec::with_capacity(param_descriptors.len());
-  for (index, param_descriptor) in param_descriptors.iter().enumerate() {
+  let mut values = Vec::with_capacity(signature.args().len());
+  for (index, ty) in signature.args().iter().enumerate() {
     let arg = args.get_element(env, index)?;
-    match box_of(param_descriptor) {
-      Some(kind) => {
-        if arg.is_null() || !env.is_instance_of(&arg, &known.boxed(kind).1)? {
+    match ty {
+      JavaType::Primitive(kind) => {
+        if arg.is_null() || !env.is_instance_of(&arg, &known.boxed(*kind).1)? {
           return Err(refuse_call(env, "jvm: a primitive parameter was handed something else"));
         }
-        values.push(Native::unbox(env, known, kind, &arg)?.as_jni());
+        values.push(Native::unbox(env, known, *kind, &arg)?.as_jni());
       }
-      None => {
+      JavaType::Object | JavaType::Array => {
         let param = params.get_element(env, index)?;
-        let param = unsafe { JClass::from_raw(env, param.into_raw() as jni::sys::jclass) };
+        let param = env.cast_local::<JClass>(param)?;
         if !arg.is_null() && !env.is_instance_of(&arg, &param)? {
           return Err(refuse_call(env, "jvm: an argument does not match its parameter"));
         }
@@ -472,25 +438,16 @@ pub(crate) fn call_nonvirtual_boxed<'l>(
       }
     }
   }
-  let ret = Native::ret_kind(&ret_descriptor);
-  let id = unsafe { JMethodID::from_raw(reflected_method_id(env, method)?) };
-  let value = unsafe { env.call_nonvirtual_method_unchecked(receiver, &owner, id, ret.java_type(), &values)? };
-  let kind = match value {
-    JValueOwned::Object(obj) => return Ok(obj),
-    JValueOwned::Void => return Ok(JObject::null()),
-    JValueOwned::Bool(_) => BoxKind::Bool,
-    JValueOwned::Byte(_) => BoxKind::Byte,
-    JValueOwned::Char(_) => BoxKind::Char,
-    JValueOwned::Short(_) => BoxKind::Short,
-    JValueOwned::Int(_) => BoxKind::Int,
-    JValueOwned::Long(_) => BoxKind::Long,
-    JValueOwned::Float(_) => BoxKind::Float,
-    JValueOwned::Double(_) => BoxKind::Double,
-  };
-  Native::boxed_value(env, known, kind, value.borrow())
+  let id = reflected_method_id(env, method)?;
+  // SAFETY: the receiver, every argument and the return type were checked against the method above
+  let value = unsafe { env.call_nonvirtual_method_unchecked(receiver, &owner, id, signature.ret(), &values)? };
+  match value.primitive_type() {
+    None => value.l(),
+    Some(Primitive::Void) => Ok(JObject::null()),
+    Some(kind) => Native::boxed_value(env, known, kind, value.borrow()),
+  }
 }
 
-/// what a js argument is before any java type is known: the same reading `arg_to_wire` gives
 pub(crate) enum Arg<'js> {
   Null,
   Bool(bool),
@@ -527,31 +484,28 @@ pub(crate) fn read_arg<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<Arg<
   if let Some(s) = value.as_string() {
     let s = s.to_string()?;
     if s.len() > VALUE_LIMIT_BYTES {
-      return too_big(ctx, "a string argument", s.len());
+      return super::throw_too_big(ctx, "a string argument", s.len(), VALUE_LIMIT_BYTES);
     }
     return Ok(Arg::Str(s));
   }
   if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
-    // SAFETY: no javascript runs while the slice is borrowed; the error past the limit is built after
-    // its last use
-    if let Some(bytes) = unsafe { typed.as_bytes() } {
+    // an error thrown past the limit is built after the last use of the bytes
+    let arg = qjs_read_typed_bytes(&typed, |bytes| {
       if bytes.len() > VALUE_LIMIT_BYTES {
-        return too_big(ctx, "a byte[] argument", bytes.len());
+        return super::throw_too_big(ctx, "a byte[] argument", bytes.len(), VALUE_LIMIT_BYTES);
       }
-      return Ok(Arg::Bytes(bytes.to_vec()));
+      Ok(Arg::Bytes(bytes.to_vec()))
+    });
+    if let Some(arg) = arg {
+      return arg;
     }
   }
-  if let Some(handle) = super::ref_of(value) {
+  if let Some(handle) = super::get_jvm_ref(value) {
     return Ok(Arg::Ref(handle));
   }
   PluginErrorCode::InvalidArgument.throw(ctx, &format!("jvm: cannot hand a {} to java", value.type_of()))
 }
 
-fn too_big<T>(ctx: &Ctx<'_>, what: &str, size: usize) -> JsResult<T> {
-  super::throw_too_big(ctx, what, size, VALUE_LIMIT_BYTES)
-}
-
-/// a minted result, for `JvmState::make_handle` to wrap
 pub(crate) struct HandleSpec {
   pub(crate) id: i64,
   pub(crate) kind: u8,
@@ -564,7 +518,6 @@ pub(crate) enum Outcome<'js> {
   Handle(HandleSpec),
 }
 
-/// per engine: the class cache and the reference table are both the plugin's own
 pub(crate) struct Native {
   host: Rc<dyn JvmReflectHost>,
   refs: Arc<RefTable>,
@@ -589,7 +542,7 @@ impl Native {
   ) -> JsResult<T> {
     let ran = with_current_env(|env| {
       let Some(known) = WellKnown::get(env) else {
-        return throw(ctx, PluginErrorCode::Internal, "jvm: the platform classes did not load");
+        return PluginErrorCode::Internal.throw(ctx, "jvm: the platform classes did not load").map_err(OpError::Js);
       };
       env.with_local_frame(32, |env| f(env, known))
     });
@@ -601,27 +554,25 @@ impl Native {
     }
   }
 
-  fn entry_of(&self, ctx: &Ctx<'_>, handle: &Class<'_, JvmRef>) -> OpResult<Entry> {
+  fn get_live_entry(&self, ctx: &Ctx<'_>, handle: &Class<'_, JvmRef>) -> OpResult<Entry> {
     let id = handle.borrow().id;
     match self.refs.get(id) {
       Some(entry) if !self.refs.is_closed() => Ok(entry),
-      _ => throw(
-        ctx,
-        PluginErrorCode::HandleExpired,
-        "jvm: that handle was released; a plugin's handles do not outlive it",
-      ),
+      _ => PluginErrorCode::HandleExpired
+        .throw(ctx, "jvm: that handle was released; a plugin's handles do not outlive it")
+        .map_err(OpError::Js),
     }
   }
 
-  /// a global reference the table holds from here on, or the refusal every expired mint gets
   fn mint_ref(&self, ctx: &Ctx<'_>, obj: Global<JObject<'static>>, kind: u8) -> OpResult<i64> {
     match self.refs.mint(obj, kind) {
       Some(id) => Ok(id),
-      None => throw(ctx, PluginErrorCode::HandleExpired, "jvm: this plugin's handles have been released"),
+      None => PluginErrorCode::HandleExpired
+        .throw(ctx, "jvm: this plugin's handles have been released")
+        .map_err(OpError::Js),
     }
   }
 
-  /// the class a `getDeclared*` is asked on: the handle must name one, not be an instance of one
   fn class_target(
     &self,
     ctx: &Ctx<'_>,
@@ -629,14 +580,13 @@ impl Native {
     known: &WellKnown,
     target: &Class<'_, JvmRef>,
   ) -> OpResult<usize> {
-    let entry = self.entry_of(ctx, target)?;
+    let entry = self.get_live_entry(ctx, target)?;
     if entry.kind != KIND_CLASS {
-      return throw(ctx, PluginErrorCode::InvalidArgument, "jvm: that handle is not a class");
+      return PluginErrorCode::InvalidArgument.throw(ctx, "jvm: that handle is not a class").map_err(OpError::Js);
     }
-    self.class_key_of(ctx, env, known, target, &entry)
+    self.resolve_class_key(env, known, target, &entry)
   }
 
-  /// the field a pinned handle stands for, and the receiver it was handed
   fn pinned_field(
     &self,
     ctx: &Ctx<'_>,
@@ -645,20 +595,21 @@ impl Native {
     target: &Class<'_, JvmRef>,
     receiver: &Arg<'_>,
   ) -> OpResult<(Rc<FieldPlan>, Option<Entry>)> {
-    let entry = self.entry_of(ctx, target)?;
+    let entry = self.get_live_entry(ctx, target)?;
     if entry.kind != KIND_FIELD {
-      return throw(ctx, PluginErrorCode::InvalidArgument, "jvm: that handle is not a field");
+      return PluginErrorCode::InvalidArgument.throw(ctx, "jvm: that handle is not a field").map_err(OpError::Js);
     }
-    let pinned = self.pinned_of(ctx, env, known, target, &entry)?;
+    let pinned = self.get_pinned(ctx, env, known, target, &entry)?;
     let Pinned::Field(plan) = &*pinned else {
-      return throw(ctx, PluginErrorCode::InvalidArgument, "jvm: that handle is not a field");
+      return PluginErrorCode::InvalidArgument.throw(ctx, "jvm: that handle is not a field").map_err(OpError::Js);
     };
     let plan = plan.clone();
     let receiver = self.receiver_arg(ctx, env, receiver, Self::field_owner(&plan))?;
     Ok((plan, receiver))
   }
 
-  fn key_of(&self, env: &mut Env, known: &WellKnown, cls: &JObject) -> OpResult<usize> {
+  fn intern_class_key(&self, env: &mut Env, known: &WellKnown, cls: &JObject) -> OpResult<usize> {
+    // SAFETY: `identityHashCode(Object)I`, handed one object
     let hash = unsafe {
       env.call_static_method_unchecked(
         &known.system,
@@ -676,8 +627,7 @@ impl Native {
         }
       }
     }
-    let view = unsafe { JClass::from_raw(env, cls.as_raw()) };
-    let global = env.new_global_ref(&view)?;
+    let global = Self::as_class(env, cls)?;
     let mut classes = self.classes.borrow_mut();
     let key = classes.len();
     classes.push(ClassInfo {
@@ -692,15 +642,13 @@ impl Native {
   }
 
   /// a second global ref to the same class, so the cache borrow does not have to outlive the call
-  fn class_of(&self, env: &mut Env, key: usize) -> OpResult<Global<JClass<'static>>> {
+  fn get_class(&self, env: &mut Env, key: usize) -> OpResult<Global<JClass<'static>>> {
     let classes = self.classes.borrow();
     Ok(env.new_global_ref(&*classes[key].cls)?)
   }
 
-  /// the class a handle is asked about: the class it names, or the runtime class of its object
-  fn class_key_of(
+  fn resolve_class_key(
     &self,
-    ctx: &Ctx<'_>,
     env: &mut Env,
     known: &WellKnown,
     handle: &Class<'_, JvmRef>,
@@ -710,21 +658,20 @@ impl Native {
       return Ok(key);
     }
     let key = if entry.kind == KIND_CLASS {
-      self.key_of(env, known, entry.obj.as_obj())?
+      self.intern_class_key(env, known, entry.obj.as_obj())?
     } else {
       let cls = env.get_object_class(entry.obj.as_obj())?;
-      self.key_of(env, known, cls.as_ref())?
+      self.intern_class_key(env, known, cls.as_ref())?
     };
-    let _ = ctx;
     handle.borrow().class_key.set(Some(key));
     Ok(key)
   }
 
-  fn shape_of(&self, env: &mut Env, known: &WellKnown, key: usize) -> OpResult<Shape> {
+  fn resolve_class_shape(&self, env: &mut Env, known: &WellKnown, key: usize) -> OpResult<Shape> {
     if let Some(shape) = self.classes.borrow()[key].shape {
       return Ok(shape);
     }
-    let cls = self.class_of(env, key)?;
+    let cls = self.get_class(env, key)?;
     let mut shape = Shape::Object;
     if env.is_assignable_from(&cls, &known.string)? {
       shape = Shape::String;
@@ -754,6 +701,8 @@ impl Native {
     if obj.is_null() {
       return Ok(None);
     }
+    // SAFETY: callers hand over a `java.lang.String`: a result `resolve_class_shape` said is one, or a string slot
+    // of the host's answer
     let text = unsafe { JString::from_raw(env, obj.as_raw()) };
     Ok(Some(text.try_to_string(env)?))
   }
@@ -769,36 +718,27 @@ impl Native {
   }
 
   fn read_bool(env: &mut Env, known: &WellKnown, obj: &JObject) -> OpResult<bool> {
-    let unbox = known.boxed(BoxKind::Bool).3;
-    Ok(unsafe { env.call_method_unchecked(obj, unbox, JavaType::Primitive(Primitive::Boolean), &[])? }.z()?)
+    Ok(Self::unbox(env, known, Primitive::Boolean, obj)?.z()?)
   }
 
   fn class_name(env: &mut Env, known: &WellKnown, cls: &JObject) -> OpResult<String> {
-    let name = unsafe { env.call_method_unchecked(cls, known.class_get_name, JavaType::Object, &[])? }.l()?;
+    let name = call_object(env, cls, known.class_get_name)?;
     Ok(Self::read_string(env, &name)?.unwrap_or_default())
   }
 
   fn as_class(env: &mut Env, obj: &JObject) -> OpResult<Global<JClass<'static>>> {
-    let view = unsafe { JClass::from_raw(env, obj.as_raw()) };
-    Ok(env.new_global_ref(&view)?)
+    Ok(env.new_cast_global_ref::<JClass>(obj)?)
   }
 
   fn declaring_class(env: &mut Env, known: &WellKnown, member: &JObject) -> OpResult<Global<JClass<'static>>> {
-    let cls = unsafe { env.call_method_unchecked(member, known.get_declaring_class, JavaType::Object, &[])? }.l()?;
+    let cls = call_object(env, member, known.get_declaring_class)?;
     Self::as_class(env, &cls)
   }
 
-  fn param_kind(env: &mut Env, known: &WellKnown, descriptor: &str, cls: &JObject) -> OpResult<ParamKind> {
-    Ok(match descriptor.as_bytes()[0] {
-      b'Z' => ParamKind::Bool,
-      b'B' => ParamKind::Byte,
-      b'C' => ParamKind::Char,
-      b'S' => ParamKind::Short,
-      b'I' => ParamKind::Int,
-      b'J' => ParamKind::Long,
-      b'F' => ParamKind::Float,
-      b'D' => ParamKind::Double,
-      _ => {
+  fn param_kind(env: &mut Env, known: &WellKnown, ty: JavaType, cls: &JObject) -> OpResult<ParamKind> {
+    Ok(match ty {
+      JavaType::Primitive(p) => ParamKind::Prim(p),
+      JavaType::Object | JavaType::Array => {
         let global = Self::as_class(env, cls)?;
         let assignable = |env: &mut Env, from: &Global<JClass<'static>>| env.is_assignable_from(from, &global);
         let mut exact_box = None;
@@ -809,10 +749,10 @@ impl Native {
         }
         let accepts_string = assignable(env, &known.string)?;
         let accepts_bytes = assignable(env, &known.byte_array)?;
-        let accepts_boolean = assignable(env, &known.boxed(BoxKind::Bool).1)?;
-        let accepts_integer = assignable(env, &known.boxed(BoxKind::Int).1)?;
-        let accepts_long = assignable(env, &known.boxed(BoxKind::Long).1)?;
-        let accepts_double = assignable(env, &known.boxed(BoxKind::Double).1)?;
+        let accepts_boolean = assignable(env, &known.boxed(Primitive::Boolean).1)?;
+        let accepts_integer = assignable(env, &known.boxed(Primitive::Int).1)?;
+        let accepts_long = assignable(env, &known.boxed(Primitive::Long).1)?;
+        let accepts_double = assignable(env, &known.boxed(Primitive::Double).1)?;
         ParamKind::Ref(RefParam {
           cls: global,
           exact_box,
@@ -825,49 +765,6 @@ impl Native {
         })
       }
     })
-  }
-
-  /// the parameter descriptors of `(...)R`, one string each, and the return descriptor
-  fn split_descriptor(descriptor: &str) -> (Vec<String>, String) {
-    let inner = descriptor.strip_prefix('(').unwrap_or(descriptor);
-    let (params, ret) = inner.split_once(')').unwrap_or((inner, "V"));
-    let bytes = params.as_bytes();
-    let mut out = Vec::new();
-    let mut i = 0;
-    while i < bytes.len() {
-      let start = i;
-      while i < bytes.len() && bytes[i] == b'[' {
-        i += 1;
-      }
-      if i < bytes.len() && bytes[i] == b'L' {
-        while i < bytes.len() && bytes[i] != b';' {
-          i += 1;
-        }
-      }
-      // a truncated descriptor must not index past the end, and a class name may hold any java
-      // identifier char, so the cut has to land on a boundary: this crate aborts on panic
-      i = (i + 1).min(bytes.len());
-      while i < bytes.len() && !params.is_char_boundary(i) {
-        i += 1;
-      }
-      out.push(params[start..i].to_string());
-    }
-    (out, ret.to_string())
-  }
-
-  fn ret_kind(descriptor: &str) -> RetKind {
-    match descriptor.as_bytes().first().copied().unwrap_or(b'V') {
-      b'V' => RetKind::Void,
-      b'Z' => RetKind::Bool,
-      b'B' => RetKind::Byte,
-      b'C' => RetKind::Char,
-      b'S' => RetKind::Short,
-      b'I' => RetKind::Int,
-      b'J' => RetKind::Long,
-      b'F' => RetKind::Float,
-      b'D' => RetKind::Double,
-      _ => RetKind::Object,
-    }
   }
 
   fn read_candidate(
@@ -883,28 +780,30 @@ impl Native {
     let is_abstract = Self::bool_at(env, known, array, at + 4)?;
     let refusal = Self::string_at(env, array, at + 5)?;
     let is_constructor = env.is_instance_of(&member, &known.constructor)?;
-    let (param_descriptors, ret_descriptor) = Self::split_descriptor(&descriptor);
-    let params_array = unsafe { JObjectArray::<JObject>::from_raw(env, params.as_raw() as jni::sys::jobjectArray) };
-    let mut kinds = Vec::with_capacity(param_descriptors.len());
-    for (index, param_descriptor) in param_descriptors.iter().enumerate() {
-      let cls = params_array.get_element(env, index)?;
-      kinds.push(Self::param_kind(env, known, param_descriptor, &cls)?);
+    let signature = RuntimeMethodSignature::from_str(&descriptor)?;
+    let signature = signature.method_signature();
+    let params = env.cast_local::<JObjectArray<JObject>>(params)?;
+    let mut kinds = Vec::with_capacity(signature.args().len());
+    for (index, ty) in signature.args().iter().enumerate() {
+      let cls = params.get_element(env, index)?;
+      kinds.push(Self::param_kind(env, known, *ty, &cls)?);
     }
     let owner = Self::declaring_class(env, known, &member)?;
-    let raw_id = reflected_method_id(env, &member)?;
+    let id = reflected_method_id(env, &member)?;
     let id = if is_constructor {
-      MethodId::Constructor(unsafe { JMethodID::from_raw(raw_id) })
+      MethodId::Constructor(id)
     } else if is_static {
-      MethodId::Static(unsafe { JStaticMethodID::from_raw(raw_id) })
+      // SAFETY: the host read the member's static modifier, so this id names a static method
+      MethodId::Static(unsafe { JStaticMethodID::from_raw(id.into_raw()) })
     } else {
-      MethodId::Instance(unsafe { JMethodID::from_raw(raw_id) })
+      MethodId::Instance(id)
     };
     Ok(Rc::new(Candidate {
       member: env.new_global_ref(&member)?,
       id,
       owner,
       params: kinds,
-      ret: if is_constructor { RetKind::Object } else { Self::ret_kind(&ret_descriptor) },
+      ret: if is_constructor { JavaType::Object } else { signature.ret() },
       descriptor,
       is_abstract,
       refusal,
@@ -929,17 +828,20 @@ impl Native {
     let name = Self::string_at(env, array, at + 7)?.unwrap_or_default();
     let owner = Self::declaring_class(env, known, &field)?;
     let raw_id = reflected_field_id(env, &field)?;
-    let id = if is_static {
-      FieldId::Static(unsafe { JStaticFieldID::from_raw(raw_id) })
-    } else {
-      FieldId::Instance(unsafe { JFieldID::from_raw(raw_id) })
+    // SAFETY: a non-null `FromReflectedField` id, static exactly when the host read the field as static
+    let id = unsafe {
+      if is_static {
+        FieldId::Static(JStaticFieldID::from_raw(raw_id))
+      } else {
+        FieldId::Instance(JFieldID::from_raw(raw_id))
+      }
     };
     Ok(Rc::new(FieldPlan {
       field: env.new_global_ref(&field)?,
       id,
       owner,
       owner_name,
-      ty: Self::param_kind(env, known, &descriptor, &ty)?,
+      ty: Self::param_kind(env, known, descriptor.parse()?, &ty)?,
       name,
       type_name,
       is_final,
@@ -957,10 +859,10 @@ impl Native {
     target: &JObject,
     name: &str,
     mode: i32,
-  ) -> OpResult<Result<(String, Vec<Rc<Candidate>>, Option<Rc<FieldPlan>>), String>> {
+  ) -> OpResult<Result<Resolved, String>> {
     let array = match self.host.jvm_resolve(env, target, name, mode) {
       Ok(array) => array,
-      Err(error) => return throw(ctx, PluginErrorCode::Internal, &error),
+      Err(error) => return PluginErrorCode::Internal.throw(ctx, &error).map_err(OpError::Js),
     };
     let tag = Self::string_at(env, &array, 0)?.unwrap_or_default();
     if tag == "E" {
@@ -991,36 +893,18 @@ impl Native {
     name: &str,
     constructors: bool,
   ) -> OpResult<Rc<Plan>> {
-    let cached = {
-      let classes = self.classes.borrow();
-      let info = &classes[key];
-      let table = if constructors { &info.constructors } else { &info.methods };
-      table.get(name).cloned()
+    let (mode, table): (_, fn(&mut ClassInfo) -> &mut PlanTable<Plan>) = if constructors {
+      (RESOLVE_CONSTRUCTORS, |info| &mut info.constructors)
+    } else {
+      (RESOLVE_METHODS, |info| &mut info.methods)
     };
-    let answer = match cached {
-      Some(answer) => answer,
-      None => {
-        let cls = self.class_of(env, key)?;
-        let mode = if constructors { RESOLVE_CONSTRUCTORS } else { RESOLVE_METHODS };
-        let answer = match self.resolve(ctx, env, known, &cls, name, mode)? {
-          Ok((class_name, candidates, _)) => Ok(Rc::new(Plan {
-            class_name,
-            candidates,
-            picks: RefCell::new(HashMap::new()),
-          })),
-          Err(wire) => Err(wire),
-        };
-        let mut classes = self.classes.borrow_mut();
-        let info = &mut classes[key];
-        let table = if constructors { &mut info.constructors } else { &mut info.methods };
-        table.insert(name.to_string(), answer.clone());
-        answer
-      }
-    };
-    match answer {
-      Ok(plan) => Ok(plan),
-      Err(wire) => throw_wire(ctx, &wire),
-    }
+    self.get_cached_plan(ctx, env, known, (key, name, mode), table, |(class_name, candidates, _)| {
+      Ok(Rc::new(Plan {
+        class_name,
+        candidates,
+        picks: RefCell::new(HashMap::new()),
+      }))
+    })
   }
 
   fn field_plan(
@@ -1031,28 +915,41 @@ impl Native {
     key: usize,
     name: &str,
   ) -> OpResult<Rc<FieldPlan>> {
-    let cached = self.classes.borrow()[key].fields.get(name).cloned();
+    self.get_cached_plan(
+      ctx,
+      env,
+      known,
+      (key, name, RESOLVE_FIELD),
+      |info| &mut info.fields,
+      |(_, _, field)| {
+        field.ok_or_else(|| crate::api::tl::proxy::encode_error("jvm: the host answered a field lookup with no field"))
+      },
+    )
+  }
+
+  fn get_cached_plan<P>(
+    &self,
+    ctx: &Ctx<'_>,
+    env: &mut Env,
+    known: &WellKnown,
+    (key, name, mode): (usize, &str, i32),
+    table: fn(&mut ClassInfo) -> &mut PlanTable<P>,
+    build: impl FnOnce(Resolved) -> Result<Rc<P>, String>,
+  ) -> OpResult<Rc<P>> {
+    let cached = table(&mut self.classes.borrow_mut()[key]).get(name).cloned();
     let answer = match cached {
       Some(answer) => answer,
       None => {
-        let cls = self.class_of(env, key)?;
-        let answer = match self.resolve(ctx, env, known, &cls, name, RESOLVE_FIELD)? {
-          Ok((_, _, Some(field))) => Ok(field),
-          Ok(_) => Err(crate::api::tl::proxy::encode_error("jvm: the host answered a field lookup with no field")),
-          Err(wire) => Err(wire),
-        };
-        self.classes.borrow_mut()[key].fields.insert(name.to_string(), answer.clone());
+        let cls = self.get_class(env, key)?;
+        let answer = self.resolve(ctx, env, known, &cls, name, mode)?.and_then(build);
+        table(&mut self.classes.borrow_mut()[key]).insert(name.to_string(), answer.clone());
         answer
       }
     };
-    match answer {
-      Ok(plan) => Ok(plan),
-      Err(wire) => throw_wire(ctx, &wire),
-    }
+    answer.or_else(|wire| throw_wire(ctx, &wire))
   }
 
-  /// a member that arrived as a value rather than through `getDeclaredMethod`: described once
-  fn pinned_of(
+  fn get_pinned(
     &self,
     ctx: &Ctx<'_>,
     env: &mut Env,
@@ -1067,7 +964,9 @@ impl Native {
       Ok((_, _, Some(field))) => Pinned::Field(field),
       Ok((_, candidates, None)) if candidates.len() == 1 => Pinned::Method(candidates[0].clone()),
       Ok(_) => {
-        return throw(ctx, PluginErrorCode::InvalidArgument, "jvm: that handle is not a method, constructor or field")
+        return PluginErrorCode::InvalidArgument
+          .throw(ctx, "jvm: that handle is not a method, constructor or field")
+          .map_err(OpError::Js)
       }
       Err(wire) => return throw_wire(ctx, &wire),
     };
@@ -1080,44 +979,27 @@ impl Native {
     Ok(match (param, arg) {
       (ParamKind::Ref(_), Arg::Null) => true,
       (_, Arg::Null) => false,
-      (ParamKind::Bool, Arg::Bool(_)) => true,
+      (ParamKind::Prim(p), Arg::Bool(_)) => *p == Primitive::Boolean,
       (ParamKind::Ref(r), Arg::Bool(_)) => r.accepts_boolean,
-      (ParamKind::Byte, Arg::Int(v)) => (i8::MIN as i64..=i8::MAX as i64).contains(v),
-      (ParamKind::Short, Arg::Int(v)) => (i16::MIN as i64..=i16::MAX as i64).contains(v),
-      (ParamKind::Int, Arg::Int(v)) => (i32::MIN as i64..=i32::MAX as i64).contains(v),
-      (ParamKind::Char, Arg::Int(v)) => (0..=0xffff).contains(v),
-      (ParamKind::Long | ParamKind::Float | ParamKind::Double, Arg::Int(_)) => true,
+      (ParamKind::Prim(p), Arg::Int(v)) => int_fits(*p, *v),
       (ParamKind::Ref(r), Arg::Int(v)) => match r.exact_box {
-        Some(BoxKind::Byte) => (i8::MIN as i64..=i8::MAX as i64).contains(v),
-        Some(BoxKind::Short) => (i16::MIN as i64..=i16::MAX as i64).contains(v),
-        Some(BoxKind::Int) => (i32::MIN as i64..=i32::MAX as i64).contains(v),
-        Some(BoxKind::Char) => (0..=0xffff).contains(v),
-        Some(BoxKind::Long | BoxKind::Float | BoxKind::Double) => true,
-        Some(BoxKind::Bool) => false,
-        None => {
-          if (i32::MIN as i64..=i32::MAX as i64).contains(v) {
-            r.accepts_integer
-          } else {
-            r.accepts_long
-          }
-        }
+        Some(p) => int_fits(p, *v),
+        None if int_box(*v) == Primitive::Int => r.accepts_integer,
+        None => r.accepts_long,
       },
-      (ParamKind::Double, Arg::Double(_)) => true,
-      (ParamKind::Float, Arg::Double(v)) => !(v.is_finite() && v.abs() > f32::MAX as f64),
+      (ParamKind::Prim(p), Arg::Double(v)) => float_fits(*p, *v),
       (ParamKind::Ref(r), Arg::Double(v)) => match r.exact_box {
-        Some(BoxKind::Double) => true,
-        Some(BoxKind::Float) => !(v.is_finite() && v.abs() > f32::MAX as f64),
-        Some(_) => false,
+        Some(p) => float_fits(p, *v),
         None => r.accepts_double,
       },
-      (ParamKind::Char, Arg::Str(s)) => is_one_code_unit(s),
+      (ParamKind::Prim(p), Arg::Str(s)) => *p == Primitive::Char && is_one_code_unit(s),
       (ParamKind::Ref(r), Arg::Str(s)) => match r.exact_box {
-        Some(BoxKind::Char) => is_one_code_unit(s),
+        Some(Primitive::Char) => is_one_code_unit(s),
         _ => r.accepts_string,
       },
       (ParamKind::Ref(r), Arg::Bytes(_)) => r.accepts_bytes,
       (ParamKind::Ref(r), Arg::Ref(handle)) => {
-        let entry = self.entry_of(ctx, handle)?;
+        let entry = self.get_live_entry(ctx, handle)?;
         env.is_instance_of(entry.obj.as_obj(), &r.cls)?
       }
       _ => false,
@@ -1127,11 +1009,12 @@ impl Native {
   fn boxed_value<'l>(
     env: &mut Env<'l>,
     known: &WellKnown,
-    kind: BoxKind,
+    kind: Primitive,
     value: JValue,
   ) -> jni::errors::Result<JObject<'l>> {
     let (_, cls, value_of, _) = known.boxed(kind);
-    unsafe { env.call_static_method_unchecked(cls, *value_of, JavaType::Object, &[value.as_jni()])? }.l()
+    // SAFETY: `valueOf` of the box for `kind`, handed a `kind` value
+    unsafe { env.call_static_method_unchecked(cls, *value_of, JavaType::Object, &[value.as_jni()]) }?.l()
   }
 
   /// `PluginJvm.convert` for one argument, after `matches` said it fits
@@ -1142,54 +1025,26 @@ impl Native {
     param: &ParamKind,
     arg: &Arg<'_>,
   ) -> OpResult<Prepared<'l>> {
+    let boxed = |env: &mut Env<'l>, kind, value| Self::boxed_value(env, known, kind, value).map(Prepared::Local);
     Ok(match (param, arg) {
       (_, Arg::Null) => Prepared::Null,
-      (ParamKind::Bool, Arg::Bool(b)) => Prepared::Primitive(JValue::Bool(*b)),
-      (ParamKind::Byte, Arg::Int(v)) => Prepared::Primitive(JValue::Byte(*v as i8)),
-      (ParamKind::Short, Arg::Int(v)) => Prepared::Primitive(JValue::Short(*v as i16)),
-      (ParamKind::Char, Arg::Int(v)) => Prepared::Primitive(JValue::Char(*v as u16)),
-      (ParamKind::Int, Arg::Int(v)) => Prepared::Primitive(JValue::Int(*v as i32)),
-      (ParamKind::Long, Arg::Int(v)) => Prepared::Primitive(JValue::Long(*v)),
-      (ParamKind::Float, Arg::Int(v)) => Prepared::Primitive(JValue::Float(*v as f32)),
-      (ParamKind::Double, Arg::Int(v)) => Prepared::Primitive(JValue::Double(*v as f64)),
-      (ParamKind::Float, Arg::Double(v)) => Prepared::Primitive(JValue::Float(*v as f32)),
-      (ParamKind::Double, Arg::Double(v)) => Prepared::Primitive(JValue::Double(*v)),
-      (ParamKind::Char, Arg::Str(s)) => Prepared::Primitive(JValue::Char(first_code_unit(s))),
-      (ParamKind::Ref(_), Arg::Bool(b)) => {
-        Prepared::Local(Self::boxed_value(env, known, BoxKind::Bool, JValue::Bool(*b))?)
-      }
+      (ParamKind::Prim(_), Arg::Bool(b)) => Prepared::Primitive(JValue::Bool(*b)),
+      (ParamKind::Prim(p), Arg::Int(v)) => Prepared::Primitive(int_value(*p, *v)),
+      (ParamKind::Prim(p), Arg::Double(v)) => Prepared::Primitive(float_value(*p, *v)),
+      (ParamKind::Prim(_), Arg::Str(s)) => Prepared::Primitive(JValue::Char(first_code_unit(s))),
+      (ParamKind::Ref(_), Arg::Bool(b)) => boxed(env, Primitive::Boolean, JValue::Bool(*b))?,
       (ParamKind::Ref(r), Arg::Int(v)) => {
-        let kind = match r.exact_box {
-          Some(kind) => kind,
-          None => {
-            if (i32::MIN as i64..=i32::MAX as i64).contains(v) {
-              BoxKind::Int
-            } else {
-              BoxKind::Long
-            }
-          }
-        };
-        let value = match kind {
-          BoxKind::Byte => JValue::Byte(*v as i8),
-          BoxKind::Short => JValue::Short(*v as i16),
-          BoxKind::Char => JValue::Char(*v as u16),
-          BoxKind::Int => JValue::Int(*v as i32),
-          BoxKind::Long => JValue::Long(*v),
-          BoxKind::Float => JValue::Float(*v as f32),
-          BoxKind::Double => JValue::Double(*v as f64),
-          BoxKind::Bool => JValue::Bool(false),
-        };
-        Prepared::Local(Self::boxed_value(env, known, kind, value)?)
+        let kind = r.exact_box.unwrap_or_else(|| int_box(*v));
+        boxed(env, kind, int_value(kind, *v))?
       }
-      (ParamKind::Ref(r), Arg::Double(v)) => Prepared::Local(match r.exact_box {
-        Some(BoxKind::Float) => Self::boxed_value(env, known, BoxKind::Float, JValue::Float(*v as f32))?,
-        _ => Self::boxed_value(env, known, BoxKind::Double, JValue::Double(*v))?,
-      }),
-      (ParamKind::Ref(r), Arg::Str(s)) => Prepared::Local(if r.exact_box == Some(BoxKind::Char) {
-        Self::boxed_value(env, known, BoxKind::Char, JValue::Char(first_code_unit(s)))?
-      } else {
-        JObject::from(JString::new(env, s)?)
-      }),
+      (ParamKind::Ref(r), Arg::Double(v)) => {
+        let kind = if r.exact_box == Some(Primitive::Float) { Primitive::Float } else { Primitive::Double };
+        boxed(env, kind, float_value(kind, *v))?
+      }
+      (ParamKind::Ref(r), Arg::Str(s)) if r.exact_box == Some(Primitive::Char) => {
+        boxed(env, Primitive::Char, JValue::Char(first_code_unit(s)))?
+      }
+      (ParamKind::Ref(_), Arg::Str(s)) => Prepared::Local(JObject::from(JString::new(env, s)?)),
       (ParamKind::Ref(_), Arg::Bytes(bytes)) => Prepared::Local(JObject::from(env.byte_array_from_slice(bytes)?)),
       (ParamKind::Ref(_), Arg::Ref(handle)) => match self.refs.get(handle.borrow().id) {
         Some(entry) => Prepared::Shared(entry),
@@ -1214,7 +1069,8 @@ impl Native {
   fn same_param(&self, env: &mut Env, a: &ParamKind, b: &ParamKind) -> OpResult<bool> {
     match (a, b) {
       (ParamKind::Ref(ra), ParamKind::Ref(rb)) => Ok(env.is_same_object(&ra.cls, &rb.cls)?),
-      _ => Ok(a.is_primitive() && b.is_primitive() && std::mem::discriminant(a) == std::mem::discriminant(b)),
+      (ParamKind::Prim(pa), ParamKind::Prim(pb)) => Ok(pa == pb),
+      _ => Ok(false),
     }
   }
 
@@ -1240,9 +1096,8 @@ impl Native {
     candidate.params.iter().zip(args).any(|(param, arg)| {
       matches!(arg, Arg::Str(_))
         && match param {
-          ParamKind::Char => true,
-          ParamKind::Ref(r) => r.exact_box == Some(BoxKind::Char),
-          _ => false,
+          ParamKind::Prim(p) => *p == Primitive::Char,
+          ParamKind::Ref(r) => r.exact_box == Some(Primitive::Char),
         }
     })
   }
@@ -1263,28 +1118,18 @@ impl Native {
     Ok(match arg {
       Arg::Null => ArgShape::Null,
       Arg::Bool(_) => ArgShape::Bool,
-      Arg::Int(v) => {
-        let mut widths = 0u8;
-        if (i8::MIN as i64..=i8::MAX as i64).contains(v) {
-          widths |= 1;
-        }
-        if (i16::MIN as i64..=i16::MAX as i64).contains(v) {
-          widths |= 2;
-        }
-        if (i32::MIN as i64..=i32::MAX as i64).contains(v) {
-          widths |= 4;
-        }
-        if (0..=0xffff).contains(v) {
-          widths |= 8;
-        }
-        ArgShape::Int(widths)
-      }
-      Arg::Double(v) => ArgShape::Double(!(v.is_finite() && v.abs() > f32::MAX as f64)),
+      Arg::Int(v) => ArgShape::Int(
+        [Primitive::Byte, Primitive::Short, Primitive::Int, Primitive::Char]
+          .iter()
+          .enumerate()
+          .fold(0, |widths, (bit, p)| widths | (u8::from(int_fits(*p, *v)) << bit)),
+      ),
+      Arg::Double(v) => ArgShape::Double(float_fits(Primitive::Float, *v)),
       Arg::Str(s) => ArgShape::Str(is_one_code_unit(s)),
       Arg::Bytes(_) => ArgShape::Bytes,
       Arg::Ref(handle) => {
-        let entry = self.entry_of(ctx, handle)?;
-        let key = self.class_key_of(ctx, env, known, handle, &entry)?;
+        let entry = self.get_live_entry(ctx, handle)?;
+        let key = self.resolve_class_key(env, known, handle, &entry)?;
         ArgShape::Ref(entry.kind, key)
       }
     })
@@ -1331,7 +1176,7 @@ impl Native {
       candidates.retain(|c| c.is_static());
     }
     if pinned && candidates.is_empty() {
-      return throw(ctx, PluginErrorCode::NotFound, &format!("jvm: {} was not found", what()));
+      return PluginErrorCode::NotFound.throw(ctx, &format!("jvm: {} was not found", what())).map_err(OpError::Js);
     }
     let mut fitting = Vec::new();
     for candidate in candidates {
@@ -1341,13 +1186,13 @@ impl Native {
     }
     if fitting.is_empty() {
       if pinned {
-        return throw(ctx, PluginErrorCode::InvalidArgument, &format!("jvm: {} does not take these arguments", what()));
+        return PluginErrorCode::InvalidArgument
+          .throw(ctx, &format!("jvm: {} does not take these arguments", what()))
+          .map_err(OpError::Js);
       }
-      return throw(
-        ctx,
-        PluginErrorCode::NotFound,
-        &format!("jvm: no {} takes {} argument(s) of these types", what(), args.len()),
-      );
+      return PluginErrorCode::NotFound
+        .throw(ctx, &format!("jvm: no {} takes {} argument(s) of these types", what(), args.len()))
+        .map_err(OpError::Js);
     }
     if fitting.len() == 1 {
       return Ok(fitting.remove(0));
@@ -1371,11 +1216,12 @@ impl Native {
     }
     if narrowest.len() != 1 {
       let examples = fitting.iter().take(3).map(|c| c.descriptor.clone()).collect::<Vec<_>>().join(", ");
-      return throw(
-        ctx,
-        PluginErrorCode::InvalidArgument,
-        &format!("jvm: {} is ambiguous for these arguments; pin one with a descriptor, e.g. {examples}", what()),
-      );
+      return PluginErrorCode::InvalidArgument
+        .throw(
+          ctx,
+          &format!("jvm: {} is ambiguous for these arguments; pin one with a descriptor, e.g. {examples}", what()),
+        )
+        .map_err(OpError::Js);
     }
     Ok(narrowest.remove(0))
   }
@@ -1400,24 +1246,26 @@ impl Native {
       prepared.push(self.prepare(env, known, param, arg)?);
     }
     let values: Vec<jvalue> = prepared.iter().map(|value| value.borrow().as_jni()).collect();
-    let called = match &candidate.id {
-      MethodId::Constructor(id) => {
-        unsafe { env.new_object_unchecked(&candidate.owner, *id, &values) }.map(JValueOwned::Object)
-      }
-      MethodId::Static(id) => unsafe {
-        env.call_static_method_unchecked(&candidate.owner, *id, candidate.ret.java_type(), &values)
-      },
-      MethodId::Instance(id) => {
-        let Some(receiver) = receiver else {
-          return throw(ctx, PluginErrorCode::InvalidArgument, "jvm: an instance method needs a receiver");
-        };
-        match dispatch {
-          Dispatch::Virtual => unsafe { env.call_method_unchecked(receiver, *id, candidate.ret.java_type(), &values) },
-          Dispatch::Nonvirtual => unsafe {
-            let receiver = JObject::from_raw(env, receiver.as_raw());
-            let owner = JClass::from_raw(env, candidate.owner.as_raw());
-            env.call_nonvirtual_method_unchecked(receiver, &owner, *id, candidate.ret.java_type(), &values)
-          },
+    // SAFETY: `fits` checked every argument against its parameter and `prepare` converted it to that
+    // parameter's type, the id was resolved for this owner, and a receiver is checked against the owner
+    // before it reaches here
+    let called = unsafe {
+      match &candidate.id {
+        MethodId::Constructor(id) => env.new_object_unchecked(&candidate.owner, *id, &values).map(JValueOwned::Object),
+        MethodId::Static(id) => env.call_static_method_unchecked(&candidate.owner, *id, candidate.ret, &values),
+        MethodId::Instance(id) => {
+          let Some(receiver) = receiver else {
+            return PluginErrorCode::InvalidArgument
+              .throw(ctx, "jvm: an instance method needs a receiver")
+              .map_err(OpError::Js);
+          };
+          match dispatch {
+            Dispatch::Virtual => env.call_method_unchecked(receiver, *id, candidate.ret, &values),
+            Dispatch::Nonvirtual => {
+              let owner: &JClass = &candidate.owner;
+              env.call_nonvirtual_method_unchecked(receiver, owner, *id, candidate.ret, &values)
+            }
+          }
         }
       }
     };
@@ -1429,10 +1277,7 @@ impl Native {
     }
   }
 
-  /// Initialize the class on first static use, matching reflection. Member lookup and
-  /// `Class.forName(name, false, ...)` deliberately skip initialization, so call `forName` with
-  /// initialization enabled here. If it throws, leave the plan uninitialized and propagate the Java
-  /// exception.
+  /// Lookup skips class initialization, so the first static use initializes it, as reflection does.
   fn ensure_initialized(
     &self,
     ctx: &Ctx<'_>,
@@ -1444,10 +1289,10 @@ impl Native {
     if initialized.get() {
       return Ok(());
     }
-    let name = unsafe { env.call_method_unchecked(owner, known.class_get_name, JavaType::Object, &[])? }.l()?;
-    let loader =
-      unsafe { env.call_method_unchecked(owner, known.class_get_class_loader, JavaType::Object, &[])? }.l()?;
+    let name = call_object(env, owner, known.class_get_name)?;
+    let loader = call_object(env, owner, known.class_get_class_loader)?;
     let args = [JValue::Object(&name).as_jni(), JValue::Bool(true).as_jni(), JValue::Object(&loader).as_jni()];
+    // SAFETY: `Class.forName(String, boolean, ClassLoader)`, handed exactly those
     let loaded =
       unsafe { env.call_static_method_unchecked(&known.class, known.class_for_name, JavaType::Object, &args) };
     match loaded {
@@ -1463,7 +1308,9 @@ impl Native {
   /// `InvocationTargetException`'s cause, described the way kotlin describes it: `Throwable.toString()`
   fn throw_java<T>(&self, ctx: &Ctx<'_>, env: &mut Env, known: &WellKnown) -> OpResult<T> {
     let Some(thrown) = env.exception_occurred() else {
-      return throw(ctx, PluginErrorCode::Internal, "jvm: java reported an exception that is not there");
+      return PluginErrorCode::Internal
+        .throw(ctx, "jvm: java reported an exception that is not there")
+        .map_err(OpError::Js);
     };
     env.exception_clear();
     let text = Self::describe(env, known, &thrown).unwrap_or_else(|| "java exception".to_string());
@@ -1471,9 +1318,8 @@ impl Native {
   }
 
   fn describe(env: &mut Env, known: &WellKnown, thrown: &JThrowable) -> Option<String> {
-    let text = unsafe { env.call_method_unchecked(thrown, known.to_string, JavaType::Object, &[]) };
-    let text = match text {
-      Ok(value) => value.l().ok()?,
+    let text = match call_object(env, thrown, known.to_string) {
+      Ok(text) => text,
       Err(_) => {
         env.exception_clear();
         return None;
@@ -1494,13 +1340,19 @@ impl Native {
       return throw_wire(ctx, wire);
     }
     self.ensure_initialized(ctx, env, known, &plan.owner, &plan.initialized)?;
-    let read = match &plan.id {
-      FieldId::Static(id) => unsafe { env.get_static_field_unchecked(&plan.owner, *id, plan.ty.java_type()) },
-      FieldId::Instance(id) => {
-        let Some(receiver) = receiver else {
-          return throw(ctx, PluginErrorCode::InvalidArgument, "jvm: an instance field needs a receiver");
-        };
-        unsafe { env.get_field_unchecked(receiver, *id, plan.ty.java_type()) }
+    // SAFETY: the id was resolved for the owner with the field's own type, and a receiver is checked
+    // against the owner before it reaches here
+    let read = unsafe {
+      match &plan.id {
+        FieldId::Static(id) => env.get_static_field_unchecked(&plan.owner, *id, plan.ty.java_type()),
+        FieldId::Instance(id) => {
+          let Some(receiver) = receiver else {
+            return PluginErrorCode::InvalidArgument
+              .throw(ctx, "jvm: an instance field needs a receiver")
+              .map_err(OpError::Js);
+          };
+          env.get_field_unchecked(receiver, *id, plan.ty.java_type())
+        }
       }
     };
     Ok(read?)
@@ -1519,20 +1371,29 @@ impl Native {
       return throw_wire(ctx, wire);
     }
     if plan.is_final {
-      return throw(ctx, PluginErrorCode::Forbidden, &format!("jvm: {}.{} is final", plan.owner_name, plan.name));
+      return PluginErrorCode::Forbidden
+        .throw(ctx, &format!("jvm: {}.{} is final", plan.owner_name, plan.name))
+        .map_err(OpError::Js);
     }
     self.ensure_initialized(ctx, env, known, &plan.owner, &plan.initialized)?;
     if !self.matches(ctx, env, &plan.ty, value)? {
-      return throw(ctx, PluginErrorCode::InvalidArgument, &format!("jvm: cannot assign that to a {}", plan.type_name));
+      return PluginErrorCode::InvalidArgument
+        .throw(ctx, &format!("jvm: cannot assign that to a {}", plan.type_name))
+        .map_err(OpError::Js);
     }
     let prepared = self.prepare(env, known, &plan.ty, value)?;
-    match &plan.id {
-      FieldId::Static(id) => unsafe { env.set_static_field_unchecked(&plan.owner, *id, prepared.borrow())? },
-      FieldId::Instance(id) => {
-        let Some(receiver) = receiver else {
-          return throw(ctx, PluginErrorCode::InvalidArgument, "jvm: an instance field needs a receiver");
-        };
-        unsafe { env.set_field_unchecked(receiver, *id, prepared.borrow())? }
+    // SAFETY: as in `get_field`, with the value `matches` accepted and `prepare` converted to the field's type
+    unsafe {
+      match &plan.id {
+        FieldId::Static(id) => env.set_static_field_unchecked(&plan.owner, *id, prepared.borrow())?,
+        FieldId::Instance(id) => {
+          let Some(receiver) = receiver else {
+            return PluginErrorCode::InvalidArgument
+              .throw(ctx, "jvm: an instance field needs a receiver")
+              .map_err(OpError::Js);
+          };
+          env.set_field_unchecked(receiver, *id, prepared.borrow())?
+        }
       }
     }
     drop(prepared);
@@ -1542,21 +1403,12 @@ impl Native {
   fn unbox<'l>(
     env: &mut Env<'l>,
     known: &WellKnown,
-    kind: BoxKind,
+    kind: Primitive,
     obj: &JObject,
   ) -> jni::errors::Result<JValueOwned<'l>> {
-    let ty = match kind {
-      BoxKind::Bool => Primitive::Boolean,
-      BoxKind::Byte => Primitive::Byte,
-      BoxKind::Char => Primitive::Char,
-      BoxKind::Short => Primitive::Short,
-      BoxKind::Int => Primitive::Int,
-      BoxKind::Long => Primitive::Long,
-      BoxKind::Float => Primitive::Float,
-      BoxKind::Double => Primitive::Double,
-    };
     let unbox = known.boxed(kind).3;
-    unsafe { env.call_method_unchecked(obj, unbox, JavaType::Primitive(ty), &[]) }
+    // SAFETY: `<kind>Value()` of the box for `kind`, called on an instance of that box
+    unsafe { env.call_method_unchecked(obj, unbox, JavaType::Primitive(kind), &[]) }
   }
 
   fn scalar_to_js<'js>(ctx: &Ctx<'js>, value: JValueOwned<'_>) -> OpResult<Option<Value<'js>>> {
@@ -1596,12 +1448,12 @@ impl Native {
       return Ok(Outcome::Value(Value::new_null(ctx.clone())));
     }
     let cls = env.get_object_class(&obj)?;
-    let own_key = self.key_of(env, known, cls.as_ref())?;
-    let (kind, checked_key) = match self.shape_of(env, known, own_key)? {
+    let own_key = self.intern_class_key(env, known, cls.as_ref())?;
+    let (kind, checked_key) = match self.resolve_class_shape(env, known, own_key)? {
       Shape::String => {
         let text = Self::read_string(env, &obj)?.unwrap_or_default();
         if text.len() > VALUE_LIMIT_BYTES {
-          return Err(OpError::Js(too_big::<()>(ctx, "a string", text.len()).unwrap_err()));
+          return super::throw_too_big(ctx, "a string", text.len(), VALUE_LIMIT_BYTES).map_err(OpError::Js);
         }
         return Ok(Outcome::Value(text.into_js(ctx)?));
       }
@@ -1610,26 +1462,24 @@ impl Native {
         return Ok(Outcome::Value(Self::scalar_to_js(ctx, unboxed)?.expect("unboxed to a scalar")));
       }
       Shape::Bytes => {
+        // SAFETY: `resolve_class_shape` found the object's class assignable to `byte[]`
         let array = unsafe { JByteArray::from_raw(env, obj.as_raw() as jni::sys::jbyteArray) };
         let bytes = env.convert_byte_array(&array)?;
         if bytes.len() > VALUE_LIMIT_BYTES {
-          return Err(OpError::Js(too_big::<()>(ctx, "a byte[]", bytes.len()).unwrap_err()));
+          return super::throw_too_big(ctx, "a byte[]", bytes.len(), VALUE_LIMIT_BYTES).map_err(OpError::Js);
         }
         return Ok(Outcome::Value(crate::api::tl::proxy::make_bytes_value(ctx, &bytes)?));
       }
       // a `Class` is checked as the class it *names*, and a member by the class it declares
-      Shape::Class => (KIND_CLASS, self.key_of(env, known, &obj)?),
-      Shape::Method => {
+      Shape::Class => (KIND_CLASS, self.intern_class_key(env, known, &obj)?),
+      member @ (Shape::Method | Shape::Constructor | Shape::Field) => {
+        let kind = match member {
+          Shape::Method => KIND_METHOD,
+          Shape::Constructor => KIND_CONSTRUCTOR,
+          _ => KIND_FIELD,
+        };
         let declaring = Self::declaring_class(env, known, &obj)?;
-        (KIND_METHOD, self.key_of(env, known, declaring.as_obj())?)
-      }
-      Shape::Constructor => {
-        let declaring = Self::declaring_class(env, known, &obj)?;
-        (KIND_CONSTRUCTOR, self.key_of(env, known, declaring.as_obj())?)
-      }
-      Shape::Field => {
-        let declaring = Self::declaring_class(env, known, &obj)?;
-        (KIND_FIELD, self.key_of(env, known, declaring.as_obj())?)
+        (kind, self.intern_class_key(env, known, declaring.as_obj())?)
       }
       Shape::Object => (KIND_OBJECT, own_key),
     };
@@ -1639,7 +1489,7 @@ impl Native {
     Ok(Outcome::Handle(HandleSpec { id, kind, class_key, pinned: None }))
   }
 
-  fn receiver_of(entry: &Entry) -> Option<&JObject<'static>> {
+  fn get_receiver(entry: &Entry) -> Option<&JObject<'static>> {
     if entry.kind == KIND_CLASS {
       None
     } else {
@@ -1655,12 +1505,12 @@ impl Native {
     args: &[Arg<'js>],
   ) -> JsResult<Outcome<'js>> {
     self.with_env(ctx, |env, known| {
-      let entry = self.entry_of(ctx, target)?;
-      let key = self.class_key_of(ctx, env, known, target, &entry)?;
+      let entry = self.get_live_entry(ctx, target)?;
+      let key = self.resolve_class_key(env, known, target, &entry)?;
       let plan = self.method_plan(ctx, env, known, key, name, false)?;
       let what = || format!("{}.{}", plan.class_name, name.split('(').next().unwrap_or(name));
       let candidate = self.pick(ctx, env, known, &plan, what, name.contains('('), entry.kind == KIND_CLASS, args)?;
-      let value = self.invoke(ctx, env, known, &candidate, Self::receiver_of(&entry), Dispatch::Virtual, args)?;
+      let value = self.invoke(ctx, env, known, &candidate, Self::get_receiver(&entry), Dispatch::Virtual, args)?;
       self.result_to_js(ctx, env, known, value)
     })
   }
@@ -1674,6 +1524,7 @@ impl Native {
     index: usize,
   ) -> JsResult<Outcome<'js>> {
     self.with_env(ctx, |env, known| {
+      // SAFETY: see the function doc
       let array = unsafe { JObjectArray::<JObject>::from_raw(env, array) };
       let element = array.get_element(env, index)?;
       self.result_to_js(ctx, env, known, JValueOwned::Object(element))
@@ -1708,30 +1559,41 @@ impl Native {
   ) -> JsResult<Outcome<'js>> {
     self.with_env(ctx, |env, known| {
       let key = self.class_target(ctx, env, known, cls)?;
-      let cls = self.class_of(env, key)?;
+      let cls = self.get_class(env, key)?;
       let receiver = match receiver {
-        Arg::Ref(handle) => self.entry_of(ctx, handle)?,
-        _ => return throw(ctx, PluginErrorCode::InvalidArgument, "jvm: callSuper needs a java object to call on"),
+        Arg::Ref(handle) => self.get_live_entry(ctx, handle)?,
+        _ => {
+          return PluginErrorCode::InvalidArgument
+            .throw(ctx, "jvm: callSuper needs a java object to call on")
+            .map_err(OpError::Js)
+        }
       };
       if !env.is_instance_of(receiver.obj.as_obj(), &cls)? {
         let class_name = Self::class_name(env, known, &cls)?;
         let message = format!("jvm: that receiver is not an instance of {class_name}");
-        return throw(ctx, PluginErrorCode::InvalidArgument, &message);
+        return PluginErrorCode::InvalidArgument.throw(ctx, &message).map_err(OpError::Js);
       }
       let Some(parent) = env.get_superclass(&cls)? else {
         let class_name = Self::class_name(env, known, &cls)?;
-        return throw(ctx, PluginErrorCode::InvalidArgument, &format!("jvm: {class_name} has no superclass"));
+        return PluginErrorCode::InvalidArgument
+          .throw(ctx, &format!("jvm: {class_name} has no superclass"))
+          .map_err(OpError::Js);
       };
-      let parent_key = self.key_of(env, known, &parent)?;
+      let parent_key = self.intern_class_key(env, known, &parent)?;
       let plan = self.method_plan(ctx, env, known, parent_key, name, false)?;
       let what = || format!("{}.{}", plan.class_name, name.split('(').next().unwrap_or(name));
       let candidate = self.pick(ctx, env, known, &plan, what, name.contains('('), false, args)?;
       if candidate.is_abstract {
-        return throw(
-          ctx,
-          PluginErrorCode::InvalidArgument,
-          &format!("jvm: {}{} is abstract, so there is no super implementation to call", what(), candidate.descriptor),
-        );
+        return PluginErrorCode::InvalidArgument
+          .throw(
+            ctx,
+            &format!(
+              "jvm: {}{} is abstract, so there is no super implementation to call",
+              what(),
+              candidate.descriptor
+            ),
+          )
+          .map_err(OpError::Js);
       }
       let value = self.invoke(ctx, env, known, &candidate, Some(receiver.obj.as_obj()), Dispatch::Nonvirtual, args)?;
       self.result_to_js(ctx, env, known, value)
@@ -1740,10 +1602,10 @@ impl Native {
 
   pub(crate) fn get<'js>(&self, ctx: &Ctx<'js>, target: &Class<'js, JvmRef>, name: &str) -> JsResult<Outcome<'js>> {
     self.with_env(ctx, |env, known| {
-      let entry = self.entry_of(ctx, target)?;
-      let key = self.class_key_of(ctx, env, known, target, &entry)?;
+      let entry = self.get_live_entry(ctx, target)?;
+      let key = self.resolve_class_key(env, known, target, &entry)?;
       let plan = self.field_plan(ctx, env, known, key, name)?;
-      let value = self.get_field(ctx, env, known, &plan, Self::receiver_of(&entry))?;
+      let value = self.get_field(ctx, env, known, &plan, Self::get_receiver(&entry))?;
       self.result_to_js(ctx, env, known, value)
     })
   }
@@ -1756,14 +1618,13 @@ impl Native {
     value: &Arg<'js>,
   ) -> JsResult<()> {
     self.with_env(ctx, |env, known| {
-      let entry = self.entry_of(ctx, target)?;
-      let key = self.class_key_of(ctx, env, known, target, &entry)?;
+      let entry = self.get_live_entry(ctx, target)?;
+      let key = self.resolve_class_key(env, known, target, &entry)?;
       let plan = self.field_plan(ctx, env, known, key, name)?;
-      self.set_field(ctx, env, known, &plan, Self::receiver_of(&entry), value)
+      self.set_field(ctx, env, known, &plan, Self::get_receiver(&entry), value)
     })
   }
 
-  /// `getDeclaredMethod`/`getDeclaredConstructor`: one member, minted with its plan attached
   pub(crate) fn method<'js>(&self, ctx: &Ctx<'js>, target: &Class<'js, JvmRef>, name: &str) -> JsResult<Outcome<'js>> {
     self.with_env(ctx, |env, known| {
       let key = self.class_target(ctx, env, known, target)?;
@@ -1778,15 +1639,13 @@ impl Native {
         (plan, what)
       };
       if plan.candidates.is_empty() {
-        return throw(ctx, PluginErrorCode::NotFound, &format!("jvm: {what} was not found"));
+        return PluginErrorCode::NotFound.throw(ctx, &format!("jvm: {what} was not found")).map_err(OpError::Js);
       }
       if plan.candidates.len() > 1 {
         let examples = plan.candidates.iter().take(3).map(|c| c.descriptor.clone()).collect::<Vec<_>>().join(", ");
-        return throw(
-          ctx,
-          PluginErrorCode::InvalidArgument,
-          &format!("jvm: {what} is overloaded; pin one with a descriptor, e.g. {examples}"),
-        );
+        return PluginErrorCode::InvalidArgument
+          .throw(ctx, &format!("jvm: {what} is overloaded; pin one with a descriptor, e.g. {examples}"))
+          .map_err(OpError::Js);
       }
       let candidate = plan.candidates[0].clone();
       if let Some(wire) = &candidate.refusal {
@@ -1822,9 +1681,7 @@ impl Native {
     })
   }
 
-  /// A pinned member plan may come from a different class than the receiver. Validate the receiver
-  /// before calling through its JNI ID; unlike `call`/`get`/`set`, resolution did not already
-  /// establish compatibility.
+  /// A pinned plan may come from another class, so the receiver is checked before calling through its id.
   fn receiver_arg(
     &self,
     ctx: &Ctx<'_>,
@@ -1835,22 +1692,22 @@ impl Native {
     match arg {
       Arg::Null => Ok(None),
       Arg::Ref(handle) => {
-        let entry = self.entry_of(ctx, handle)?;
+        let entry = self.get_live_entry(ctx, handle)?;
         if entry.kind == KIND_CLASS {
-          return throw(ctx, PluginErrorCode::InvalidArgument, "jvm: a class is not a receiver");
+          return PluginErrorCode::InvalidArgument.throw(ctx, "jvm: a class is not a receiver").map_err(OpError::Js);
         }
         if let Some((owner, what)) = instance_owner {
           if !env.is_instance_of(entry.obj.as_obj(), owner)? {
-            return throw(
-              ctx,
-              PluginErrorCode::InvalidArgument,
-              &format!("jvm: that receiver is not an instance of the class declaring {what}"),
-            );
+            return PluginErrorCode::InvalidArgument
+              .throw(ctx, &format!("jvm: that receiver is not an instance of the class declaring {what}"))
+              .map_err(OpError::Js);
           }
         }
         Ok(Some(entry))
       }
-      _ => throw(ctx, PluginErrorCode::InvalidArgument, "jvm: the receiver must be a java object or null"),
+      _ => PluginErrorCode::InvalidArgument
+        .throw(ctx, "jvm: the receiver must be a java object or null")
+        .map_err(OpError::Js),
     }
   }
 
@@ -1862,13 +1719,17 @@ impl Native {
     args: &[Arg<'js>],
   ) -> JsResult<Outcome<'js>> {
     self.with_env(ctx, |env, known| {
-      let entry = self.entry_of(ctx, target)?;
+      let entry = self.get_live_entry(ctx, target)?;
       if entry.kind != KIND_METHOD && entry.kind != KIND_CONSTRUCTOR {
-        return throw(ctx, PluginErrorCode::InvalidArgument, "jvm: that handle is not a method or constructor");
+        return PluginErrorCode::InvalidArgument
+          .throw(ctx, "jvm: that handle is not a method or constructor")
+          .map_err(OpError::Js);
       }
-      let pinned = self.pinned_of(ctx, env, known, target, &entry)?;
+      let pinned = self.get_pinned(ctx, env, known, target, &entry)?;
       let Pinned::Method(candidate) = &*pinned else {
-        return throw(ctx, PluginErrorCode::InvalidArgument, "jvm: that handle is not a method or constructor");
+        return PluginErrorCode::InvalidArgument
+          .throw(ctx, "jvm: that handle is not a method or constructor")
+          .map_err(OpError::Js);
       };
       let receiver = match &candidate.id {
         MethodId::Constructor(_) => None,
@@ -1879,7 +1740,9 @@ impl Native {
       };
       if !self.fits(ctx, env, candidate, args)? {
         let what = if candidate.is_constructor() { "constructor" } else { &candidate.descriptor };
-        return throw(ctx, PluginErrorCode::InvalidArgument, &format!("jvm: {what} does not take these arguments"));
+        return PluginErrorCode::InvalidArgument
+          .throw(ctx, &format!("jvm: {what} does not take these arguments"))
+          .map_err(OpError::Js);
       }
       let receiver_obj = receiver.as_ref().map(|entry| entry.obj.as_obj());
       let value = self.invoke(ctx, env, known, candidate, receiver_obj, Dispatch::Virtual, args)?;
@@ -1887,7 +1750,6 @@ impl Native {
     })
   }
 
-  /// `Class.isInstance`, over the handle the caller already narrowed to one (see `js_is_instance`)
   pub(crate) fn is_instance<'js>(
     &self,
     ctx: &Ctx<'js>,
@@ -1895,17 +1757,17 @@ impl Native {
     value: &Arg<'js>,
   ) -> JsResult<bool> {
     self.with_env(ctx, |env, known| {
-      let entry = self.entry_of(ctx, target)?;
+      let entry = self.get_live_entry(ctx, target)?;
       if entry.kind != KIND_CLASS {
-        return throw(ctx, PluginErrorCode::InvalidArgument, "jvm: isInstance needs a class");
+        return PluginErrorCode::InvalidArgument.throw(ctx, "jvm: isInstance needs a class").map_err(OpError::Js);
       }
       // resolved for its own sake: it is what caches the key and pins the scope check on the class
-      let _ = self.class_key_of(ctx, env, known, target, &entry)?;
+      let _ = self.resolve_class_key(env, known, target, &entry)?;
       let Arg::Ref(handle) = value else {
         return Ok(false);
       };
-      let subject = self.entry_of(ctx, handle)?;
-      let cls = unsafe { JClass::from_raw(env, entry.obj.as_obj().as_raw()) };
+      let subject = self.get_live_entry(ctx, handle)?;
+      let cls = env.new_cast_local_ref::<JClass>(entry.obj.as_obj())?;
       Ok(env.is_instance_of(subject.obj.as_obj(), &cls)?)
     })
   }
@@ -1955,8 +1817,6 @@ fn first_code_unit(text: &str) -> u16 {
   text.encode_utf16().next().unwrap_or(0)
 }
 
-/// one converted argument, alive for the call: a primitive, a local this call made, or a plugin
-/// reference held so the table cannot drop it underneath the vm
 enum Prepared<'l> {
   Null,
   Primitive(JValue<'static>),

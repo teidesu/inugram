@@ -6,8 +6,8 @@ use std::sync::{Arc, Mutex};
 
 use jni::objects::JObject;
 use jni::refs::Global;
-use rquickjs::class::{JsClass, Readable, Trace, Tracer};
-use rquickjs::{Constructor, Ctx, JsLifetime, Result as JsResult};
+use rquickjs::class::{Trace, Tracer};
+use rquickjs::JsLifetime;
 
 use super::native::Pinned;
 
@@ -23,12 +23,8 @@ pub(crate) struct Entry {
   pub(crate) kind: u8,
 }
 
-/// Owns each plugin's Java references, keyed by JS handle ID.
-///
-/// Rust keeps the table beside the JNI caller so arguments need only a lookup and results a
-/// `NewGlobalRef`, without string encoding. Kotlin accesses it through `nativeJvm*` without the
-/// engine lease: a hooked thread may need to encode arguments while another thread owns the engine.
-/// A mutex protects the table independently of engine state.
+/// Kotlin reaches this through `nativeJvm*` without the engine lease (a hooked thread may encode
+/// while another owns the engine), so the table has its own mutex.
 pub(crate) struct RefTable {
   entries: Mutex<HashMap<i64, Entry>>,
   next: AtomicI64,
@@ -98,8 +94,8 @@ impl RefTable {
   }
 }
 
-/// A JS handle stores a table-entry ID read without executing JS. It also caches the class key and
-/// pinned member, which are immutable and frequently read.
+#[derive(JsLifetime)]
+#[rquickjs::class(frozen)]
 pub(crate) struct JvmRef {
   pub(crate) id: i64,
   refs: Arc<RefTable>,
@@ -126,18 +122,4 @@ impl Drop for JvmRef {
 
 impl<'js> Trace<'js> for JvmRef {
   fn trace<'a>(&self, _tracer: Tracer<'a, 'js>) {}
-}
-
-// SAFETY: `JvmRef` holds no JavaScript-lifetime-bound data.
-unsafe impl JsLifetime<'_> for JvmRef {
-  type Changed<'to> = Self;
-}
-
-impl<'js> JsClass<'js> for JvmRef {
-  const NAME: &'static str = "JvmRef";
-  type Mutable = Readable;
-
-  fn constructor(_ctx: &Ctx<'js>) -> JsResult<Option<Constructor<'js>>> {
-    Ok(None)
-  }
 }

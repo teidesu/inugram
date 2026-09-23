@@ -6,7 +6,6 @@ import android.graphics.PorterDuffColorFilter
 import android.graphics.drawable.Drawable
 import android.net.Uri
 import androidx.core.content.res.ResourcesCompat
-import desu.inugram.core.plugins.CommonIcons
 import org.telegram.messenger.DocumentObject
 import org.telegram.messenger.FileLoader
 import org.telegram.messenger.ImageLocation
@@ -20,32 +19,21 @@ import org.telegram.ui.Components.AnimatedEmojiDrawable
 import org.telegram.ui.Components.BackupImageView
 
 /**
- * Loads manifest icons into [BackupImageView]. Remote URLs are unsupported because loading
- * them would expose the user's IP to a manifest-selected host whenever the list renders.
- * Supported forms resolve locally or through Telegram:
- *
- * - `inu://{name}`: a local icon from `inu.icons.common`.
- * - `tg://emoji?id={documentId}`: a custom emoji, resolved as in messages.
- * - `tg://addstickers?set={slug}`: a sticker; `&idx={n}` selects a zero-based index,
- *   `&id={documentId}` selects an ID, and neither selects the set's preview sticker.
- *
- * Other values use [placeholder].
+ * Remote urls are unsupported: loading one would leak the user's IP to a manifest-chosen host.
+ * - `inu://{name}`: `inu.icons.common`
+ * - `tg://emoji?id={documentId}`: a custom emoji
+ * - `tg://addstickers?set={slug}`: `&idx={n}` zero-based, `&id={documentId}`, or the set's preview
  * TODO: show a warning when `@icon` cannot be resolved.
  */
 object PluginManifestIcons {
     private const val FILTER = "56_56"
 
-    /** what every plugin surface draws when the manifest names no icon, or names one we can't resolve */
     fun createPlaceholder(context: Context): Drawable? =
         ResourcesCompat.getDrawable(context.resources, R.drawable.inu_tabler_code, null)?.mutate()?.apply {
-            colorFilter = tintOf(Theme.getColor(Theme.key_windowBackgroundWhiteGrayIcon))
+            colorFilter = PorterDuffColorFilter(Theme.getColor(Theme.key_windowBackgroundWhiteGrayIcon), PorterDuff.Mode.SRC_IN)
         }
 
-    /**
-     * True when the view ended up showing one of *our* glyphs, which is flat and takes [commonTint]
-     * - the caller is then free to put it on a badge. Everything else (an emoji, a sticker, the
-     * placeholder) brings its own colours and answers false.
-     */
+    /** true when showing one of our flat glyphs tinted with [commonTint], so the caller may badge it */
     fun bindIcon(
         view: BackupImageView,
         spec: String?,
@@ -54,31 +42,22 @@ object PluginManifestIcons {
     ): Boolean {
         view.tag = spec
         view.setAnimatedEmojiDrawable(null)
-        // the tint goes on the receiver rather than on the drawable: under a round radius a bitmap
-        // is drawn through the receiver's own paint, which is handed the receiver's filter and
-        // *nulled* when there is none - so a filter set on the drawable is thrown away
-        view.setColorFilter(tintOf(Theme.getColor(Theme.key_windowBackgroundWhiteGrayIcon)))
-        // up front, not only on the `else` below: a sticker set is fetched, and a slug nobody can
-        // resolve answers with nothing at all rather than with a failure - so what a spec starts is
-        // never proof that it will finish
+        // a round-radius bitmap draws through the receiver's paint, which nulls a filter set on the drawable
+        view.setColorFilter(PorterDuffColorFilter(Theme.getColor(Theme.key_windowBackgroundWhiteGrayIcon), PorterDuff.Mode.SRC_IN))
+        // an unresolvable sticker slug answers with nothing rather than a failure, so show the placeholder up front
         view.setImageDrawable(placeholder)
         if (spec.isNullOrBlank()) return false
-        var common = false
-        val bound = when {
-            spec.startsWith("inu://") -> bindCommon(view, spec.removePrefix("inu://"), commonTint).also { common = it }
+        when {
+            spec.startsWith("inu://") -> return bindCommon(view, spec.removePrefix("inu://"), commonTint)
             spec.startsWith("tg://emoji?") -> bindEmoji(view, Uri.parse(spec))
             spec.startsWith("tg://addstickers?") -> bindSticker(view, spec, Uri.parse(spec))
-            else -> false
         }
-        return common
+        return false
     }
 
-    internal fun tintOf(color: Int) = PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN)
-
     private fun bindCommon(view: BackupImageView, name: String, tint: Int): Boolean {
-        val resource = CommonIcons.resolve(name) ?: return false
-        val drawable = PluginIcons.drawableOf(view.context, resource)?.mutate() ?: return false
-        view.setColorFilter(tintOf(tint))
+        val drawable = PluginIcons.loadCommonDrawable(view.context, name)?.mutate() ?: return false
+        view.setColorFilter(PorterDuffColorFilter(tint, PorterDuff.Mode.SRC_IN))
         view.setImageDrawable(drawable)
         return true
     }

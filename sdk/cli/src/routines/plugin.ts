@@ -6,14 +6,14 @@ import { messageAt } from '../utils/log.js'
 import { checkCaptures } from './captures.js'
 import { compileRoutine, isRoutineFunction, RoutineCompileError } from './compile.js'
 import { emitRoutineCall } from './emit.js'
-import { findRoutineCalls, languageOf, parseFile } from './find.js'
+import { detectLanguage, findRoutineCalls, parseFile } from './find.js'
 
 const LOADERS: Record<string, Loader> = { ts: 'ts', tsx: 'tsx', js: 'js', jsx: 'jsx' }
 
 const ROUTINE_CALL = /\binu\s*\.\s*(?:jvm|xposed)\s*\.\s*routine\s*\(/
 
 /** The leading whitespace on the line containing [offset], used when reprinting the call. */
-function indentOf(source: string, offset: number): string {
+function getLineIndent(source: string, offset: number): string {
   const line = source.slice(source.lastIndexOf('\n', offset - 1) + 1, offset)
   return line.slice(0, line.length - line.trimStart().length)
 }
@@ -32,10 +32,6 @@ function checkCallShape(call: RoutineCall, file: string, source: string): BodyCh
   if (!isRoutineFunction(body)) {
     return { error: messageAt(file, source, `${what}expected a function expression`, body.start, body.end) }
   }
-  if (body.async || body.generator) {
-    const message = `${what}a routine body is neither async nor a generator`
-    return { error: messageAt(file, source, message, body.start, body.end) }
-  }
   return { body }
 }
 
@@ -49,7 +45,7 @@ export function compileRoutines(): EsbuildPlugin {
     setup(build) {
       build.onLoad({ filter: /\.[cm]?[jt]sx?$/ }, async (args) => {
         const source = await fs.readFile(args.path, 'utf8')
-        const loader = LOADERS[languageOf(args.path)]
+        const loader = LOADERS[detectLanguage(args.path)]
         if (!source.includes('routine')) return { contents: source, loader }
 
         const parsed = parseFile(args.path, source)
@@ -74,9 +70,9 @@ export function compileRoutines(): EsbuildPlugin {
             continue
           }
           try {
-            const program = compileRoutine(shape.body, source, { mode: call.mode, file: args.path })
+            const program = compileRoutine(shape.body, source, { mode: call.mode })
             captured.push({ call, names: program.captures })
-            const text = emitRoutineCall(call.callee, program, indentOf(source, call.start))
+            const text = emitRoutineCall(call.callee, program, getLineIndent(source, call.start))
             patches.push({ start: call.start, end: call.end, text })
           } catch (error) {
             if (!(error instanceof RoutineCompileError)) throw error

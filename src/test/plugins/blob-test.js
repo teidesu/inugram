@@ -1,46 +1,7 @@
 // ==InuPlugin==
 // @name         blob test
-// @author       teidesu
-// @version      1.0
 // @description  asserts Blob/File: round trips, slices as views, dispose, the spill boundary, structuredClone
-// @plugin-api   1
-// @platform     android
 // ==/InuPlugin==
-
-function pass(label, detail) {
-  console.log(detail === undefined ? `PASS ${label}` : `PASS ${label}: ${detail}`)
-}
-
-function fail(label, detail) {
-  console.error(`FAIL ${label}: ${detail}`)
-}
-
-function check(label, ok, detail) {
-  if (ok) pass(label, detail)
-  else fail(label, detail)
-}
-
-function expectThrow(label, code, fn) {
-  let error
-  try {
-    fn()
-  } catch (e) {
-    error = e
-  }
-  if (error === undefined) return fail(label, 'did not throw')
-  check(label, error instanceof inu.PluginError && error.code === code, `${error.name}: ${error.code}`)
-}
-
-async function expectReject(label, code, promise) {
-  let error
-  try {
-    await promise
-  } catch (e) {
-    error = e
-  }
-  if (error === undefined) return fail(label, 'did not reject')
-  check(label, error instanceof inu.PluginError && error.code === code, `${error.name}: ${error.code}`)
-}
 
 function sameBytes(a, b) {
   if (a.length !== b.length) return false
@@ -49,8 +10,6 @@ function sameBytes(a, b) {
 }
 
 async function main() {
-  // -- construction and round trip --
-
   const source = new Uint8Array([0, 1, 2, 250, 251, 255])
   const blob = new Blob([source], { type: 'Application/Octet-Stream' })
   check('size counts bytes, not parts', blob.size === 6, blob.size)
@@ -66,16 +25,12 @@ async function main() {
   check('and a multi-byte part is counted in bytes', mixed.size === 7, mixed.size)
   check('text() replaces what is not utf-8', (await new Blob([new Uint8Array([0xff])]).text()) === '\uFFFD')
 
-  // -- slice --
-
   const digits = new Blob(['0123456789'])
   check('slice reads the range', (await digits.slice(2, 5).text()) === '234', await digits.slice(2, 5).text())
   check('a negative start counts from the end', (await digits.slice(-3).text()) === '789')
   check('an inverted range is empty', digits.slice(5, 2).size === 0)
   check('slices compose against the original', (await digits.slice(2, 8).slice(1, 3).text()) === '34')
   check('slice does not inherit the type', new Blob(['x'], { type: 'text/plain' }).slice(0, 1).type === '')
-
-  // -- dispose --
 
   const parent = new Blob(['hello world'], { type: 'text/plain' })
   const kept = parent.slice(0, 5)
@@ -98,8 +53,6 @@ async function main() {
   check('disposing a slice leaves the parent readable', (await whole.text()) === 'abcdef', await whole.text())
   await expectReject('and kills only itself', 'handle-expired', part.text())
 
-  // -- File --
-
   const file = new File(['payload'], 'photos/holiday.jpg', { type: 'image/jpeg', lastModified: 1700000000000 })
   check('a File is a Blob', file instanceof File && file instanceof Blob)
   check('a File keeps its name', file.name === 'photos:holiday.jpg', file.name)
@@ -108,13 +61,10 @@ async function main() {
   check('slicing a File gives a Blob', !(file.slice(0, 2) instanceof File) && file.slice(0, 2) instanceof Blob)
   check('a File is content like any other', (await file.text()) === 'payload', await file.text())
 
-  // -- brands, and what a plugin cannot swap --
-
   check('a blob brands itself', Object.prototype.toString.call(blob) === '[object Blob]', String(blob))
   check('and a File says File', Object.prototype.toString.call(file) === '[object File]', String(file))
 
-  // the app mints its own media against this prototype instead of reading `globalThis.File`, so a
-  // plugin reassigning the global cannot decide what shape the app hands it
+  // the app mints media against this prototype, not `globalThis.File`, which a plugin can reassign
   const protoKey = Symbol.for('inu.blob.fileProto')
   const stash = Object.getOwnPropertyDescriptor(Blob.prototype, protoKey)
   check(
@@ -130,12 +80,8 @@ async function main() {
   }
   check('and cannot be redefined', swap === 'TypeError' && Blob.prototype[protoKey] === File.prototype, swap)
 
-  // -- the spill boundary --
-
-  // 3 MB is past the point where the engine stops keeping content in memory. js is never told
-  // where the bytes went, so the first thing asserted is the only thing that matters: they survive
-  // the boundary, and a blob built *from* one is still exact. what proves the spill actually
-  // happened comes after.
+  // 3 MB is past the in-memory threshold. where the bytes went is invisible to js, so this checks
+  // they survive the boundary; proof the spill happened comes after
   const CHUNK = 3 * 1024 * 1024
   const big = new Uint8Array(CHUNK)
   for (let i = 0; i < CHUNK; i++) big[i] = i % 251
@@ -154,8 +100,6 @@ async function main() {
   const rebuilt = new Blob([spilled.slice(5, 5 + 16)])
   check('building from a spilled blob copies its content', sameBytes(await rebuilt.bytes(), big.slice(0, 16)))
 
-  // one read may not materialize more than half the js heap, and the refusal happens before the
-  // read rather than as an out-of-memory somewhere inside it
   const huge = new Blob([big, big, big, big, big, big])
   check('a huge blob is still cheap to build', huge.size === CHUNK * 6, huge.size)
   await expectReject('reading more than 16 MB into js is refused', 'quota-exceeded', huge.bytes())
@@ -163,14 +107,12 @@ async function main() {
   huge.dispose()
   spilled.dispose()
 
-  // text() stops lower than bytes() does, because a js string can cost two bytes per byte of
-  // content and a blob at the byte ceiling would be the whole heap
+  // a js string can cost two bytes per content byte, so text() stops lower than bytes()
   const wide = new Blob([big, big, big])
   check('a 9 MB blob still reads as bytes', (await wide.bytes()).length === CHUNK * 3)
   await expectReject('but reading it as text is refused', 'quota-exceeded', wide.text())
   wide.dispose()
 
-  // one call may not assemble more than 32 MB, whatever it is assembling from
   const PER_WALL = 8 * CHUNK
   expectThrow('assembling more than 32 MB in one call is refused', 'quota-exceeded', () => {
     const part = new Blob(Array(8).fill(big))
@@ -181,11 +123,8 @@ async function main() {
     }
   })
 
-  // the spill is not directly observable, so this is the strongest indirect thing there is: more
-  // content live at once than the 64 MB native budget could ever hold, which is only possible if
-  // it is not in ram. one call only assembles 32 MB, so the wall is three of them held together.
-  // an engine with nowhere to spill fails somewhere in here with quota-exceeded instead, which is
-  // the point: nothing above this line can tell the two apart.
+  // the spill is not observable directly: more content live at once than the 64 MB native budget
+  // holds is only possible off ram. one call assembles at most 32 MB, so the wall is three
   const wall = []
   try {
     for (let i = 0; i < 3; i++) wall.push(new Blob(Array(8).fill(big)))
@@ -200,8 +139,6 @@ async function main() {
     check('and reads back at both ends', sameBytes(head, big.slice(0, 4)) && sameBytes(end, big.slice(CHUNK - 4)))
     for (const one of wall) one.dispose()
   }
-
-  // -- structuredClone --
 
   const original = new Blob(['shared content'], { type: 'text/plain' })
   const graph = structuredClone({ a: original, b: original, f: new File(['x'], 'n.txt') })

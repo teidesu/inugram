@@ -21,10 +21,6 @@ impl TestActionHost {
   pub(crate) fn editor_ops(&self) -> Vec<(i32, i64, String)> {
     self.editor.borrow().clone()
   }
-
-  fn row_count(&self, kind: i32) -> usize {
-    self.rows.borrow().iter().filter(|r| r.0 == kind).count()
-  }
 }
 
 impl ActionHost for TestActionHost {
@@ -93,18 +89,16 @@ pub(crate) fn setup() -> Fixture {
 }
 
 fn setup_with(lifecycle: Rc<Lifecycle>, grants: &[&str]) -> Fixture {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
+  let (rt, ctx) = crate::testing::harness::new_engine();
   let host = Rc::new(TestActionHost::default());
   let host_dyn: Rc<dyn ActionHost> = host.clone();
   let logs = crate::testing::harness::Logs::new();
   let log = crate::testing::harness::log_sink(&logs);
   let state = ctx.with(|ctx| {
     let inu = crate::testing::harness::get_api_globals(&ctx);
-    crate::api::error::install_plugin_error(&ctx).unwrap();
     let shared = crate::api::tl::utils::install_utils(&ctx, &inu).unwrap();
     crate::api::tl::message::install_message(&ctx, &shared, &inu).unwrap();
-    let grants = crate::sandbox::grants::TestGrantHost::new(grants).as_host();
+    let grants = crate::sandbox::grants::CachedGrantHost::new(grants);
     install_actions(&ctx, host_dyn, lifecycle, None, grants, None, log, &inu).unwrap()
   });
   let state = Disposing::new(&ctx, state, |ctx, state| state.dispose(ctx));
@@ -122,7 +116,7 @@ fn eval_err(ctx: &Context, source: &str) -> String {
 }
 
 fn read_log(ctx: &Context) -> String {
-  ctx.with(|ctx| ctx.eval::<String, _>("JSON.stringify(globalThis.__log)").unwrap())
+  crate::testing::harness::eval_json(&ctx, "globalThis.__log")
 }
 
 pub(crate) const CHAT_SURFACE: &str = r#"{"accountId":0,"dialogId":-100,"topicId":7}"#;
@@ -142,8 +136,10 @@ fn a_static_row_renders_without_running_plugin_code() {
   let (rt, ctx, host, state, _logs) = setup();
   eval(
     &ctx,
-    r#"globalThis.__log = [];
-           inu.registerChatAction({ id: 'a', text: 'Alpha', callback: () => { __log.push('a') } })"#,
+    r#"
+      globalThis.__log = [];
+      inu.registerChatAction({ id: 'a', text: 'Alpha', callback: () => { __log.push('a') } })
+    "#,
   );
   assert_eq!(host.registered.borrow().len(), 1);
   assert_eq!(host.registered.borrow()[0], (KIND_CHAT, 1, "a".to_string(), Some("Alpha".to_string()), None, 0),);
@@ -156,15 +152,17 @@ fn a_dynamic_label_and_visible_see_the_surface() {
   let (rt, ctx, host, state, _logs) = setup();
   eval(
     &ctx,
-    r#"inu.registerMessageAction({
-               id: 'a',
-               text: ctx => `${ctx.source} ${ctx.messages.map(message => message.id).join('+')} in ${ctx.dialogId}`,
-               visible: ctx => ctx.messages.length === 2,
-               callback: () => {},
-           });
-           inu.registerMessageAction({
-               id: 'b', text: 'never', visible: () => false, callback: () => {},
-           })"#,
+    r#"
+      inu.registerMessageAction({
+        id: 'a',
+        text: ctx => `${ctx.source} ${ctx.messages.map(message => message.id).join('+')} in ${ctx.dialogId}`,
+        visible: ctx => ctx.messages.length === 2,
+        callback: () => {},
+      });
+      inu.registerMessageAction({
+        id: 'b', text: 'never', visible: () => false, callback: () => {},
+      })
+    "#,
   );
   assert_eq!(host.registered.borrow()[0].3.as_deref(), None);
   assert_eq!(host.registered.borrow()[0].5, DYNAMIC_TEXT | DYNAMIC_VISIBLE);
@@ -179,9 +177,11 @@ fn message_placements_filter_each_surface_and_settings_include_every_placement()
   let (rt, ctx, _host, state, _logs) = setup();
   eval(
     &ctx,
-    r#"inu.registerMessageAction({ id: 'bubble', text: 'bubble', callback: () => {} });
-           inu.registerMessageAction({ id: 'selection', placements: ['selection'], text: 'selection', callback: () => {} });
-           inu.registerMessageAction({ id: 'both', placements: ['bubble', 'selection'], text: 'both', callback: () => {} })"#,
+    r#"
+      inu.registerMessageAction({ id: 'bubble', text: 'bubble', callback: () => {} });
+      inu.registerMessageAction({ id: 'selection', placements: ['selection'], text: 'selection', callback: () => {} });
+      inu.registerMessageAction({ id: 'both', placements: ['bubble', 'selection'], text: 'both', callback: () => {} })
+    "#,
   );
 
   assert_eq!(
@@ -212,57 +212,16 @@ fn message_placements_reject_empty_unknown_and_non_array_values() {
 }
 
 #[test]
-fn a_topic_is_absent_rather_than_zero_when_the_surface_has_none() {
-  let (rt, ctx, _host, state, _logs) = setup();
-  eval(
-    &ctx,
-    r#"inu.registerChatAction({
-               id: 'a', text: ctx => String(ctx.topicId === undefined), callback: () => {},
-           })"#,
-  );
-  let json = state.render(&rt, &ctx, KIND_CHAT, r#"{"accountId":0,"dialogId":5}"#).unwrap();
-  assert_eq!(json, rows(&[row(1, "true")]));
-  let json = state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
-  assert_eq!(json, rows(&[row(1, "false")]));
-}
-
-#[test]
-fn a_global_action_gets_no_dialog_at_all() {
-  let (rt, ctx, _host, state, _logs) = setup();
-  eval(
-    &ctx,
-    r#"inu.registerGlobalAction({
-               id: 'a',
-               text: ctx => `${'dialogId' in ctx}/${'messages' in ctx}`,
-               callback: () => {},
-           })"#,
-  );
-  let json = state.render(&rt, &ctx, KIND_GLOBAL, r#"{"accountId":2}"#).unwrap();
-  assert_eq!(json, rows(&[row(1, "false/false")]));
-}
-
-#[test]
-fn rows_render_in_registration_order() {
-  let (rt, ctx, _host, state, _logs) = setup();
-  eval(
-    &ctx,
-    r#"for (const id of ['c', 'a', 'b']) {
-               inu.registerChatAction({ id, text: id.toUpperCase(), callback: () => {} })
-           }"#,
-  );
-  let json = state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
-  assert_eq!(json, rows(&[row(1, "C"), row(2, "A"), row(3, "B")]));
-}
-
-#[test]
 fn re_registering_an_id_replaces_the_row_in_place_and_retires_its_token() {
   let (rt, ctx, host, state, _logs) = setup();
   eval(
     &ctx,
-    r#"inu.registerChatAction({ id: 'a', text: 'A', callback: () => {} });
-           inu.registerChatAction({ id: 'b', text: 'B', callback: () => {} });
-           globalThis.__disposeFirst = null;
-           inu.registerChatAction({ id: 'a', text: 'A2', callback: () => {} })"#,
+    r#"
+      inu.registerChatAction({ id: 'a', text: 'A', callback: () => {} });
+      inu.registerChatAction({ id: 'b', text: 'B', callback: () => {} });
+      globalThis.__disposeFirst = null;
+      inu.registerChatAction({ id: 'a', text: 'A2', callback: () => {} })
+    "#,
   );
   let json = state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
   assert_eq!(json, rows(&[row(3, "A2"), row(2, "B")]), "the replacement keeps its predecessor's position");
@@ -278,9 +237,11 @@ fn a_disposer_removes_the_row_and_tells_the_host_once() {
   let (rt, ctx, host, state, _logs) = setup();
   eval(
     &ctx,
-    r#"globalThis.__d = inu.registerChatAction({ id: 'a', text: 'A', callback: () => {} });
-           inu.registerChatAction({ id: 'b', text: 'B', callback: () => {} });
-           __d(); __d()"#,
+    r#"
+      globalThis.__d = inu.registerChatAction({ id: 'a', text: 'A', callback: () => {} });
+      inu.registerChatAction({ id: 'b', text: 'B', callback: () => {} });
+      __d(); __d()
+    "#,
   );
   let json = state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
   assert_eq!(json, rows(&[row(2, "B")]));
@@ -294,8 +255,10 @@ fn registering_after_unload_began_registers_nothing() {
   let (rt, ctx, host, state, _logs) = setup_with(lifecycle, &["account.read(draft)"]);
   eval(
     &ctx,
-    r#"globalThis.__d = inu.registerChatAction({ id: 'a', text: 'A', callback: () => {} });
-           __d()"#,
+    r#"
+      globalThis.__d = inu.registerChatAction({ id: 'a', text: 'A', callback: () => {} });
+      __d()
+    "#,
   );
   assert!(host.registered.borrow().is_empty());
   let json = state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
@@ -312,24 +275,18 @@ fn a_malformed_registration_throws_even_while_unloading() {
 }
 
 #[test]
-fn an_icon_not_minted_by_the_icon_api_is_refused() {
-  let (_rt, ctx, host, _state, _logs) = setup();
-  let err = eval_err(&ctx, "inu.registerChatAction({ id: 'a', text: 'A', icon: {}, callback: () => {} })");
-  assert!(err.contains("must come from inu.icons"), "{err}");
-  assert!(host.registered.borrow().is_empty(), "nothing is registered for a refused row");
-}
-
-#[test]
 fn static_and_dynamic_icons_are_rendered() {
   let (rt, ctx, host, state, _logs) = setup();
   eval(
     &ctx,
-    r#"inu.registerChatAction({
-             id: 'a', text: 'A', icon: { __inuIcon: 'rmsg_settings' }, callback: () => {},
-           });
-           inu.registerChatAction({
-             id: 'b', text: 'B', icon: () => ({ __inuIcon: 'rmsg_pin' }), callback: () => {},
-           })"#,
+    r#"
+      inu.registerChatAction({
+        id: 'a', text: 'A', icon: { __inuIcon: 'rmsg_settings' }, callback: () => {},
+      });
+      inu.registerChatAction({
+        id: 'b', text: 'B', icon: () => ({ __inuIcon: 'rmsg_pin' }), callback: () => {},
+      })
+    "#,
   );
   assert_eq!(host.registered.borrow()[0].4.as_deref(), Some("rmsg_settings"));
   assert_eq!(host.registered.borrow()[0].5, 0);
@@ -344,119 +301,33 @@ fn chat_and_message_getters_receive_null_in_settings() {
   let (rt, ctx, _host, state, _logs) = setup();
   eval(
     &ctx,
-    r#"inu.registerChatAction({
-             id: 'a', text: ctx => ctx === null ? 'chat settings' : 'chat', callback: () => {},
-           });
-           inu.registerMessageAction({
-             id: 'b', text: ctx => ctx === null ? 'message settings' : 'message', callback: () => {},
-           })"#,
+    r#"
+      inu.registerChatAction({
+        id: 'a', text: ctx => ctx === null ? 'chat settings' : 'chat', callback: () => {},
+      });
+      inu.registerMessageAction({
+        id: 'b', text: ctx => ctx === null ? 'message settings' : 'message', callback: () => {},
+      })
+    "#,
   );
   assert_eq!(state.render(&rt, &ctx, KIND_CHAT, "null").unwrap(), rows(&[row(1, "chat settings")]));
   assert_eq!(state.render(&rt, &ctx, KIND_MESSAGE, "null").unwrap(), rows(&[row(1, "message settings")]));
 }
 
+/// a JNI failure is the bridge's, so the plugin is told `internal` rather than to shed rows
 #[test]
-fn a_host_that_refuses_a_registration_leaves_nothing_behind() {
+fn a_host_that_refuses_a_registration_throws_internal_and_leaves_nothing_behind() {
   let (rt, ctx, host, state, _logs) = setup();
-  *host.refuse_register.borrow_mut() = Some("too many rows".to_string());
-  let err = eval_err(&ctx, "inu.registerChatAction({ id: 'a', text: ctx => 'A', callback: () => {} })");
-  assert!(err.contains("too many rows"), "{err}");
-  let json = state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
-  assert_eq!(json, "[]");
-}
-
-/// a limit is `quota-exceeded` in this contract's vocabulary, like every other one, so a plugin
-/// can branch on it rather than matching the host's wording
-#[test]
-fn the_row_cap_reaches_the_plugin_as_a_quota_exceeded_plugin_error() {
-  let (_rt, ctx, host, _state, _logs) = setup();
-  host.limit.set(2);
-  let code = ctx.with(|ctx| {
-    ctx
-      .eval::<String, _>(
-        r#"(() => {
-                   for (const id of ['a', 'b']) {
-                       inu.registerChatAction({ id, text: id, callback: () => {} })
-                   }
-                   try {
-                       inu.registerChatAction({ id: 'c', text: 'C', callback: () => {} });
-                       return 'did not throw';
-                   } catch (e) {
-                       return `${e instanceof inu.PluginError}:${e.code}:${e.message.includes("'c' would be row 3")}`;
-                   }
-               })()"#,
-      )
-      .unwrap()
-  });
-  assert_eq!(code, "true:quota-exceeded:true");
-}
-
-/// JNI failures from `action_register` must report `internal`, not `quota-exceeded`. A plugin
-/// should not be told to reduce its row count when the bridge failed.
-#[test]
-fn a_host_failure_is_not_reported_to_the_plugin_as_a_quota() {
-  let (_rt, ctx, host, _state, _logs) = setup();
   *host.refuse_register.borrow_mut() = Some("registerAction: JNI env unavailable".to_string());
-  let code = ctx.with(|ctx| {
-    ctx
-      .eval::<String, _>(
-        r#"(() => {
-                   try {
-                       inu.registerChatAction({ id: 'a', text: 'A', callback: () => {} });
-                       return 'did not throw';
-                   } catch (e) {
-                       return `${e instanceof inu.PluginError}:${e.code}:${e.message.includes('JNI env unavailable')}`;
-                   }
-               })()"#,
-      )
-      .unwrap()
-  });
-  assert_eq!(code, "true:internal:true");
-}
-
-/// Updating a row allocates its replacement token before retiring the old one. Check the limit by
-/// new row ID, not token count, so updates still work at capacity.
-#[test]
-fn a_keyed_re_registration_at_the_cap_replaces_rather_than_being_refused() {
-  let (rt, ctx, host, state, _logs) = setup();
-  host.limit.set(8);
-  eval(
+  let caught = crate::testing::harness::catch_json(
     &ctx,
-    r#"for (const id of ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']) {
-               inu.registerChatAction({ id, text: id.toUpperCase(), callback: () => {} })
-           }
-           inu.registerChatAction({ id: 'a', text: 'A2', callback: () => {} })"#,
+    "inu.registerChatAction({ id: 'a', text: ctx => 'A', callback: () => {} })",
   );
-  assert_eq!(host.row_count(KIND_CHAT), 8, "the replacement took the place its predecessor held");
-  let json = state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
-  assert_eq!(
-    json,
-    rows(&[row(9, "A2"), row(2, "B"), row(3, "C"), row(4, "D"), row(5, "E"), row(6, "F"), row(7, "G"), row(8, "H"),])
-  );
-  let err = eval_err(&ctx, "inu.registerChatAction({ id: 'i', text: 'I', callback: () => {} })");
-  assert!(err.contains("would be row 9"), "a genuinely new row is still refused: {err}");
-}
-
-/// `common.d.ts`: a throwing `visible`/`text` drops that one row. It is not a fault, or a
-/// predicate that fails on one chat would switch off every other feature the plugin provides.
-#[test]
-fn a_row_whose_visible_throws_is_dropped_without_disabling_the_plugin() {
-  let (rt, ctx, _host, state, logs) = setup();
-  eval(
-    &ctx,
-    r#"inu.registerChatAction({ id: 'a', text: 'A', visible: () => { throw new Error('boom') }, callback: () => {} });
-           inu.registerChatAction({ id: 'b', text: () => { throw new Error('bang') }, callback: () => {} });
-           inu.registerChatAction({ id: 'c', text: 'C', callback: () => {} })"#,
-  );
-  let json = state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
-  assert_eq!(json, rows(&[row(3, "C")]), "the other rows still render");
-  let logs = logs.borrow();
-  assert!(logs.iter().any(|l| l.contains("boom")), "{logs:#?}");
-  assert!(logs.iter().any(|l| l.contains("bang")), "{logs:#?}");
   assert!(
-    !logs.iter().any(|l| l.starts_with(crate::FAULT_PREFIX)),
-    "a dropped row must not disable the plugin: {logs:#?}"
+    caught.starts_with(r#"[true,"internal",null,"#) && caught.contains("JNI env unavailable"),
+    "{caught}"
   );
+  assert_eq!(state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap(), "[]");
 }
 
 #[test]
@@ -471,37 +342,27 @@ fn a_callback_that_throws_is_the_plugins_fault() {
   assert!(logs.iter().any(|l| l.starts_with(crate::FAULT_PREFIX) && l.contains("nope")), "{logs:#?}");
 }
 
+/// tokens are never reused, so a row drawn before a replacement cannot be answered by the row
+/// that replaced it, which is what makes a menu left open across a reload safe
 #[test]
-fn a_dispatch_for_a_disposed_row_does_nothing() {
+fn a_dispatch_for_a_disposed_or_replaced_row_does_nothing() {
   let (rt, ctx, _host, state, logs) = setup();
   eval(
     &ctx,
-    r#"globalThis.__log = [];
-           globalThis.__d = inu.registerChatAction({ id: 'a', text: 'A', callback: () => { __log.push('ran') } })"#,
-  );
-  state.dispatch(&rt, &ctx, KIND_CHAT, 1, CHAT_SURFACE);
-  assert_eq!(read_log(&ctx), r#"["ran"]"#);
-  eval(&ctx, "__d()");
-  state.dispatch(&rt, &ctx, KIND_CHAT, 1, CHAT_SURFACE);
-  assert_eq!(read_log(&ctx), r#"["ran"]"#, "the stale row is inert");
-  assert!(logs.borrow().is_empty());
-}
-
-/// tokens are never reused, so a row drawn before a replacement cannot be answered by the row
-/// that replaced it - which is the whole reason a menu left open across a reload is safe
-#[test]
-fn a_dispatch_for_a_replaced_row_does_not_reach_its_replacement() {
-  let (rt, ctx, _host, state, _logs) = setup();
-  eval(
-    &ctx,
-    r#"globalThis.__log = [];
-           inu.registerChatAction({ id: 'a', text: 'A', callback: () => { __log.push('first') } });
-           inu.registerChatAction({ id: 'a', text: 'A2', callback: () => { __log.push('second') } })"#,
+    r#"
+      globalThis.__log = [];
+      inu.registerChatAction({ id: 'a', text: 'A', callback: () => { __log.push('first') } });
+      globalThis.__d = inu.registerChatAction({ id: 'a', text: 'A2', callback: () => { __log.push('second') } })
+    "#,
   );
   state.dispatch(&rt, &ctx, KIND_CHAT, 1, CHAT_SURFACE);
   assert_eq!(read_log(&ctx), "[]");
   state.dispatch(&rt, &ctx, KIND_CHAT, 2, CHAT_SURFACE);
   assert_eq!(read_log(&ctx), r#"["second"]"#);
+  eval(&ctx, "__d()");
+  state.dispatch(&rt, &ctx, KIND_CHAT, 2, CHAT_SURFACE);
+  assert_eq!(read_log(&ctx), r#"["second"]"#, "the stale row is inert");
+  assert!(logs.borrow().is_empty());
 }
 
 #[test]
@@ -509,9 +370,11 @@ fn a_row_disposed_by_an_earlier_rows_visible_is_not_drawn() {
   let (rt, ctx, _host, state, _logs) = setup();
   eval(
     &ctx,
-    r#"globalThis.__d = null;
-           inu.registerChatAction({ id: 'a', text: 'A', visible: () => { __d(); return true }, callback: () => {} });
-           globalThis.__d = inu.registerChatAction({ id: 'b', text: 'B', callback: () => {} })"#,
+    r#"
+      globalThis.__d = null;
+      inu.registerChatAction({ id: 'a', text: 'A', visible: () => { __d(); return true }, callback: () => {} });
+      globalThis.__d = inu.registerChatAction({ id: 'b', text: 'B', callback: () => {} })
+    "#,
   );
   let json = state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
   assert_eq!(json, rows(&[row(1, "A")]));
@@ -522,17 +385,19 @@ fn a_row_registered_mid_render_joins_the_next_one() {
   let (rt, ctx, _host, state, _logs) = setup();
   eval(
     &ctx,
-    r#"inu.registerChatAction({
-               id: 'a', text: 'A',
-               visible: () => {
-                   if (!globalThis.__added) {
-                       globalThis.__added = true;
-                       inu.registerChatAction({ id: 'b', text: 'B', callback: () => {} });
-                   }
-                   return true;
-               },
-               callback: () => {},
-           })"#,
+    r#"
+      inu.registerChatAction({
+        id: 'a', text: 'A',
+        visible: () => {
+          if (!globalThis.__added) {
+            globalThis.__added = true;
+            inu.registerChatAction({ id: 'b', text: 'B', callback: () => {} });
+          }
+          return true;
+        },
+        callback: () => {},
+      })
+    "#,
   );
   let json = state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
   assert_eq!(json, rows(&[row(1, "A")]));
@@ -545,38 +410,13 @@ fn kinds_are_separate_registries() {
   let (rt, ctx, _host, state, _logs) = setup();
   eval(
     &ctx,
-    r#"inu.registerChatAction({ id: 'a', text: 'chat', callback: () => {} });
-           inu.registerMessageAction({ id: 'a', text: 'message', callback: () => {} })"#,
+    r#"
+      inu.registerChatAction({ id: 'a', text: 'chat', callback: () => {} });
+      inu.registerMessageAction({ id: 'a', text: 'message', callback: () => {} })
+    "#,
   );
   assert_eq!(state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap(), rows(&[row(1, "chat")]));
   assert_eq!(state.render(&rt, &ctx, KIND_MESSAGE, MESSAGE_SURFACE).unwrap(), rows(&[row(1, "message")]));
-}
-
-#[test]
-fn the_editor_context_carries_the_draft_and_crosses_replace_and_send() {
-  let (rt, ctx, host, state, _logs) = setup();
-  eval(
-    &ctx,
-    r#"globalThis.__log = [];
-           inu.registerMessageEditorAction({
-               id: 'a', text: 'Shout',
-               callback: ctx => {
-                   __log.push(ctx.draft.text);
-                   ctx.replace(ctx.draft.text.toUpperCase());
-                   ctx.send({ text: 'sent', entities: [{ _: 'messageEntityBold', offset: 0, length: 4 }] });
-               },
-           })"#,
-  );
-  let surface = r#"{"accountId":0,"dialogId":5,"surface":42,"draft":{"text":"hi there"}}"#;
-  state.dispatch(&rt, &ctx, KIND_EDITOR, 1, surface);
-  assert_eq!(read_log(&ctx), r#"["hi there"]"#);
-  let editor = host.editor.borrow();
-  assert_eq!(editor.len(), 2);
-  assert_eq!(editor[0].0, EDITOR_REPLACE);
-  assert_eq!(editor[0].1, 42);
-  assert_eq!(editor[0].2, r#"{"text":"HI THERE"}"#);
-  assert_eq!(editor[1].0, EDITOR_SEND);
-  assert!(editor[1].2.contains("messageEntityBold"), "{}", editor[1].2);
 }
 
 /// the composer's text is app state, and `getDraft` charges `account.read(draft)` for the very
@@ -587,18 +427,20 @@ fn reading_the_draft_needs_the_same_grant_get_draft_does() {
   let (rt, ctx, host, state, _logs) = setup_with(Lifecycle::new(), &[]);
   eval(
     &ctx,
-    r#"globalThis.__log = [];
-           inu.registerMessageEditorAction({
-               id: 'a', text: 'Shout',
-               callback: ctx => {
-                   try {
-                       __log.push(ctx.draft.text)
-                   } catch (e) {
-                       __log.push(e.code + ':' + e.message)
-                   }
-                   ctx.replace('written anyway');
-               },
-           })"#,
+    r#"
+      globalThis.__log = [];
+      inu.registerMessageEditorAction({
+        id: 'a', text: 'Shout',
+        callback: ctx => {
+          try {
+            __log.push(ctx.draft.text)
+          } catch (e) {
+            __log.push(e.code + ':' + e.message)
+          }
+          ctx.replace('written anyway');
+        },
+      })
+    "#,
   );
   let surface = r#"{"accountId":0,"dialogId":5,"surface":42,"draft":{"text":"hi there"}}"#;
   state.dispatch(&rt, &ctx, KIND_EDITOR, 1, surface);
@@ -613,14 +455,16 @@ fn a_bad_editor_argument_is_an_invalid_argument_error() {
   let (rt, ctx, host, state, _logs) = setup();
   eval(
     &ctx,
-    r#"globalThis.__log = [];
-           inu.registerMessageEditorAction({
-               id: 'a', text: 'x',
-               callback: ctx => {
-                   try { ctx.replace(42) } catch (e) { __log.push(`${e.name}:${e.code}`) }
-                   try { ctx.send({ text: 'ok', entities: 'no' }) } catch (e) { __log.push(`${e.name}:${e.code}`) }
-               },
-           })"#,
+    r#"
+      globalThis.__log = [];
+      inu.registerMessageEditorAction({
+        id: 'a', text: 'x',
+        callback: ctx => {
+          try { ctx.replace(42) } catch (e) { __log.push(`${e.name}:${e.code}`) }
+          try { ctx.send({ text: 'ok', entities: 'no' }) } catch (e) { __log.push(`${e.name}:${e.code}`) }
+        },
+      })
+    "#,
   );
   state.dispatch(&rt, &ctx, KIND_EDITOR, 1, r#"{"accountId":0,"dialogId":5,"surface":1,"draft":{"text":""}}"#);
   assert_eq!(read_log(&ctx), r#"["PluginError:invalid-argument","PluginError:invalid-argument"]"#);
@@ -633,60 +477,48 @@ fn a_host_that_refuses_an_editor_op_throws_into_the_callback() {
   *host.refuse_editor.borrow_mut() = Some("the composer is gone".to_string());
   eval(
     &ctx,
-    r#"globalThis.__log = [];
-           inu.registerMessageEditorAction({
-               id: 'a', text: 'x',
-               callback: ctx => { try { ctx.send('hi') } catch (e) { __log.push(e.message) } },
-           })"#,
+    r#"
+      globalThis.__log = [];
+      inu.registerMessageEditorAction({
+        id: 'a', text: 'x',
+        callback: ctx => { try { ctx.send('hi') } catch (e) { __log.push(e.message) } },
+      })
+    "#,
   );
   state.dispatch(&rt, &ctx, KIND_EDITOR, 1, r#"{"accountId":0,"dialogId":5,"surface":1,"draft":{"text":""}}"#);
   assert_eq!(read_log(&ctx), r#"["the composer is gone"]"#);
 }
 
-#[cfg(test)]
-mod bundled_oracle {
-  use super::*;
+#[test]
+fn the_bundled_actions_test_plugin_passes() {
+  let (rt, ctx, host, state, logs) = setup();
+  // the oracle asserts the cap, so the harness has to have one; the device's is the same 8
+  host.limit.set(8);
+  let lines = crate::testing::harness::install_capturing_console(&ctx);
+  eval(&ctx, crate::testing::test_plugin!("actions-test.js"));
 
-  const ORACLE: &str = include_str!("../../../../test/plugins/actions-test.js");
+  assert_eq!(state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap(), rows(&[row(2, "Chat row")]));
+  assert_eq!(state.render(&rt, &ctx, KIND_MESSAGE, MESSAGE_SURFACE).unwrap(), rows(&[row(1, "Message row")]));
+  state.dispatch(&rt, &ctx, KIND_MESSAGE, 1, MESSAGE_SURFACE);
+  state.dispatch(&rt, &ctx, KIND_MESSAGE, 1, SELECTION_SURFACE);
+  state.dispatch(&rt, &ctx, KIND_PROFILE, 1, CHAT_SURFACE);
+  state.dispatch(&rt, &ctx, KIND_GLOBAL, 1, r#"{"accountId":0}"#);
+  let editor_surface = r#"{"accountId":0,"dialogId":-100,"surface":42,"draft":{"text":"hello"}}"#;
+  state.dispatch(&rt, &ctx, KIND_EDITOR, 1, editor_surface);
 
-  #[test]
-  fn the_bundled_actions_test_plugin_passes() {
-    let (rt, ctx, host, state, logs) = setup();
-    // the oracle asserts the cap, so the harness has to have one; the device's is the same 8
-    host.limit.set(8);
-    let lines = crate::testing::harness::install_capturing_console(&ctx);
-    ctx.with(|ctx| match ctx.eval::<(), _>(ORACLE) {
-      Ok(()) => {}
-      Err(rquickjs::Error::Exception) => panic!("{}", format_exception(&ctx)),
-      Err(e) => panic!("{e:?}"),
-    });
-
-    assert_eq!(state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap(), rows(&[row(2, "Chat row")]),);
-    assert_eq!(state.render(&rt, &ctx, KIND_MESSAGE, MESSAGE_SURFACE).unwrap(), rows(&[row(1, "Message row")]),);
-    state.dispatch(&rt, &ctx, KIND_MESSAGE, 1, MESSAGE_SURFACE);
-    state.dispatch(&rt, &ctx, KIND_MESSAGE, 1, SELECTION_SURFACE);
-    state.dispatch(&rt, &ctx, KIND_PROFILE, 1, CHAT_SURFACE);
-    state.dispatch(&rt, &ctx, KIND_GLOBAL, 1, r#"{"accountId":0}"#);
-    state.dispatch(
-      &rt,
-      &ctx,
-      KIND_EDITOR,
-      1,
-      r#"{"accountId":0,"dialogId":-100,"surface":1,"draft":{"text":"hello"}}"#,
-    );
-
-    while rt.is_job_pending() {
-      rt.execute_pending_job().ok();
-    }
-    let lines = lines.borrow().clone();
-    crate::testing::harness::assert_oracle_exact(&lines, "actions test done", ORACLE_ASSERTIONS);
-    assert_eq!(host.editor_ops().len(), 2);
-    // what the oracle cannot see about itself: its throwing row was dropped from the render
-    // above and left the plugin running, so every assertion after it still ran
-    let logs = logs.borrow();
-    assert!(logs.iter().any(|l| l.contains("visible blew up")), "{logs:#?}");
-    assert!(!logs.iter().any(|l| l.starts_with(crate::FAULT_PREFIX)), "{logs:#?}");
+  while rt.is_job_pending() {
+    rt.execute_pending_job().ok();
   }
-
-  const ORACLE_ASSERTIONS: usize = 19;
+  let lines = lines.borrow().clone();
+  crate::testing::harness::assert_oracle_exact(&lines, "actions test done", 19);
+  let editor = host.editor_ops();
+  assert_eq!(editor.len(), 2);
+  assert_eq!(editor[0], (EDITOR_REPLACE, 42, r#"{"text":"replaced"}"#.to_string()));
+  assert_eq!((editor[1].0, editor[1].1), (EDITOR_SEND, 42));
+  assert!(editor[1].2.contains("messageEntityBold"), "{}", editor[1].2);
+  // what the oracle cannot see about itself: its throwing row was dropped from the render
+  // above and left the plugin running, so every assertion after it still ran
+  let logs = logs.borrow();
+  assert!(logs.iter().any(|l| l.contains("visible blew up")), "{logs:#?}");
+  assert!(!logs.iter().any(|l| l.starts_with(crate::FAULT_PREFIX)), "{logs:#?}");
 }

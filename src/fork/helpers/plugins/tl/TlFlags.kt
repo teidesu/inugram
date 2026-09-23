@@ -1,23 +1,23 @@
-package desu.inugram.core.plugins
+package desu.inugram.helpers.plugins.tl
 
-/** Use flags from stock serialization, not the schema. Stock can use an older TL layer. */
+import desu.inugram.core.plugins.TlTables
+
+/** flags come from stock serialization, not the schema: stock can be on an older layer */
 object TlFlags {
-    data class Gate(val word: Int, val bit: Int)
-
     fun isFlagWord(cls: Class<*>, name: String): Boolean {
         if (name !in TlTables.table.flagWords) return false
-        return gatesOf(cls) != null
+        return getGates(cls) != null
     }
 
-    fun gateOf(cls: Class<*>, name: String): Gate? = gatesOf(cls)?.get(name)
+    fun findGate(cls: Class<*>, name: String): TlTables.Gate? = getGates(cls)?.get(name)
 
     fun wordName(word: Int): String? = TlTables.table.flagWords.getOrNull(word)
 
-    fun wordsOf(cls: Class<*>): Set<Int> =
-        gatesOf(cls)?.values?.mapTo(HashSet()) { it.word } ?: emptySet()
+    fun getFlagWords(cls: Class<*>): Set<Int> =
+        getGates(cls)?.values?.mapTo(HashSet()) { it.word } ?: emptySet()
 
-    fun isBitPresent(cls: Class<*>, gate: Gate, isPresent: (String) -> Boolean): Boolean {
-        for ((name, other) in gatesOf(cls) ?: return false) {
+    fun isBitPresent(cls: Class<*>, gate: TlTables.Gate, isPresent: (String) -> Boolean): Boolean {
+        for ((name, other) in getGates(cls) ?: return false) {
             if (other == gate && isPresent(name)) return true
         }
         return false
@@ -25,14 +25,14 @@ object TlFlags {
 
     fun computeWord(cls: Class<*>, word: Int, isPresent: (String) -> Boolean): Int {
         var value = 0
-        for ((name, gate) in gatesOf(cls) ?: return 0) {
+        for ((name, gate) in getGates(cls) ?: return 0) {
             if (gate.word == word && isPresent(name)) value = value or (1 shl gate.bit)
         }
         return value
     }
 
-    private fun gatesOf(cls: Class<*>): Map<String, Gate>? {
-        val id = TlTables.constructorIdOf(cls) ?: return null
+    private fun getGates(cls: Class<*>): Map<String, TlTables.Gate>? {
+        val id = TlTables.readConstructorId(cls) ?: return null
         return TlTables.table.gatesById[id]
     }
 

@@ -54,7 +54,6 @@ impl CachedGrantHost {
     Rc::new(CachedGrantHost { unscoped, scoped })
   }
 
-  /// fixtures spell grants the way a manifest does
   #[cfg(test)]
   pub(crate) fn new<T: AsRef<str>>(tokens: impl IntoIterator<Item = T>) -> Rc<Self> {
     let mut pairs = Vec::new();
@@ -73,10 +72,6 @@ impl CachedGrantHost {
       }
     }
     Self::from_pairs(&pairs)
-  }
-
-  pub(crate) fn as_host(self: &Rc<Self>) -> Rc<dyn GrantHost> {
-    self.clone()
   }
 }
 
@@ -109,9 +104,6 @@ fn scope_matches(scope: &str, target: &str, mode: i32) -> bool {
     _ => false,
   }
 }
-
-#[cfg(test)]
-pub(crate) type TestGrantHost = CachedGrantHost;
 
 #[cfg(test)]
 #[path = "grants_tests.rs"]

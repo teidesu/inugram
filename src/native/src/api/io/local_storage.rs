@@ -1,136 +1,97 @@
-use std::cell::{RefCell, RefMut};
+use std::cell::{Cell, RefCell, RefMut};
 use std::collections::BTreeMap;
-use std::fs::{self, File, OpenOptions};
-use std::io::{self, Write};
+use std::fs::{self, File};
+use std::io;
 use std::ops::Bound;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use rquickjs::atom::PredefinedAtom;
-use rquickjs::class::{JsClass, Readable, Trace, Tracer};
+use rquickjs::class::Trace;
 use rquickjs::function::{Opt, This};
 use rquickjs::object::Property;
 use rquickjs::proxy::ProxyHandler;
 use rquickjs::{
-  Array, Atom, Class, Coerced, Constructor, Ctx, Exception, Function, JsLifetime, Object, Proxy, Result as JsResult,
-  Value,
+  Array, Atom, Class, Coerced, Ctx, Exception, Function, JsLifetime, Object, Proxy, Result as JsResult, Value,
 };
 
 use crate::api::error::PluginErrorCode;
+use crate::api::Globals;
 use crate::utils::shape::{define_getter, define_method, get_class_prototype};
 
 /// `dom.d.ts`: 1 MB per plugin, keys and values both counted as utf-8 bytes
 pub(crate) const QUOTA_BYTES: usize = 1 << 20;
 
-const MAGIC: &[u8] = b"INUKV\x01";
-const FRAME_HEADER: usize = 4;
-const TAG_SET: u8 = b'S';
-const TAG_DEL: u8 = b'D';
-/// a log smaller than this is never worth rewriting, whatever share of it is dead
-const COMPACT_FLOOR: u64 = 64 * 1024;
-
-enum Change<'a> {
-  Set(&'a str, &'a str),
-  Del(&'a str),
-}
-
-/// An append-only log replayed into memory on open. Each frame contains a length and changes. If
-/// process death interrupts a write, replay stops at the first incomplete frame; the next write
-/// rewrites the recovered store. A file that does not start with the magic was not torn by this
-/// format, so it is moved to [`quarantine_path`] rather than rewritten.
+/// Flushed whole, once per microtask turn and on drop. A file that is not an object of strings moves to
+/// `<path>.corrupt`; `PluginLocalStorage.wipe` removes it and `<path>.tmp`.
 struct Store {
   path: PathBuf,
   entries: BTreeMap<String, String>,
   used: usize,
-  log: Option<File>,
-  log_bytes: u64,
+  dirty: bool,
   /// the last `key(i)` answer, so walking `0..length` costs a step each rather than a scan
   cursor: Option<(usize, String)>,
 }
 
 impl Store {
-  fn open(path: &Path) -> io::Result<Store> {
-    let mut bytes = match fs::read(path) {
-      Ok(bytes) => bytes,
-      Err(e) if e.kind() == io::ErrorKind::NotFound => Vec::new(),
-      Err(e) => return Err(e),
+  fn open(ctx: &Ctx<'_>, path: &Path) -> JsResult<Store> {
+    let entries: BTreeMap<String, String> = match fs::read(path) {
+      Ok(bytes) => match serde_json::from_slice(&bytes) {
+        Ok(entries) => entries,
+        Err(_) => {
+          fs::rename(path, path.with_added_extension("corrupt"))
+            .or_else(|e| PluginErrorCode::Internal.throw(ctx, &format!("localStorage: {}", e)))?;
+          BTreeMap::new()
+        }
+      },
+      Err(e) if e.kind() == io::ErrorKind::NotFound => BTreeMap::new(),
+      Err(e) => return PluginErrorCode::Internal.throw(ctx, &format!("localStorage: {}", e)),
     };
-    if !bytes.starts_with(MAGIC) && !MAGIC.starts_with(&bytes) {
-      fs::rename(path, quarantine_path(path))?;
-      bytes.clear();
-    }
-    let mut entries = BTreeMap::new();
-    let whole = bytes.len() < MAGIC.len() || replay(&bytes, &mut entries);
     let used = entries.iter().map(|(key, value)| key.len() + value.len()).sum();
-    let mut store = Store {
+    Ok(Store {
       path: path.to_path_buf(),
       entries,
       used,
-      log: None,
-      log_bytes: 0,
+      dirty: false,
       cursor: None,
-    };
-    if !whole {
-      store.compact()?;
-    } else if bytes.len() >= MAGIC.len() {
-      store.log = Some(OpenOptions::new().append(true).open(path)?);
-      store.log_bytes = bytes.len() as u64;
-    }
-    Ok(store)
+    })
   }
 
-  fn set_all(&mut self, pairs: &[(String, String)]) -> Result<(), Refusal> {
+  fn set_all(&mut self, pairs: Vec<(String, String)>) -> bool {
     let mut used = self.used;
-    for (key, value) in pairs {
+    for (key, value) in &pairs {
       used -= self.entries.get(key).map_or(0, |old| key.len() + old.len());
       used += key.len() + value.len();
     }
     if used > QUOTA_BYTES {
-      return Err(Refusal::Quota);
+      return false;
     }
-    let changes: Vec<Change> = pairs
-      .iter()
-      .filter(|(key, value)| self.entries.get(key) != Some(value))
-      .map(|(key, value)| Change::Set(key, value))
-      .collect();
-    if changes.is_empty() {
-      return Ok(());
-    }
-    self.append(&changes).map_err(Refusal::Io)?;
     for (key, value) in pairs {
-      self.entries.insert(key.clone(), value.clone());
+      if self.entries.get(&key) != Some(&value) {
+        self.entries.insert(key, value);
+        self.dirty = true;
+        self.cursor = None;
+      }
     }
-    self.cursor = None;
     self.used = used;
-    self.compact_if_sparse();
-    Ok(())
+    true
   }
 
-  fn delete(&mut self, key: &str) -> io::Result<()> {
-    let Some(old) = self.entries.get(key) else {
-      return Ok(());
-    };
-    let freed = key.len() + old.len();
-    self.append(&[Change::Del(key)])?;
-    self.entries.remove(key);
-    self.cursor = None;
-    self.used -= freed;
-    self.compact_if_sparse();
-    Ok(())
-  }
-
-  fn clear(&mut self) -> io::Result<()> {
-    self.log = None;
-    match fs::remove_file(&self.path) {
-      Ok(()) => {}
-      Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-      Err(e) => return Err(e),
+  fn delete(&mut self, key: &str) {
+    if let Some(old) = self.entries.remove(key) {
+      self.used -= key.len() + old.len();
+      self.dirty = true;
+      self.cursor = None;
     }
-    self.entries.clear();
-    self.cursor = None;
-    self.used = 0;
-    self.log_bytes = 0;
-    Ok(())
+  }
+
+  fn clear(&mut self) {
+    if !self.entries.is_empty() {
+      self.entries.clear();
+      self.used = 0;
+      self.dirty = true;
+      self.cursor = None;
+    }
   }
 
   fn key_at(&mut self, index: usize) -> Option<&str> {
@@ -146,165 +107,39 @@ impl Store {
     Some(&self.cursor.insert((index, key)).1)
   }
 
-  fn append(&mut self, changes: &[Change]) -> io::Result<()> {
-    let frame = encode_frame(changes);
-    if self.log.is_none() {
-      if self.entries.is_empty() {
-        let mut file = OpenOptions::new().create(true).truncate(true).write(true).open(&self.path)?;
-        file.write_all(MAGIC)?;
-        self.log = Some(OpenOptions::new().append(true).open(&self.path)?);
-        self.log_bytes = MAGIC.len() as u64;
-      } else {
-        self.compact()?;
-      }
+  /// Syncs before renaming, so a crash cannot leave the path pointing at unwritten data.
+  fn flush(&mut self) -> io::Result<()> {
+    if !self.dirty {
+      return Ok(());
     }
-    let log = self.log.as_mut().expect("opened above");
-    if let Err(e) = log.write_all(&frame) {
-      // a torn frame left in place would stop replay before every frame appended after it
-      if log.set_len(self.log_bytes).is_err() {
-        self.log = None;
-      }
-      return Err(e);
-    }
-    self.log_bytes += frame.len() as u64;
-    Ok(())
-  }
-
-  fn compact_if_sparse(&mut self) {
-    let live = (MAGIC.len() + FRAME_HEADER + self.used + self.entries.len() * 9) as u64;
-    if self.log_bytes > COMPACT_FLOOR && self.log_bytes > live * 2 {
-      let _ = self.compact();
-    }
-  }
-
-  /// Writes the whole store as one frame and syncs before renaming, so a crash cannot leave the new
-  /// path pointing to unwritten data.
-  fn compact(&mut self) -> io::Result<()> {
-    self.log = None;
     if self.entries.is_empty() {
-      return self.clear();
-    }
-    let changes: Vec<Change> = self.entries.iter().map(|(key, value)| Change::Set(key, value)).collect();
-    let frame = encode_frame(&changes);
-    let staged = staged_path(&self.path);
-    {
+      match fs::remove_file(&self.path) {
+        Ok(()) => {}
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e),
+      }
+    } else {
+      let staged = self.path.with_added_extension("tmp");
       let mut file = File::create(&staged)?;
-      file.write_all(MAGIC)?;
-      file.write_all(&frame)?;
+      serde_json::to_writer(&mut file, &self.entries)?;
       file.sync_all()?;
+      fs::rename(&staged, &self.path)?;
     }
-    fs::rename(&staged, &self.path)?;
-    self.log = Some(OpenOptions::new().append(true).open(&self.path)?);
-    self.log_bytes = (MAGIC.len() + frame.len()) as u64;
+    self.dirty = false;
     Ok(())
   }
 }
 
-enum Refusal {
-  Quota,
-  Io(io::Error),
-}
-
-/// where [`Store::compact`] writes before the rename; `PluginLocalStorage.wipe` removes it alongside the store
-pub(crate) fn staged_path(path: &Path) -> PathBuf {
-  suffixed(path, ".tmp")
-}
-
-/// Where a file without the magic is moved aside: a newer build's format or a damaged header, either
-/// of which may still be recovered. One slot; `PluginLocalStorage.wipe` removes it alongside the store.
-pub(crate) fn quarantine_path(path: &Path) -> PathBuf {
-  suffixed(path, ".corrupt")
-}
-
-fn suffixed(path: &Path, suffix: &str) -> PathBuf {
-  let mut name = path.as_os_str().to_owned();
-  name.push(suffix);
-  PathBuf::from(name)
-}
-
-fn encode_frame(changes: &[Change]) -> Vec<u8> {
-  let mut payload = Vec::new();
-  for change in changes {
-    match change {
-      Change::Set(key, value) => {
-        payload.push(TAG_SET);
-        push_str(&mut payload, key);
-        push_str(&mut payload, value);
-      }
-      Change::Del(key) => {
-        payload.push(TAG_DEL);
-        push_str(&mut payload, key);
-      }
-    }
+impl Drop for Store {
+  fn drop(&mut self) {
+    let _ = self.flush();
   }
-  let mut frame = Vec::with_capacity(FRAME_HEADER + payload.len());
-  frame.extend_from_slice(&(payload.len() as u32).to_le_bytes());
-  frame.extend_from_slice(&payload);
-  frame
-}
-
-fn push_str(out: &mut Vec<u8>, text: &str) {
-  out.extend_from_slice(&(text.len() as u32).to_le_bytes());
-  out.extend_from_slice(text.as_bytes());
-}
-
-/// false when anything past the magic is not a whole, well-formed frame; what came before it stands
-fn replay(bytes: &[u8], entries: &mut BTreeMap<String, String>) -> bool {
-  let Some(mut rest) = bytes.strip_prefix(MAGIC) else {
-    return false;
-  };
-  while !rest.is_empty() {
-    let Some((payload, next)) = take_sized(rest) else {
-      return false;
-    };
-    let Some(changes) = decode_changes(payload) else {
-      return false;
-    };
-    for change in changes {
-      match change {
-        Change::Set(key, value) => entries.insert(key.to_string(), value.to_string()),
-        Change::Del(key) => entries.remove(key),
-      };
-    }
-    rest = next;
-  }
-  true
-}
-
-fn take_sized(bytes: &[u8]) -> Option<(&[u8], &[u8])> {
-  let (len, rest) = bytes.split_first_chunk::<FRAME_HEADER>()?;
-  let len = u32::from_le_bytes(*len) as usize;
-  (rest.len() >= len).then(|| rest.split_at(len))
-}
-
-fn take_str(bytes: &[u8]) -> Option<(&str, &[u8])> {
-  let (text, rest) = take_sized(bytes)?;
-  Some((std::str::from_utf8(text).ok()?, rest))
-}
-
-fn decode_changes(mut payload: &[u8]) -> Option<Vec<Change<'_>>> {
-  let mut changes = Vec::new();
-  while let Some((&tag, rest)) = payload.split_first() {
-    let (key, rest) = take_str(rest)?;
-    match tag {
-      TAG_SET => {
-        let (value, rest) = take_str(rest)?;
-        changes.push(Change::Set(key, value));
-        payload = rest;
-      }
-      TAG_DEL => {
-        changes.push(Change::Del(key));
-        payload = rest;
-      }
-      _ => return None,
-    }
-  }
-  Some(changes)
 }
 
 struct StorageState {
   path: PathBuf,
   store: RefCell<Option<Store>>,
+  flush_queued: Cell<bool>,
 }
 
 impl StorageState {
@@ -315,10 +150,7 @@ impl StorageState {
     }
     let mut slot = self.store.borrow_mut();
     if slot.is_none() {
-      match Store::open(&self.path) {
-        Ok(store) => *slot = Some(store),
-        Err(e) => return throw_io(ctx, e),
-      }
+      *slot = Some(Store::open(ctx, &self.path)?);
     }
     Ok(RefMut::map(slot, |slot| slot.as_mut().expect("opened above")))
   }
@@ -334,37 +166,12 @@ impl StorageState {
     Ok(self.open_store(ctx)?.entries.contains_key(key))
   }
 
-  fn delete(&self, ctx: &Ctx<'_>, key: &str) -> JsResult<()> {
-    let done = self.open_store(ctx)?.delete(key);
-    done.or_else(|e| throw_io(ctx, e))
-  }
-}
-
-fn throw_io<T>(ctx: &Ctx<'_>, e: io::Error) -> JsResult<T> {
-  PluginErrorCode::Internal.throw(ctx, &format!("localStorage: {e}"))
-}
-
-/// `Reflect` as it was before any plugin code ran, for what a trap hands back to ordinary semantics
-struct ReflectFns<'js> {
-  get: Function<'js>,
-  set: Function<'js>,
-  define_property: Function<'js>,
-  delete_property: Function<'js>,
-  get_own_property_descriptor: Function<'js>,
-  own_keys: Function<'js>,
-}
-
-impl<'js> ReflectFns<'js> {
-  fn take(ctx: &Ctx<'js>) -> JsResult<Self> {
-    let reflect: Object = ctx.globals().get("Reflect")?;
-    Ok(Self {
-      get: reflect.get("get")?,
-      set: reflect.get("set")?,
-      define_property: reflect.get("defineProperty")?,
-      delete_property: reflect.get("deleteProperty")?,
-      get_own_property_descriptor: reflect.get("getOwnPropertyDescriptor")?,
-      own_keys: reflect.get("ownKeys")?,
-    })
+  fn flush(&self, ctx: &Ctx<'_>) -> JsResult<()> {
+    self.flush_queued.set(false);
+    let Some(store) = self.store.borrow_mut().as_mut().map(Store::flush) else {
+      return Ok(());
+    };
+    store.or_else(|e| PluginErrorCode::Internal.throw(ctx, &format!("localStorage: {}", e)))
   }
 }
 
@@ -374,55 +181,38 @@ impl<'js> ReflectFns<'js> {
 /// The store is reached only by native code, between conversions: a key's `toString`, a prototype
 /// getter or a proxy up the chain is plugin code, and a store borrowed across one of them would
 /// panic the engine when it reenters.
+#[derive(JsLifetime, Trace)]
+#[rquickjs::class(rename = "Storage", frozen)]
 pub struct StorageTarget<'js> {
+  #[qjs(skip_trace)]
   state: Rc<StorageState>,
-  reflect: ReflectFns<'js>,
-  dom_exception: Constructor<'js>,
-}
-
-impl<'js> Trace<'js> for StorageTarget<'js> {
-  fn trace<'a>(&self, tracer: Tracer<'a, 'js>) {
-    let reflect = &self.reflect;
-    for f in [
-      &reflect.get,
-      &reflect.set,
-      &reflect.define_property,
-      &reflect.delete_property,
-      &reflect.get_own_property_descriptor,
-      &reflect.own_keys,
-    ] {
-      f.trace(tracer);
-    }
-    self.dom_exception.trace(tracer);
-  }
-}
-
-// SAFETY: every JavaScript-lifetime-bound field uses the struct's `'js` lifetime.
-unsafe impl<'js> JsLifetime<'js> for StorageTarget<'js> {
-  type Changed<'to> = StorageTarget<'to>;
-}
-
-impl<'js> JsClass<'js> for StorageTarget<'js> {
-  const NAME: &'static str = "Storage";
-  type Mutable = Readable;
-
-  fn constructor(_ctx: &Ctx<'js>) -> JsResult<Option<Constructor<'js>>> {
-    Ok(None)
-  }
+  flush: Function<'js>,
 }
 
 impl<'js> StorageTarget<'js> {
-  fn set_all(&self, ctx: &Ctx<'js>, pairs: &[(String, String)]) -> JsResult<()> {
-    let outcome = self.state.open_store(ctx)?.set_all(pairs);
-    match outcome {
-      Ok(()) => Ok(()),
-      Err(Refusal::Quota) => {
-        let error: Value =
-          self.dom_exception.construct(("localStorage: the 1 MB quota is exceeded", "QuotaExceededError"))?;
-        Err(ctx.throw(error))
-      }
-      Err(Refusal::Io(e)) => throw_io(ctx, e),
+  fn set_all(&self, ctx: &Ctx<'js>, pairs: Vec<(String, String)>) -> JsResult<()> {
+    if !self.state.open_store(ctx)?.set_all(pairs) {
+      return Err(Exception::throw_dom(ctx, "QuotaExceededError", "localStorage: the 1 MB quota is exceeded"));
     }
+    self.queue_flush()
+  }
+
+  fn delete(&self, ctx: &Ctx<'js>, key: &str) -> JsResult<()> {
+    self.state.open_store(ctx)?.delete(key);
+    self.queue_flush()
+  }
+
+  fn clear(&self, ctx: &Ctx<'js>) -> JsResult<()> {
+    self.state.open_store(ctx)?.clear();
+    self.queue_flush()
+  }
+
+  fn queue_flush(&self) -> JsResult<()> {
+    let dirty = self.state.store.borrow().as_ref().is_some_and(|store| store.dirty);
+    if !dirty || self.state.flush_queued.replace(true) {
+      return Ok(());
+    }
+    self.flush.defer(())
   }
 }
 
@@ -454,7 +244,7 @@ fn get_visible_key<'js>(ctx: &Ctx<'js>, target: &Target<'js>, prop: &Value<'js>)
   key.to_string().map(Some)
 }
 
-fn is_proxy_of<'js>(receiver: &Value<'js>, target: &Target<'js>) -> JsResult<bool> {
+fn is_proxy_for_target<'js>(receiver: &Value<'js>, target: &Target<'js>) -> JsResult<bool> {
   match receiver.as_proxy() {
     Some(proxy) => Ok(&proxy.target()? == target.as_inner()),
     None => Ok(false),
@@ -487,7 +277,7 @@ fn build_handler<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
             return Ok(value);
           }
         }
-        let get = storage.borrow().reflect.get.clone();
+        let get = Globals::get(&ctx)?.reflect.get;
         get.call((target, prop, receiver))
       },
     )?,
@@ -505,13 +295,13 @@ fn build_handler<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
        -> JsResult<bool> {
         let storage = get_target(&ctx, &target)?;
         if let Some(key) = prop.as_string() {
-          if is_proxy_of(&receiver, &storage)? {
+          if is_proxy_for_target(&receiver, &storage)? {
             let pair = (key.to_string()?, to_dom_string(value)?);
-            storage.borrow().set_all(&ctx, &[pair])?;
+            storage.borrow().set_all(&ctx, vec![pair])?;
             return Ok(true);
           }
         }
-        let set = storage.borrow().reflect.set.clone();
+        let set = Globals::get(&ctx)?.reflect.set;
         set.call((target, prop, value, receiver))
       },
     )?,
@@ -524,7 +314,7 @@ fn build_handler<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
       |ctx: Ctx<'js>, target: Value<'js>, prop: Value<'js>, descriptor: Object<'js>| -> JsResult<bool> {
         let storage = get_target(&ctx, &target)?;
         let Some(key) = prop.as_string() else {
-          let define_property = storage.borrow().reflect.define_property.clone();
+          let define_property = Globals::get(&ctx)?.reflect.define_property;
           return define_property.call((target, prop, descriptor));
         };
         // proxy invariants refuse a non-configurable property the target lacks, and would do so
@@ -536,7 +326,7 @@ fn build_handler<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
           return Ok(false);
         }
         let pair = (key.to_string()?, to_dom_string(descriptor.get("value")?)?);
-        storage.borrow().set_all(&ctx, &[pair])?;
+        storage.borrow().set_all(&ctx, vec![pair])?;
         Ok(true)
       },
     )?,
@@ -561,10 +351,10 @@ fn build_handler<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
     Function::new(ctx.clone(), |ctx: Ctx<'js>, target: Value<'js>, prop: Value<'js>| -> JsResult<bool> {
       let storage = get_target(&ctx, &target)?;
       if let Some(key) = get_visible_key(&ctx, &storage, &prop)? {
-        storage.borrow().state.delete(&ctx, &key)?;
+        storage.borrow().delete(&ctx, &key)?;
         return Ok(true);
       }
-      let delete_property = storage.borrow().reflect.delete_property.clone();
+      let delete_property = Globals::get(&ctx)?.reflect.delete_property;
       delete_property.call((target, prop))
     })?,
   )?;
@@ -578,7 +368,7 @@ fn build_handler<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
           return Ok(build_item_descriptor(&ctx, value)?.into_value());
         }
       }
-      let get_own_property_descriptor = storage.borrow().reflect.get_own_property_descriptor.clone();
+      let get_own_property_descriptor = Globals::get(&ctx)?.reflect.get_own_property_descriptor;
       get_own_property_descriptor.call((target, prop))
     })?,
   )?;
@@ -596,7 +386,7 @@ fn build_handler<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
           len += 1;
         }
       }
-      let own_keys = storage.borrow().reflect.own_keys.clone();
+      let own_keys = Globals::get(&ctx)?.reflect.own_keys;
       for key in own_keys.call::<_, Array>((target,))?.iter::<Value>() {
         keys.set(len, key?)?;
         len += 1;
@@ -704,7 +494,7 @@ fn install_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> JsResult<()> {
         let storage = get_this_target(&ctx, &this.0)?;
         let [key, value] = require_args(&ctx, "setItem", [key, value])?;
         let pair = (to_dom_string(key)?, to_dom_string(value)?);
-        let done = storage.borrow().set_all(&ctx, &[pair]);
+        let done = storage.borrow().set_all(&ctx, vec![pair]);
         done
       },
     )?
@@ -717,7 +507,7 @@ fn install_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> JsResult<()> {
       let storage = get_this_target(&ctx, &this.0)?;
       let [items] = require_args(&ctx, "setItems", [items])?;
       let pairs = read_pairs(&ctx, &items)?;
-      let done = storage.borrow().set_all(&ctx, &pairs);
+      let done = storage.borrow().set_all(&ctx, pairs);
       done
     })?
     .with_name("setItems")?,
@@ -729,7 +519,7 @@ fn install_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> JsResult<()> {
       let storage = get_this_target(&ctx, &this.0)?;
       let [key] = require_args(&ctx, "removeItem", [key])?;
       let key = to_dom_string(key)?;
-      let done = storage.borrow().state.delete(&ctx, &key);
+      let done = storage.borrow().delete(&ctx, &key);
       done
     })?
     .with_name("removeItem")?,
@@ -739,9 +529,8 @@ fn install_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> JsResult<()> {
     "clear",
     Function::new(ctx.clone(), |ctx: Ctx<'js>, this: Me<'js>| -> JsResult<()> {
       let storage = get_this_target(&ctx, &this.0)?;
-      let storage = storage.borrow();
-      let done = storage.state.open_store(&ctx)?.clear();
-      done.or_else(|e| throw_io(&ctx, e))
+      let done = storage.borrow().clear(&ctx);
+      done
     })?
     .with_name("clear")?,
   )?;
@@ -749,8 +538,6 @@ fn install_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> JsResult<()> {
   Ok(())
 }
 
-/// Installs `Storage` and `localStorage`. `Reflect` and `DOMException` are taken now, before any
-/// plugin code runs and could replace them.
 pub fn install_local_storage<'js>(ctx: &Ctx<'js>, path: PathBuf) -> JsResult<()> {
   let proto = get_class_prototype::<StorageTarget>(ctx)?;
   install_members(ctx, &proto)?;
@@ -762,14 +549,16 @@ pub fn install_local_storage<'js>(ctx: &Ctx<'js>, path: PathBuf) -> JsResult<()>
   ctor.prop("prototype", Property::from(proto.clone()))?;
   proto.prop("constructor", Property::from(ctor.clone()).writable().configurable())?;
 
-  let target = Class::instance(
-    ctx.clone(),
-    StorageTarget {
-      state: Rc::new(StorageState { path, store: RefCell::new(None) }),
-      reflect: ReflectFns::take(ctx)?,
-      dom_exception: ctx.globals().get("DOMException")?,
-    },
-  )?;
+  let state = Rc::new(StorageState {
+    path,
+    store: RefCell::new(None),
+    flush_queued: Cell::new(false),
+  });
+  let flush = {
+    let state = state.clone();
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>| state.flush(&ctx))?
+  };
+  let target = Class::instance(ctx.clone(), StorageTarget { state, flush })?;
   let storage = Proxy::new(ctx.clone(), target, ProxyHandler::from_object(build_handler(ctx)?)?)?;
 
   let globals = ctx.globals();

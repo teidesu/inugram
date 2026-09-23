@@ -1,19 +1,13 @@
-//! JNI entry for the encoder's colour conversion. No engine is involved: the caller hands over
-//! its pixel array and the codec's own input planes, and gets back the length it wrote.
-//!
-//! The pixels are a bitmap's memory as `copyPixelsToBuffer` hands it over: `ARGB_8888` is R, G,
-//! B, A in byte order, premultiplied, which for an opaque frame is the colour itself. The output is
-//! BT.601 limited range, which is what an h264 encoder takes unless told otherwise.
+//! Pixels are `copyPixelsToBuffer` ARGB_8888 (R, G, B, A in byte order, premultiplied); the output is
+//! BT.601 limited range, what an h264 encoder takes unless told otherwise.
 
-use jni::objects::{JByteBuffer, JClass, JObject};
+use jni::objects::{JByteBuffer, JClass};
 use jni::sys::jint;
 use jni::{Env, EnvUnowned};
 use yuv::{BufferStoreMut, YuvBiPlanarImageMut, YuvConversionMode, YuvPlanarImageMut, YuvRange, YuvStandardMatrix};
 
 use super::env::in_env;
 
-/// One plane of an encoder's input, laid out as `MediaCodec` describes it: where it starts, how
-/// many bytes its buffer has past that, and its strides.
 pub(crate) struct Plane {
   pub ptr: *mut u8,
   pub len: usize,
@@ -21,7 +15,6 @@ pub(crate) struct Plane {
   pub pixel_stride: usize,
 }
 
-/// the bytes from a plane's first to one past its last, for `rows` rows of `columns` bytes each
 fn reach(row_stride: usize, rows: usize, columns: usize) -> Option<usize> {
   if row_stride < columns {
     return None;
@@ -33,7 +26,6 @@ fn disjoint(a: (usize, usize), b: (usize, usize)) -> bool {
   a.0 + a.1 <= b.0 || b.0 + b.1 <= a.0
 }
 
-/// a validated plane: rows of `columns` meaningful bytes, `row_stride` apart
 struct Rows {
   ptr: *mut u8,
   row_stride: usize,
@@ -66,8 +58,6 @@ enum ChromaBytes<'a> {
   Interleaved { uv: &'a mut [u8], stride: usize, blue_first: bool },
 }
 
-/// one call into the crate, whose planes must hold whole strides for every row: given a plane
-/// whose last row stops short of its stride, it converts nothing of that row pair and still succeeds
 fn convert_rows(
   pixels: &[u8],
   width: usize,
@@ -113,11 +103,6 @@ fn convert_rows(
   }
 }
 
-/// Converts `width * height` RGBA pixels into the three planes, and answers the address one past
-/// the last byte the frame reached. `None` when the planes are too small for the frame, overlap,
-/// or are laid out as neither planar nor interleaved (NV12 or NV21) chroma, refused before
-/// anything is written.
-///
 /// Codecs commonly hand out planes whose last row stops at its pixels rather than its stride, which
 /// the crate cannot take. Every row pair but the last is converted in place; the last goes through
 /// a scratch row pair at tight strides and is copied in. Chroma averages within a row pair, so the
@@ -259,24 +244,18 @@ pub(crate) unsafe fn convert_planes(
   Some((y_range.0 + y_len).max(chroma_end))
 }
 
-/// A plane's bytes, taken from the direct buffer the codec handed out plus the offset the
-/// caller's own view of it starts at. The buffer object is borrowed for the call only.
-fn plane(env: &Env, buffer: &JObject, offset: jint, row_stride: jint, pixel_stride: jint) -> Option<Plane> {
+fn plane(env: &Env, buffer: &JByteBuffer, offset: jint, row_stride: jint, pixel_stride: jint) -> Option<Plane> {
   if offset < 0 || row_stride <= 0 || pixel_stride <= 0 {
     return None;
   }
-  // SAFETY: the caller passes a java.nio.ByteBuffer, and the raw reference outlives this borrow
-  let buffer = unsafe { JByteBuffer::from_raw(env, buffer.as_raw()) };
-  let address = env.get_direct_buffer_address(&buffer).ok()?;
-  let capacity = env.get_direct_buffer_capacity(&buffer).ok()?;
+  let address = env.get_direct_buffer_address(buffer).ok()?;
+  let capacity = env.get_direct_buffer_capacity(buffer).ok()?;
   let offset = offset as usize;
   if offset > capacity {
     return None;
   }
-  // SAFETY: address + offset stays inside the buffer's capacity
-  let ptr = unsafe { address.add(offset) };
   Some(Plane {
-    ptr,
+    ptr: address.wrapping_add(offset),
     len: capacity - offset,
     row_stride: row_stride as usize,
     pixel_stride: pixel_stride as usize,
@@ -288,18 +267,18 @@ fn plane(env: &Env, buffer: &JObject, offset: jint, row_stride: jint, pixel_stri
 pub extern "system" fn Java_desu_inugram_helpers_plugins_ui_NativePixels_rgbaToYuv420<'local>(
   mut env: EnvUnowned<'local>,
   _class: JClass<'local>,
-  pixels: JObject<'local>,
+  pixels: JByteBuffer<'local>,
   width: jint,
   height: jint,
-  y_buffer: JObject<'local>,
+  y_buffer: JByteBuffer<'local>,
   y_offset: jint,
   y_row_stride: jint,
   y_pixel_stride: jint,
-  u_buffer: JObject<'local>,
+  u_buffer: JByteBuffer<'local>,
   u_offset: jint,
   u_row_stride: jint,
   u_pixel_stride: jint,
-  v_buffer: JObject<'local>,
+  v_buffer: JByteBuffer<'local>,
   v_offset: jint,
   v_row_stride: jint,
   v_pixel_stride: jint,

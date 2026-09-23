@@ -1,12 +1,11 @@
 use super::*;
 
 fn plane(data: &mut [u8], row_stride: usize, pixel_stride: usize) -> Plane {
-  Plane {
-    ptr: data.as_mut_ptr(),
-    len: data.len(),
-    row_stride,
-    pixel_stride,
-  }
+  plane_at(data.as_mut_ptr(), data.len(), row_stride, pixel_stride)
+}
+
+fn plane_at(ptr: *mut u8, len: usize, row_stride: usize, pixel_stride: usize) -> Plane {
+  Plane { ptr, len, row_stride, pixel_stride }
 }
 
 fn convert(pixels: &[u8], width: usize, height: usize, y: Plane, u: Plane, v: Plane) -> Option<usize> {
@@ -44,18 +43,8 @@ fn an_interleaved_layout_writes_chroma_in_the_order_its_planes_start_in() {
   let mut nv12 = vec![0u8; 4];
   let at = nv12.as_mut_ptr();
   // the second view starts one byte in and, as codecs hand it out, reaches one byte less far
-  let u = Plane {
-    ptr: at,
-    len: 4,
-    row_stride: 4,
-    pixel_stride: 2,
-  };
-  let v = Plane {
-    ptr: unsafe { at.add(1) },
-    len: 2,
-    row_stride: 4,
-    pixel_stride: 2,
-  };
+  let u = plane_at(at, 4, 4, 2);
+  let v = plane_at(at.wrapping_add(1), 2, 4, 2);
   let y_end = y.as_ptr() as usize + y.len();
   let end = convert(&pixels, width, height, plane(&mut y, 4, 1), u, v);
   assert_eq!(end, Some(y_end.max(at as usize + 4)));
@@ -65,18 +54,8 @@ fn an_interleaved_layout_writes_chroma_in_the_order_its_planes_start_in() {
 
   let mut nv21 = vec![0u8; 4];
   let at = nv21.as_mut_ptr();
-  let v = Plane {
-    ptr: at,
-    len: 4,
-    row_stride: 4,
-    pixel_stride: 2,
-  };
-  let u = Plane {
-    ptr: unsafe { at.add(1) },
-    len: 3,
-    row_stride: 4,
-    pixel_stride: 2,
-  };
+  let v = plane_at(at, 4, 4, 2);
+  let u = plane_at(at.wrapping_add(1), 3, 4, 2);
   assert!(convert(&pixels, width, height, plane(&mut y, 4, 1), u, v).is_some());
   assert!(near(&[nv21[0], nv21[2]], 110), "{nv21:?}");
   assert!(near(&[nv21[1], nv21[3]], 240), "{nv21:?}");
@@ -112,18 +91,8 @@ fn a_last_row_that_stops_short_of_its_stride_is_still_written() {
   let mut y = vec![7u8; 6 * 3 + 4];
   let mut uv = vec![7u8; 6 + 4];
   let at = uv.as_mut_ptr();
-  let u = Plane {
-    ptr: at,
-    len: 9,
-    row_stride: 6,
-    pixel_stride: 2,
-  };
-  let v = Plane {
-    ptr: unsafe { at.add(1) },
-    len: 9,
-    row_stride: 6,
-    pixel_stride: 2,
-  };
+  let u = plane_at(at, 9, 6, 2);
+  let v = plane_at(at.wrapping_add(1), 9, 6, 2);
   assert!(convert(&pixels, width, height, plane(&mut y, 6, 1), u, v).is_some());
   assert!(y.chunks(6).all(|row| row[..4] == [235; 4]), "{y:?}");
   assert_eq!(uv, [128, 128, 128, 128, 7, 7, 128, 128, 128, 128]);
@@ -144,12 +113,7 @@ fn planes_that_cannot_take_the_frame_are_refused_without_a_write() {
   );
 
   let shared = plane(&mut u, 2, 1);
-  let aliased = Plane {
-    ptr: shared.ptr,
-    len: shared.len,
-    row_stride: 2,
-    pixel_stride: 1,
-  };
+  let aliased = plane_at(shared.ptr, shared.len, 2, 1);
   assert!(convert(&pixels, width, height, plane(&mut y, 4, 1), shared, aliased).is_none());
 
   let mut other = vec![9u8; 4];

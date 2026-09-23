@@ -86,7 +86,6 @@ pub(crate) trait Dispose {
   fn dispose(&self, context: &rquickjs::Context);
 }
 
-/// Resources held with a pending promise and their cleanup outcome.
 pub(crate) trait Parked: Sized {
   /// the request failed: refused before it crossed, or answered with an error
   fn reject(self, _ctx: &Ctx<'_>) {}
@@ -102,8 +101,7 @@ struct Entry<T> {
   parked: T,
 }
 
-/// Tracks pending host requests by API, including their IDs, promises, and resources. Ignores
-/// settlements for unknown IDs, including duplicate responses and responses after abort.
+/// Settlements for unknown ids (duplicates, answers after an abort) are ignored.
 pub(crate) struct PendingTable<T: Parked> {
   ids: RequestIds,
   entries: RefCell<HashMap<i64, Entry<T>>>,
@@ -142,7 +140,6 @@ impl<T: Parked> PendingTable<T> {
     Ok(promise)
   }
 
-  /// Settles a request with the host's `wire`: an error wire rejects, anything else is `decode`d.
   pub(crate) fn settle<'js>(
     &self,
     ctx: &Ctx<'js>,
@@ -152,15 +149,32 @@ impl<T: Parked> PendingTable<T> {
     decode: impl FnOnce(&Ctx<'js>, &mut T, &str) -> JsResult<Value<'js>>,
   ) -> Result<(), String> {
     self.settle_with(ctx, id, keep, |ctx, parked| {
-      if let Some(error) = error::wire_error_to_js(ctx, wire) {
-        return Err(ctx.throw(error?));
-      }
+      error::throw_wire_error(ctx, wire)?;
       decode(ctx, parked, wire)
     })
   }
 
-  /// Settles from `produce`; rejects if it throws or returns an unreadable response.
-  ///
+  /// settles from the host's thread entry: failures are the engine's to log, and the microtasks the
+  /// settlement queued run before returning
+  #[allow(clippy::too_many_arguments)]
+  pub(crate) fn settle_and_pump(
+    &self,
+    rt: &Runtime,
+    context: &rquickjs::Context,
+    log: &crate::Log,
+    what: &str,
+    id: i64,
+    wire: &str,
+    decode: impl for<'js> FnOnce(&Ctx<'js>, &mut T, &str) -> JsResult<Value<'js>>,
+  ) {
+    context.with(|ctx| {
+      if let Err(why) = self.settle(&ctx, id, wire, false, decode) {
+        log(&format!("{what}({id}) settle failed: {why}"));
+      }
+    });
+    pump_jobs(rt, context, log.as_ref());
+  }
+
   /// With `keep`, settles the promise but retains resources until a second response with the same
   /// ID. This supports responses delivered in two stages.
   pub(crate) fn settle_with<'js>(
@@ -213,7 +227,6 @@ impl<T: Parked> PendingTable<T> {
     settled.map_err(|_| error::format_exception(ctx))
   }
 
-  /// Removes a request without settling its promise when its response is no longer needed.
   pub(crate) fn forget(&self, ctx: &Ctx<'_>, id: i64) {
     let removed = self.entries.borrow_mut().remove(&id);
     if let Some(entry) = removed {

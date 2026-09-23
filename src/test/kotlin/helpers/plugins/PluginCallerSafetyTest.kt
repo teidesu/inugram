@@ -1,8 +1,6 @@
 package desu.inugram.helpers.plugins
 
 import android.graphics.Bitmap
-import desu.inugram.helpers.plugins.platform.PluginJvm
-import desu.inugram.helpers.plugins.ui.PluginCanvas
 import desu.inugram.jvmfixture.JvmFixture
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -17,16 +15,9 @@ import org.junit.Test
 class PluginCallerSafetyTest {
     @Before fun setUp() = resetBridge()
 
-    private val core = object : CoreListener {
-        override fun onConsole(level: Int, message: String) = Unit
-        override fun onTimerSchedule(delayMs: Long) = Unit
-    }
-
     @Test fun busy_runnable_returns_without_throwing_into_the_calling_thread() {
-        val plugin = startPlugin("busy-callback", "unsafe.jvm")
-        val engine = QuickJs()
-        plugin.session = PluginSession(plugin, engine)
-        attachBridge(plugin.session!!, core)
+        val plugin = startEngine("busy-callback", "unsafe.jvm")
+        val engine = plugin.engine!!
         val failure = AtomicReference<Throwable?>()
         JvmFixture.callbackEntered = CountDownLatch(1)
         JvmFixture.callbackRelease = CountDownLatch(1)
@@ -51,23 +42,15 @@ class PluginCallerSafetyTest {
         } finally {
             JvmFixture.callbackRelease!!.countDown()
             owner?.join(5000)
-            engine.stopCallbacks()
-            PluginJvm.detach(plugin.session!!)
-            engine.close()
-            JvmFixture.task = null
-            JvmFixture.callbackEntered = null
-            JvmFixture.callbackRelease = null
-            plugin.session = null
+            closeEngine(plugin)
         }
         assertNull(failure.get())
     }
 
     @Test fun off_thread_canvas_gc_recycles_the_host_bitmap() {
-        val plugin = startPlugin("canvas-gc", "unsafe.jvm")
-        val engine = QuickJs()
-        plugin.session = PluginSession(plugin, engine)
-        val canvas = PluginCanvas.listenerFor(plugin.session!!)
-        attachBridge(plugin.session!!, core, canvas)
+        val plugin = startEngine("canvas-gc", "unsafe.jvm", canvas = true)
+        val engine = plugin.engine!!
+        val canvas = (engine.listener as PluginBridge).canvas
         try {
             engine.evaluate("""
                 const fixture = inu.jvm.cls('desu.inugram.jvmfixture.JvmFixture');
@@ -77,21 +60,13 @@ class PluginCallerSafetyTest {
             val surfaces = canvas.javaClass.getDeclaredField("canvases").apply { isAccessible = true }.get(canvas) as Map<*, *>
             val surface = surfaces.values.single()!!
             val bitmap = surface.javaClass.getDeclaredField("bitmap").apply { isAccessible = true }.get(surface) as Bitmap
-            val caller = Thread(JvmFixture.task!!)
-            caller.start()
-            caller.join(5000)
-            assertFalse(caller.isAlive)
+            runOnCaller(JvmFixture.task!!)
             assertFalse(bitmap.isRecycled)
             drain()
             assertTrue(bitmap.isRecycled)
             assertEquals(0, surfaces.size)
         } finally {
-            engine.stopCallbacks()
-            PluginCanvas.detach(plugin.session!!)
-            PluginJvm.detach(plugin.session!!)
-            engine.close()
-            JvmFixture.task = null
-            plugin.session = null
+            closeEngine(plugin)
         }
     }
 }

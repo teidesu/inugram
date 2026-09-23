@@ -14,11 +14,7 @@ import org.json.JSONObject
 internal object PluginJvmClass {
     private val IDENTIFIER = Regex("[A-Za-z_$][A-Za-z0-9_$]*")
 
-    /**
-     * Generates names for unnamed classes. Loaded DEX cannot be unloaded, so every class needs
-     * a fresh name. The install ID separates packages for different installs of the same plugin.
-     * Explicit names in this package are still allowed but receive no collision protection.
-     */
+    /** loaded dex cannot be unloaded, so every class needs a fresh name. explicit names here get no collision protection */
     const val GENERATED_PACKAGE = "inu.plugins"
 
     private val names = SecureRandom()
@@ -47,9 +43,9 @@ internal object PluginJvmClass {
 
     private fun convert(value: Any?, type: Class<*>, what: String): Any? {
         if (type.isInstance(value)) return value
-        return requireNotNull(PluginJvm.convertArguments(arrayOf(type), listOf(value))) {
+        return requireNotNull(PluginJvm.convert(value, type)) {
             "defineClass: $what does not match ${type.name}"
-        }[0]
+        }.value
     }
 
     sealed class SuperSource {
@@ -186,7 +182,7 @@ internal object PluginJvmClass {
             val fieldName = field.getString(0)
             checkName(fieldName)
             require(fieldNames.add(fieldName)) { "duplicate field: $fieldName" }
-            arrayOf(fieldName, PluginJvm.descriptorOf(getType(field.getString(1))), if (field.getBoolean(2)) "1" else "0")
+            arrayOf(fieldName, PluginJvm.buildDescriptor(getType(field.getString(1))), if (field.getBoolean(2)) "1" else "0")
         }
         val inherited = ArrayList<Method>()
         var current: Class<*>? = superclass
@@ -221,7 +217,7 @@ internal object PluginJvmClass {
                 require(Modifier.isStatic(base.modifiers) == isStatic) { "static/instance mismatch for $methodName" }
                 require(base.returnType == returns || !base.returnType.isPrimitive && base.returnType.isAssignableFrom(returns)) { "incompatible return type for $methodName" }
             }
-            val signature = methodName + params.joinToString(prefix = "(", postfix = ")") { PluginJvm.descriptorOf(it) }
+            val signature = methodName + params.joinToString(prefix = "(", postfix = ")") { PluginJvm.buildDescriptor(it) }
             require(signatures.add(signature)) { "duplicate method: $signature" }
             val body = if (method.isNull("body")) null else readBody(method.getJSONArray("body"))
             require(isConstructor || body != null) { "method needs a body" }
@@ -254,7 +250,7 @@ internal object PluginJvmClass {
                     constructor.parameterCount == sources.size && sources.indices.all { index ->
                         val (arg, value) = sources[index]
                         val type = constructor.parameterTypes[index]
-                        if (arg == null) PluginJvm.convertArguments(arrayOf(type), listOf(value)) != null
+                        if (arg == null) PluginJvm.convert(value, type) != null
                         else canAssign(params[arg], type)
                     }
                 }
@@ -264,9 +260,9 @@ internal object PluginJvmClass {
             }
             MethodSpec(methodName, params, returns, isStatic, superConstructor, sources, superBody, body)
         }.toMutableList()
-        val effectiveInherited = inherited.distinctBy { it.name + PluginJvm.descriptorOf(it.returnType) + it.parameterTypes.joinToString { PluginJvm.descriptorOf(it) } }
+        val effectiveInherited = inherited.distinctBy { it.name + PluginJvm.buildDescriptor(it.returnType) + it.parameterTypes.joinToString { PluginJvm.buildDescriptor(it) } }
         for (method in effectiveInherited.filter { Modifier.isAbstract(it.modifiers) }) {
-            val signature = method.name + method.parameterTypes.joinToString(prefix = "(", postfix = ")") { PluginJvm.descriptorOf(it) }
+            val signature = method.name + method.parameterTypes.joinToString(prefix = "(", postfix = ")") { PluginJvm.buildDescriptor(it) }
             require(signature in signatures || effectiveInherited.any { !Modifier.isAbstract(it.modifiers) && !Modifier.isStatic(it.modifiers) && it.name == method.name && it.parameterTypes.contentEquals(method.parameterTypes) && method.returnType.isAssignableFrom(it.returnType) }) { "abstract method needs implementation: $signature" }
         }
         for (method in methodSpecs.toList().filter { it.constructor == null && !it.isStatic }) {
@@ -289,9 +285,9 @@ internal object PluginJvmClass {
         }
         val methodData = methodSpecs.map { method ->
             val superParams = method.constructor?.parameterTypes ?: emptyArray()
-            (listOf(method.name, PluginJvm.descriptorOf(method.returns), if (method.isStatic) "1" else "0", method.params.size.toString()) + method.params.map(PluginJvm::descriptorOf) + superParams.size.toString() + superParams.map(PluginJvm::descriptorOf)).toTypedArray()
+            (listOf(method.name, PluginJvm.buildDescriptor(method.returns), if (method.isStatic) "1" else "0", method.params.size.toString()) + method.params.map(PluginJvm::buildDescriptor) + superParams.size.toString() + superParams.map(PluginJvm::buildDescriptor)).toTypedArray()
         }.toTypedArray()
-        return Prepared(name, PluginJvm.descriptorOf(superclass), interfaces.map(PluginJvm::descriptorOf).toTypedArray(), fieldData, methodData, parent, targets)
+        return Prepared(name, PluginJvm.buildDescriptor(superclass), interfaces.map(PluginJvm::buildDescriptor).toTypedArray(), fieldData, methodData, parent, targets)
     }
 
     class Prepared(

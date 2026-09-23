@@ -1,17 +1,8 @@
 package desu.inugram.core.plugins
 
-/**
- * Parsed InuPlugin-style metadata header of a plugin. v0 only consumes the descriptive directives;
- * [grants], [pluginApi], [platform] are parsed already so the engine layer can gate on them without
- * re-parsing.
- *
- * Nothing here keys storage: that is [PluginInstall.id], minted at install time. [id] is only
- * what decides whether a second file is an update of an installed plugin or a plugin of its own.
- */
 data class PluginManifest(
     val name: String,
     val author: String?,
-    /** `@id` as written, once it is a single printable token; null leaves [id] to derive one */
     val declaredId: String?,
     val version: String?,
     val description: String?,
@@ -20,18 +11,8 @@ data class PluginManifest(
     val grants: List<String>,
     val pluginApi: Int?,
     val platform: String?,
-    /** every directive, base key lowercased, in declaration order; backs `inu.info().header` */
     val raw: Map<String, List<String>>,
 ) {
-    /**
-     * Identifies updates, compared verbatim. Prefer an explicit `@id`, usually a reverse domain
-     * name, to preserve identity across renames.
-     *
-     * Without `@id`, derive from both [author] and [name]. Changing either creates a separate
-     * plugin. Both are required to avoid unrelated same-name plugins replacing each other.
-     *
-     * Storage uses the separate install ID and survives renames.
-     */
     val id: String? by lazy {
         if (declaredId != null) return@lazy declaredId
         val authorSlug = slug(author ?: return@lazy null)
@@ -51,10 +32,6 @@ data class PluginManifest(
     }
 
     companion object {
-        /**
-         * Lowercase words of letters and digits joined by dashes. Keep in sync with `@inugram/cli`
-         * so CLI-written IDs match IDs derived for older plugins without `@id`.
-         */
         fun slug(value: String): String = buildString {
             var gap = false
             for (ch in value.lowercase()) {
@@ -67,10 +44,6 @@ data class PluginManifest(
                 append(ch)
             }
         }
-
-        /** an `@id` is compared verbatim, so it may hold nothing that is invisible or ambiguous */
-        fun readDeclaredId(value: String?): String? = value
-            ?.takeIf { it.isNotEmpty() && it.none { ch -> ch.isWhitespace() || ch.isISOControl() } }
     }
 }
 
@@ -149,7 +122,8 @@ object PluginManifestParser {
         return PluginManifest(
             name = name,
             author = raw["author"]?.firstOrNull()?.takeIf { it.isNotBlank() },
-            declaredId = PluginManifest.readDeclaredId(raw["id"]?.firstOrNull()),
+            declaredId = raw["id"]?.firstOrNull()
+                ?.takeIf { it.isNotEmpty() && it.none { ch -> ch.isWhitespace() || ch.isISOControl() } },
             version = raw["version"]?.firstOrNull()?.takeIf { it.isNotBlank() },
             description = raw["description"]?.firstOrNull()?.takeIf { it.isNotBlank() },
             localizedDescriptions = localizedDescriptions,

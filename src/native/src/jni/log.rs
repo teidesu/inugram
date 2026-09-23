@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use super::env::{clear_exception, with_current_env};
 use crate::classify_log;
+use crate::utils::qjs::qjs_load_prelude;
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/console.qbc"));
 
@@ -23,6 +24,7 @@ impl ConsoleSink {
       };
       let jmsg = jmsg.auto();
       let args = [JValue::Int(level).as_jni(), JValue::Object(&jmsg).as_jni()];
+      // SAFETY: `on_console` was looked up on `target`'s class as `(ILjava/lang/String;)V`
       let _ = unsafe {
         env.call_method_unchecked(&self.target, self.on_console, ReturnType::Primitive(Primitive::Void), &args)
       };
@@ -40,7 +42,7 @@ pub(crate) fn make_log(console: Arc<ConsoleSink>) -> crate::Log {
 
 pub(crate) fn install_console<'js>(ctx: &Ctx<'js>, emit: impl Fn(i32, &str) + 'static) -> JsResult<()> {
   let emit = Function::new(ctx.clone(), move |level: i32, line: String| emit(level, &line))?;
-  let factory = crate::utils::prelude::load(ctx, PRELUDE)?;
+  let factory = qjs_load_prelude(ctx, PRELUDE)?;
   let console: Object = factory.call((emit,))?;
   ctx.globals().set("console", console)
 }

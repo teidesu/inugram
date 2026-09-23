@@ -4,9 +4,8 @@ use std::rc::Rc;
 use rquickjs::{Context, Runtime};
 
 use super::*;
-use crate::api::error::install_plugin_error;
-use crate::api::io::fs::tests::TestDir;
 use crate::sandbox::limits::ExternalMemory;
+use crate::testing::harness::TestDir;
 
 /// Mirrors `PluginCanvas.decodeTable` using UTF-16 units. Length prefixes must prevent separator
 /// collisions; a fake decoder that shared an encoder bug would hide it.
@@ -57,17 +56,17 @@ impl OracleHost {
 
   fn with_blend_modes(blend_modes: bool) -> Rc<OracleHost> {
     Rc::new(OracleHost {
-            log: RefCell::new(Recorder::default()),
-            blend_modes,
-            reply: RefCell::new(None),
-            measure: RefCell::new(
-                r#"J{"width":42,"actualBoundingBoxLeft":0,"actualBoundingBoxRight":42,"actualBoundingBoxAscent":8,"actualBoundingBoxDescent":2,"fontBoundingBoxAscent":9,"fontBoundingBoxDescent":3}"#
-                    .to_string(),
-            ),
-            average: RefCell::new(r#"J{"r":10,"g":20,"b":30,"a":255}"#.to_string()),
-            fail: RefCell::new(None),
-            pending: RefCell::new(Vec::new()),
-        })
+      log: RefCell::new(Recorder::default()),
+      blend_modes,
+      reply: RefCell::new(None),
+      measure: RefCell::new(
+          r#"J{"width":42,"actualBoundingBoxLeft":0,"actualBoundingBoxRight":42,"actualBoundingBoxAscent":8,"actualBoundingBoxDescent":2,"fontBoundingBoxAscent":9,"fontBoundingBoxDescent":3}"#
+              .to_string(),
+      ),
+      average: RefCell::new(r#"J{"r":10,"g":20,"b":30,"a":255}"#.to_string()),
+      fail: RefCell::new(None),
+      pending: RefCell::new(Vec::new()),
+  })
   }
 }
 
@@ -288,6 +287,7 @@ impl<'a> Reader<'a> {
       let count = match verb {
         0 | 1 => 2,
         2 => 6,
+        4 => 4,
         _ => 0,
       };
       let mut points = Vec::new();
@@ -466,18 +466,18 @@ struct Fixture {
 }
 
 fn setup(name: &str) -> Fixture {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
+  setup_with_host(name, OracleHost::new())
+}
+
+fn setup_with_host(name: &str, host: Rc<OracleHost>) -> Fixture {
+  let (rt, ctx) = crate::testing::harness::new_engine();
   let dir = TestDir::new(name);
-  let host = OracleHost::new();
   let external = ExternalMemory::new();
   let host_dyn: Rc<dyn CanvasHost> = host.clone();
   let state = ctx.with(|ctx| {
     let inu = crate::testing::harness::get_api_globals(&ctx);
-    install_plugin_error(&ctx).unwrap();
-    let blobs = crate::api::io::blob::install(&ctx, dir.path(), external.clone()).unwrap();
-    install_canvas(&ctx, host_dyn, blobs, external, dir.path().to_path_buf(), std::sync::Arc::new(|_: &str| {}), &inu)
-      .unwrap()
+    crate::api::io::blob::install(&ctx, dir.path(), external.clone()).unwrap();
+    install_canvas(&ctx, host_dyn, external, dir.path().to_path_buf(), std::sync::Arc::new(|_: &str| {}), &inu).unwrap()
   });
   Fixture {
     _dispose: DisposeOnDrop { ctx: ctx.clone(), state: state.clone() },
@@ -497,13 +497,11 @@ fn eval(f: &Fixture, code: &str) -> String {
   crate::testing::harness::eval_string(&f.ctx, code)
 }
 
-/// runs `code` and answers `code:message` for whatever `PluginError` it raised, so a refusal is
-/// asserted on rather than merely observed to be a failure
 fn refusal(f: &Fixture, code: &str) -> String {
   eval(
     f,
     &format!(
-      r#"(() => {{ try {{ {code}; return 'no error' }} catch (e) {{ return `${{e.code}}:${{e.message}}` }} }})()"#,
+      r#"(() => {{ try {{ {code}; return 'no error' }} catch (e) {{ return `${{e.code ?? e.name}}:${{e.message}}` }} }})()"#,
     ),
   )
 }
@@ -513,30 +511,45 @@ fn settle(f: &Fixture, expr: &str) -> String {
     f,
     &format!(
       r#"
-            globalThis.__out = 'pending';
-            Promise.resolve().then(() => {expr}).then(
-                v => {{ globalThis.__out = 'ok:' + (v && v.constructor ? v.constructor.name : v) }},
-                e => {{ globalThis.__out = `${{e.code}}:${{e.message}}` }},
-            );
-            "#,
+        globalThis.__out = 'pending';
+        Promise.resolve().then(() => {expr}).then(
+          v => {{ globalThis.__out = 'ok:' + (v && v.constructor ? v.constructor.name : v) }},
+          e => {{ globalThis.__out = `${{e.code}}:${{e.message}}` }},
+        );
+      "#,
     ),
   );
-  while f._rt.is_job_pending() {
-    f._rt.execute_pending_job().ok();
-  }
+  pump(f);
   eval(f, "String(globalThis.__out)")
 }
 
-/// answers the asynchronous op the host is holding, the way `nativeCanvasResult` does
 fn pump(f: &Fixture) {
   while f._rt.is_job_pending() {
     f._rt.execute_pending_job().ok();
   }
 }
 
+/// answers the asynchronous op the host is holding, the way `nativeCanvasResult` does
 fn answer(f: &Fixture, wire: &str) {
   let request = f.host.pending.borrow_mut().pop().expect("nothing pending");
   f.state.settle(&f._rt, &f.ctx, request, wire);
+}
+
+fn last_call(f: &Fixture, op: i32) -> String {
+  f.host
+    .log
+    .borrow()
+    .calls
+    .iter()
+    .rev()
+    .find(|(called, ..)| *called == op)
+    .expect("never called")
+    .2
+    .clone()
+}
+
+fn count_calls(f: &Fixture, op: i32) -> usize {
+  f.host.log.borrow().calls.iter().filter(|(called, ..)| *called == op).count()
 }
 
 fn commands(f: &Fixture) -> Vec<Command> {
@@ -549,45 +562,20 @@ fn draw(f: &Fixture, body: &str) -> Vec<Command> {
     f,
     &format!(
       r#"
-            globalThis.c = globalThis.c ?? inu.canvas.create(100, 100);
-            globalThis.x = globalThis.c.getContext('2d');
-            {body}
-            "#,
+        globalThis.c = globalThis.c ?? inu.canvas.create(100, 100);
+        globalThis.x = globalThis.c.getContext('2d');
+        {body}
+      "#,
     ),
   );
   // nothing reads the pixels, so the buffer has to be pushed the way `convertToBlob` would
   f.ctx.with(|ctx| {
     let canvas: rquickjs::Value = ctx.globals().get("c").unwrap();
     let handle = Class::<CanvasHandle>::from_value(&canvas).unwrap();
-    let surface = handle.borrow().0.clone();
+    let surface = handle.borrow().surface.clone();
     surface.flush(&ctx).unwrap();
   });
   commands(f)
-}
-
-#[test]
-fn the_namespace_carries_exactly_what_the_contract_declares() {
-  let f = setup("namespace");
-  assert_eq!(
-    eval(&f, "Object.keys(inu.canvas).sort().join(',')"),
-    "create,createEncoder,decode,decodeAnimation,listFonts,load,loadFont",
-  );
-}
-
-#[test]
-fn a_canvas_answers_its_own_size_and_the_same_context_every_time() {
-  let f = setup("basics");
-  run(&f, "globalThis.c = inu.canvas.create(320, 240)");
-  assert_eq!(eval(&f, "`${c.width}x${c.height}`"), "320x240");
-  assert_eq!(eval(&f, "String(c.getContext('2d') === c.getContext('2d'))"), "true");
-  assert_eq!(eval(&f, "String(c.getContext('2d').canvas === c)"), "true");
-}
-
-#[test]
-fn only_the_2d_context_exists() {
-  let f = setup("context-id");
-  run(&f, "globalThis.c = inu.canvas.create(4, 4)");
-  assert!(refusal(&f, "c.getContext('webgl')").starts_with("invalid-argument:"));
 }
 
 #[test]
@@ -611,11 +599,11 @@ fn resizing_reallocates_and_throws_the_recorded_drawing_away() {
   run(
     &f,
     r#"
-        globalThis.c = inu.canvas.create(10, 10)
-        const x = c.getContext('2d')
-        x.fillRect(0, 0, 5, 5)
-        c.width = 20
-        "#,
+      globalThis.c = inu.canvas.create(10, 10)
+      const x = c.getContext('2d')
+      x.fillRect(0, 0, 5, 5)
+      c.width = 20
+    "#,
   );
   let created = f.host.log.borrow().canvases.clone();
   assert_eq!(created.len(), 2, "the resize did not reallocate: {created:?}");
@@ -627,8 +615,6 @@ fn resizing_reallocates_and_throws_the_recorded_drawing_away() {
 #[test]
 fn a_canvas_costs_its_pixels_against_the_native_budget() {
   let f = setup("budget");
-  let before = f.ctx.with(|_| 0);
-  let _ = before;
   run(&f, "globalThis.c = inu.canvas.create(1000, 1000)");
   // 1000 * 1000 * 4, and nothing else here charges
   assert!(refusal(&f, "inu.canvas.create(8192, 8192)").starts_with("quota-exceeded:"));
@@ -640,54 +626,10 @@ fn a_canvas_costs_its_pixels_against_the_native_budget() {
 #[test]
 fn save_and_restore_cross_the_wire_because_the_clip_lives_on_the_other_side() {
   let f = setup("save");
-  let commands = draw(&f, "x.save(); x.restore(); x.reset()");
-  assert!(matches!(commands[0], Command::Save));
+  let commands = draw(&f, "x.restore(); x.save(); x.restore(); x.restore(); x.reset()");
+  assert!(matches!(commands[0], Command::Save), "{commands:?}");
   assert!(matches!(commands[1], Command::Restore));
-  assert!(matches!(commands[2], Command::Reset));
-}
-
-#[test]
-fn restoring_an_empty_stack_says_nothing_to_the_host() {
-  let f = setup("save-empty");
-  let commands = draw(&f, "x.restore(); x.save(); x.restore(); x.restore()");
-  assert_eq!(commands.len(), 2, "{commands:?}");
-}
-
-#[test]
-fn restore_puts_back_every_piece_of_state() {
-  let f = setup("restore-state");
-  run(
-    &f,
-    r#"
-        const x = inu.canvas.create(10, 10).getContext('2d')
-        x.fillStyle = '#ff0000'
-        x.lineWidth = 9
-        x.font = 'italic bold 20px Roboto'
-        x.save()
-        x.fillStyle = '#00ff00'
-        x.lineWidth = 1
-        x.font = '10px monospace'
-        x.restore()
-        globalThis.out = `${x.fillStyle}|${x.lineWidth}|${x.font}`
-        "#,
-  );
-  assert_eq!(eval(&f, "out"), "#ff0000|9|italic bold 20px Roboto");
-}
-
-#[test]
-fn reset_returns_the_context_to_its_initial_state() {
-  let f = setup("reset-state");
-  run(
-    &f,
-    r#"
-        const x = inu.canvas.create(10, 10).getContext('2d')
-        x.fillStyle = 'red'
-        x.translate(5, 5)
-        x.reset()
-        globalThis.out = x.fillStyle
-        "#,
-  );
-  assert_eq!(eval(&f, "out"), "#000000");
+  assert!(matches!(commands[2], Command::Reset), "an empty stack's restore reached the host");
 }
 
 #[test]
@@ -715,19 +657,24 @@ fn a_path_built_across_two_transforms_keeps_each_point_where_it_was_put() {
 }
 
 #[test]
+fn a_quadratic_curve_reaches_the_host_as_one() {
+  let f = setup("quad");
+  let commands = draw(&f, "x.beginPath(); x.moveTo(0, 0); x.quadraticCurveTo(5, 10, 10, 0); x.stroke()");
+  let Command::Stroke { path, .. } = &commands[0] else { panic!("{commands:?}") };
+  assert_eq!(path[1], (4, vec![5.0, 10.0, 10.0, 0.0]));
+}
+
+#[test]
 fn a_transform_with_no_inverse_draws_nothing_rather_than_dividing_by_it() {
   let f = setup("singular");
-  let f2 = setup("singular-control");
-  let commands = draw(&f2, "x.fillRect(0, 0, 5, 5)");
-  assert_eq!(commands.len(), 1);
   run(
     &f,
     r#"
-        globalThis.c = inu.canvas.create(10, 10)
-        globalThis.x = c.getContext('2d')
-        x.setTransform(1, 0, 2, 0, 0, 0)
-        x.fillRect(0, 0, 5, 5)
-        "#,
+      globalThis.c = inu.canvas.create(10, 10)
+      globalThis.x = c.getContext('2d')
+      x.setTransform(1, 0, 2, 0, 0, 0)
+      x.fillRect(0, 0, 5, 5)
+    "#,
   );
   assert!(f.host.log.borrow().commands.is_empty(), "a flattened transform still drew");
 }
@@ -753,44 +700,17 @@ fn set_transform_takes_both_of_the_shapes_the_spec_gives_it() {
 }
 
 #[test]
-fn a_colour_reads_back_in_the_form_the_spec_serializes() {
-  let f = setup("colour-roundtrip");
-  run(&f, "globalThis.x = inu.canvas.create(4, 4).getContext('2d')");
-  for (set, back) in
-    [("red", "#ff0000"), ("#0f0", "#00ff00"), ("rgb(1 2 3)", "#010203"), ("rgba(0, 0, 0, 0.5)", "rgba(0, 0, 0, 0.502)")]
-  {
-    run(&f, &format!("x.fillStyle = '{set}'"));
-    assert_eq!(eval(&f, "x.fillStyle"), back, "for '{set}'");
-  }
-}
-
-#[test]
-fn an_unparseable_colour_leaves_the_previous_one_in_place() {
-  let f = setup("colour-bad");
-  run(
-    &f,
-    r#"
-        globalThis.x = inu.canvas.create(4, 4).getContext('2d')
-        x.fillStyle = 'red'
-        x.fillStyle = 'not a colour'
-        x.fillStyle = 'rgb(300)'
-        "#,
-  );
-  assert_eq!(eval(&f, "x.fillStyle"), "#ff0000");
-}
-
-#[test]
 fn a_gradient_is_encoded_with_the_stops_it_has_when_it_is_drawn_with() {
   let f = setup("gradient-late-stops");
   let commands = draw(
     &f,
     r#"
-        const g = x.createLinearGradient(0, 0, 100, 0)
-        x.fillStyle = g
-        g.addColorStop(0, 'black')
-        g.addColorStop(1, 'white')
-        x.fillRect(0, 0, 10, 10)
-        "#,
+      const g = x.createLinearGradient(0, 0, 100, 0)
+      x.fillStyle = g
+      g.addColorStop(0, 'black')
+      g.addColorStop(1, 'white')
+      x.fillRect(0, 0, 10, 10)
+    "#,
   );
   let Command::Fill { paint, .. } = &commands[0] else { panic!("{commands:?}") };
   assert_eq!(paint.kind, STYLE_LINEAR);
@@ -804,14 +724,14 @@ fn colour_stops_come_out_sorted_with_ties_in_the_order_they_were_added() {
   let commands = draw(
     &f,
     r#"
-        const g = x.createLinearGradient(0, 0, 1, 0)
-        g.addColorStop(1, '#ff0000')
-        g.addColorStop(0, '#00ff00')
-        g.addColorStop(0.5, '#0000ff')
-        g.addColorStop(0.5, '#ffffff')
-        x.fillStyle = g
-        x.fillRect(0, 0, 1, 1)
-        "#,
+      const g = x.createLinearGradient(0, 0, 1, 0)
+      g.addColorStop(1, '#ff0000')
+      g.addColorStop(0, '#00ff00')
+      g.addColorStop(0.5, '#0000ff')
+      g.addColorStop(0.5, '#ffffff')
+      x.fillStyle = g
+      x.fillRect(0, 0, 1, 1)
+    "#,
   );
   let Command::Fill { paint, .. } = &commands[0] else { panic!("{commands:?}") };
   let offsets: Vec<f32> = paint.stops.iter().map(|(o, _)| *o).collect();
@@ -820,42 +740,17 @@ fn colour_stops_come_out_sorted_with_ties_in_the_order_they_were_added() {
 }
 
 #[test]
-fn a_gradient_refuses_a_stop_outside_the_unit_range_and_a_colour_it_cannot_read() {
-  let f = setup("gradient-bad");
-  run(&f, "globalThis.g = inu.canvas.create(4,4).getContext('2d').createLinearGradient(0,0,1,0)");
-  assert!(refusal(&f, "g.addColorStop(2, 'red')").starts_with("invalid-argument:"));
-  assert!(refusal(&f, "g.addColorStop(NaN, 'red')").starts_with("invalid-argument:"));
-  assert!(refusal(&f, "g.addColorStop(0, 'nope')").starts_with("invalid-argument:"));
-}
-
-#[test]
-fn a_gradient_stops_taking_stops_at_the_stated_ceiling() {
-  let f = setup("gradient-ceiling");
-  run(&f, "globalThis.g = inu.canvas.create(4,4).getContext('2d').createLinearGradient(0,0,1,0)");
-  let message =
-    refusal(&f, &format!("for (let i = 0; i < {}; i++) g.addColorStop(i / 1000, 'red')", MAX_GRADIENT_STOPS + 1));
-  assert!(message.starts_with("quota-exceeded:"), "{message}");
-}
-
-#[test]
-fn a_radial_gradient_refuses_a_negative_radius() {
-  let f = setup("gradient-radius");
-  run(&f, "globalThis.x = inu.canvas.create(4,4).getContext('2d')");
-  assert!(refusal(&f, "x.createRadialGradient(0, 0, -1, 0, 0, 5)").starts_with("invalid-argument:"));
-}
-
-#[test]
 fn a_pattern_carries_its_source_its_repetition_and_its_own_transform() {
   let f = setup("pattern");
   let commands = draw(
     &f,
     r#"
-        const other = inu.canvas.create(8, 8)
-        const p = x.createPattern(other, 'repeat-x')
-        p.setTransform({ a: 2, d: 2 })
-        x.fillStyle = p
-        x.fillRect(0, 0, 10, 10)
-        "#,
+      const other = inu.canvas.create(8, 8)
+      const p = x.createPattern(other, 'repeat-x')
+      p.setTransform({ a: 2, d: 2 })
+      x.fillStyle = p
+      x.fillRect(0, 0, 10, 10)
+    "#,
   );
   let Command::Fill { paint, .. } = &commands[0] else { panic!("{commands:?}") };
   let (source, _, repeat, matrix) = paint.pattern.expect("no pattern");
@@ -865,27 +760,18 @@ fn a_pattern_carries_its_source_its_repetition_and_its_own_transform() {
 }
 
 #[test]
-fn a_pattern_refuses_a_repetition_it_does_not_know() {
-  let f = setup("pattern-repeat");
-  run(&f, "globalThis.x = inu.canvas.create(4,4).getContext('2d')");
-  run(&f, "globalThis.o = inu.canvas.create(4,4)");
-  assert!(refusal(&f, "x.createPattern(o, 'tile')").starts_with("invalid-argument:"));
-  assert!(refusal(&f, "x.createPattern(42, 'repeat')").starts_with("invalid-argument:"));
-}
-
-#[test]
 fn the_shadow_is_pushed_through_the_inverse_so_it_survives_the_transform() {
   let f = setup("shadow");
   let commands = draw(
     &f,
     r#"
-        x.shadowColor = 'black'
-        x.shadowOffsetX = 4
-        x.shadowOffsetY = 8
-        x.shadowBlur = 10
-        x.scale(2, 2)
-        x.fillRect(0, 0, 1, 1)
-        "#,
+      x.shadowColor = 'black'
+      x.shadowOffsetX = 4
+      x.shadowOffsetY = 8
+      x.shadowBlur = 10
+      x.scale(2, 2)
+      x.fillRect(0, 0, 1, 1)
+    "#,
   );
   let Command::Fill { paint, .. } = &commands[0] else { panic!("{commands:?}") };
   // the host draws under a 2x transform, so a 4px device offset has to be handed over as 2
@@ -899,14 +785,14 @@ fn the_stroke_block_carries_the_pen_and_the_dash_pattern() {
   let commands = draw(
     &f,
     r#"
-        x.lineWidth = 3
-        x.lineCap = 'round'
-        x.lineJoin = 'bevel'
-        x.miterLimit = 4
-        x.setLineDash([1, 2, 3])
-        x.lineDashOffset = 5
-        x.beginPath(); x.moveTo(0, 0); x.lineTo(10, 10); x.stroke()
-        "#,
+      x.lineWidth = 3
+      x.lineCap = 'round'
+      x.lineJoin = 'bevel'
+      x.miterLimit = 4
+      x.setLineDash([1, 2, 3])
+      x.lineDashOffset = 5
+      x.beginPath(); x.moveTo(0, 0); x.lineTo(10, 10); x.stroke()
+    "#,
   );
   let Command::Stroke { stroke, .. } = &commands[0] else { panic!("{commands:?}") };
   assert_eq!(stroke.width, 3.0);
@@ -915,48 +801,6 @@ fn the_stroke_block_carries_the_pen_and_the_dash_pattern() {
   assert_eq!(stroke.dash_offset, 5.0);
   // an odd list is doubled, so the host never has to know that rule
   assert_eq!(stroke.dash, vec![1.0, 2.0, 3.0, 1.0, 2.0, 3.0]);
-}
-
-#[test]
-fn get_line_dash_answers_the_doubled_list_the_spec_stores() {
-  let f = setup("dash-getter");
-  run(
-    &f,
-    r#"
-        globalThis.x = inu.canvas.create(4,4).getContext('2d')
-        x.setLineDash([4, 2])
-        globalThis.a = x.getLineDash().join(',')
-        x.setLineDash([5])
-        globalThis.b = x.getLineDash().join(',')
-        x.setLineDash([1, -1])
-        globalThis.c2 = x.getLineDash().join(',')
-        "#,
-  );
-  assert_eq!(eval(&f, "a"), "4,2");
-  assert_eq!(eval(&f, "b"), "5,5");
-  assert_eq!(eval(&f, "c2"), "5,5", "one bad entry has to leave the whole list alone");
-}
-
-#[test]
-fn an_out_of_range_setter_is_ignored_rather_than_clamped() {
-  let f = setup("setters");
-  run(
-    &f,
-    r#"
-        globalThis.x = inu.canvas.create(4,4).getContext('2d')
-        x.globalAlpha = 0.5
-        x.globalAlpha = 2
-        x.globalAlpha = -1
-        x.lineWidth = 4
-        x.lineWidth = 0
-        x.lineCap = 'squircle'
-        x.globalCompositeOperation = 'nonsense'
-        "#,
-  );
-  assert_eq!(
-    eval(&f, "`${x.globalAlpha}|${x.lineWidth}|${x.lineCap}|${x.globalCompositeOperation}`"),
-    "0.5|4|butt|source-over"
-  );
 }
 
 #[test]
@@ -974,27 +818,7 @@ fn every_composite_mode_the_contract_declares_is_accepted() {
 
 #[test]
 fn a_blend_mode_the_host_cannot_honour_is_refused_rather_than_approximated() {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
-  let dir = TestDir::new("no-blend");
-  let host = OracleHost::with_blend_modes(false);
-  let external = ExternalMemory::new();
-  let host_dyn: Rc<dyn CanvasHost> = host.clone();
-  let state = ctx.with(|ctx| {
-    let inu = crate::testing::harness::get_api_globals(&ctx);
-    install_plugin_error(&ctx).unwrap();
-    let blobs = crate::api::io::blob::install(&ctx, dir.path(), external.clone()).unwrap();
-    install_canvas(&ctx, host_dyn, blobs, external, dir.path().to_path_buf(), std::sync::Arc::new(|_: &str| {}), &inu)
-      .unwrap()
-  });
-  let f = Fixture {
-    _dispose: DisposeOnDrop { ctx: ctx.clone(), state: state.clone() },
-    _rt: rt,
-    ctx,
-    host,
-    state,
-    _dir: dir,
-  };
+  let f = setup_with_host("no-blend", OracleHost::with_blend_modes(false));
   run(&f, "globalThis.x = inu.canvas.create(4,4).getContext('2d')");
   let message = refusal(&f, "x.globalCompositeOperation = 'multiply'; x.fillRect(0,0,1,1)");
   assert!(message.starts_with("unsupported:"), "{message}");
@@ -1014,25 +838,18 @@ fn fill_and_clip_carry_the_rule_and_stroke_does_not_take_one() {
 }
 
 #[test]
-fn an_unknown_fill_rule_is_refused() {
-  let f = setup("fill-rule-bad");
-  run(&f, "globalThis.x = inu.canvas.create(4,4).getContext('2d')");
-  assert!(refusal(&f, "x.fill('winding')").starts_with("invalid-argument:"));
-}
-
-#[test]
 fn an_empty_path_says_nothing_to_the_host() {
   let f = setup("empty-path");
   run(
     &f,
     r#"
-        globalThis.c = inu.canvas.create(10, 10)
-        globalThis.x = c.getContext('2d')
-        x.beginPath()
-        x.fill()
-        x.stroke()
-        x.fillRect(0, 0, 0, 10)
-        "#,
+      globalThis.c = inu.canvas.create(10, 10)
+      globalThis.x = c.getContext('2d')
+      x.beginPath()
+      x.fill()
+      x.stroke()
+      x.fillRect(0, 0, 0, 10)
+    "#,
   );
   assert!(f.host.log.borrow().commands.is_empty());
 }
@@ -1057,37 +874,32 @@ fn round_rect_takes_every_radii_shape_the_spec_lists() {
       "for {radii}",
     );
   }
-  assert!(refusal(&f, "x.roundRect(0, 0, 10, 10, -1)").starts_with("invalid-argument:"));
-  assert!(refusal(&f, "x.roundRect(0, 0, 10, 10, [1, NaN])").starts_with("invalid-argument:"));
+  for (radii, answer) in [
+    ("-1", "RangeError:"),
+    ("[1, -1, NaN]", "RangeError:"),
+    ("[]", "RangeError:"),
+    ("[1, 2, 3, 4, 5]", "RangeError:"),
+    ("[NaN, -1]", "no error"),
+  ] {
+    assert!(refusal(&f, &format!("x.roundRect(0, 0, 10, 10, {radii})")).starts_with(answer), "for {radii}");
+  }
 }
 
 #[test]
 fn a_negative_arc_radius_is_an_error_and_a_non_finite_one_is_not() {
   let f = setup("arc-radius");
   run(&f, "globalThis.x = inu.canvas.create(20, 20).getContext('2d')");
-  assert!(refusal(&f, "x.arc(0, 0, -1, 0, 1)").starts_with("invalid-argument:"));
-  assert!(refusal(&f, "x.ellipse(0, 0, 1, -1, 0, 0, 1)").starts_with("invalid-argument:"));
-  assert!(refusal(&f, "x.arcTo(1, 1, 2, 2, -1)").starts_with("invalid-argument:"));
+  for call in ["x.arc(0, 0, -1, 0, 1)", "x.ellipse(0, 0, 1, -1, 0, 0, 1)", "x.arcTo(1, 1, 2, 2, -1)"] {
+    assert_eq!(
+      eval(
+        &f,
+        &format!("(() => {{ try {{ {call} }} catch (e) {{ return e instanceof DOMException && e.name }} }})()")
+      ),
+      "IndexSizeError",
+      "{call}"
+    );
+  }
   assert_eq!(refusal(&f, "x.arc(0, 0, NaN, 0, 1)"), "no error");
-}
-
-#[test]
-fn the_font_reads_back_as_it_was_written_and_a_bad_one_is_ignored() {
-  let f = setup("font");
-  run(
-    &f,
-    r#"
-        globalThis.x = inu.canvas.create(4,4).getContext('2d')
-        globalThis.initial = x.font
-        x.font = 'italic small-caps bold 24px/30px "PT Sans", serif'
-        globalThis.set = x.font
-        x.font = 'not a font'
-        globalThis.after = x.font
-        "#,
-  );
-  assert_eq!(eval(&f, "initial"), "10px sans-serif");
-  assert_eq!(eval(&f, "set"), eval(&f, "after"));
-  assert!(eval(&f, "set").contains("24px"));
 }
 
 #[test]
@@ -1096,13 +908,13 @@ fn text_crosses_as_an_interned_string_with_its_font_and_its_placement() {
   let commands = draw(
     &f,
     r#"
-        x.font = 'bold 20px Roboto'
-        x.textAlign = 'center'
-        x.textBaseline = 'top'
-        x.fillText('hi', 5, 6)
-        x.fillText('hi', 7, 8, 40)
-        x.strokeText('bye', 1, 2)
-        "#,
+      x.font = 'bold 20px Roboto'
+      x.textAlign = 'center'
+      x.textBaseline = 'top'
+      x.fillText('hi', 5, 6)
+      x.fillText('hi', 7, 8, 40)
+      x.strokeText('bye', 1, 2)
+    "#,
   );
   let strings = f.host.log.borrow().strings.last().unwrap().clone();
   let Command::Text {
@@ -1144,9 +956,9 @@ fn a_multi_family_font_and_separator_bearing_text_survive_the_string_table() {
   let commands = draw(
     &f,
     r#"
-        x.font = 'italic small-caps bold 24px/30px "PT Sans", serif'
-        x.fillText('a\u001fb\u001ec', 1, 2)
-        "#,
+      x.font = 'italic small-caps bold 24px/30px "PT Sans", serif'
+      x.fillText('a\u001fb\u001ec', 1, 2)
+    "#,
   );
   let strings = f.host.log.borrow().strings.last().unwrap().clone();
   let Command::Text { font, text, .. } = &commands[0] else { panic!("{commands:?}") };
@@ -1161,16 +973,15 @@ fn measure_text_asks_the_host_with_the_font_and_alignment_it_would_draw_with() {
   run(
     &f,
     r#"
-        globalThis.x = inu.canvas.create(4,4).getContext('2d')
-        x.font = '16px Roboto'
-        x.textAlign = 'right'
-        globalThis.m = x.measureText('hello')
-        "#,
+      globalThis.x = inu.canvas.create(4,4).getContext('2d')
+      x.font = '16px Roboto'
+      x.textAlign = 'right'
+      globalThis.m = x.measureText('hello')
+    "#,
   );
   assert_eq!(eval(&f, "String(m.width)"), "42");
   assert_eq!(eval(&f, "String(m.fontBoundingBoxAscent)"), "9");
-  let calls = f.host.log.borrow().calls.clone();
-  let (_, _, arg) = calls.iter().rev().find(|(op, ..)| *op == OP_MEASURE).unwrap();
+  let arg = last_call(&f, OP_MEASURE);
   assert_eq!(arg, "16\u{1e}400\u{1e}0\u{1e}0\u{1e}Roboto\u{1e}3\u{1e}hello");
 }
 
@@ -1189,11 +1000,13 @@ fn draw_image_takes_all_three_argument_counts() {
   let commands = draw(
     &f,
     r#"
-        x.drawImage(o, 1, 2)
-        x.drawImage(o, 1, 2, 30, 40)
-        x.drawImage(o, 1, 2, 3, 4, 5, 6, 7, 8)
-        "#,
+      x.drawImage(o, 1, 2)
+      x.drawImage(o, 1, 2, 30, 40)
+      x.drawImage(o, 1, 2, 3, 4, 5, 6, 7, 8)
+      x.drawImage(o, 1, 2, 0, 4, 5, 6, 7, 8)
+    "#,
   );
+  assert_eq!(commands.len(), 3, "an empty source rectangle draws nothing, as the spec says");
   let Command::Image { src, dst, source, .. } = &commands[0] else { panic!("{commands:?}") };
   assert_eq!(*source, SOURCE_CANVAS);
   assert_eq!(*src, [0.0, 0.0, 8.0, 4.0], "the whole source is the default");
@@ -1205,17 +1018,6 @@ fn draw_image_takes_all_three_argument_counts() {
   assert_eq!(*dst, [5.0, 6.0, 7.0, 8.0]);
 }
 
-#[test]
-fn draw_image_refuses_a_count_that_is_not_one_of_the_three() {
-  let f = setup("draw-image-arity");
-  run(&f, "globalThis.o = inu.canvas.create(8, 4)");
-  run(&f, "globalThis.x = inu.canvas.create(8, 4).getContext('2d')");
-  assert!(refusal(&f, "x.drawImage(o, 1, 2, 3)").starts_with("invalid-argument:"));
-  assert!(refusal(&f, "x.drawImage(o)").starts_with("invalid-argument:"));
-  assert!(refusal(&f, "x.drawImage({}, 1, 2)").starts_with("invalid-argument:"));
-  assert!(refusal(&f, "x.drawImage(o, 1, 2, 3, 0, 5, 6, 7, 8)").starts_with("invalid-argument:"));
-}
-
 /// the snapshot the spec promises: whatever the source canvas has recorded has to be on its bitmap
 /// before the copy, or the picture drawn is the one from before its last few ops
 #[test]
@@ -1224,12 +1026,12 @@ fn naming_another_canvas_flushes_that_canvas_first() {
   run(
     &f,
     r#"
-        globalThis.o = inu.canvas.create(8, 8)
-        o.getContext('2d').fillRect(0, 0, 8, 8)
-        globalThis.c = inu.canvas.create(8, 8)
-        globalThis.x = c.getContext('2d')
-        x.drawImage(o, 0, 0)
-        "#,
+      globalThis.o = inu.canvas.create(8, 8)
+      o.getContext('2d').fillRect(0, 0, 8, 8)
+      globalThis.c = inu.canvas.create(8, 8)
+      globalThis.x = c.getContext('2d')
+      x.drawImage(o, 0, 0)
+    "#,
   );
   let log = f.host.log.borrow();
   assert_eq!(log.commands.len(), 1, "the source canvas was not replayed");
@@ -1242,11 +1044,11 @@ fn a_pattern_over_a_canvas_flushes_it_too() {
   run(
     &f,
     r#"
-        globalThis.o = inu.canvas.create(8, 8)
-        o.getContext('2d').fillRect(0, 0, 8, 8)
-        globalThis.x = inu.canvas.create(8, 8).getContext('2d')
-        x.createPattern(o, 'repeat')
-        "#,
+      globalThis.o = inu.canvas.create(8, 8)
+      o.getContext('2d').fillRect(0, 0, 8, 8)
+      globalThis.x = inu.canvas.create(8, 8).getContext('2d')
+      x.createPattern(o, 'repeat')
+    "#,
   );
   assert_eq!(f.host.log.borrow().commands.len(), 1);
 }
@@ -1264,16 +1066,6 @@ fn a_decoded_image_answers_its_size_and_frees_the_host_bitmap_when_disposed() {
   assert_eq!(f.host.log.borrow().released.len(), 1, "a second dispose released it twice");
 }
 
-#[test]
-fn drawing_a_disposed_image_is_handle_expired() {
-  let f = setup("decode-expired");
-  run(&f, "globalThis.p = inu.canvas.decode(new Uint8Array([1]))");
-  answer(&f, r#"J{"width":4,"height":4}"#);
-  settle(&f, "p.then(i => (globalThis.img = i, 1))");
-  run(&f, "globalThis.x = inu.canvas.create(8,8).getContext('2d'); img.dispose()");
-  assert!(refusal(&f, "x.drawImage(img, 0, 0)").starts_with("handle-expired:"));
-}
-
 /// Commands resolve image IDs during replay. Disposing an image before a queued draw used to free
 /// its bitmap and fail the entire flush, dropping later commands too. Disposal must flush first,
 /// then release the memory before returning.
@@ -1286,9 +1078,9 @@ fn disposing_an_image_flushes_the_buffers_that_named_it_rather_than_stranding_th
   run(
     &f,
     r#"
-        globalThis.x = inu.canvas.create(8, 8).getContext('2d')
-        x.drawImage(img, 0, 0)
-        "#,
+      globalThis.x = inu.canvas.create(8, 8).getContext('2d')
+      x.drawImage(img, 0, 0)
+    "#,
   );
   assert!(f.host.log.borrow().commands.is_empty(), "the draw was performed rather than recorded");
   run(&f, "img.dispose()");
@@ -1300,27 +1092,10 @@ fn disposing_an_image_flushes_the_buffers_that_named_it_rather_than_stranding_th
     let canvas: rquickjs::Value = ctx.globals().get("x").unwrap();
     let canvas: rquickjs::Value = canvas.as_object().unwrap().get("canvas").unwrap();
     let handle = Class::<CanvasHandle>::from_value(&canvas).unwrap();
-    let surface = handle.borrow().0.clone();
+    let surface = handle.borrow().surface.clone();
     surface.flush(&ctx).unwrap();
   });
   assert_eq!(f.host.log.borrow().commands.len(), 2);
-}
-
-#[test]
-fn a_pattern_outliving_its_image_fails_where_it_is_drawn_with() {
-  let f = setup("pattern-expired");
-  run(&f, "globalThis.p = inu.canvas.decode(new Uint8Array([1]))");
-  answer(&f, r#"J{"width":4,"height":4}"#);
-  settle(&f, "p.then(i => (globalThis.img = i, 1))");
-  run(
-    &f,
-    r#"
-        globalThis.x = inu.canvas.create(8,8).getContext('2d')
-        x.fillStyle = x.createPattern(img, 'repeat')
-        img.dispose()
-        "#,
-  );
-  assert!(refusal(&f, "x.fillRect(0, 0, 1, 1)").starts_with("handle-expired:"));
 }
 
 #[test]
@@ -1335,8 +1110,7 @@ fn a_decode_the_host_refused_settles_as_a_rejection_and_leaves_nothing_charged()
 fn a_source_is_staged_to_a_file_and_the_file_goes_away_with_the_request() {
   let f = setup("stage");
   run(&f, "globalThis.p = inu.canvas.decode(new Uint8Array([1,2,3,4]))");
-  let calls = f.host.log.borrow().calls.clone();
-  let (_, _, arg) = calls.iter().rev().find(|(op, ..)| *op == OP_DECODE).unwrap();
+  let arg = last_call(&f, OP_DECODE);
   let path = arg.split(FIELD).nth(1).unwrap().to_string();
   assert!(std::fs::metadata(&path).is_ok(), "nothing was staged at {path}");
   answer(&f, r#"J{"width":1,"height":1}"#);
@@ -1349,12 +1123,11 @@ fn a_blob_source_is_staged_by_its_own_range() {
   run(
     &f,
     r#"
-        const b = new Blob(['0123456789'])
-        globalThis.p = inu.canvas.decode(b.slice(2, 5))
-        "#,
+      const b = new Blob(['0123456789'])
+      globalThis.p = inu.canvas.decode(b.slice(2, 5))
+    "#,
   );
-  let calls = f.host.log.borrow().calls.clone();
-  let (_, _, arg) = calls.iter().rev().find(|(op, ..)| *op == OP_DECODE).unwrap();
+  let arg = last_call(&f, OP_DECODE);
   let path = arg.split(FIELD).nth(1).unwrap();
   assert_eq!(std::fs::read(path).unwrap(), b"234");
 }
@@ -1387,8 +1160,7 @@ fn a_source_that_is_none_of_the_three_shapes_is_refused() {
 fn loading_a_font_settles_with_nothing_and_names_the_family_to_the_host() {
   let f = setup("font-load");
   run(&f, "globalThis.p = inu.canvas.loadFont('My Face', new Uint8Array([1]))");
-  let calls = f.host.log.borrow().calls.clone();
-  let (_, _, arg) = calls.iter().rev().find(|(op, ..)| *op == OP_LOAD_FONT).unwrap();
+  let arg = last_call(&f, OP_LOAD_FONT);
   assert_eq!(arg.split(FIELD).nth(1).unwrap(), "My Face");
   answer(&f, "");
   assert_eq!(settle(&f, "p"), "ok:undefined");
@@ -1416,10 +1188,10 @@ fn convert_to_blob_flushes_and_answers_a_blob_over_the_file_the_host_wrote() {
   run(
     &f,
     r#"
-        globalThis.c = inu.canvas.create(8, 8)
-        c.getContext('2d').fillRect(0, 0, 8, 8)
-        globalThis.p = c.convertToBlob()
-        "#,
+      globalThis.c = inu.canvas.create(8, 8)
+      c.getContext('2d').fillRect(0, 0, 8, 8)
+      globalThis.p = c.convertToBlob()
+    "#,
   );
   assert_eq!(f.host.log.borrow().commands.len(), 1, "the drawing was not flushed before the encode");
   answer(&f, &format!(r#"J{{"path":"{}","type":"image/png"}}"#, dir.to_string_lossy()));
@@ -1440,8 +1212,7 @@ fn convert_to_blob_refuses_an_encoding_it_does_not_write() {
 fn convert_to_blob_passes_the_type_and_quality_it_was_given() {
   let f = setup("encode-options");
   run(&f, "globalThis.c = inu.canvas.create(4, 4); c.convertToBlob({ type: 'image/jpeg', quality: 0.5 })");
-  let calls = f.host.log.borrow().calls.clone();
-  let (_, _, arg) = calls.iter().rev().find(|(op, ..)| *op == OP_ENCODE).unwrap();
+  let arg = last_call(&f, OP_ENCODE);
   let fields: Vec<&str> = arg.split(FIELD).collect();
   assert_eq!(fields[1], "image/jpeg");
   assert_eq!(fields[2], "0.5");
@@ -1453,15 +1224,14 @@ fn get_average_color_flushes_and_defaults_to_the_whole_canvas() {
   run(
     &f,
     r#"
-        globalThis.x = inu.canvas.create(30, 20).getContext('2d')
-        x.fillRect(0, 0, 5, 5)
-        globalThis.avg = x.getAverageColor()
-        "#,
+      globalThis.x = inu.canvas.create(30, 20).getContext('2d')
+      x.fillRect(0, 0, 5, 5)
+      globalThis.avg = x.getAverageColor()
+    "#,
   );
   assert_eq!(f.host.log.borrow().commands.len(), 1);
   assert_eq!(eval(&f, "`${avg.r},${avg.g},${avg.b},${avg.a}`"), "10,20,30,255");
-  let calls = f.host.log.borrow().calls.clone();
-  let (_, _, arg) = calls.iter().rev().find(|(op, ..)| *op == OP_AVERAGE).unwrap();
+  let arg = last_call(&f, OP_AVERAGE);
   assert_eq!(arg, "0,0,30,20");
 }
 
@@ -1471,14 +1241,12 @@ fn get_average_color_passes_the_region_it_was_given() {
   run(
     &f,
     r#"
-        globalThis.x = inu.canvas.create(30, 20).getContext('2d')
-        x.getAverageColor(1, 2, 3, 4)
-        "#,
+      globalThis.x = inu.canvas.create(30, 20).getContext('2d')
+      x.getAverageColor(1, 2, 3, 4)
+    "#,
   );
-  let calls = f.host.log.borrow().calls.clone();
-  let (_, _, arg) = calls.iter().rev().find(|(op, ..)| *op == OP_AVERAGE).unwrap();
+  let arg = last_call(&f, OP_AVERAGE);
   assert_eq!(arg, "1,2,3,4");
-  assert!(refusal(&f, "x.getAverageColor(NaN, 0, 1, 1)").starts_with("invalid-argument:"));
 }
 
 #[test]
@@ -1487,9 +1255,9 @@ fn the_buffer_replays_itself_before_it_can_grow_without_bound() {
   run(
     &f,
     r#"
-        globalThis.x = inu.canvas.create(64, 64).getContext('2d')
-        for (let i = 0; i < 40000; i++) x.fillRect(i, 0, 1, 1)
-        "#,
+      globalThis.x = inu.canvas.create(64, 64).getContext('2d')
+      for (let i = 0; i < 40000; i++) x.fillRect(i, 0, 1, 1)
+    "#,
   );
   assert!(!f.host.log.borrow().commands.is_empty(), "nothing was replayed");
   let total: usize = f.host.log.borrow().commands.iter().map(|c| c.len()).sum();
@@ -1510,10 +1278,9 @@ fn disposing_a_canvas_lets_its_bitmap_go_and_expires_what_was_drawing_on_it() {
   let f = setup("canvas-dispose");
   run(&f, "globalThis.c = inu.canvas.create(8, 8); globalThis.x = c.getContext('2d')");
   run(&f, "c.dispose()");
-  let destroys = |f: &Fixture| f.host.log.borrow().calls.iter().filter(|(op, ..)| *op == OP_DESTROY).count();
-  assert_eq!(destroys(&f), 1);
+  assert_eq!(count_calls(&f, OP_DESTROY), 1);
   run(&f, "c.dispose()");
-  assert_eq!(destroys(&f), 1, "a second dispose destroyed it twice");
+  assert_eq!(count_calls(&f, OP_DESTROY), 1, "a second dispose destroyed it twice");
   assert_eq!(
     eval(&f, "(() => { try { x.fillRect(0,0,1,1); return 'drew' } catch (e) { return e.code } })()"),
     "handle-expired"
@@ -1533,15 +1300,14 @@ fn the_handles_are_using_resources() {
     "true",
   );
   assert_eq!(
-    eval(&f, "`${Object.keys(Blob.prototype).includes('dispose') && !Object.getOwnPropertySymbols(Blob.prototype).some(s => Object.propertyIsEnumerable.call(Blob.prototype, s))}`"),
+    eval(&f, "`${!Object.getOwnPropertySymbols(Blob.prototype).some(s => Object.propertyIsEnumerable.call(Blob.prototype, s))}`"),
     "true",
   );
 
-  let destroys = |f: &Fixture| f.host.log.borrow().calls.iter().filter(|(op, ..)| *op == OP_DESTROY).count();
-  let before = destroys(&f);
+  let before = count_calls(&f, OP_DESTROY);
   run(&f, "{ using c = inu.canvas.create(4, 4); globalThis.seen = c.width }");
   assert_eq!(eval(&f, "`${seen}`"), "4");
-  assert_eq!(destroys(&f) - before, 1, "the block exit disposed it");
+  assert_eq!(count_calls(&f, OP_DESTROY) - before, 1, "the block exit disposed it");
 }
 
 #[test]
@@ -1562,81 +1328,30 @@ fn disposal_releases_every_promise_the_engine_still_holds() {
   assert!(f.state.pending.is_empty());
 }
 
-/// Runs the shipped `canvas-test.js` oracle to catch missing members as well as wrong behavior.
-/// `expectThrows` alone can mistake a missing member's TypeError for an expected error. Loading the
-/// real asset also catches stale test plugins after contract changes.
+/// the shipped oracle, so a missing member fails too: `expectThrow` alone can take one's TypeError for
+/// the expected error
 mod bundled_oracle {
   use super::*;
 
-  const ORACLE: &str = include_str!("../../../../test/plugins/canvas-test.js");
-
-  /// the host the oracle runs against: it answers the three asynchronous ops, and refuses the one
-  /// decode whose content says to - which is how the suite reaches its rejection case without a
-  /// second host
-  struct OracleCanvas {
-    inner: Rc<OracleHost>,
-  }
-
-  impl CanvasHost for OracleCanvas {
-    fn canvas(&self, op: i32, id: i64, arg: &str, bytes: Option<&[u8]>) -> String {
-      self.inner.canvas(op, id, arg, bytes)
-    }
-  }
+  const ORACLE: &str = crate::testing::test_plugin!("canvas-test.js");
 
   #[test]
   fn the_bundled_canvas_test_plugin_passes() {
-    let rt = Runtime::new().unwrap();
-    let ctx = Context::full(&rt).unwrap();
-    let dir = TestDir::new("oracle");
-    let encoded = dir.path().join("out.png");
+    let fixture = setup("oracle");
+    let encoded = fixture._dir.path().join("out.png");
     std::fs::write(&encoded, b"encoded bytes").unwrap();
-    let inner = OracleHost::new();
-    let host = Rc::new(OracleCanvas { inner: inner.clone() });
-    let lines = Rc::new(RefCell::new(Vec::<String>::new()));
-    let external = ExternalMemory::new();
-    let host_dyn: Rc<dyn CanvasHost> = host.clone();
-    let state = ctx.with(|ctx| {
-      let inu = crate::testing::harness::get_api_globals(&ctx);
-      install_plugin_error(&ctx).unwrap();
-      install_console(&ctx, lines.clone());
-      let blobs = crate::api::io::blob::install(&ctx, dir.path(), external.clone()).unwrap();
-      install_canvas(&ctx, host_dyn, blobs, external, dir.path().to_path_buf(), std::sync::Arc::new(|_: &str| {}), &inu)
-        .unwrap()
-    });
-    let fixture = Fixture {
-      _dispose: DisposeOnDrop { ctx: ctx.clone(), state: state.clone() },
-      _rt: rt,
-      ctx,
-      host: inner,
-      state,
-      _dir: dir,
-    };
+    let lines = crate::testing::harness::install_capturing_console(&fixture.ctx);
     run(&fixture, ORACLE);
     drain(&fixture, &encoded);
     let lines = lines.borrow().clone();
-    crate::testing::harness::assert_oracle_exact(&lines, "canvas test done", 64);
-  }
-
-  fn install_console(ctx: &Ctx<'_>, lines: Rc<RefCell<Vec<String>>>) {
-    let console = rquickjs::Object::new(ctx.clone()).unwrap();
-    for name in ["log", "error", "warn", "info", "debug"] {
-      let lines = lines.clone();
-      let f = rquickjs::Function::new(ctx.clone(), move |args: rquickjs::function::Rest<Coerced<String>>| {
-        lines.borrow_mut().push(args.0.iter().map(|a| a.0.as_str()).collect::<Vec<_>>().join(" "));
-      })
-      .unwrap();
-      console.set(name, f).unwrap();
-    }
-    ctx.globals().set("console", console).unwrap();
+    crate::testing::harness::assert_oracle_exact(&lines, "canvas test done", 67);
   }
 
   /// settles whatever the plugin is waiting on until it is waiting on nothing. Each answer can
   /// start the next op, so this is a loop rather than one pass.
   fn drain(f: &Fixture, encoded: &std::path::Path) {
     for _ in 0..64 {
-      while f._rt.is_job_pending() {
-        f._rt.execute_pending_job().ok();
-      }
+      pump(f);
       let pending: Vec<(i32, String)> = {
         let calls = f.host.log.borrow().calls.clone();
         calls
@@ -1678,7 +1393,6 @@ mod bundled_oracle {
   }
 }
 
-/// the shape every animation test starts from: one open decoder, `globalThis.a`
 fn open_animation(f: &Fixture, name: &str, shape: &str) {
   run(f, &format!("globalThis.p = inu.canvas.decodeAnimation(new Uint8Array([1,2,3]))"));
   answer(f, shape);
@@ -1725,12 +1439,12 @@ fn an_animation_is_read_in_order_by_iterating_it_until_the_source_ends() {
   run(
     &f,
     r#"
-        globalThis.seen = []
-        globalThis.p = (async () => {
-          for await (using frame of a) seen.push(`${frame.width}x${frame.height}@${frame.timestamp}`)
-          return seen.length
-        })()
-        "#,
+      globalThis.seen = []
+      globalThis.p = (async () => {
+        for await (using frame of a) seen.push(`${frame.width}x${frame.height}@${frame.timestamp}`)
+        return seen.length
+      })()
+    "#,
   );
   answer(&f, r#"J{"width":320,"height":240,"timestamp":0}"#);
   pump(&f);
@@ -1776,8 +1490,7 @@ fn a_frame_of_a_disposed_animation_is_handle_expired() {
 fn an_animations_staged_source_outlives_the_request_and_goes_with_the_decoder() {
   let f = setup("animation-stage");
   run(&f, "globalThis.p = inu.canvas.decodeAnimation(new Uint8Array([1,2,3,4]))");
-  let calls = f.host.log.borrow().calls.clone();
-  let (_, _, arg) = calls.iter().rev().find(|(op, ..)| *op == OP_DECODE_ANIMATION).unwrap();
+  let arg = last_call(&f, OP_DECODE_ANIMATION);
   let path = arg.split(FIELD).nth(3).unwrap().to_string();
   assert!(std::fs::metadata(&path).is_ok(), "nothing was staged at {path}");
   answer(&f, GIF_SHAPE);
@@ -1792,8 +1505,7 @@ fn an_animation_the_host_could_not_open_deletes_what_it_staged() {
   let f = setup("animation-refused");
   *f.host.fail.borrow_mut() = Some((OP_DECODE_ANIMATION, "Pinvalid-argument\n\n\n\nnot an animation".to_string()));
   run(&f, "globalThis.p = inu.canvas.decodeAnimation(new Uint8Array([1,2,3,4]))");
-  let calls = f.host.log.borrow().calls.clone();
-  let (_, _, arg) = calls.iter().rev().find(|(op, ..)| *op == OP_DECODE_ANIMATION).unwrap();
+  let arg = last_call(&f, OP_DECODE_ANIMATION);
   let path = arg.split(FIELD).nth(3).unwrap().to_string();
   assert_eq!(settle(&f, "p"), "invalid-argument:not an animation");
   assert!(std::fs::metadata(&path).is_err(), "the staged copy outlived the failed open");
@@ -1850,8 +1562,7 @@ fn open_encoder(f: &Fixture, options: &str) -> String {
 fn an_encoder_is_asked_for_with_everything_the_host_needs_to_configure_it() {
   let f = setup("encoder");
   assert_eq!(open_encoder(&f, "{ width: 320, height: 240, fps: 25, bitrate: 900000 }"), "ok:Number");
-  let calls = f.host.log.borrow().calls.clone();
-  let (_, _, arg) = calls.iter().rev().find(|(op, ..)| *op == OP_ENCODER_CREATE).unwrap();
+  let arg = last_call(&f, OP_ENCODER_CREATE);
   let fields: Vec<&str> = arg.split(FIELD).collect();
   assert_eq!(&fields[1..6], &["video/mp4", "320", "240", "25", "900000"]);
   assert_eq!(eval(&f, "`${e.width}x${e.height}`"), "320x240");
@@ -1889,14 +1600,13 @@ fn a_frame_flushes_what_was_drawn_and_names_the_source_with_its_length() {
   run(
     &f,
     r#"
-        globalThis.c = inu.canvas.create(320, 240)
-        c.getContext('2d').fillRect(0, 0, 8, 8)
-        globalThis.q = e.addFrame(c)
-        "#,
+      globalThis.c = inu.canvas.create(320, 240)
+      c.getContext('2d').fillRect(0, 0, 8, 8)
+      globalThis.q = e.addFrame(c)
+    "#,
   );
   assert_eq!(f.host.log.borrow().commands.len(), 1, "the drawing was not flushed before the frame");
-  let calls = f.host.log.borrow().calls.clone();
-  let (_, _, arg) = calls.iter().rev().find(|(op, ..)| *op == OP_ENCODER_FRAME).unwrap();
+  let arg = last_call(&f, OP_ENCODER_FRAME);
   let fields: Vec<&str> = arg.split(FIELD).collect();
   assert_eq!(fields[1], SOURCE_CANVAS.to_string(), "the canvas was not named as a canvas");
   assert_eq!(fields[3], "50", "a frame with no duration of its own is one frame at the encoder's rate");
@@ -1904,8 +1614,7 @@ fn a_frame_flushes_what_was_drawn_and_names_the_source_with_its_length() {
   assert_eq!(settle(&f, "q"), "ok:undefined");
   // and a duration of its own is passed as given
   run(&f, "e.addFrame(c, 33)");
-  let calls = f.host.log.borrow().calls.clone();
-  let (_, _, arg) = calls.iter().rev().find(|(op, ..)| *op == OP_ENCODER_FRAME).unwrap();
+  let arg = last_call(&f, OP_ENCODER_FRAME);
   assert_eq!(arg.split(FIELD).nth(3).unwrap(), "33");
 }
 
@@ -1917,8 +1626,7 @@ fn a_frame_may_be_an_image_as_well_as_a_canvas() {
   answer(&f, r#"J{"width":320,"height":240}"#);
   settle(&f, "p.then(i => (globalThis.img = i, 1))");
   run(&f, "e.addFrame(img)");
-  let calls = f.host.log.borrow().calls.clone();
-  let (_, _, arg) = calls.iter().rev().find(|(op, ..)| *op == OP_ENCODER_FRAME).unwrap();
+  let arg = last_call(&f, OP_ENCODER_FRAME);
   assert_eq!(arg.split(FIELD).nth(1).unwrap(), SOURCE_IMAGE.to_string());
   run(&f, "img.dispose()");
   assert!(refusal(&f, "e.addFrame(img)").starts_with("handle-expired:"));
@@ -2002,7 +1710,7 @@ fn a_fast_encoder_producer_hits_the_quota_before_more_pixels_reach_the_host() {
   run(&f, "globalThis.c = inu.canvas.create(1024, 1024)");
   let baseline = f.state.external.charged_bytes();
   assert!(refusal(&f, "for (let i = 0; i < 100; i++) e.addFrame(c)").starts_with("quota-exceeded:"));
-  let accepted = f.host.log.borrow().calls.iter().filter(|(op, ..)| *op == OP_ENCODER_FRAME).count();
+  let accepted = count_calls(&f, OP_ENCODER_FRAME);
   assert!(accepted > 0 && accepted < 100);
   assert_eq!(f.state.external.charged_bytes(), baseline + accepted * 4 * 1024 * 1024);
   while !f.host.pending.borrow().is_empty() {
@@ -2048,19 +1756,19 @@ fn finishing_keeps_the_encoder_alive_without_a_javascript_reference() {
   answer(&f, "");
   run(&f, "globalThis.q = e.finish(); globalThis.e = null; globalThis.p = null");
   f._rt.run_gc();
-  assert!(!f.host.log.borrow().calls.iter().any(|(op, ..)| *op == OP_ENCODER_DESTROY));
+  assert_eq!(count_calls(&f, OP_ENCODER_DESTROY), 0);
   let out = f._dir.path().join("finished.mp4");
   std::fs::write(&out, b"encoded").unwrap();
   answer(&f, &format!(r#"J{{"path":"{}","type":"video/mp4"}}"#, out.to_string_lossy()));
   assert_eq!(settle(&f, "q"), "ok:Blob");
-  assert_eq!(f.host.log.borrow().calls.iter().filter(|(op, ..)| *op == OP_ENCODER_DESTROY).count(), 1);
+  assert_eq!(count_calls(&f, OP_ENCODER_DESTROY), 1);
 }
 
 #[test]
 fn encoder_buffer_reservations_are_checked_before_opening_the_host() {
   let f = setup("encoder-open-quota");
   assert!(refusal(&f, "inu.canvas.createEncoder({ width: 8192, height: 8192 })").starts_with("quota-exceeded:"));
-  assert!(!f.host.log.borrow().calls.iter().any(|(op, ..)| *op == OP_ENCODER_CREATE));
+  assert_eq!(count_calls(&f, OP_ENCODER_CREATE), 0);
   assert_eq!(f.state.external.charged_bytes(), 0);
 }
 

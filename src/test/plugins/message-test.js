@@ -1,49 +1,14 @@
 // ==InuPlugin==
 // @name         message test
-// @author       teidesu
-// @version      1.0
 // @description  asserts inu.Message: every getter against a built raw, and that it stays a lazy read of one
 // @grant        invokeRpc(messages.getHistory)
-// @plugin-api   1
-// @platform     android
 // ==/InuPlugin==
-
-function pass(label, detail) {
-  console.log(detail === undefined ? `PASS ${label}` : `PASS ${label}: ${detail}`)
-}
-
-function fail(label, detail) {
-  console.error(`FAIL ${label}: ${detail}`)
-}
-
-function check(label, ok, detail) {
-  if (ok) pass(label, detail)
-  else fail(label, detail)
-}
-
-function equals(label, actual, expected) {
-  const same = JSON.stringify(actual) === JSON.stringify(expected)
-  check(label, same, same ? JSON.stringify(actual) : `${JSON.stringify(actual)} != ${JSON.stringify(expected)}`)
-}
-
-function expectThrow(label, code, fn) {
-  let error
-  try {
-    fn()
-  } catch (e) {
-    error = e
-  }
-  if (error === undefined) return fail(label, 'did not throw')
-  check(label, error instanceof inu.PluginError && error.code === code, `${error.name}: ${error.code}`)
-}
 
 const SERVICE_PEER = { _: 'peerUser', user_id: '777000' }
 
 function message(fields) {
   return new inu.Message(Object.assign({ _: 'message', id: 1, date: 1715540640 }, fields))
 }
-
-// -- the plain getters --
 
 const incoming = message({
   id: 42,
@@ -76,13 +41,12 @@ equals('textWithEntities without entities', incoming.textWithEntities, { text: '
 const rich = message({ message: 'bold', entities: [{ _: 'messageEntityBold', offset: 0, length: 4 }] })
 equals('textWithEntities carries the entities', rich.textWithEntities.entities?.length, 1)
 
-// both are pass-throughs, so asserting only their null case cannot tell one from `return null`
+// pass-throughs: a null case alone cannot tell one from `return null`
 const forwarded = message({
   fwd_from: { _: 'messageFwdHeader', from_id: { _: 'peerUser', user_id: '5' }, date: 1715540000 },
   reactions: { _: 'messageReactions', results: [{ _: 'reactionCount', count: 3, reaction: { _: 'reactionEmoji', emoticon: '👍' } }] },
 })
 equals('forwardedFrom is the header itself', [forwarded.forwardedFrom?._, forwarded.forwardedFrom?.date], ['messageFwdHeader', 1715540000])
-// the forward header says who wrote it first, which is not who sent this copy here
 equals('and it is not what senderId reads', forwarded.senderId, null)
 equals('reactions is the block itself', [forwarded.reactions?._, forwarded.reactions?.results?.[0].count], ['messageReactions', 3])
 equals('and both are null when absent', [incoming.forwardedFrom, incoming.reactions], [null, null])
@@ -90,10 +54,8 @@ equals('and both are null when absent', [incoming.forwardedFrom, incoming.reacti
 const service = message({ _: 'messageService', action: { _: 'messageActionChatCreate', title: 'x', users: [] } })
 equals('a service message is one, and has no text', [service.isService, service.text], [true, ''])
 
-// legacy constructors are what a message loaded out of the app's own storage arrives as
+// messages loaded from the app's own storage arrive as legacy constructors
 equals('a legacy message is still a message', [message({ _: 'message_old7' }).isService, message({ _: 'messageService_old2' }).isService], [false, true])
-
-// -- dialog ids and secret chats --
 
 equals('a channel dialog id is negative', message({ peer_id: { _: 'peerChannel', channel_id: '456' } }).dialogId, -456)
 equals('a basic group dialog id is negative', message({ peer_id: { _: 'peerChat', chat_id: '123' } }).dialogId, -123)
@@ -103,7 +65,7 @@ equals(
   4242,
 )
 
-// 0x4000000000000000 | 7 - what DialogObject.makeEncryptedDialogId(7) produces
+// DialogObject.makeEncryptedDialogId(7)
 const ENCRYPTED = '4611686018427387911'
 const secret = message({ _: 'message_secret', peer_id: { _: 'peerUser', user_id: '4242' }, dialog_id: ENCRYPTED })
 equals('a secret message has no DialogId', secret.dialogId, null)
@@ -115,21 +77,16 @@ equals(
   null,
 )
 
-// -- the sender --
-
 equals(
   'from_id wins',
   message({ from_id: { _: 'peerUser', user_id: '5' }, peer_id: SERVICE_PEER }).senderId,
   5,
 )
-// from_id is flags.8?Peer and the server omits it in a 1:1 dialog: keying on it alone misses
-// every message read straight off the wire, which is exactly the login-code case
+// from_id is flags.8?Peer and the server omits it in a 1:1 dialog, e.g. the login code
 equals('an incoming 1:1 message falls back to the dialog peer', message({ peer_id: SERVICE_PEER }).senderId, 777000)
 equals('an outgoing one does not', message({ peer_id: SERVICE_PEER, out: true }).senderId, null)
 equals('a channel post with no author has no sender', message({ peer_id: { _: 'peerChannel', channel_id: '99' }, post: true }).senderId, null)
 equals('and neither does a group message with no from_id', message({ peer_id: { _: 'peerChat', chat_id: '3' } }).senderId, null)
-
-// -- media --
 
 function withDocument(...attributes) {
   return message({ media: { _: 'messageMediaDocument', document: { _: 'document', id: '9', attributes } } })
@@ -148,6 +105,9 @@ equals('a legacy photo', message({ media: { _: 'messageMediaPhoto_old' } }).medi
 equals('a live location is a location', message({ media: { _: 'messageMediaGeoLive' } }).mediaType, 'location')
 equals('a giveaway result is a giveaway', message({ media: { _: 'messageMediaGiveawayResults' } }).mediaType, 'giveaway')
 equals('an unrecognised media is "other", not null', message({ media: { _: 'messageMediaDice' } }).mediaType, 'other')
+equals('a document with no attributes, or none at all, is a plain document', [withDocument().mediaType, message({ media: { _: 'messageMediaDocument', document: { _: 'documentEmpty' } } }).mediaType], ['document', 'document'])
+equals('a zero dialog_id annotation falls back to peer_id', message({ peer_id: { _: 'peerUser', user_id: '4242' }, dialog_id: '0' }).dialogId, 4242)
+equals('an old secret message or one with no peer has no DialogId', [message({ _: 'message_secret_old', peer_id: { _: 'peerUser', user_id: '4242' } }).dialogId, message({}).dialogId], [null, null])
 equals('messageMediaEmpty is no media at all', [
   message({ media: { _: 'messageMediaEmpty' } }).media,
   message({ media: { _: 'messageMediaEmpty' } }).mediaType,
@@ -159,19 +119,14 @@ check('document is the document', video.document !== null && video.document.id =
 equals('a photo has no document and no duration', [message({ media: { _: 'messageMediaPhoto' } }).document, message({ media: { _: 'messageMediaPhoto' } }).duration], [null, null])
 equals('an empty document is no document', message({ media: { _: 'messageMediaDocument', document: { _: 'documentEmpty', id: '0' } } }).document, null)
 
-// -- reply / topic --
-
 const inTopic = message({ reply_to: { _: 'messageReplyHeader', forum_topic: true, reply_to_top_id: 12, reply_to_msg_id: 30 } })
 equals('topicId prefers the top id', [inTopic.topicId, inTopic.replyToMessageId], [12, 30])
 const topicRoot = message({ reply_to: { _: 'messageReplyHeader', forum_topic: true, reply_to_msg_id: 12 } })
-// telegram spends one reply header on both jobs: a message that merely sits in a topic carries the
-// topic's root id here and nothing beside it, and reporting that as a reply is a wrong answer
+// telegram uses one reply header for both: a message in a topic carries the topic root id alone
 equals('a message posted in a topic is in it, not replying to it', [topicRoot.topicId, topicRoot.replyToMessageId], [12, null])
 const plainReply = message({ reply_to: { _: 'messageReplyHeader', reply_to_msg_id: 30 } })
 equals('a reply outside a forum has no topic', [plainReply.topicId, plainReply.replyToMessageId], [null, 30])
 equals('and a message with no reply header has neither', [incoming.topicId, incoming.replyToMessageId], [null, null])
-
-// -- it is a view of raw, never a copy of it --
 
 /** @type {tl.RawMessage} */
 const raw = { _: 'message', id: 1, peer_id: { _: 'peerUser', user_id: 4242 }, date: 1715540640, message: 'original' }
@@ -198,8 +153,6 @@ expectThrow('a wrapper needs something to wrap', 'invalid-argument', () => new i
 // @ts-expect-error
 expectThrow('and it has to be an object', 'invalid-argument', () => new inu.Message('a message'))
 
-// -- against the app's own messages --
-
 if (typeof inu.invokeRpc !== 'function') {
   console.log('SKIP the live half: no invokeRpc in this context')
   console.log('message test done')
@@ -223,14 +176,12 @@ if (typeof inu.invokeRpc !== 'function') {
         const m = new inu.Message(raw)
         wrapped += 1
         if (m.raw !== raw) return fail('wrapping a live view', 'raw is not the view')
-        // the whole point of the wrapper being lazy: what it answers is what the view answers,
-        // including whatever the takeover filter decided the view may say
+        // the wrapper is lazy, so it answers what the view (and the takeover filter) says
         if (m.text !== (typeof raw.message === 'string' ? raw.message : '')) {
           return fail('text reads through the view', `${m.text} != ${raw.message}`)
         }
         if (m.id !== raw.id) return fail('id reads through the view', `${m.id} != ${raw.id}`)
         if (m.dialogId === null) return fail('a saved-messages message has a dialog id', String(m.id))
-        // saved messages: every message in it is one of ours
         if (m.senderId === null && !m.isService) return fail('a saved-messages message has a sender', String(m.id))
         if (m.mediaType !== null && m.media === null) return fail('a media type without media', m.mediaType)
       }

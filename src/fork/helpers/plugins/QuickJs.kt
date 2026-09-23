@@ -2,25 +2,17 @@ package desu.inugram.helpers.plugins
 
 import desu.inugram.core.plugins.PluginPermissions
 import java.util.concurrent.atomic.AtomicBoolean
-import org.telegram.messenger.Utilities
 
 /**
- * JNI wrapper over an rquickjs (quickjs-ng) context; the engine itself is the rust crate in
- * src/native.
+ * Rust calls [PluginBridge] directly, caching its method ids off that class, so construction is
+ * two-phase: the listeners need this object and [start] needs them.
  *
- * Native entries serialize access. Synchronous callbacks run on their caller thread.
- *
- * There are no upcalls here: rust calls [PluginBridge] directly, caching its method ids off that
- * class. So construction is two-phase - the listeners need this object, and [start] needs them.
- *
- * `open` for the on-device suite alone. It runs in the app's own process, where this class is on
- * the classpath already, so it cannot shadow it the way the JVM harness does; the members a test
- * double records are the ones opened. Nothing in the app subclasses it.
+ * `open` for the on-device suite only, which runs in the app process and cannot shadow this class.
  */
 open class QuickJs {
     data class Config(
         val spillDir: String,
-        /** where a send's or an upload's file is staged; "" stages beside the spills */
+        /** "" stages beside the spills */
         val transferDir: String,
         val fsDir: String,
         val fsQuotaBytes: Long,
@@ -33,18 +25,12 @@ open class QuickJs {
         val grants: PluginPermissions,
     )
 
-    /**
-     * 0 until [start], published as 0 before teardown. Native validates this generation-tagged
-     * handle under the registry lock, including callers racing close().
-     */
+    /** published as 0 before teardown. Native validates this generation-tagged handle under the registry lock */
     @Volatile private var ptr: Long = 0
 
     /**
-     * Use [requireLive] after [PluginSession.isCurrent] has passed: a closed engine then indicates
-     * a caller bug. Use [ifLive] or [ifLiveOr] for callers that can race teardown, including
-     * hooked threads, notification observers, timers, and UI menu rendering.
-     *
-     * Using the lenient forms everywhere would hide missing identity checks.
+     * [requireLive] after [PluginSession.isCurrent] passed, where a closed engine is a caller bug. [ifLive]/[ifLiveOr]
+     * for callers racing teardown. Lenient forms everywhere would hide missing identity checks.
      */
     private inline fun <T> requireLive(call: (Long) -> T): T {
         val live = ptr
@@ -62,14 +48,10 @@ open class QuickJs {
         return if (live == 0L) fallback else call(live)
     }
 
-    /** whatever [start] was handed; the parts that carry per-engine state are read back off it */
     var listener: PluginBridge? = null
         protected set
 
-    /**
-     * Creates the native context and passes its callback bridge to Rust.
-     * Throws if any upcall descriptor fails to resolve; that wiring error affects all plugins.
-     */
+    /** throws if any upcall descriptor fails to resolve; that affects all plugins */
     open fun start(listener: PluginBridge, config: Config) {
         check(ptr == 0L) { "QuickJs is already started" }
         this.listener = listener
@@ -95,44 +77,36 @@ open class QuickJs {
 
     fun evaluate(code: String, filename: String = "<plugin>"): String? = requireLive { nativeEvaluate(it, code, filename) }
 
-
     /**
-     * Runs on the hooked thread, with bounded engine admission. [invocation] is `[method, this, ...args]`.
-     * Answers `["A", wire]` to answer the call with `wire`, or `["P0" | "P1", ...args]` to run the
-     * original with those args, `=` keeping an argument as it was - `P1` also meaning
-     * [xposedAfter] is owed a call for [dispatchId]. `null` means the phase never ran.
+     * Runs on the hooked thread. [invocation] is `[method, this, ...args]`. Answers `["A", wire]`, or
+     * `["P0" | "P1", ...args]` to run the original, `=` keeping an argument; `P1` means [xposedAfter] is
+     * owed a call. `null` means the phase never ran.
      */
     open fun xposedBefore(dispatchId: Long, site: Long, invocation: Array<Any?>): Array<String>? =
         ifLiveOr(null) { nativeXposedBefore(it, dispatchId, site, invocation, invocation.size) }
 
     /**
-     * `null` preserves the outcome; `X` means the after phase never ran, so the dispatch is still
-     * owed a release. [invocation] is the before phase's, with the result appended: the engine
-     * borrows these references for the call rather than holding them, so the after phase is handed
-     * them again.
+     * `null` preserves the outcome; `X` means the after phase never ran and the dispatch still owes a
+     * release. The engine borrows [invocation]'s references per call, so it is handed them again.
      */
     open fun xposedAfter(dispatchId: Long, invocation: Array<Any?>, threw: Boolean): String? =
         ifLiveOr(NOT_DISPATCHED) { nativeXposedAfter(it, dispatchId, invocation, invocation.size, threw) }
 
-    /** [invocation] is `[method, this, ...args, result]`, the result last so one array crosses instead of two. */
+    /** `[method, this, ...args, result]`: one array crosses instead of two */
     open fun xposedAfterOnly(site: Long, invocation: Array<Any?>, threw: Boolean): String? =
         ifLiveOr(NOT_DISPATCHED) { nativeXposedAfterOnly(it, site, invocation, invocation.size, threw) }
 
-    /** Shared budget for native phases and Rust engine admission. */
     open fun xposedBudgetMs(): Long = nativeXposedBudgetMs()
 
     open fun xposedRelease(dispatchId: Long) = ifLive { nativeXposedRelease(it, dispatchId) }
 
-    /** Runs synchronously; native rejects recursive entry and admission past the hook budget. */
+    /** native rejects recursive entry and admission past the hook budget */
     open fun jvmCallback(callbackId: Int) = ifLive { nativeJvmCallback(it, callbackId) }
 
     open fun jvmMethod(callbackId: Int, self: String, args: Array<String>): String =
         requireLive { nativeJvmMethod(it, callbackId, self, args) }
 
-    /**
-     * The reference table behind `inu.jvm` handles is rust's; these reach it from any thread and
-     * without the engine lease. [kind] is the handle kind char; 0 means the table has closed.
-     */
+    /** rust's table, reachable from any thread without the engine lease. 0 means the table has closed */
     open fun jvmMint(value: Any, kind: Char): Long = ifLiveOr(0L) { nativeJvmMint(it, value, kind.code) }
 
     open fun jvmObjectAt(id: Long): Any? = ifLiveOr(null) { nativeJvmObjectAt(it, id) }
@@ -155,27 +129,18 @@ open class QuickJs {
     /** Quiesce caller-thread callbacks before detaching any host state. */
     fun stopCallbacks() = ifLive { nativeStopCallbacks(it) }
 
-
-    /**
-     * Settles a host request. [api] selects a [SETTLE_FETCH]..[SETTLE_INVOKE] table;
-     * [wire] contains a value or error. Ignores requests already settled or aborted.
-     */
+    /** ignores requests already settled or aborted */
     open fun settle(api: Int, requestId: Long, wire: String) = requireLive { nativeSettle(it, api, requestId, wire) }
 
-    /** [settle] for the one answer that is bytes and nothing else: `invokeRaw`'s response body */
     open fun settleBytes(api: Int, requestId: Long, bytes: ByteArray) =
         requireLive { nativeSettleBytes(it, api, requestId, bytes) }
 
     fun runTimers() = ifLive { nativeRunTimers(it) }
 
-    /**
-     * Throttles this engine's timers while hidden; nothing else slows down. A fresh engine assumes
-     * the foreground, so push the current state before evaluating a plugin whenever the app is not
-     * in it.
-     */
+    /** a fresh engine assumes foreground, so push the state before evaluating a plugin in the background */
     fun appVisibilityChanged(mode: Int) = requireLive { nativeAppVisibilityChanged(it, mode) }
 
-    /** call right before [close]; JS throws are logged, never propagated */
+    /** JS throws are logged, never propagated */
     fun notifyUnload() = requireLive { nativeNotifyUnload(it) }
     fun pollUnload(): Boolean = ifLiveOr(true) { nativePollUnload(it) }
 
@@ -192,10 +157,10 @@ open class QuickJs {
 
     open fun dispatchAction(kind: Int, token: Int, surfaceJson: String) = ifLive { nativeDispatchAction(it, kind, token, surfaceJson) }
 
-    /** the diff is the host's ([desu.inugram.core.plugins.ScreenStack]), so only call this for an actual change */
+    /** the host owns the diff ([desu.inugram.core.plugins.ScreenStack]) */
     fun dispatchScreenChange(changeJson: String, stackJson: String) = requireLive { nativeDispatchScreenChange(it, changeJson, stackJson) }
 
-    /** native coalesces these on a time interval, so calling it per chunk is what the contract expects */
+    /** native coalesces these, so call per chunk */
     open fun writeProgress(requestId: Long, loaded: Long, total: Long) = ifLive { nativeWriteProgress(it, requestId, loaded, total) }
 
     open fun dispatchRpc(callbackId: Int, dispatchId: Long, method: String, accountId: Int, requestWire: String) =
@@ -206,22 +171,18 @@ open class QuickJs {
     /** the host has already answered the app, so no completion comes back */
     open fun abandonDispatch(dispatchId: Long, reasonWire: String) = requireLive { nativeAbandonDispatch(it, dispatchId, reasonWire) }
 
-    /** only for a type some registration named; the payload is decoded either way, since nothing else frees its handle */
+    /** the payload is decoded either way, since nothing else frees its handle */
     open fun dispatchUpdate(typeName: String, accountId: Int, updateWire: String) = requireLive { nativeDispatchUpdate(it, typeName, accountId, updateWire) }
 
-    /** answered exactly once through [RpcListener.onUpdateVerdict], whatever the middleware does */
+    /** answered exactly once through [RpcListener.onUpdateVerdict] */
     open fun dispatchUpdateIntercept(callbackId: Int, dispatchId: Long, typeName: String, accountId: Int, updateWire: String) =
         requireLive { nativeDispatchUpdateIntercept(it, callbackId, dispatchId, typeName, accountId, updateWire) }
 
-    /** nothing is rejected, but a middleware settling later can no longer drop an update the app already has */
     open fun abandonUpdateDispatch(dispatchId: Long, reasonWire: String) = requireLive { nativeAbandonUpdateDispatch(it, dispatchId, reasonWire) }
 
     fun notifyAccountsChanged() = requireLive { nativeAccountsChanged(it) }
 
-    /**
-     * [header] crosses as two parallel arrays with the key repeated per value: a directive may
-     * appear several times (`@grant`, `@description:xx`), so native regroups the runs.
-     */
+    /** a directive may repeat (`@grant`, `@description:xx`), so native regroups the runs */
     fun installInfo(
         appVersion: String,
         appBuild: String,
@@ -321,22 +282,18 @@ open class QuickJs {
     private external fun nativeDestroy(ptr: Long)
 
     companion object {
-        /**
-         * a fault: plugin code threw at a site the engine catches rather than propagates.
-         * `console.*` binds 0..4 only, so plugin JS cannot forge one.
-         */
+        /** `console.*` binds 0..4 only, so plugin JS cannot forge a fault */
         const val LEVEL_FAULT = 5
 
-        /** keep in sync with rust `xposed::NOT_DISPATCHED`: the after phase never ran */
+        /** keep in sync with rust `xposed::NOT_DISPATCHED` */
         const val NOT_DISPATCHED = "X"
 
-        /** [RpcListener.onInvokeRpc]'s slot for the account-less `inu.invokeRpc` (rust: `ANY_ACCOUNT`) */
+        /** rust: `ANY_ACCOUNT` */
         const val ANY_ACCOUNT = -1
 
         /**
-         * the tables [settle] answers into; keep in step with rust `runtime::SETTLE_*`. A modal is a
-         * dialog (`S` and the button), a prompt (`S` and the text, or `N`) or a chooser (`N`, or `J`
-         * and the picked indices); a file request is a pick (`J` and the copies) or a save (`B1`/`B0`).
+         * keep in step with rust `runtime::SETTLE_*`. A modal settles `S`+button (dialog), `S`+text or `N`
+         * (prompt), `N` or `J`+indices (chooser); a file request `J`+copies (pick) or `B1`/`B0` (save).
          */
         const val SETTLE_FETCH = 0
         const val SETTLE_CANVAS = 1
@@ -346,13 +303,12 @@ open class QuickJs {
         const val SETTLE_WRITES = 5
         const val SETTLE_INVOKE = 6
 
-        // standalone rust cdylib (rquickjs); separate from the stock tmessages.NN lib
+        // standalone rust cdylib, separate from the stock tmessages.NN lib
         init {
             System.loadLibrary("inu_native")
         }
 
-        /** for a class with natives of its own in the same library: touching the companion loads it */
-        @JvmStatic
+        /** touching the companion loads the library */
         fun ensureLoaded() = Unit
     }
 }

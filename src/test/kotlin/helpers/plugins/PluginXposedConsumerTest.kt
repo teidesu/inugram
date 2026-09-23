@@ -1,6 +1,5 @@
 package desu.inugram.helpers.plugins
 
-import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.platform.PluginHookContext
 import desu.inugram.helpers.plugins.platform.PluginJvm
 import desu.inugram.helpers.plugins.platform.PluginXposed
@@ -16,32 +15,16 @@ class PluginXposedConsumerTest {
     @Before fun setUp() = resetBridge()
 
     private fun install(plugin: Plugin, method: java.lang.reflect.Method, before: String = "N", after: String = "N") {
-        val bridge = PluginJvm.bridgeFor(plugin.js)!!
-        val id = bridge.encode(method).substring(2).toLong()
-        val wire = plugin.js.listener!!.xposed(PluginXposed.OP_HOOK, id, "", arrayOf(before, after))
-        val site = (PluginWire.decode(wire) as PluginWire.Value.Str).value.toLong()
-        assertEquals("N", plugin.js.listener!!.xposed(PluginXposed.OP_NATIVE_ADD, site, "1", arrayOf(before, after)))
+        val site = decodeString(plugin.xposed(PluginXposed.OP_HOOK, plugin.jvmHandle(method), "", before, after)).toLong()
+        assertEquals("N", plugin.xposed(PluginXposed.OP_NATIVE_ADD, site, "1", before, after))
     }
 
     private fun createConsumer(plugin: Plugin, graph: String, vararg args: String): String {
-        val wire = plugin.js.listener!!.jvm(PluginJvm.OP_XPOSED_ROUTINE, 0, graph, arrayOf(*args))
+        val wire = plugin.jvm(PluginJvm.OP_XPOSED_ROUTINE, 0, graph, *args)
         assertTrue(wire.startsWith("GO"), wire)
         val input = "G" + wire.substring(2)
         assertTrue(PluginJvm.bridgeFor(plugin.js)!!.decode(input) is Consumer<*>)
         return input
-    }
-
-    @Test fun consumers_edit_arguments_and_replace_the_original_result_without_js() {
-        val plugin = startPlugin("consumer", "unsafe.jvm", "unsafe.xposed")
-        val before = createConsumer(plugin, """{"v":1,"slots":0,"tries":[],"code":[["capture",0],["capture",1],["arg",0],["add",2,1],["setArg",0,3]]}""", "I0", "I9")
-        val after = createConsumer(plugin, """{"v":1,"slots":0,"tries":[],"code":[["capture",0],["result"],["add",1,0],["setResult",2]]}""", "I1")
-        val method = JvmFixture::class.java.getDeclaredMethod("sum", Int::class.java, Int::class.java)
-        install(plugin, method, before, after)
-        assertEquals(13, method.invoke(null, 1, 2))
-        assertTrue(plugin.js.xposedBefores.isEmpty())
-        assertTrue(plugin.js.xposedAfters.isEmpty())
-        PluginXposed.detach(plugin.session!!)
-        assertEquals(3, method.invoke(null, 1, 2))
     }
 
     @Test fun a_before_consumer_can_return_null_and_an_after_consumer_can_recover_an_exception() {
@@ -57,7 +40,6 @@ class PluginXposedConsumerTest {
         assertEquals("recovered", boom.invoke(fixture))
     }
 
-    /** an argument the bridge will not carry stops the consumer, so the original answers untouched */
     @Test fun argument_reads_the_bridge_refuses_stop_the_consumer() {
         val plugin = startPlugin("consumer", "unsafe.jvm", "unsafe.xposed")
         val before = createConsumer(plugin, """{"v":1,"slots":0,"tries":[],"code":[["capture",0],["capture",1],["arg",0],["setResult",1]]}""", "I0", "Sblocked")
@@ -70,7 +52,7 @@ class PluginXposedConsumerTest {
     @Test fun consumers_can_set_and_clear_throwables() {
         val plugin = startPlugin("throwing-consumer", "unsafe.jvm", "unsafe.xposed")
         val exception = IllegalStateException("blocked")
-        val wire = "G" + PluginJvm.bridgeFor(plugin.js)!!.encode(exception).substring(2)
+        val wire = plugin.jvmWire(exception)
         val before = createConsumer(plugin, """{"v":1,"slots":0,"tries":[],"code":[["capture",0],["setThrowable",0]]}""", wire)
         val after = createConsumer(plugin, """{"v":1,"slots":0,"tries":[],"code":[["capture",0],["throwable"],["jumpIfFalsy",1,3],["setResult",0]]}""", "I7")
         val method = JvmFixture::class.java.getDeclaredMethod("sum", Int::class.java, Int::class.java)

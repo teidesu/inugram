@@ -10,8 +10,7 @@ struct Fixture {
 }
 
 fn open(path: &Path) -> Fixture {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
+  let (rt, ctx) = crate::testing::harness::new_engine();
   ctx.with(|ctx| {
     install_plugin_error(&ctx).unwrap();
     install_local_storage(&ctx, path.to_path_buf()).unwrap();
@@ -257,6 +256,20 @@ fn a_store_outlives_its_engine() {
   assert_eq!(open(&file.0).eval("JSON.stringify(localStorage)"), r#"{"a":"again","b":"2"}"#);
 }
 
+/// the store is written when the turn's microtasks run, not only when the engine goes away
+#[test]
+fn a_turn_s_writes_reach_the_file_once_its_jobs_run() {
+  let file = TempPath::default();
+  let ls = open(&file.0);
+  ls.eval("for (let i = 0; i < 100; i++) localStorage.setItem('k', String(i)); localStorage.setItem('q', 'a\"b\\\\c\\n\\u0001é')");
+  while ls._rt.execute_pending_job().unwrap() {}
+  let written: serde_json::Value = serde_json::from_slice(&fs::read(&file.0).unwrap()).unwrap();
+  assert_eq!(written, serde_json::json!({ "k": "99", "q": "a\"b\\c\n\u{1}é" }));
+  ls.eval("localStorage.clear()");
+  while ls._rt.execute_pending_job().unwrap() {}
+  assert!(!file.0.exists());
+}
+
 #[test]
 fn a_read_alone_creates_no_file() {
   let file = TempPath::default();
@@ -317,7 +330,6 @@ fn a_store_cleared_under_the_cap_accepts_what_it_refused() {
   ls.eval(&format!("localStorage.setItem('a', 'x'.repeat({}))", Q - 1));
   assert_eq!(ls.eval("localStorage.setItem('b', 'y')"), "throws QuotaExceededError");
   ls.eval("localStorage.clear()");
-  assert!(!file.0.exists());
   assert_eq!(ls.eval("localStorage.setItem('b', 'y')"), "undefined");
 }
 
@@ -355,53 +367,15 @@ fn set_items_reads_its_values_before_it_touches_the_store() {
 }
 
 #[test]
-fn a_torn_frame_loses_itself_and_nothing_written_after() {
-  let file = TempPath::default();
-  open(&file.0).eval("localStorage.setItem('a', '1'); localStorage.setItem('b', '2')");
-  let mut log = OpenOptions::new().append(true).open(&file.0).unwrap();
-  log.write_all(&[9, 0, 0, 0, TAG_SET, 1]).unwrap();
-  drop(log);
-
-  let ls = open(&file.0);
-  assert_eq!(ls.eval("JSON.stringify(localStorage)"), r#"{"a":"1","b":"2"}"#);
-  ls.eval("localStorage.setItem('c', '3')");
-  drop(ls);
-  assert_eq!(open(&file.0).eval("JSON.stringify(localStorage)"), r#"{"a":"1","b":"2","c":"3"}"#);
-}
-
-#[test]
 fn a_file_that_is_not_a_store_is_moved_aside_and_the_store_starts_empty() {
   let file = TempPath::default();
-  fs::write(&file.0, b"INUKV\x02 from a newer build").unwrap();
+  fs::write(&file.0, b"{\"a\": 1").unwrap();
   let ls = open(&file.0);
   assert_eq!(ls.eval("Object.keys(localStorage)"), "[]");
   ls.eval("localStorage.setItem('a', '1')");
   drop(ls);
   assert_eq!(open(&file.0).eval("localStorage.getItem('a')"), "1");
-  assert_eq!(fs::read(quarantine_path(&file.0)).unwrap(), b"INUKV\x02 from a newer build");
-}
-
-#[test]
-fn a_torn_magic_reads_as_empty_and_is_not_moved_aside() {
-  let file = TempPath::default();
-  fs::write(&file.0, &MAGIC[..3]).unwrap();
-  let ls = open(&file.0);
-  assert_eq!(ls.eval("Object.keys(localStorage)"), "[]");
-  ls.eval("localStorage.setItem('a', '1')");
-  drop(ls);
-  assert_eq!(open(&file.0).eval("localStorage.getItem('a')"), "1");
-  assert!(!quarantine_path(&file.0).exists());
-}
-
-#[test]
-fn rewriting_one_key_keeps_the_file_near_what_it_holds() {
-  let file = TempPath::default();
-  let ls = open(&file.0);
-  ls.eval("for (let i = 0; i < 300; i++) localStorage.setItem('k', String(i).padStart(4096, 'x'))");
-  let size = fs::metadata(&file.0).unwrap().len();
-  assert!(size < COMPACT_FLOOR + 2 * 4200, "{size}");
-  drop(ls);
-  assert_eq!(open(&file.0).eval("localStorage.getItem('k').slice(-3)"), "299");
+  assert_eq!(fs::read(file.0.with_added_extension("corrupt")).unwrap(), b"{\"a\": 1");
 }
 
 #[test]
@@ -416,7 +390,7 @@ fn an_engine_with_no_store_path_throws_internal() {
   assert_eq!(open(Path::new("")).eval("localStorage.getItem('a')"), "throws internal");
 }
 
-const API_ORACLE: &str = include_str!("../../../../test/plugins/api-test.js");
+const API_ORACLE: &str = crate::testing::test_plugin!("api-test.js");
 
 /// its last two halves are the ones a device only reaches through a person: the dialog settles
 /// when the user picks a button, and the unload callbacks run when the plugin is stopped. Both
@@ -444,11 +418,7 @@ fn the_bundled_api_test_plugin_passes() {
     state.dispose(ctx)
   });
   let lines = crate::testing::harness::install_capturing_console(&ctx);
-  ctx.with(|ctx| match ctx.eval::<(), _>(API_ORACLE) {
-    Ok(()) => {}
-    Err(rquickjs::Error::Exception) => panic!("{}", crate::api::error::format_exception(&ctx)),
-    Err(e) => panic!("{e:?}"),
-  });
+  crate::testing::harness::eval_unit(&ctx, API_ORACLE);
 
   let request_id = host.dialogs.borrow().last().expect("a dialog was opened").0;
   dialogs.settle(&rt, &ctx, request_id, "Spositive");
@@ -460,26 +430,4 @@ fn the_bundled_api_test_plugin_passes() {
   // accepted one did
   assert_eq!(host.dialogs.borrow().len(), 1);
   assert_eq!(*host.toasts.borrow(), vec!["api-test loaded (run #1)".to_string(), "dialog: positive".to_string()],);
-}
-
-#[test]
-fn a_write_after_the_log_was_lost_keeps_everything_already_stored() {
-  let file = TempPath::default();
-  let mut store = Store::open(&file.0).unwrap();
-  assert!(store.set_all(&[("a".to_string(), "1".to_string())]).is_ok());
-  store.log = None;
-  assert!(store.set_all(&[("b".to_string(), "2".to_string())]).is_ok());
-  drop(store);
-  assert_eq!(open(&file.0).eval("JSON.stringify(localStorage)"), r#"{"a":"1","b":"2"}"#);
-}
-
-#[test]
-fn a_delete_after_the_log_was_lost_keeps_the_other_entries() {
-  let file = TempPath::default();
-  let mut store = Store::open(&file.0).unwrap();
-  assert!(store.set_all(&[("a".to_string(), "1".to_string()), ("b".to_string(), "2".to_string())]).is_ok());
-  store.log = None;
-  store.delete("a").unwrap();
-  drop(store);
-  assert_eq!(open(&file.0).eval("JSON.stringify(localStorage)"), r#"{"b":"2"}"#);
 }

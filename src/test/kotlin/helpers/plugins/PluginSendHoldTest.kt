@@ -12,12 +12,6 @@ import org.telegram.messenger.SendMessagesHelper
 import org.telegram.messenger.SendMessagesHelper.SendMessageParams
 import org.telegram.tgnet.TLRPC
 
-/**
- * The grace window a send waits out before it is drawn, when a middleware could still drop it. What
- * is asserted here is what the user sees: a dropped send never reaches the screen at all, one the
- * chain keeps does, and a send no registered filter could claim is drawn before `sendMessage` has
- * even returned.
- */
 class PluginSendHoldTest {
     private val self = 100L
     private val alice = 222L
@@ -38,12 +32,6 @@ class PluginSendHoldTest {
         observer = null
     }
 
-    private fun user(id: Long) = TLRPC.TL_user().apply {
-        this.id = id
-        access_hash = id * 10
-    }
-
-    /** the notification the bubble is drawn off, so a message that flashed is one this recorded */
     private fun watchDraws() = onUi {
         val delegate = NotificationCenter.NotificationCenterDelegate { _, _, args ->
             @Suppress("UNCHECKED_CAST")
@@ -58,14 +46,8 @@ class PluginSendHoldTest {
         SendMessagesHelper.getInstance(0).sendMessage(SendMessageParams.of(text, alice))
     }
 
-    /** the composer reconciles across its own storage thread, which the queue recorders do not stand in for */
     private fun waitFor(what: String, condition: () -> Boolean) {
-        repeat(100) {
-            settle()
-            if (condition()) return
-            Thread.sleep(20)
-        }
-        throw AssertionError(what)
+        awaitValue(what) { condition().takeIf { it } }
     }
 
     private fun dropping(plugin: Plugin) {
@@ -100,10 +82,6 @@ class PluginSendHoldTest {
         assertTrue(connections().lastSent()?.request is TLRPC.TL_messages_sendMessage)
     }
 
-    /**
-     * the filter is read off the text alone, which the composer already has - so a send the
-     * registered middleware could not claim pays nothing, not even a queue hop
-     */
     @Test
     fun a_send_no_filter_could_claim_is_drawn_before_the_composer_returns() {
         val plugin = startPlugin("p", "interceptSendMessage")
@@ -116,9 +94,6 @@ class PluginSendHoldTest {
         }
     }
 
-    /**
-     * a middleware may resolve a promise immediately; the grace window depends on its verdict
-     */
     @Test
     fun a_quick_verdict_is_held_regardless_of_callback_syntax() {
         val plugin = startPlugin("p", "interceptSendMessage")

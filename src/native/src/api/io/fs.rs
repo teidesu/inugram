@@ -4,7 +4,6 @@ use std::fs;
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::rc::Rc;
-use std::time::UNIX_EPOCH;
 
 use cap_std::ambient_authority;
 use cap_std::fs::Dir;
@@ -12,10 +11,9 @@ use rquickjs::function::Opt;
 use rquickjs::{Ctx, Function, Object, Result as JsResult, TypedArray, Value};
 
 use crate::api::error::PluginErrorCode;
-use crate::api::io::blob::{BlobExport, BlobState, MATERIALIZE_LIMIT_BYTES};
+use crate::api::io::blob::{mtime_millis, BlobExport, BlobFault, BlobHandle, MATERIALIZE_LIMIT_BYTES};
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
-
-const COPY_CHUNK_BYTES: u64 = 256 * 1024;
+use crate::utils::qjs::qjs_read_typed_bytes;
 
 pub const DEFAULT_QUOTA_BYTES: u64 = 50 * 1024 * 1024;
 
@@ -47,7 +45,6 @@ impl Storage {
 
 pub struct FsState {
   grants: Rc<dyn GrantHost>,
-  blobs: Rc<BlobState>,
   storage: Storage,
   quota: u64,
   unscoped: bool,
@@ -143,7 +140,7 @@ impl Entry {
     ctime: i64,
     ctime_nsec: i64,
   ) -> Entry {
-    let mtime = system_time_millis(modified);
+    let mtime = mtime_millis(modified);
     Entry {
       is_file,
       is_dir,
@@ -174,10 +171,6 @@ impl Entry {
 enum Target<'a> {
   Confined { root: &'a Path, dir: &'a Dir, path: PathBuf },
   Ambient(PathBuf),
-}
-
-fn mismatched_storage() -> std::io::Error {
-  std::io::Error::other("the two paths are in different storage")
 }
 
 impl Target<'_> {
@@ -280,7 +273,7 @@ impl Target<'_> {
         std::io::copy(&mut reader, &mut writer).map(|_| ())
       }
       (Target::Ambient(path), Target::Ambient(to_path)) => fs::copy(path, to_path).map(|_| ()),
-      _ => Err(mismatched_storage()),
+      _ => Err(std::io::Error::other("the two paths are in different storage")),
     }
   }
 
@@ -290,7 +283,7 @@ impl Target<'_> {
         dir.rename(path, to_dir, to_path)
       }
       (Target::Ambient(path), Target::Ambient(to_path)) => fs::rename(path, to_path),
-      _ => Err(mismatched_storage()),
+      _ => Err(std::io::Error::other("the two paths are in different storage")),
     }
   }
 }
@@ -393,17 +386,10 @@ impl Source {
   fn write_into(&self, file: &mut fs::File) -> FsResult<()> {
     match self {
       Source::Bytes(bytes) => file.write_all(bytes).map_err(|e| io("fs", e)),
-      Source::Blob(export) => {
-        let mut at = 0;
-        while at < export.len() {
-          let take = (export.len() - at).min(COPY_CHUNK_BYTES);
-          let chunk =
-            export.read(at, take).map_err(|_| Fault::Gone("fs: the blob being written is gone".to_string()))?;
-          file.write_all(&chunk).map_err(|e| io("fs", e))?;
-          at += take;
-        }
-        Ok(())
-      }
+      Source::Blob(export) => export.write_to(file).map_err(|fault| match fault {
+        BlobFault::Gone(message) => Fault::Gone(format!("fs: {message}")),
+        other => Fault::Io(format!("fs: {}", other.message())),
+      }),
     }
   }
 }
@@ -411,16 +397,15 @@ impl Source {
 impl FsState {
   fn read_source(&self, value: &Value<'_>) -> FsResult<Source> {
     if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
-      // SAFETY: no javascript runs while the slice is borrowed
-      let Some(bytes) = (unsafe { typed.as_bytes() }) else {
+      let Some(bytes) = qjs_read_typed_bytes(&typed, <[u8]>::to_vec) else {
         return Err(Fault::Invalid("fs: the array is detached".to_string()));
       };
-      return Ok(Source::Bytes(bytes.to_vec()));
+      return Ok(Source::Bytes(bytes));
     }
-    if let Some(export) = self.blobs.resolve_export_of(value) {
+    if let Some(export) = crate::api::io::blob::export_blob(value) {
       return Ok(Source::Blob(export));
     }
-    if rquickjs::Class::<crate::api::io::blob::BlobHandle>::from_value(value).is_ok() {
+    if rquickjs::Class::<BlobHandle>::from_value(value).is_ok() {
       return Err(Fault::Gone("fs: the blob being written was disposed".to_string()));
     }
     Err(Fault::Invalid("fs: expected a Blob or a Uint8Array".to_string()))
@@ -534,14 +519,6 @@ impl FsState {
   }
 }
 
-fn system_time_millis(time: Option<std::time::SystemTime>) -> i64 {
-  let Some(time) = time else { return 0 };
-  match time.duration_since(UNIX_EPOCH) {
-    Ok(duration) => i64::try_from(duration.as_millis()).unwrap_or(i64::MAX),
-    Err(error) => i64::try_from(error.duration().as_millis()).map_or(i64::MIN, i64::saturating_neg),
-  }
-}
-
 fn unix_ctime_millis(seconds: i64, nanos: i64) -> Option<i64> {
   if seconds == 0 && nanos == 0 {
     return None;
@@ -608,7 +585,6 @@ fn remove_tree(target: &Target<'_>) -> std::io::Result<()> {
 pub fn install_fs<'js>(
   ctx: &Ctx<'js>,
   grants: Rc<dyn GrantHost>,
-  blobs: Rc<BlobState>,
   root: &Path,
   quota: u64,
   unscoped: bool,
@@ -618,7 +594,6 @@ pub fn install_fs<'js>(
   let storage = open_storage(root, unscoped);
   let state = Rc::new(FsState {
     grants,
-    blobs,
     storage,
     quota,
     unscoped,
@@ -628,16 +603,10 @@ pub fn install_fs<'js>(
 
   let fs_obj = Object::new(ctx.clone())?;
 
-  {
-    let state = state.clone();
-    fs_obj.set(
-      "read",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, path: String| -> JsResult<Value<'js>> {
-        state.gate(&ctx)?;
-        state.op_read(&ctx, &path).or_else(|fault| fault.throw(&ctx))
-      })?,
-    )?;
-  }
+  set_fn!(fs_obj, "read", ctx, state, move |ctx: Ctx<'js>, path: String| -> JsResult<Value<'js>> {
+    state.gate(&ctx)?;
+    state.op_read(&ctx, &path).or_else(|fault| fault.throw(&ctx))
+  });
 
   for (name, append) in [("write", false), ("append", true)] {
     let state = state.clone();
@@ -653,71 +622,44 @@ pub fn install_fs<'js>(
     )?;
   }
 
-  {
-    let state = state.clone();
-    fs_obj.set(
-      "mkdir",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, path: String| -> JsResult<()> {
-        state.gate(&ctx)?;
-        state.op_mkdir(&path).or_else(|fault| fault.throw(&ctx))
-      })?,
-    )?;
-  }
+  set_fn!(fs_obj, "mkdir", ctx, state, move |ctx: Ctx<'js>, path: String| -> JsResult<()> {
+    state.gate(&ctx)?;
+    state.op_mkdir(&path).or_else(|fault| fault.throw(&ctx))
+  });
 
-  {
-    let state = state.clone();
-    fs_obj.set(
-      "rm",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, path: String, options: Opt<Value<'js>>| -> JsResult<()> {
-        state.gate(&ctx)?;
-        let recursive = match options.0.as_ref().and_then(|v| v.as_object()) {
-          Some(options) => options.get::<_, Option<bool>>("recursive")?.unwrap_or(false),
-          None => false,
-        };
-        state.op_rm(&path, recursive).or_else(|fault| fault.throw(&ctx))
-      })?,
-    )?;
-  }
+  set_fn!(fs_obj, "rm", ctx, state, move |ctx: Ctx<'js>,
+                                          path: String,
+                                          options: Opt<Value<'js>>|
+        -> JsResult<()> {
+    state.gate(&ctx)?;
+    let recursive = match options.0.as_ref().and_then(|v| v.as_object()) {
+      Some(options) => options.get::<_, Option<bool>>("recursive")?.unwrap_or(false),
+      None => false,
+    };
+    state.op_rm(&path, recursive).or_else(|fault| fault.throw(&ctx))
+  });
 
-  {
-    let state = state.clone();
-    fs_obj.set(
-      "exists",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, path: String| -> JsResult<bool> {
-        state.gate(&ctx)?;
-        state.op_exists(&path).or_else(|fault| fault.throw(&ctx))
-      })?,
-    )?;
-  }
+  set_fn!(fs_obj, "exists", ctx, state, move |ctx: Ctx<'js>, path: String| -> JsResult<bool> {
+    state.gate(&ctx)?;
+    state.op_exists(&path).or_else(|fault| fault.throw(&ctx))
+  });
 
-  {
-    let state = state.clone();
-    fs_obj.set(
-      "readdir",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, path: String| -> JsResult<Vec<String>> {
-        state.gate(&ctx)?;
-        state.op_readdir(&path).or_else(|fault| fault.throw(&ctx))
-      })?,
-    )?;
-  }
+  set_fn!(fs_obj, "readdir", ctx, state, move |ctx: Ctx<'js>, path: String| -> JsResult<Vec<String>> {
+    state.gate(&ctx)?;
+    state.op_readdir(&path).or_else(|fault| fault.throw(&ctx))
+  });
 
-  {
-    let state = state.clone();
-    fs_obj.set(
-      "stat",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, path: String| -> JsResult<Object<'js>> {
-        state.gate(&ctx)?;
-        let stat = state.op_stat(&path).or_else(|fault| fault.throw(&ctx))?;
-        let obj = Object::new(ctx.clone())?;
-        obj.set("isFile", stat.is_file)?;
-        obj.set("isDirectory", stat.is_dir)?;
-        obj.set("size", stat.len as f64)?;
-        obj.set("mtime", stat.mtime as f64)?;
-        obj.set("ctime", stat.ctime as f64)?;
-        Ok(obj)
-      })?,
-    )?;
-  }
+  set_fn!(fs_obj, "stat", ctx, state, move |ctx: Ctx<'js>, path: String| -> JsResult<Object<'js>> {
+    state.gate(&ctx)?;
+    let stat = state.op_stat(&path).or_else(|fault| fault.throw(&ctx))?;
+    let obj = Object::new(ctx.clone())?;
+    obj.set("isFile", stat.is_file)?;
+    obj.set("isDirectory", stat.is_dir)?;
+    obj.set("size", stat.len as f64)?;
+    obj.set("mtime", stat.mtime as f64)?;
+    obj.set("ctime", stat.ctime as f64)?;
+    Ok(obj)
+  });
 
   for (name, is_move) in [("copy", false), ("move", true)] {
     let state = state.clone();
@@ -731,30 +673,18 @@ pub fn install_fs<'js>(
     )?;
   }
 
-  {
-    let state = state.clone();
-    fs_obj.set(
-      "usage",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<f64> {
-        state.gate(&ctx)?;
-        if state.storage.root().is_none() {
-          return Fault::Io("fs: this plugin has no storage directory".to_string()).throw(&ctx);
-        }
-        Ok(state.usage() as f64)
-      })?,
-    )?;
-  }
+  set_fn!(fs_obj, "usage", ctx, state, move |ctx: Ctx<'js>| -> JsResult<f64> {
+    state.gate(&ctx)?;
+    if state.storage.root().is_none() {
+      return Fault::Io("fs: this plugin has no storage directory".to_string()).throw(&ctx);
+    }
+    Ok(state.usage() as f64)
+  });
 
-  {
-    let state = state.clone();
-    fs_obj.set(
-      "quota",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<f64> {
-        state.gate(&ctx)?;
-        Ok(if state.quota == UNCAPPED { f64::INFINITY } else { state.quota as f64 })
-      })?,
-    )?;
-  }
+  set_fn!(fs_obj, "quota", ctx, state, move |ctx: Ctx<'js>| -> JsResult<f64> {
+    state.gate(&ctx)?;
+    Ok(if state.quota == UNCAPPED { f64::INFINITY } else { state.quota as f64 })
+  });
 
   globals.inu.set("fs", fs_obj)?;
   state.install_android_dirs(ctx, globals)?;

@@ -1,27 +1,8 @@
 // ==InuPlugin==
 // @name         send intercept test
-// @author       teidesu
-// @version      1.0
 // @description  asserts inu.interceptSendMessage normalizes all four send methods into one OutgoingMessage, that a rewrite lands on the request that goes out and that a drop is total
 // @grant        interceptSendMessage
-// @plugin-api   1
-// @platform     android
 // ==/InuPlugin==
-
-function pass(label, detail) {
-  console.log(detail === undefined ? `PASS ${label}` : `PASS ${label}: ${detail}`)
-}
-
-function fail(label, detail) {
-  console.error(`FAIL ${label}: ${detail}`)
-}
-
-function check(label, ok, detail) {
-  if (ok) pass(label, detail)
-  else fail(label, detail)
-}
-
-// -- the surface --
 
 check('interceptSendMessage exists', typeof inu.interceptSendMessage === 'function')
 
@@ -31,16 +12,11 @@ disposer()
 disposer()
 pass('disposing twice is a no-op')
 
-// registered and disposed before anything could be sent; `neverRan` re-asserts it below
 let neverRan = 0
 inu.interceptSendMessage(() => { neverRan += 1; return 'drop' })()
 
-// -- the chain --
-//
-// the harness pushes one of each of the four send methods plus a second sendMessage whose text says
-// to drop it, then hands `__report` what the *host* was actually asked to send. so the rewrite
-// assertions are against the request that went out rather than against this file's own bookkeeping,
-// and a drop is proved by the send being absent from that list.
+// the harness sends one of each send method plus a sendMessage asking to be dropped, then hands
+// `__report` what the host was asked to send: rewrites and drops are checked against that
 
 const seen = []
 const refusals = []
@@ -62,8 +38,7 @@ inu.interceptSendMessage(({ message: m, account }) => {
 
   if (m.text.text === 'drop me') return 'drop'
 
-  // a shape change is refused where it is decidable, rather than silently swapping the method the
-  // app is already awaiting a response type for
+  // a shape change is refused rather than swapping the method the app awaits a response type for
   try {
     m.media = m.media.concat([{ _: 'inputMediaEmpty' }])
     refusals.push('no-throw')
@@ -72,8 +47,7 @@ inu.interceptSendMessage(({ message: m, account }) => {
   }
 
   m.text = { text: `[${m.text.text}]`, entities: [] }
-  // an edit is never sent silently, and the field is simply not on the request - which is why the
-  // shape is read off the method rather than probed: a flag-clear field is omitted from reads too
+  // a flag-clear field is omitted from reads too, so the shape is read off the method, not probed
   try {
     m.silent = true
     silentRefusals.push('no-throw')
@@ -120,18 +94,13 @@ globalThis.__report = (sent) => {
     JSON.stringify(refusals),
   )
 
-  // what actually went out
   check('a dropped send never reaches the network', sent.length === 4, String(sent.length))
   check(
     'the rewritten text is what goes out',
     sent.map(s => JSON.parse(s).message).join(',') === '[hi],[cap],,[fixed]',
     sent.map(s => JSON.parse(s).message).join(','),
   )
-  check(
-    "an album's caption is rewritten on its first item",
-    JSON.parse(sent[2]).multi_media[0].message === '[one]',
-    sent[2],
-  )
+  check("an album's caption is rewritten on its first item", JSON.parse(sent[2]).multi_media[0].message === '[one]', sent[2])
   check('a flag written by a middleware goes out', JSON.parse(sent[0]).silent === true, sent[0])
   check('nothing that went out says "drop me"', sent.every(s => !s.includes('drop me')))
 

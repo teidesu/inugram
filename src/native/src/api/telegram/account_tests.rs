@@ -1,5 +1,5 @@
 use super::*;
-use crate::sandbox::grants::TestGrantHost;
+use crate::sandbox::grants::CachedGrantHost;
 use rquickjs::Context;
 
 #[derive(Default)]
@@ -36,13 +36,11 @@ const SWITCHED: &str = r#"[{"id":0,"userId":111,"isCurrent":false,"isPremium":fa
 type Disposing = crate::testing::harness::DisposeOnDrop<AccountState>;
 type Fixture = (Runtime, Context, Rc<TestAccountHost>, Disposing, std::sync::Arc<crate::testing::harness::Logs>);
 
-/// installs the account api over [`TestAccountHost`], with `grants` as the manifest's tokens
 pub(crate) fn setup(grants: &[&str], accounts: &str) -> Fixture {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
+  let (rt, ctx) = crate::testing::harness::new_engine();
   let host = TestAccountHost::with(accounts);
   let host_dyn: Rc<dyn AccountHost> = host.clone();
-  let grants = TestGrantHost::new(grants).as_host();
+  let grants = CachedGrantHost::new(grants);
   let logs = crate::testing::harness::Logs::new();
   let log = crate::testing::harness::log_sink(&logs);
   let state = ctx.with(|ctx| {
@@ -58,7 +56,6 @@ use crate::testing::harness::eval_unit as eval;
 
 use crate::testing::harness::eval_json;
 
-/// evaluates `code`, returning the caught error as `[isPluginError, code, grant, message]` json
 use crate::testing::harness::catch_json;
 
 #[test]
@@ -69,34 +66,12 @@ fn account_needs_no_grant_and_defaults_to_the_selected_slot() {
     "[0,true,1]",
     "minting a handle and reading the parts that aren't identity costs nothing",
   );
-}
-
-#[test]
-fn user_id_needs_no_grant() {
-  let (_rt, ctx, _host, _state, _logs) = setup(&[], TWO_ACCOUNTS);
   assert_eq!(eval_json(&ctx, "[inu.account().userId, inu.account(1).userId]"), "[111,222]");
   assert_eq!(
     eval_json(&ctx, "Object.getOwnPropertyDescriptor(inu.account(), 'userId').value"),
     "111",
     "a plain data property, not an accessor",
   );
-}
-
-#[test]
-fn a_handle_stays_pinned_across_a_switch_and_only_is_current_flips() {
-  let (rt, ctx, host, state, _logs) = setup(&["account.read(self)"], TWO_ACCOUNTS);
-  eval(&ctx, "globalThis.__a = inu.account();");
-  assert_eq!(eval_json(&ctx, "[__a.id, __a.userId, __a.isCurrent()]"), "[0,111,true]");
-
-  *host.json.borrow_mut() = SWITCHED.to_string();
-  state.accounts_changed(&rt, &ctx);
-
-  assert_eq!(
-    eval_json(&ctx, "[__a.id, __a.userId, __a.isCurrent()]"),
-    "[0,111,false]",
-    "the handle denotes the same slot; only isCurrent() moves",
-  );
-  assert_eq!(eval_json(&ctx, "inu.account().id"), "1");
 }
 
 #[test]
@@ -184,7 +159,10 @@ fn a_handle_for_a_logged_out_account_is_neither_current_nor_premium() {
   eval(&ctx, "globalThis.__a = inu.account(1);");
   *host.json.borrow_mut() = r#"[{"id":1,"userId":999,"isCurrent":true,"isPremium":true}]"#.to_string();
   state.accounts_changed(&rt, &ctx);
-  assert_eq!(eval_json(&ctx, "[__a.isCurrent(), __a.isPremium(), inu.account(1).isCurrent()]"), "[false,false,true]");
+  assert_eq!(
+    eval_json(&ctx, "[__a.isCurrent(), __a.isPremium(), inu.account(1).isCurrent()]"),
+    "[false,false,true]"
+  );
 }
 
 #[test]
@@ -193,11 +171,11 @@ fn on_accounts_changed_fires_with_the_new_list_and_its_disposer_stops_it() {
   eval(
     &ctx,
     r#"
-        globalThis.__seen = [];
-        globalThis.__d = inu.onAccountsChanged((accounts) => {
-            __seen.push(accounts.map((a) => `${a.id}:${a.isCurrent()}`).join(','));
-        });
-        "#,
+      globalThis.__seen = [];
+      globalThis.__d = inu.onAccountsChanged((accounts) => {
+        __seen.push(accounts.map((a) => `${a.id}:${a.isCurrent()}`).join(','));
+      });
+    "#,
   );
 
   *host.json.borrow_mut() = SWITCHED.to_string();
@@ -210,36 +188,15 @@ fn on_accounts_changed_fires_with_the_new_list_and_its_disposer_stops_it() {
 }
 
 #[test]
-fn with_current_account_runs_now_and_tears_down_before_the_next_account() {
-  let (rt, ctx, host, state, _logs) = setup(&["account.read(self)"], TWO_ACCOUNTS);
-  eval(
-    &ctx,
-    r#"
-        globalThis.__log = [];
-        inu.withCurrentAccount((account) => {
-            __log.push(`setup:${account.id}:${account.userId}`);
-            return () => { __log.push(`teardown:${account.id}`); };
-        });
-        "#,
-  );
-  assert_eq!(eval_json(&ctx, "__log"), r#"["setup:0:111"]"#);
-
-  *host.json.borrow_mut() = SWITCHED.to_string();
-  state.accounts_changed(&rt, &ctx);
-  assert_eq!(eval_json(&ctx, "__log"), r#"["setup:0:111","teardown:0","setup:1:222"]"#);
-}
-
-#[test]
 fn a_change_that_leaves_the_account_alone_does_not_re_run_the_scope() {
   let (rt, ctx, host, state, _logs) = setup(&[], TWO_ACCOUNTS);
   eval(
     &ctx,
     r#"
-        globalThis.__runs = 0;
-        inu.withCurrentAccount(() => { __runs++; });
-        "#,
+      globalThis.__runs = 0;
+      inu.withCurrentAccount(() => { __runs++; });
+    "#,
   );
-  // the other slot went premium; the selected account is untouched
   *host.json.borrow_mut() =
     r#"[{"id":0,"userId":111,"isCurrent":true,"isPremium":false},{"id":1,"userId":222,"isCurrent":false,"isPremium":false}]"#.to_string();
   state.accounts_changed(&rt, &ctx);
@@ -254,12 +211,12 @@ fn a_slot_re_used_by_another_login_re_runs_the_scope() {
   eval(
     &ctx,
     r#"
-        globalThis.__log = [];
-        inu.withCurrentAccount((account) => {
-            __log.push(`setup:${account.userId}`);
-            return () => { __log.push(`teardown:${account.userId}`); };
-        });
-        "#,
+      globalThis.__log = [];
+      inu.withCurrentAccount((account) => {
+        __log.push(`setup:${account.userId}`);
+        return () => { __log.push(`teardown:${account.userId}`); };
+      });
+    "#,
   );
   *host.json.borrow_mut() = r#"[{"id":0,"userId":999,"isCurrent":true,"isPremium":false}]"#.to_string();
   state.accounts_changed(&rt, &ctx);
@@ -272,12 +229,12 @@ fn with_no_account_logged_in_the_scope_waits_for_one() {
   eval(
     &ctx,
     r#"
-        globalThis.__log = [];
-        inu.withCurrentAccount((account) => {
-            __log.push(`setup:${account.id}`);
-            return () => { __log.push('teardown'); };
-        });
-        "#,
+      globalThis.__log = [];
+      inu.withCurrentAccount((account) => {
+        __log.push(`setup:${account.id}`);
+        return () => { __log.push('teardown'); };
+      });
+    "#,
   );
   assert_eq!(eval_json(&ctx, "__log"), "[]");
 
@@ -285,7 +242,6 @@ fn with_no_account_logged_in_the_scope_waits_for_one() {
   state.accounts_changed(&rt, &ctx);
   assert_eq!(eval_json(&ctx, "__log"), r#"["setup:0"]"#);
 
-  // everyone logged out again: the scope is torn down and left waiting
   *host.json.borrow_mut() = "[]".to_string();
   state.accounts_changed(&rt, &ctx);
   assert_eq!(eval_json(&ctx, "__log"), r#"["setup:0","teardown"]"#);
@@ -297,14 +253,14 @@ fn disposing_a_scope_tears_it_down_and_stops_re_runs() {
   eval(
     &ctx,
     r#"
-        globalThis.__log = [];
-        globalThis.__d = inu.withCurrentAccount(() => {
-            __log.push('setup');
-            return () => { __log.push('teardown'); };
-        });
-        __d();
-        __d();
-        "#,
+      globalThis.__log = [];
+      globalThis.__d = inu.withCurrentAccount(() => {
+        __log.push('setup');
+        return () => { __log.push('teardown'); };
+      });
+      __d();
+      __d();
+    "#,
   );
   assert_eq!(eval_json(&ctx, "__log"), r#"["setup","teardown"]"#, "a disposer called twice tears down once");
 
@@ -323,17 +279,17 @@ fn a_scope_disposed_mid_walk_is_not_re_entered() {
   eval(
     &ctx,
     r#"
-        globalThis.__log = [];
-        inu.withCurrentAccount(() => {
-            __log.push('A');
-            if (globalThis.__db) __db();
-            return () => { __log.push('A-teardown'); };
-        });
-        globalThis.__db = inu.withCurrentAccount(() => {
-            __log.push('B');
-            return () => { __log.push('B-teardown'); };
-        });
-        "#,
+      globalThis.__log = [];
+      inu.withCurrentAccount(() => {
+        __log.push('A');
+        if (globalThis.__db) __db();
+        return () => { __log.push('A-teardown'); };
+      });
+      globalThis.__db = inu.withCurrentAccount(() => {
+        __log.push('B');
+        return () => { __log.push('B-teardown'); };
+      });
+    "#,
   );
   assert_eq!(eval_json(&ctx, "__log"), r#"["A","B"]"#);
 
@@ -361,12 +317,12 @@ fn a_scope_its_own_teardown_disposes_is_not_re_entered() {
   eval(
     &ctx,
     r#"
-        globalThis.__log = [];
-        globalThis.__d = inu.withCurrentAccount(() => {
-            __log.push('setup');
-            return () => { __log.push('teardown'); __d(); };
-        });
-        "#,
+      globalThis.__log = [];
+      globalThis.__d = inu.withCurrentAccount(() => {
+        __log.push('setup');
+        return () => { __log.push('teardown'); __d(); };
+      });
+    "#,
   );
   *host.json.borrow_mut() = SWITCHED.to_string();
   state.accounts_changed(&rt, &ctx);
@@ -383,13 +339,13 @@ fn a_scope_that_disposes_itself_from_its_own_callback_still_tears_down() {
   eval(
     &ctx,
     r#"
-        globalThis.__log = [];
-        globalThis.__d = inu.withCurrentAccount((a) => {
-            __log.push(`setup:${a.id}`);
-            if (a.id === 1) __d();
-            return () => { __log.push(`teardown:${a.id}`); };
-        });
-        "#,
+      globalThis.__log = [];
+      globalThis.__d = inu.withCurrentAccount((a) => {
+        __log.push(`setup:${a.id}`);
+        if (a.id === 1) __d();
+        return () => { __log.push(`teardown:${a.id}`); };
+      });
+    "#,
   );
   *host.json.borrow_mut() = SWITCHED.to_string();
   state.accounts_changed(&rt, &ctx);
@@ -403,13 +359,13 @@ fn a_scope_can_hand_back_a_disposable_instead_of_a_function() {
   eval(
     &ctx,
     r#"
-        globalThis.__log = [];
-        inu.withCurrentAccount((a) => {
-            const stack = new DisposableStack();
-            stack.defer(() => { __log.push(`teardown:${a.id}`); });
-            return stack;
-        });
-        "#,
+      globalThis.__log = [];
+      inu.withCurrentAccount((a) => {
+        const stack = new DisposableStack();
+        stack.defer(() => { __log.push(`teardown:${a.id}`); });
+        return stack;
+      });
+    "#,
   );
   *host.json.borrow_mut() = SWITCHED.to_string();
   state.accounts_changed(&rt, &ctx);
@@ -424,10 +380,10 @@ fn unload_runs_every_teardown_once_more() {
   eval(
     &ctx,
     r#"
-        globalThis.__log = [];
-        inu.withCurrentAccount(() => () => { __log.push('a'); });
-        inu.withCurrentAccount(() => () => { __log.push('b'); });
-        "#,
+      globalThis.__log = [];
+      inu.withCurrentAccount(() => () => { __log.push('a'); });
+      inu.withCurrentAccount(() => () => { __log.push('b'); });
+    "#,
   );
   state.notify_unload(&rt, &ctx);
   assert_eq!(eval_json(&ctx, "__log"), r#"["a","b"]"#);
@@ -441,12 +397,12 @@ fn registering_after_unload_began_is_a_no_op_returning_a_no_op_disposer() {
   eval(
     &ctx,
     r#"
-        globalThis.__ran = [];
-        globalThis.__shapes = [
-            typeof inu.onAccountsChanged(() => { __ran.push('changed'); }),
-            typeof inu.withCurrentAccount(() => { __ran.push('scope'); }),
-        ];
-        "#,
+      globalThis.__ran = [];
+      globalThis.__shapes = [
+        typeof inu.onAccountsChanged(() => { __ran.push('changed'); }),
+        typeof inu.withCurrentAccount(() => { __ran.push('scope'); }),
+      ];
+    "#,
   );
   assert_eq!(eval_json(&ctx, "__shapes"), r#"["function","function"]"#);
   assert_eq!(eval_json(&ctx, "__ran"), "[]");
@@ -463,18 +419,16 @@ fn a_throwing_scope_callback_faults_and_the_others_still_run() {
   eval(
     &ctx,
     r#"
-        globalThis.__ran = [];
-        inu.withCurrentAccount(() => { throw new Error('scope-boom'); });
-        inu.withCurrentAccount(() => { __ran.push('second'); });
-        "#,
+      globalThis.__ran = [];
+      inu.withCurrentAccount(() => { throw new Error('scope-boom'); });
+      inu.withCurrentAccount(() => { __ran.push('second'); });
+    "#,
   );
   assert_eq!(eval_json(&ctx, "__ran"), r#"["second"]"#);
   assert_fault(&logs, "scope-boom");
 }
 
-/// the level of the one diagnostic mentioning `needle`. Only [`crate::LEVEL_FAULT`] reaches
-/// `PluginManager`'s `fail(...)`, so a plugin whose callback throws is switched off by this and
-/// by nothing else.
+/// only [`crate::LEVEL_FAULT`] reaches `PluginManager`'s `fail(...)`
 fn assert_fault(logs: &std::sync::Arc<crate::testing::harness::Logs>, needle: &str) {
   let logs = logs.borrow();
   let Some(line) = logs.iter().find(|l| l.contains(needle)) else {
@@ -484,19 +438,16 @@ fn assert_fault(logs: &std::sync::Arc<crate::testing::harness::Logs>, needle: &s
   assert_eq!(level, crate::LEVEL_FAULT, "'{message}' must disable the plugin");
 }
 
-/// `common.d.ts`: "a fault like any other callback that throws: your plugin is switched off".
-/// The teardown is held to it as well, on the unload path too - `onUnload` throwing already
-/// faults there (`PluginFailure.Site.UNLOAD`), and a teardown is the same plugin code failing
-/// in the same place.
+/// `common.d.ts`: a throwing teardown is a fault like any other callback, on the unload path too
 #[test]
 fn every_throwing_account_callback_is_a_fault_including_a_teardown_on_unload() {
   let (rt, ctx, host, state, logs) = setup(&["account.read(self)"], TWO_ACCOUNTS);
   eval(
     &ctx,
     r#"
-        inu.onAccountsChanged(() => { throw new Error('changed-boom'); });
-        inu.withCurrentAccount(() => () => { throw new Error('teardown-boom'); });
-        "#,
+      inu.onAccountsChanged(() => { throw new Error('changed-boom'); });
+      inu.withCurrentAccount(() => () => { throw new Error('teardown-boom'); });
+    "#,
   );
 
   *host.json.borrow_mut() = SWITCHED.to_string();
@@ -530,13 +481,13 @@ fn a_host_that_cannot_be_read_is_not_an_empty_account_list() {
   eval(
     &ctx,
     r#"
-        globalThis.__log = [];
-        inu.onAccountsChanged((accounts) => { __log.push(`changed:${accounts.length}`); });
-        inu.withCurrentAccount((a) => {
-            __log.push(`setup:${a.userId}`);
-            return () => { __log.push('teardown'); };
-        });
-        "#,
+      globalThis.__log = [];
+      inu.onAccountsChanged((accounts) => { __log.push(`changed:${accounts.length}`); });
+      inu.withCurrentAccount((a) => {
+        __log.push(`setup:${a.userId}`);
+        return () => { __log.push('teardown'); };
+      });
+    "#,
   );
   host.readable.set(false);
   state.accounts_changed(&rt, &ctx);

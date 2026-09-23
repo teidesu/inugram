@@ -3,18 +3,9 @@ package desu.inugram.jvmfixture
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
-/**
- * `@JvmStatic` on a companion member puts the body on `Companion` and leaves a forwarder on the
- * class, so a recursive call from that body never re-enters the forwarder a hook was placed on. A
- * top-level function is a real static calling itself, which is the shape stock recursion has.
- */
+/** top-level: a `@JvmStatic` companion body recursing would skip the hooked forwarder */
 fun countHookDepth(depth: Int): Int = if (depth == 0) 0 else 1 + countHookDepth(depth - 1)
 
-/**
- * `PluginJvm` walks interfaces itself rather than calling `getMethods()`/`getFields()`, so the
- * members that live only on one - a constant, which *is* inherited, and a static, which is not -
- * need something to be declared on.
- */
 interface JvmContract {
     companion object {
         const val STAMP: String = "stamped"
@@ -23,10 +14,7 @@ interface JvmContract {
     }
 }
 
-/**
- * Never touched by anything but `PluginJvmTest`'s initialization test, so its static block has not
- * run when the plugin names it: naming must not run it, the first static use must.
- */
+/** touched only by one test, so its `<clinit>` has not run before it */
 class JvmLazy {
     companion object {
         @JvmField var initializedBy: String = "nobody"
@@ -39,14 +27,7 @@ class JvmLazy {
     }
 }
 
-/**
- * something for `PluginJvmTest` to reflect over. Deliberately **not** in
- * `desu.inugram.helpers.plugins`: that package is refused by `PluginJvm` whatever the grant says, so
- * a fixture living there would make every test read as a passing test of the refusal.
- *
- * Fields are `@JvmField` because the api reflects over java's shape, and a kotlin property is a pair
- * of methods rather than the field a plugin would name.
- */
+/** outside `desu.inugram.helpers.plugins`, which `PluginJvm` refuses whatever the grant */
 class JvmFixture : JvmContract {
     @JvmField var count: Int = 3
 
@@ -60,7 +41,6 @@ class JvmFixture : JvmContract {
 
     @JvmField var big: Long = 9007199254740993L
 
-    /** whatever a test needs handed back, so a returned reference has something to be */
     @JvmField var payload: Any? = null
 
     fun getPayload(): Any? = payload
@@ -69,7 +49,6 @@ class JvmFixture : JvmContract {
 
     private var secret: String = "private"
 
-    /** which constructor ran, so a test can say which overload was picked */
     @JvmField var madeBy: String = "noArg"
 
     constructor()
@@ -112,17 +91,13 @@ class JvmFixture : JvmContract {
 
     fun boom(): String = throw IllegalStateException("boom")
 
-    /** what a java callee may throw that is not an `Exception`, which a routine must still unwind */
     fun detonate(): String = throw AssertionError("detonate")
 
-    /** a member crossing back as an ordinary value, which `ctx.method` in `inu.xposed` also is */
     fun ownMethod(): java.lang.reflect.Method = JvmFixture::class.java.getDeclaredMethod("echo", String::class.java)
 
-    /** the same for a constructor, which `ctx.method` on a hooked constructor is */
     fun ownConstructor(): java.lang.reflect.Constructor<*> =
         JvmFixture::class.java.getDeclaredConstructor(Int::class.javaPrimitiveType)
 
-    /** runs it *inside* the reflected call, which is the reentrancy every rule here is about */
     fun runNow(action: Runnable): String {
         action.run()
         return "ran"
@@ -131,7 +106,6 @@ class JvmFixture : JvmContract {
     companion object {
         @JvmField var tag: String = "static"
 
-        /** the instance a test built, handed to its plugin through a static read so a test can set fields first */
         @JvmField var shared: Any? = null
 
         @JvmField var task: Runnable? = null
@@ -156,7 +130,6 @@ class JvmFixture : JvmContract {
     }
 }
 
-/** a hierarchy where every level answers differently, so a test can tell which one `callSuper` reached */
 open class JvmSuperBase {
     open fun describe(): String = "base"
 

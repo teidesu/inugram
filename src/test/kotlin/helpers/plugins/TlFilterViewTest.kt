@@ -1,11 +1,10 @@
 package desu.inugram.helpers.plugins
 
-import desu.inugram.core.plugins.ApiFilter
-import desu.inugram.core.plugins.TlNames
-import desu.inugram.core.plugins.TlTables
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.tl.TlFilter
 import desu.inugram.helpers.plugins.tl.TlHandles
+import desu.inugram.helpers.plugins.tl.TlNames
+import desu.inugram.core.plugins.TlTables
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -17,11 +16,6 @@ import org.junit.Test
 import org.telegram.tgnet.TLRPC
 import org.telegram.tgnet.tl.TL_update
 
-/**
- * The account-takeover filter as a plugin actually meets it: through a live [TlHandles] view and
- * through a [TlJson] snapshot. Everything here fails open if a guard is removed, which is the point
- * - the policy itself is `:InuCore`'s `ApiFilterTest`, this is the wiring that applies it.
- */
 class TlFilterViewTest {
     @Before
     fun setUp() = resetBridge()
@@ -36,7 +30,7 @@ class TlFilterViewTest {
         val (handles, mint) = view()
         val message = serviceMessage("Login code: 63527. Do not give this code to anyone.")
 
-        val read = stringOf(handles.tlGet(mint(message), "message"))
+        val read = decodeString(handles.tlGet(mint(message), "message"))
 
         assertEquals("Login code: *****. Do not give this code to anyone.", read)
         assertEquals(
@@ -46,13 +40,7 @@ class TlFilterViewTest {
         )
     }
 
-    /**
-     * `updateShortMessage` is the form a 1:1 message actually arrives in, and it carries the text on
-     * `Updates` rather than in a `Message` - so a redaction predicate keyed on the `Message` class
-     * misses the one shape a login code reaches the device in. The update fan-out never shows this
-     * object to a plugin (`PluginUpdates.normalizeShortMessage` builds a synthetic `TL_message` first),
-     * but TL views can still represent the real one.
-     */
+    /** stock delivers 1:1 messages as `updateShortMessage`, text on `Updates` rather than a `Message` */
     @Test
     fun a_login_code_in_the_compressed_update_form_is_redacted_too() {
         val (handles, mint) = view()
@@ -63,7 +51,7 @@ class TlFilterViewTest {
 
         assertEquals(
             "Login code: *****. Do not give this code to anyone.",
-            stringOf(handles.tlGet(mint(short), "message")),
+            decodeString(handles.tlGet(mint(short), "message")),
         )
         assertEquals(
             "Login code: 63527. Do not give this code to anyone.",
@@ -81,15 +69,13 @@ class TlFilterViewTest {
         }
         val handle = mint(short)
 
-        // the short form names its sender with bare ids, so these are the fields the verdict reads
         assertPluginError("forbidden", handles.tlSet(handle, "user_id", PluginWire.encodeJson("1")))
         assertPluginError("forbidden", handles.tlSet(handle, "out", PluginWire.encodeJson("true")))
         assertPluginError("forbidden", handles.tlSet(handle, "chat_id", PluginWire.encodeJson("5")))
         assertEquals(777000L, short.user_id)
-        assertEquals("Login code: *****.", stringOf(handles.tlGet(handle, "message")))
+        assertEquals("Login code: *****.", decodeString(handles.tlGet(handle, "message")))
     }
 
-    /** an outgoing short message is the user's own text, and nothing about it is a service message */
     @Test
     fun an_ordinary_compressed_update_still_reads_in_clear() {
         val (handles, mint) = view()
@@ -98,29 +84,7 @@ class TlFilterViewTest {
             message = "Login code: 63527."
         }
 
-        assertEquals("Login code: 63527.", stringOf(handles.tlGet(mint(short), "message")))
-    }
-
-    @Test
-    fun the_same_message_reads_in_clear_for_a_plugin_holding_unsafe_disableApiFiltering() {
-        val (handles, mint) = view(filtering = false)
-        val message = serviceMessage("Login code: 63527.")
-
-        assertEquals("Login code: 63527.", stringOf(handles.tlGet(mint(message), "message")))
-    }
-
-    @Test
-    fun redaction_evidence_cannot_be_cleared_through_a_writable_view() {
-        val (handles, mint) = view()
-        val message = serviceMessage("Login code: 63527.")
-        val handle = mint(message)
-
-        // this is the attack: drop the sender, then re-read the text with nothing to key redaction on
-        val refusal = handles.tlSet(handle, "from_id", PluginWire.encodeNull())
-
-        assertPluginError("forbidden", refusal)
-        assertEquals(777000L, (message.from_id as TLRPC.TL_peerUser).user_id)
-        assertEquals("Login code: *****.", stringOf(handles.tlGet(handle, "message")))
+        assertEquals("Login code: 63527.", decodeString(handles.tlGet(mint(short), "message")))
     }
 
     @Test
@@ -134,6 +98,8 @@ class TlFilterViewTest {
             assertPluginError("forbidden", handles.tlSet(handle, field, PluginWire.encodeNull()))
         }
         assertPluginError("forbidden", handles.tlSet(handle, "out", PluginWire.encodeBool(true)))
+        assertEquals(777000L, (message.from_id as TLRPC.TL_peerUser).user_id)
+        assertEquals("Login code: *****.", decodeString(handles.tlGet(handle, "message")))
     }
 
     @Test
@@ -142,13 +108,12 @@ class TlFilterViewTest {
         val message = serviceMessage("Login code: 63527.")
         val handle = mint(message)
 
-        // one level down: `m.from_id.user_id = 0` would defeat the verdict just as well
-        val child = handleOf(handles.tlGet(handle, "from_id"))
+        val child = decodeHandle(handles.tlGet(handle, "from_id"))
         assertTrue(child.readOnly, "from_id's peer must not be writable while filtering is on")
 
         assertPluginError("forbidden", handles.tlSet(child.id, "user_id", PluginWire.encodeJson("0")))
         assertEquals(777000L, (message.from_id as TLRPC.TL_peerUser).user_id)
-        assertEquals("Login code: *****.", stringOf(handles.tlGet(handle, "message")))
+        assertEquals("Login code: *****.", decodeString(handles.tlGet(handle, "message")))
     }
 
     @Test
@@ -166,18 +131,18 @@ class TlFilterViewTest {
         assertEquals("edited", message.message)
         assertNull(handles.tlSet(handle, "id", PluginWire.encodeJson("8")))
         assertEquals(8, message.id)
-        // the seal is not conditional on the verdict: it is recomputed on every read, so a message
-        // that is not from a service peer now may be one after a write the seal is what refuses
-        assertTrue(handleOf(handles.tlGet(handle, "from_id")).readOnly)
+        // sealed regardless of the verdict: a write could make this a service message
+        assertTrue(decodeHandle(handles.tlGet(handle, "from_id")).readOnly)
     }
 
     @Test
-    fun nothing_is_sealed_while_api_filtering_is_off() {
+    fun with_api_filtering_off_a_login_code_reads_in_clear_and_nothing_is_sealed() {
         val (handles, mint) = view(filtering = false)
         val message = serviceMessage("Login code: 63527.")
         val handle = mint(message)
 
-        assertFalse(handleOf(handles.tlGet(handle, "from_id")).readOnly)
+        assertEquals("Login code: 63527.", decodeString(handles.tlGet(handle, "message")))
+        assertFalse(decodeHandle(handles.tlGet(handle, "from_id")).readOnly)
         assertNull(handles.tlSet(handle, "from_id", PluginWire.encodeNull()))
         assertNull(message.from_id)
     }
@@ -198,12 +163,7 @@ class TlFilterViewTest {
         assertEquals("your code is 63527", notification.message, "the app's own object stays intact")
     }
 
-    /**
-     * a legacy variant is a class of its own, and it does not read as the name the schema gave the
-     * predicate: `TL_message_old7` is `message` on the wire but calls itself `message_old7`. so the
-     * hidden-field table is keyed on a wire name and *matched* on the constructor ids that name
-     * carries, and a check by name walks past every variant of a hidden type.
-     */
+    /** stock legacy variants are separate classes named e.g. `message_old7`, so a check by name misses them */
     private class TL_updateServiceNotification_old : TL_update.TL_updateServiceNotification()
 
     @Test
@@ -224,14 +184,13 @@ class TlFilterViewTest {
 
     @Test
     fun every_constructor_id_a_hidden_type_carries_is_matched_not_just_the_one_its_class_declares() {
-        // `message` stands in for a hidden type with legacy variants, which none of the real ones
-        // has: without it this asserts nothing, every hidden type today having a single id
-        val family = TlTables.idsOf("message")!!
+        // no hidden type has legacy variants today, so `message` stands in for one
+        val family = TlTables.getConstructorIds("message")!!
         assertTrue(family.size > 1, "'message' lost its legacy variants; pick another predicate")
         assertEquals(family, TlFilter.indexByCtorId(setOf("message")).keys)
 
-        for (name in ApiFilter.HIDDEN_FIELDS.keys) {
-            val ids = TlTables.idsOf(name) ?: fail("'$name' is not a constructor this build has")
+        for (name in TlFilter.HIDDEN_FIELDS.keys) {
+            val ids = TlTables.getConstructorIds(name) ?: fail("'$name' is not a constructor this build has")
             assertEquals(ids, TlFilter.indexByCtorId(setOf(name)).keys)
         }
     }
@@ -263,7 +222,7 @@ class TlFilterViewTest {
             peer_id = peerUser(42L)
             fwd_from = TLRPC.TL_messageFwdHeader().apply { from_id = peerUser(777000L) }.synced()
         }.synced()
-        assertEquals("code *****", stringOf(handles.tlGet(mint(forwarded), "message")))
+        assertEquals("code *****", decodeString(handles.tlGet(mint(forwarded), "message")))
 
         // `from_id` is flags.8?Peer and the server omits it in a 1:1 dialog
         val incoming = TLRPC.TL_message().apply {
@@ -271,6 +230,6 @@ class TlFilterViewTest {
             peer_id = peerUser(777000L)
             out = false
         }.synced()
-        assertEquals("code *****", stringOf(handles.tlGet(mint(incoming), "message")))
+        assertEquals("code *****", decodeString(handles.tlGet(mint(incoming), "message")))
     }
 }

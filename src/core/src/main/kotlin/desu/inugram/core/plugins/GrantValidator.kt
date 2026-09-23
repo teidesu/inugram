@@ -1,13 +1,10 @@
 package desu.inugram.core.plugins
 
-/**
- * Validates manifest scopes at installation against [GrantCatalog].
- * Ignores unknown grant names but rejects unknown scopes for known grants.
- */
+/** unknown grant names are ignored, unknown scopes of known grants rejected */
 object GrantValidator {
     fun validateGrants(tokens: List<String>): List<String> {
         val problems = mutableListOf<String>()
-        // this grant turns the takeover filter off wholesale at call time, so the surfaces it reopens stop being the typo the rejections below exist to surface
+        // this grant disables the takeover filter wholesale, so the surfaces it reopens are not typos
         val bypassesFilter = tokens.any { PluginPermissions.parseGrant(it)?.name == "unsafe.disableApiFiltering" }
         for (token in tokens) {
             if (PluginPermissions.isMalformed(token)) {
@@ -15,7 +12,7 @@ object GrantValidator {
                 continue
             }
             val grant = PluginPermissions.parseGrant(token) ?: continue
-            val entry = GrantCatalog.entryOf(grant.name) ?: continue
+            val entry = GrantCatalog.findEntry(grant.name) ?: continue
             if (entry.scopes == ScopeKind.NONE) {
                 if (grant.scopes.isNotEmpty()) problems.add("grant '${grant.name}' takes no scopes")
                 continue

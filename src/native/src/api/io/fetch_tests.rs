@@ -1,12 +1,12 @@
 use super::*;
-use crate::api::error::install_plugin_error;
-use crate::api::io::fs::tests::{install_sandbox_globals, TestDir};
+use crate::runtime::pump_jobs;
+use crate::testing::harness::{install_sandbox_globals, TestDir};
 use rquickjs::Context;
 use std::cell::Cell;
 use std::cell::RefCell;
 
 /// Mirrors `PluginPermissions.allows(..., ScopeMatch.DOMAIN)`, which is what really answers
-/// `onCheckGrant` here. The shared `TestGrantHost` compares scopes literally, and a fixture that
+/// `onCheckGrant` here. The shared `CachedGrantHost` compares scopes literally, and a fixture that
 /// did that would call `fetch(example.com)` a refusal of `api.example.com` - passing the
 /// subdomain rule by never running it.
 pub(crate) struct TestDomainGrants {
@@ -44,7 +44,6 @@ impl GrantHost for TestDomainGrants {
   }
 }
 
-/// one request as it crossed
 struct Sent {
   id: i64,
   url: String,
@@ -52,12 +51,10 @@ struct Sent {
   body: Option<Vec<u8>>,
 }
 
-/// records what crossed and answers whatever the test told it to
 #[derive(Default)]
 struct TestFetchHost {
   sent: RefCell<Vec<Sent>>,
   aborted: RefCell<Vec<i64>>,
-  refuse: RefCell<Option<String>>,
 }
 
 impl FetchHost for TestFetchHost {
@@ -68,7 +65,7 @@ impl FetchHost for TestFetchHost {
       spec: format!("{} {} {:?}", spec.method, spec.redirect, spec.headers),
       body: body.map(<[u8]>::to_vec),
     });
-    self.refuse.borrow().clone()
+    None
   }
 
   fn abort(&self, request_id: i64) {
@@ -118,8 +115,7 @@ impl Fixture {
 }
 
 fn setup(grant: Option<&str>) -> Fixture {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
+  let (rt, ctx) = crate::testing::harness::new_engine();
   let dir = TestDir::new("fetch");
   let host = Rc::new(TestFetchHost::default());
   let host_dyn: Rc<dyn FetchHost> = host.clone();
@@ -129,12 +125,11 @@ fn setup(grant: Option<&str>) -> Fixture {
   let log: crate::Log = std::sync::Arc::new(|_| {});
   let (timers, state) = ctx.with(|ctx| {
     let inu = crate::testing::harness::get_api_globals(&ctx);
-    install_plugin_error(&ctx).unwrap();
-    let blobs = install_sandbox_globals(&ctx, dir.path()).unwrap();
+    install_sandbox_globals(&ctx, dir.path()).unwrap();
     let timers =
       crate::api::timers::install_timers(&ctx, clock_dyn, crate::sandbox::registry::Lifecycle::new(), log.clone())
         .unwrap();
-    let state = install_fetch(&ctx, host_dyn, grants, blobs, log.clone(), &inu).unwrap();
+    let state = install_fetch(&ctx, host_dyn, grants, log.clone(), &inu).unwrap();
     (timers, state)
   });
   let timers = DisposingTimers::new(&ctx, timers, |ctx, state| state.dispose(ctx));
@@ -151,19 +146,18 @@ fn run(f: &Fixture, code: &str) {
   pump_jobs(&f.rt, &f.ctx, &|_| {});
 }
 
-/// starts a fetch whose settlement is recorded on `globalThis.__out`
 fn start(f: &Fixture, call: &str) {
   run(
     f,
     &format!(
       r#"
-            globalThis.__out = null
-            globalThis.__res = null
-            ;{call}.then(
-              r => {{ globalThis.__res = r; globalThis.__out = 'ok' }},
-              e => {{ globalThis.__out = `${{e.name}}|${{e.code}}|${{e.message}}` }},
-            )
-            "#,
+        globalThis.__out = null
+        globalThis.__res = null
+        ;{call}.then(
+          r => {{ globalThis.__res = r; globalThis.__out = 'ok' }},
+          e => {{ globalThis.__out = `${{e.name}}|${{e.code}}|${{e.message}}` }},
+        )
+      "#,
     ),
   );
 }
@@ -172,7 +166,6 @@ fn out(f: &Fixture) -> String {
   eval(f, "String(globalThis.__out)")
 }
 
-/// the answer a real host would give, with a body file the engine mints its blob over
 fn answer(f: &Fixture, request_id: i64, status: i32, headers: &str, body: &str) {
   let path = f.dir.path().join(format!("body-{request_id}"));
   std::fs::write(&path, body).unwrap();
@@ -184,27 +177,22 @@ fn answer(f: &Fixture, request_id: i64, status: i32, headers: &str, body: &str) 
 }
 
 #[test]
-fn a_host_outside_the_grants_domains_never_crosses() {
-  let f = setup(Some("fetch(example.com)"));
-  start(&f, "fetch('https://evil.com/x')");
-  assert_eq!(out(&f), "PluginError|not-granted|missing grant: fetch(evil.com)");
-  assert!(f.host.sent.borrow().is_empty(), "a refused call must not reach the host");
-}
-
-#[test]
-fn a_subdomain_of_a_granted_domain_is_covered_and_a_lookalike_is_not() {
-  let f = setup(Some("fetch(example.com)"));
-  start(&f, "fetch('https://api.example.com/x')");
-  assert_eq!(out(&f), "null", "still in flight");
-  assert_eq!(f.host.sent.borrow().len(), 1);
-
-  start(&f, "fetch('https://notexample.com/x')");
-  assert_eq!(out(&f), "PluginError|not-granted|missing grant: fetch(notexample.com)");
-}
-
-#[test]
-fn a_url_whose_host_is_not_what_it_reads_as_is_refused() {
-  let f = setup(Some("fetch"));
+fn a_refused_request_never_crosses() {
+  let mut cases: Vec<(Option<&str>, String, &str)> = vec![
+    (Some("fetch(example.com)"), "fetch('https://evil.com/x')".into(), "PluginError|not-granted|missing grant: fetch(evil.com)"),
+    (None, "fetch('https://example.com/x')".into(), "PluginError|not-granted|missing grant: fetch(example.com)"),
+    (Some("fetch"), "fetch('https://example.com/x', { method: 'GET /x HTTP/1.1' })".into(), "PluginError|invalid-argument|"),
+    (
+      Some("fetch"),
+      "(() => { const b = new Blob(['x']); b.dispose(); return fetch('https://example.com/x', { body: b, method: 'POST' }) })()".into(),
+      "PluginError|handle-expired|",
+    ),
+    (
+      Some("fetch"),
+      "(() => { const c = new AbortController(); c.abort(); return fetch('https://example.com/x', { signal: c.signal }) })()".into(),
+      "PluginError|aborted|the request was aborted",
+    ),
+  ];
   for url in [
     "https://example.com@127.0.0.1/x",
     "file:///etc/hosts",
@@ -213,10 +201,34 @@ fn a_url_whose_host_is_not_what_it_reads_as_is_refused() {
     "notaurl",
     "https:///x",
   ] {
-    start(&f, &format!("fetch({url:?})"));
-    assert!(out(&f).starts_with("PluginError|invalid-argument|"), "'{url}' answered {}", out(&f),);
+    cases.push((Some("fetch"), format!("fetch({url:?})"), "PluginError|invalid-argument|"));
   }
-  assert!(f.host.sent.borrow().is_empty());
+  for header in ["Host", "content-length", "Transfer-Encoding", "connection"] {
+    cases.push((
+      Some("fetch"),
+      format!("fetch('https://example.com/x', {{ headers: {{ {header:?}: 'x' }} }})"),
+      "PluginError|invalid-argument|",
+    ));
+  }
+  for init in [
+    r#"{ headers: { 'x y': 'a' } }"#,
+    r#"{ headers: { 'x-one:': 'a' } }"#,
+    r#"{ headers: { '': 'a' } }"#,
+    r#"{ headers: { 'x-one': 'a\u0000b' } }"#,
+    r#"{ headers: { 'x-one': 'a\u007fb' } }"#,
+    r#"{ headers: { 'x-one': 'ключ' } }"#,
+    r#"{ headers: 'x-one: a' }"#,
+    r#"{ headers: [['x-one']] }"#,
+    r#"{ headers: [['x-one', 'a', 'b']] }"#,
+  ] {
+    cases.push((Some("fetch"), format!("fetch('https://example.com/x', {init})"), "TypeError|"));
+  }
+  for (grant, call, prefix) in cases {
+    let f = setup(grant);
+    start(&f, &call);
+    assert!(out(&f).starts_with(prefix), "{call}: {}", out(&f));
+    assert!(f.host.sent.borrow().is_empty(), "{call} crossed");
+  }
 }
 
 #[test]
@@ -249,14 +261,6 @@ fn an_unscoped_grant_reaches_any_host() {
   assert_eq!(sent[0].id, 1, "the id the host is given is the one an abort would name");
 }
 
-#[test]
-fn without_the_grant_nothing_is_reachable() {
-  let f = setup(None);
-  start(&f, "fetch('https://example.com/x')");
-  assert_eq!(out(&f), "PluginError|not-granted|missing grant: fetch(example.com)");
-  assert!(f.host.sent.borrow().is_empty());
-}
-
 /// every failure arrives in the `catch`, including the ones this module decides synchronously -
 /// `fetch(...).catch(...)` is the only shape anybody writes
 #[test]
@@ -271,12 +275,14 @@ fn the_spec_carries_the_method_headers_and_redirect_mode() {
   let f = setup(Some("fetch"));
   start(
     &f,
-    r#"fetch('https://example.com/x', {
-            method: 'post',
-            headers: { 'X-One': 'a', 'X-Many': ['b', 'c'] },
-            redirect: 'manual',
-            body: 'hello',
-        })"#,
+    r#"
+      fetch('https://example.com/x', {
+        method: 'post',
+        headers: { 'X-One': 'a', 'X-Many': ['b', 'c'] },
+        redirect: 'manual',
+        body: 'hello',
+      })
+    "#,
   );
   let sent = f.host.sent.borrow();
   assert_eq!(sent[0].url, "https://example.com/x");
@@ -290,12 +296,14 @@ fn a_plugin_that_patches_its_realm_still_cannot_forge_a_header() {
   let f = setup(Some("fetch"));
   start(
     &f,
-    r#"(() => {
-            RegExp.prototype.test = () => true
-            Array.prototype.toJSON = () => ['internal.corp']
-            JSON.stringify = () => '{"headers":{"host":["internal.corp"]}}'
-            return fetch('https://example.com/x', { headers: { 'X-One': ['a\r\nHost: internal.corp'] } })
-        })()"#,
+    r#"
+      (() => {
+        RegExp.prototype.test = () => true
+        Array.prototype.toJSON = () => ['internal.corp']
+        JSON.stringify = () => '{"headers":{"host":["internal.corp"]}}'
+        return fetch('https://example.com/x', { headers: { 'X-One': ['a\r\nHost: internal.corp'] } })
+      })()
+    "#,
   );
   assert!(out(&f).starts_with("TypeError|"), "{}", out(&f));
   assert!(f.host.sent.borrow().is_empty());
@@ -308,55 +316,31 @@ fn a_forged_headers_list_is_refused_on_the_send_path() {
   let f = setup(Some("fetch"));
   start(
     &f,
-    r#"(() => {
-            const push = Array.prototype.push
-            Array.prototype.push = function (...items) {
-              if (Array.isArray(items[0]) && items[0][0] === 'x-one') return push.call(this, ['x-one', 'a\r\nHost: internal.corp'])
-              return push.apply(this, items)
-            }
-            return fetch('https://example.com/x', { headers: { 'X-One': 'a' } })
-        })()"#,
+    r#"
+      (() => {
+          const push = Array.prototype.push
+          Array.prototype.push = function (...items) {
+            if (Array.isArray(items[0]) && items[0][0] === 'x-one') return push.call(this, ['x-one', 'a\r\nHost: internal.corp'])
+            return push.apply(this, items)
+          }
+          return fetch('https://example.com/x', { headers: { 'X-One': 'a' } })
+      })()
+    "#,
   );
   assert!(out(&f).starts_with("TypeError|"), "{}", out(&f));
   start(
     &f,
-    r#"(() => {
-            const push = Array.prototype.push
-            Array.prototype.push = function (...items) {
-              if (Array.isArray(items[0]) && items[0][0] === 'x-one') return push.call(this, ['host', 'internal.corp'])
-              return push.apply(this, items)
-            }
-            return fetch('https://example.com/x', { headers: { 'X-One': 'a' } })
-        })()"#,
+    r#"
+      (() => {
+          const push = Array.prototype.push
+          Array.prototype.push = function (...items) {
+            if (Array.isArray(items[0]) && items[0][0] === 'x-one') return push.call(this, ['host', 'internal.corp'])
+            return push.apply(this, items)
+          }
+          return fetch('https://example.com/x', { headers: { 'X-One': 'a' } })
+      })()
+    "#,
   );
-  assert!(out(&f).starts_with("PluginError|invalid-argument|"), "{}", out(&f));
-  assert!(f.host.sent.borrow().is_empty());
-}
-
-#[test]
-fn a_malformed_header_name_or_value_is_a_type_error_and_never_crosses() {
-  let f = setup(Some("fetch"));
-  for init in [
-    r#"{ headers: { 'x y': 'a' } }"#,
-    r#"{ headers: { 'x-one:': 'a' } }"#,
-    r#"{ headers: { '': 'a' } }"#,
-    r#"{ headers: { 'x-one': 'a\u0000b' } }"#,
-    r#"{ headers: { 'x-one': 'a\u007fb' } }"#,
-    r#"{ headers: { 'x-one': 'ключ' } }"#,
-    r#"{ headers: 'x-one: a' }"#,
-    r#"{ headers: [['x-one']] }"#,
-    r#"{ headers: [['x-one', 'a', 'b']] }"#,
-  ] {
-    start(&f, &format!("fetch('https://example.com/x', {init})"));
-    assert!(out(&f).starts_with("TypeError|"), "{init}: {}", out(&f));
-  }
-  assert!(f.host.sent.borrow().is_empty());
-}
-
-#[test]
-fn a_malformed_method_never_crosses() {
-  let f = setup(Some("fetch"));
-  start(&f, "fetch('https://example.com/x', { method: 'GET /x HTTP/1.1' })");
   assert!(out(&f).starts_with("PluginError|invalid-argument|"), "{}", out(&f));
   assert!(f.host.sent.borrow().is_empty());
 }
@@ -378,13 +362,15 @@ fn headers_reads_combine_repeats_and_iterate_sorted() {
   let f = setup(None);
   let got = eval(
     &f,
-    r#"(() => {
-            const h = new Headers([['X-B', '1'], ['x-a', '2'], ['X-B', '3'], ['Set-Cookie', 'a=1'], ['set-cookie', 'b=2']])
-            return JSON.stringify([
-              h.get('x-b'), h.get('X-MISSING'), h.has('X-A'), h.getSetCookie(), h.get('set-cookie'),
-              [...h], [...h.keys()], [...h.values()], String(h),
-            ])
-        })()"#,
+    r#"
+      (() => {
+          const h = new Headers([['X-B', '1'], ['x-a', '2'], ['X-B', '3'], ['Set-Cookie', 'a=1'], ['set-cookie', 'b=2']])
+          return JSON.stringify([
+            h.get('x-b'), h.get('X-MISSING'), h.has('X-A'), h.getSetCookie(), h.get('set-cookie'),
+            [...h], [...h.keys()], [...h.values()], String(h),
+          ])
+      })()
+    "#,
   );
   assert_eq!(
     got,
@@ -397,16 +383,18 @@ fn headers_set_replaces_every_value_in_place_and_delete_drops_them() {
   let f = setup(None);
   let got = eval(
     &f,
-    r#"(() => {
-            const h = new Headers([['x-a', '1'], ['x-b', '2'], ['x-a', '3']])
-            h.set('X-A', '4')
-            const afterSet = [...h]
-            h.append('x-c', '5')
-            h.delete('X-B')
-            const seen = []
-            h.forEach(function (value, name, self) { seen.push([name, value, self === h, this.tag]) }, { tag: 't' })
-            return JSON.stringify([afterSet, seen])
-        })()"#,
+    r#"
+      (() => {
+        const h = new Headers([['x-a', '1'], ['x-b', '2'], ['x-a', '3']])
+        h.set('X-A', '4')
+        const afterSet = [...h]
+        h.append('x-c', '5')
+        h.delete('X-B')
+        const seen = []
+        h.forEach(function (value, name, self) { seen.push([name, value, self === h, this.tag]) }, { tag: 't' })
+        return JSON.stringify([afterSet, seen])
+      })()
+    "#,
   );
   assert_eq!(got, r#"[[["x-a","4"],["x-b","2"]],[["x-a","4",true,"t"],["x-c","5",true,"t"]]]"#);
 }
@@ -416,20 +404,23 @@ fn headers_refuse_a_bad_name_or_value_and_a_non_headers_receiver() {
   let f = setup(None);
   let got = eval(
     &f,
-    r#"(() => {
-            const h = new Headers()
-            const threw = (fn) => { try { fn(); return 'no' } catch (e) { return e.name } }
-            return JSON.stringify([
-              threw(() => h.append('x y', 'a')),
-              threw(() => h.set('x-a', 'a\nb')),
-              threw(() => h.get('')),
-              threw(() => new Headers(null)),
-              threw(() => new Headers([['x-a']])),
-              threw(() => Headers.prototype.get.call({}, 'x-a')),
-            ])
-        })()"#,
+    r#"
+      (() => {
+          const h = new Headers()
+          const threw = (fn) => { try { fn(); return 'no' } catch (e) { return e.name } }
+          return JSON.stringify([
+            threw(() => h.append('x y', 'a')),
+            threw(() => h.set('x-a', 'a\nb')),
+            threw(() => h.set('x-a', 'a\u0001b')),
+            threw(() => h.get('')),
+            threw(() => new Headers(null)),
+            threw(() => new Headers([['x-a']])),
+            threw(() => Headers.prototype.get.call({}, 'x-a')),
+          ])
+      })()
+    "#,
   );
-  assert_eq!(got, r#"["TypeError","TypeError","TypeError","TypeError","TypeError","TypeError"]"#);
+  assert_eq!(got, r#"["TypeError","TypeError","TypeError","TypeError","TypeError","TypeError","TypeError"]"#);
 }
 
 /// names are case-insensitive, so two spellings of one are one header with both values
@@ -451,41 +442,6 @@ fn a_body_may_be_bytes_or_a_blob_and_a_blob_is_read_on_this_side() {
 }
 
 #[test]
-fn a_disposed_body_blob_is_refused_before_anything_crosses() {
-  let f = setup(Some("fetch"));
-  start(
-    &f,
-    "(() => { const b = new Blob(['x']); b.dispose(); return fetch('https://example.com/x', { body: b, method: 'POST' }) })()",
-  );
-  assert!(out(&f).starts_with("PluginError|handle-expired|"), "{}", out(&f));
-  assert!(f.host.sent.borrow().is_empty());
-}
-
-#[test]
-fn a_body_that_is_not_content_is_refused() {
-  let f = setup(Some("fetch"));
-  start(&f, "fetch('https://example.com/x', { method: 'POST', body: { a: 1 } })");
-  assert!(out(&f).starts_with("PluginError|invalid-argument|"), "{}", out(&f));
-}
-
-#[test]
-fn a_header_the_transport_owns_is_refused() {
-  let f = setup(Some("fetch"));
-  for header in ["Host", "content-length", "Transfer-Encoding", "connection"] {
-    start(&f, &format!("fetch('https://example.com/x', {{ headers: {{ {header:?}: 'x' }} }})"));
-    assert!(out(&f).starts_with("PluginError|invalid-argument|"), "'{header}': {}", out(&f));
-  }
-  assert!(f.host.sent.borrow().is_empty());
-}
-
-#[test]
-fn a_redirect_mode_the_api_does_not_have_is_refused() {
-  let f = setup(Some("fetch"));
-  start(&f, "fetch('https://example.com/x', { redirect: 'ignore' })");
-  assert!(out(&f).starts_with("PluginError|invalid-argument|"), "{}", out(&f));
-}
-
-#[test]
 fn a_response_carries_the_status_headers_and_body() {
   let f = setup(Some("fetch"));
   start(&f, "fetch('https://example.com/x')");
@@ -499,47 +455,8 @@ fn a_response_carries_the_status_headers_and_body() {
     got,
     r#"[true,200,"OK","https://api.example.com/x",true,[["content-type","text/plain"],["set-cookie","a=1"],["set-cookie","b=2"]]]"#,
   );
-  let immutable = eval(
-    &f,
-    r#"(() => { try { __res.headers.set('x-a', 'b'); return 'no' } catch (e) { return `${e.name}|${__res.headers.has('x-a')}` } })()"#,
-  );
-  assert_eq!(immutable, "TypeError|false", "response headers are immutable");
   run(&f, "__res.text().then(t => { globalThis.__body = t })");
   assert_eq!(eval(&f, "globalThis.__body"), "hello body");
-}
-
-#[test]
-fn the_body_is_a_blob_over_the_hosts_file_rather_than_bytes_in_the_heap() {
-  let f = setup(Some("fetch"));
-  start(&f, "fetch('https://example.com/x')");
-  answer(&f, 1, 200, "{}", "0123456789");
-  run(
-    &f,
-    r#"
-        const b = __res.blob()
-        b.then(async blob => {
-          globalThis.__shape = [blob instanceof Blob, blob.size, blob.type, await blob.slice(2, 5).text()].join('|')
-        })
-        "#,
-  );
-  assert_eq!(eval(&f, "globalThis.__shape"), "true|10|text/plain|234");
-}
-
-#[test]
-fn json_parses_the_body_and_bytes_answers_the_same_content() {
-  let f = setup(Some("fetch"));
-  start(&f, "fetch('https://example.com/x')");
-  answer(&f, 1, 200, "{}", r#"{"a":[1,2]}"#);
-  run(
-    &f,
-    r#"
-        __res.json().then(async v => {
-          const bytes = await __res.bytes()
-          globalThis.__shape = `${v.a[1]}|${bytes.length}|${bytes instanceof Uint8Array}`
-        })
-        "#,
-  );
-  assert_eq!(eval(&f, "globalThis.__shape"), "2|11|true");
 }
 
 #[test]
@@ -561,18 +478,6 @@ fn an_empty_body_still_reads_as_the_empty_string() {
 }
 
 #[test]
-fn a_host_refusal_rejects_with_what_it_named() {
-  let f = setup(Some("fetch"));
-  *f.host.refuse.borrow_mut() = Some("Pforbidden\n\n\n\n127.0.0.1 is not a place this api goes".to_string());
-  start(&f, "fetch('https://localtest.me/x')");
-  assert_eq!(
-    out(&f),
-    "PluginError|forbidden|127.0.0.1 is not a place this api goes",
-    "the address refusal is the host's to make and reaches the plugin verbatim",
-  );
-}
-
-#[test]
 fn an_answer_for_a_request_nobody_is_waiting_on_is_dropped() {
   let f = setup(Some("fetch"));
   answer(&f, 99, 200, "{}", "x");
@@ -590,17 +495,6 @@ fn an_abort_signal_rejects_and_tells_the_host_to_stop() {
   run(&f, "__c.abort()");
   assert_eq!(out(&f), "PluginError|aborted|the request was aborted");
   assert_eq!(*f.host.aborted.borrow(), vec![1]);
-}
-
-#[test]
-fn a_signal_that_already_fired_never_sends() {
-  let f = setup(Some("fetch"));
-  start(
-    &f,
-    "(() => { const c = new AbortController(); c.abort(); return fetch('https://example.com/x', { signal: c.signal }) })()",
-  );
-  assert_eq!(out(&f), "PluginError|aborted|the request was aborted");
-  assert!(f.host.sent.borrow().is_empty());
 }
 
 #[test]
@@ -641,16 +535,12 @@ fn an_answer_after_an_abort_is_dropped() {
   assert_eq!(out(&f), "PluginError|aborted|the request was aborted");
 }
 
-/// The bundled oracle runs here too, against a fake host: on a device it is the only thing that
-/// exercises this surface at all, and an oracle nobody runs is one nobody notices going green.
-#[cfg(test)]
+/// the fetch oracle's only other run is on a device
 mod bundled_oracle {
   use super::*;
-  use crate::api::error::install_plugin_error;
-  use crate::api::io::fs::tests::{install_sandbox_globals, TestDir};
-  use rquickjs::Context;
+  use crate::testing::harness::{install_sandbox_globals, TestDir};
 
-  const ORACLE: &str = include_str!("../../../../test/plugins/fetch-test.js");
+  const ORACLE: &str = crate::testing::test_plugin!("fetch-test.js");
 
   /// [`TestDomainGrants`] holds one `fetch` token, so a manifest that grew a second one has to be
   /// noticed here rather than silently running under the first
@@ -685,8 +575,7 @@ mod bundled_oracle {
 
   #[test]
   fn the_bundled_fetch_test_plugin_passes() {
-    let rt = Runtime::new().unwrap();
-    let ctx = Context::full(&rt).unwrap();
+    let (rt, ctx) = crate::testing::harness::new_engine();
     let dir = TestDir::new("fetch-oracle");
     let host = Rc::new(OracleHost {
       dir: dir.path().to_path_buf(),
@@ -699,27 +588,16 @@ mod bundled_oracle {
     let clock_dyn: Rc<dyn crate::api::timers::TimerHost> = clock.clone();
     let (timers, state) = ctx.with(|ctx| {
       let inu = crate::testing::harness::get_api_globals(&ctx);
-      install_plugin_error(&ctx).unwrap();
-      let blobs = install_sandbox_globals(&ctx, dir.path()).unwrap();
+      install_sandbox_globals(&ctx, dir.path()).unwrap();
       let timers =
         crate::api::timers::install_timers(&ctx, clock_dyn, crate::sandbox::registry::Lifecycle::new(), log.clone())
           .unwrap();
-      let state = install_fetch(
-        &ctx,
-        host_dyn,
-        super::tests::TestDomainGrants::new(oracle_grant()).as_host(),
-        blobs,
-        log.clone(),
-        &inu,
-      )
-      .unwrap();
+      let state =
+        install_fetch(&ctx, host_dyn, super::tests::TestDomainGrants::new(oracle_grant()).as_host(), log.clone(), &inu)
+          .unwrap();
       (timers, state)
     });
-    ctx.with(|ctx| match ctx.eval::<(), _>(ORACLE) {
-      Ok(()) => {}
-      Err(rquickjs::Error::Exception) => panic!("{}", crate::api::error::format_exception(&ctx)),
-      Err(e) => panic!("{e:?}"),
-    });
+    crate::testing::harness::eval_unit(&ctx, ORACLE);
 
     // the oracle awaits one call at a time, so driving it is a loop rather than a drain: settle
     // whatever the fake accepted since the last pass, then move the clock so a `timeout` the

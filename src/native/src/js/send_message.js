@@ -1,7 +1,6 @@
 ((shared, PluginError, RpcError, DROP_CODE, DROP_TEXT) => {
-  const { baseName, toNumber, peerDialogId, invalid } = shared
+  const { baseName, toNumber, peerDialogId } = shared
 
-  const unsupported = message => new PluginError('unsupported', message)
 
   // Request shapes handled by `OutgoingMessage` and its middleware. Read capabilities from the
   // method name: absent fields may be unsupported or merely cleared by flags, so `'silent' in raw`
@@ -18,8 +17,7 @@
     return value === undefined ? null : value
   }
 
-  // an album carries its caption on the first item; everything else carries it on the request
-  const captionOf = (raw, shape) => {
+  const selectCaptionHolder = (raw, shape) => {
     if (shape.media !== 'album') return raw
     const items = raw.multi_media
     if (items === null || items === undefined || items.length === 0) return null
@@ -32,49 +30,49 @@
   }
 
   const readText = (raw, shape) => {
-    const holder = captionOf(raw, shape)
+    const holder = selectCaptionHolder(raw, shape)
     if (holder === null) return { text: '', entities: [] }
     const text = optional(holder, 'message')
     return { text: typeof text === 'string' ? text : '', entities: readEntities(holder) }
   }
 
   const writeText = (raw, shape, value) => {
-    const holder = captionOf(raw, shape)
-    if (holder === null) throw invalid('text: this send carries nothing to write a caption on')
+    const holder = selectCaptionHolder(raw, shape)
+    if (holder === null) throw new PluginError('invalid-argument', 'text: this send carries nothing to write a caption on')
     if (typeof value === 'string') {
       holder.message = value
       holder.entities = []
       return
     }
     if (value === null || typeof value !== 'object' || typeof value.text !== 'string') {
-      throw invalid('text: expected a string or { text, entities }')
+      throw new PluginError('invalid-argument', 'text: expected a string or { text, entities }')
     }
     holder.message = value.text
     holder.entities = Array.isArray(value.entities) ? value.entities : []
   }
 
-  const replyOf = (raw, shape) => {
+  const readReply = (raw, shape) => {
     if (!shape.reply) return null
     const reply = optional(raw, 'reply_to')
     return reply !== null && baseName(reply) === 'inputReplyToMessage' ? reply : null
   }
 
   const readTopicId = (raw, shape) => {
-    const reply = replyOf(raw, shape)
+    const reply = readReply(raw, shape)
     return reply === null ? null : toNumber(optional(reply, 'top_msg_id'))
   }
 
   // A forum message without a reply uses the topic root as its reply ID. Matching IDs therefore
   // indicate the topic, not a user-written reply.
   const readReplyId = (raw, shape) => {
-    const reply = replyOf(raw, shape)
+    const reply = readReply(raw, shape)
     if (reply === null) return null
     const id = toNumber(optional(reply, 'reply_to_msg_id'))
     return id !== null && id === readTopicId(raw, shape) ? null : id
   }
 
   const writeReply = (raw, shape, replyId, topicId) => {
-    if (!shape.reply) throw unsupported('an edit carries no reply or topic to change')
+    if (!shape.reply) throw new PluginError('unsupported', 'an edit carries no reply or topic to change')
     if (replyId === null && topicId === null) {
       raw.reply_to = null
       return
@@ -89,7 +87,7 @@
   const toOptionalId = (value, what) => {
     if (value === null || value === undefined) return null
     const id = toNumber(value)
-    if (id === null || !Number.isInteger(id)) throw invalid(`${what}: expected an integer or null`)
+    if (id === null || !Number.isInteger(id)) throw new PluginError('invalid-argument', `${what}: expected an integer or null`)
     return id
   }
 
@@ -106,19 +104,17 @@
     return media
   }
 
-  // a length change means a different method - `sendMessage` with an attachment is `sendMedia`, and
-  // an album with one item fewer is a different album - and `next()` refuses to rewrite the method
-  // the app is already awaiting a response type for. replacing what is there in place is the part
-  // that is decidable here; `common.d.ts` points at `drop` plus `account.sendMedia` for the rest
+  // a length change means a different method, which `next()` refuses to rewrite; `common.d.ts` points
+  // at `drop` plus `account.sendMedia` for that
   const writeMedia = (raw, shape, value) => {
-    if (!Array.isArray(value)) throw invalid('media: expected an array of InputMedia')
+    if (!Array.isArray(value)) throw new PluginError('invalid-argument', 'media: expected an array of InputMedia')
     if (shape.media === 'none') {
       if (value.length === 0) return
-      throw unsupported('attaching media to a text send would change the method the app is awaiting; drop it and send your own')
+      throw new PluginError('unsupported', 'attaching media to a text send would change the method the app is awaiting; drop it and send your own')
     }
     if (shape.media === 'single') {
       if (value.length !== 1) {
-        throw unsupported('this send carries exactly one media; drop it and send your own to change that')
+        throw new PluginError('unsupported', 'this send carries exactly one media; drop it and send your own to change that')
       }
       raw.media = value[0]
       return
@@ -126,7 +122,7 @@
     const items = raw.multi_media
     const length = items === null || items === undefined ? 0 : items.length
     if (value.length !== length) {
-      throw unsupported(`this album carries ${length} items; drop it and send your own to change that`)
+      throw new PluginError('unsupported', `this album carries ${length} items; drop it and send your own to change that`)
     }
     for (let i = 0; i < length; i++) items[i].media = value[i]
   }
@@ -137,12 +133,12 @@
         const peer = raw.peer
         if (baseName(peer) === 'inputPeerSelf') return account.userId
         const id = peerDialogId(peer)
-        if (id === null) throw invalid(`peer: the request carries no readable peer`)
+        if (id === null) throw new PluginError('invalid-argument', `peer: the request carries no readable peer`)
         return id
       },
       set peer(value) {
         const id = toNumber(value)
-        if (id === null || id === 0) throw invalid(`peer: not a dialog id: ${value}`)
+        if (id === null || id === 0) throw new PluginError('invalid-argument', `peer: not a dialog id: ${value}`)
         // retargeting is naming a peer this middleware was not handed, which is a read: it goes
         // through the account handle's own gate rather than around it
         const resolved = account.resolvePeerCached(id)
@@ -184,7 +180,7 @@
         return shape.silent && raw.silent === true
       },
       set silent(value) {
-        if (!shape.silent) throw unsupported('an edit is never sent silently')
+        if (!shape.silent) throw new PluginError('unsupported', 'an edit is never sent silently')
         raw.silent = value === true
       },
 
@@ -195,15 +191,10 @@
         writeMedia(raw, shape, value)
       },
 
-      /**
-       * the media this send carries, as a file to be staged rather than one already uploaded: the
-       * app's own local message grows or swaps its media in place, so the app is what uploads it
-       * and draws the progress on the bubble it already drew
-       */
+      /** staged, not uploaded: the app uploads it into the local message it already drew */
       setMedia(file, options) {
-        if (shape.edit) throw unsupported('an edit carries no media to replace')
-        if (shape.media === 'album') throw unsupported(`an album's media cannot be replaced; drop it and send your own`)
-        if (file === null || typeof file !== 'object') throw invalid('setMedia: expected a Blob, bytes or { path }')
+        if (shape.edit) throw new PluginError('unsupported', 'an edit carries no media to replace')
+        if (shape.media === 'album') throw new PluginError('unsupported', `an album's media cannot be replaced; drop it and send your own`)
         return shared.setSendMedia(account, dispatchId, file, options)
       },
 
@@ -214,8 +205,6 @@
         return shape.edit ? toNumber(optional(raw, 'id')) : null
       },
     }
-    // Seal the object while keeping accessors writable, so typos such as `msg.silence = true` fail
-    // instead of silently doing nothing.
     return Object.seal(message)
   }
 
@@ -240,9 +229,7 @@
     // message over instead, and the host tells it so itself rather than through this value
     if (verdict === 'send') return next()
     if (verdict !== 'drop') {
-      // a plain Error rather than an `RpcError`, which is why this reads as the plugin's fault and
-      // `drop` does not: the verdict is what makes the choice total, so a path that returns nothing
-      // is a bug, and it must not read as consent to send
+      // a plain Error, unlike `drop`, so a path that returns nothing reads as the plugin's bug, never as consent to send
       throw new Error(`interceptSendMessage: expected 'send' or 'drop', got ${JSON.stringify(verdict)}`)
     }
     return new RpcError(DROP_CODE, DROP_TEXT)

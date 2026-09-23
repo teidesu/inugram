@@ -7,7 +7,7 @@ use crate::api::error::PluginErrorCode;
 use crate::api::platform::jvm::JvmState;
 use crate::api::tl::proxy::plain_wire_to_js;
 use crate::api::ui::icons;
-use crate::runtime::{pump_jobs, Parked, PendingTable};
+use crate::runtime::{Parked, PendingTable};
 use crate::utils::arguments::{self, opt_bool, opt_str, read_index, req_str, stringify_json};
 
 pub trait DialogHost {
@@ -18,7 +18,6 @@ pub trait DialogHost {
   fn prompt(&self, request_id: i64, options_json: &str) -> Option<String>;
 }
 
-/// what a modal answers once the user is done with it
 enum Modal {
   Dialog,
   Prompt,
@@ -50,29 +49,24 @@ pub struct DialogState {
 }
 
 impl DialogState {
-  /// Tracks a bulletin through the same pending-request table as modals, allowing callers to await
-  /// a tap or dismissal without a separate dispatch. Callers may ignore the promise.
   fn js_ui_bulletin<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, options: Value<'js>) -> JsResult<Value<'js>> {
     let Some(options) = options.as_object() else {
       return Err(Exception::throw_type(ctx, "bulletin: expected an options object"));
     };
     let out = Object::new(ctx.clone())?;
-    let text = arguments::opt_text(ctx, options, "bulletin", "text")?
-      .ok_or_else(|| Exception::throw_type(ctx, "bulletin: 'text' must be a string"))?;
+    let text = arguments::req_text(ctx, options, "bulletin", "text")?;
     arguments::write_input_text(&out, "text", text)?;
     if let Some(subtitle) = arguments::opt_text(ctx, options, "bulletin", "subtitle")? {
       arguments::write_input_text(&out, "subtitle", subtitle)?;
     }
 
-    let icon_value: Value =
-      options.get("icon").map_err(|_| Exception::throw_type(ctx, "bulletin: cannot read 'icon'"))?;
+    let icon_value = arguments::field(ctx, options, "bulletin", "icon")?;
     if icon_value.is_undefined() || icon_value.is_null() {
       return Err(Exception::throw_type(ctx, "bulletin: 'icon' is required"));
     }
     if is_avatars(&icon_value) {
       let spec = icon_value.as_object().expect("an avatars icon is an object");
-      let list: Value =
-        spec.get("avatars").map_err(|_| Exception::throw_type(ctx, "bulletin: cannot read 'avatars'"))?;
+      let list = arguments::field(ctx, spec, "bulletin", "avatars")?;
       let list = list.as_array().ok_or_else(|| Exception::throw_type(ctx, "bulletin: 'avatars' must be an array"))?;
       let ids = arguments::array_values(ctx, list, "bulletin: 'avatars'")?;
       // stock's own layout draws three and counts the rest; more than that is a silent no-op
@@ -103,9 +97,7 @@ impl DialogState {
       out.set("icon", icon.spec.clone())?;
     }
 
-    let duration: Value = options
-      .get("duration")
-      .map_err(|_| Exception::throw_type(ctx, "bulletin: cannot read 'duration'"))?;
+    let duration = arguments::field(ctx, options, "bulletin", "duration")?;
     if !duration.is_undefined() && !duration.is_null() {
       let millis = if let Some(name) = duration.as_string() {
         match name.to_string()?.as_str() {
@@ -185,11 +177,7 @@ impl DialogState {
     if !body.is_undefined() && !body.is_null() {
       out.set("body", body)?;
     }
-    let json = ctx
-      .json_stringify(out.into_value())?
-      .map(|s| s.to_string())
-      .transpose()?
-      .ok_or_else(|| Exception::throw_type(ctx, "dialog: expected an options object"))?;
+    let json = arguments::stringify_json(ctx, out.into_value(), "dialog: expected an options object")?;
 
     Ok(
       self
@@ -206,10 +194,10 @@ impl DialogState {
     if let Some(title) = opt_str(ctx, &opts, "chooser", "title")? {
       out.set("title", title)?;
     }
-    let multiple = opt_bool(ctx, &opts, "chooser", "multiple")?;
+    let multiple = opt_bool(ctx, &opts, "chooser", "multiple")?.unwrap_or_default();
     out.set("multiple", multiple)?;
 
-    let raw: Value = opts.get("items").map_err(|_| Exception::throw_type(ctx, "chooser: cannot read 'items'"))?;
+    let raw = arguments::field(ctx, &opts, "chooser", "items")?;
     let source = raw.as_array().ok_or_else(|| Exception::throw_type(ctx, "chooser: 'items' must be an array"))?;
     let source = arguments::array_values(ctx, source, "chooser: 'items'")?;
     if source.is_empty() {
@@ -222,13 +210,12 @@ impl DialogState {
         entry.set("text", text.to_string()?)?;
         entry.set("danger", false)?;
       } else if let Some(obj) = item.as_object() {
-        let text = opt_str(ctx, obj, "chooser item", "text")?
-          .ok_or_else(|| Exception::throw_type(ctx, "chooser item: 'text' must be a string"))?;
+        let text = arguments::req_str(ctx, obj, "chooser item", "text")?;
         entry.set("text", text)?;
         if let Some(subtitle) = opt_str(ctx, obj, "chooser item", "subtitle")? {
           entry.set("subtitle", subtitle)?;
         }
-        entry.set("danger", opt_bool(ctx, obj, "chooser item", "danger")?)?;
+        entry.set("danger", opt_bool(ctx, obj, "chooser item", "danger")?.unwrap_or_default())?;
       } else {
         return Err(Exception::throw_type(
           ctx,
@@ -279,7 +266,7 @@ impl DialogState {
     if let Some(value) = opt_str(ctx, &opts, "prompt", "value")? {
       out.set("value", value)?;
     }
-    out.set("selectAll", opt_bool(ctx, &opts, "prompt", "selectAll")?)?;
+    out.set("selectAll", opt_bool(ctx, &opts, "prompt", "selectAll")?.unwrap_or_default())?;
     let json = stringify_json(ctx, out.into_value(), "prompt: serialization failed")?;
     Ok(
       self
@@ -343,9 +330,9 @@ impl DialogState {
   /// every modal answers a plain wire: a dialog the button's name, a prompt the text or `N`, and a
   /// chooser `N` or the picked indices - of which a single-choice chooser resolves the first
   pub fn settle(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
-    let state = self;
-    context.with(|ctx| {
-      let settled = state.pending.settle(&ctx, request_id, result_wire, false, |ctx, modal, wire| {
+    self
+      .pending
+      .settle_and_pump(rt, context, &self.log, "modal", request_id, result_wire, |ctx, modal, wire| {
         let value = plain_wire_to_js(ctx, wire)?;
         match (modal, value.as_array()) {
           (Modal::Chooser { multiple: false }, Some(picked)) => {
@@ -355,11 +342,6 @@ impl DialogState {
           _ => Ok(value),
         }
       });
-      if let Err(why) = settled {
-        (state.log)(&format!("modal({request_id}) settle failed: {why}"));
-      }
-    });
-    pump_jobs(rt, context, state.log.as_ref());
   }
 }
 

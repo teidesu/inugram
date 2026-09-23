@@ -143,17 +143,6 @@ export function parseGrant(token: string): Grant | null {
   return { name, scopes: inner.split(',').map(s => s.trim()).filter(s => s !== '') }
 }
 
-/** Matches `PluginPermissions.isMalformed`: reject bad scopes instead of treating them as unscoped. */
-export function isMalformed(token: string): boolean {
-  const t = token.trim()
-  if (t === '') return false
-  const open = t.indexOf('(')
-  if (open < 0) return false
-  if (t.slice(0, open).trim() === '') return true
-  if (!t.endsWith(')')) return true
-  return t.slice(open + 1, t.length - 1).split(',').every(part => part.trim() === '')
-}
-
 function isTakeoverMethod(name: string, vocabulary: Vocabulary): boolean {
   const { prefixes, names } = vocabulary.catalog.takeoverMethods
   return prefixes.some(prefix => name.startsWith(prefix)) || names.includes(name)
@@ -196,12 +185,11 @@ export function validateGrants(tokens: string[], vocabulary: Vocabulary): string
   const bypassesFilter = tokens.some(token => parseGrant(token)?.name === 'unsafe.disableApiFiltering')
 
   for (const token of tokens) {
-    if (isMalformed(token)) {
-      problems.push(`malformed grant '${token.trim()}'`)
+    const grant = parseGrant(token)
+    if (!grant) {
+      if (token.includes('(')) problems.push(`malformed grant '${token.trim()}'`)
       continue
     }
-    const grant = parseGrant(token)
-    if (!grant) continue
     const entry = vocabulary.byName.get(grant.name)
     if (!entry) continue
     if (entry.scopes === 'none') {

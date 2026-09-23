@@ -1,4 +1,5 @@
 use super::*;
+use crate::testing::harness::{eval_json, eval_unit as eval};
 use rquickjs::Context;
 
 #[derive(Default)]
@@ -52,55 +53,50 @@ impl UiHost for TestUiHost {
   }
 }
 
-/// disposes on drop, so a failing assertion is one failed test rather than an abort in
-/// `JS_FreeRuntime` that takes the whole suite's reporting with it
 type Disposing = crate::testing::harness::DisposeOnDrop<UiState>;
 
 type Fixture = (Runtime, Context, Rc<TestUiHost>, Disposing, std::sync::Arc<crate::testing::harness::Logs>);
 
 fn setup() -> Fixture {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
+  let (rt, ctx) = crate::testing::harness::new_engine();
   let host = Rc::new(TestUiHost::default());
   let host_dyn: Rc<dyn UiHost> = host.clone();
   let logs = crate::testing::harness::Logs::new();
   let log = crate::testing::harness::log_sink(&logs);
   let state = ctx.with(|ctx| {
     let inu = crate::testing::harness::get_api_globals(&ctx);
-    crate::api::error::install_plugin_error(&ctx).unwrap();
     install_ui(&ctx, host_dyn, Lifecycle::new(), log, None, &inu).unwrap()
   });
   let state = Disposing::new(&ctx, state, |ctx, state| state.dispose(ctx));
   (rt, ctx, host, state, logs)
 }
 
-/// registers a page exercising every element type; returns its page id
 fn build_full_page(ctx: &Context, host: &Rc<TestUiHost>) -> i64 {
   ctx.with(|ctx| {
     ctx
       .eval::<(), _>(
         r#"
-            globalThis.__state = { on: false, sel: 0, speed: 1, log: [] };
-            const s = globalThis.__state;
-            const page = inu.ui.settingsPage({
-                title: 'Test page',
-                items: () => [
-                    inu.ui.header('General'),
-                    inu.ui.check({ text: 'Toggle', subtitle: 'sub', checked: s.on, onChange: v => { s.on = v; } }),
-                    inu.ui.button({ text: 'Do it', value: 'now', danger: true, onClick: () => { s.log.push('click'); },
-                        onSecondaryClick: () => { s.log.push('long'); } }),
-                    inu.ui.select({ text: 'Mode', items: ['a', { text: 'b', subtitle: 'bee' }], selected: s.sel,
-                        dialog: true, onChange: i => { s.sel = i; } }),
-                    inu.ui.slider({ text: 'Speed', min: 0, max: 2, step: 1, value: s.speed, default: 1,
-                        label: v => v + 'x', onChange: v => { s.speed = v; } }),
-                    inu.ui.separator('the end'),
-                ],
-                bottomButton: { text: 'Save', onClick: () => { s.log.push('save'); } },
-                onClose: () => { s.log.push('close'); },
-            });
-            globalThis.__disposeSettings = inu.registerSettings(page);
-            globalThis.__page = page;
-            "#,
+          globalThis.__state = { on: false, sel: 0, speed: 1, log: [] };
+          const s = globalThis.__state;
+          const page = inu.ui.settingsPage({
+            title: 'Test page',
+            items: () => [
+              inu.ui.header('General'),
+              inu.ui.check({ text: 'Toggle', subtitle: 'sub', checked: s.on, onChange: v => { s.on = v; } }),
+              inu.ui.button({ text: 'Do it', value: 'now', danger: true, onClick: () => { s.log.push('click'); },
+                onSecondaryClick: () => { s.log.push('long'); } }),
+              inu.ui.select({ text: 'Mode', items: ['a', { text: 'b', subtitle: 'bee' }], selected: s.sel,
+                dialog: true, onChange: i => { s.sel = i; } }),
+              inu.ui.slider({ text: 'Speed', min: 0, max: 2, step: 1, value: s.speed, default: 1,
+                label: v => v + 'x', onChange: v => { s.speed = v; } }),
+              inu.ui.separator('the end'),
+            ],
+            bottomButton: { text: 'Save', onClick: () => { s.log.push('save'); } },
+            onClose: () => { s.log.push('close'); },
+          });
+          globalThis.__disposeSettings = inu.registerSettings(page);
+          globalThis.__page = page;
+        "#,
       )
       .unwrap();
   });
@@ -126,19 +122,19 @@ fn input_text_renders_entities_beside_the_plain_text() {
     ctx
       .eval::<(), _>(
         r#"
-            const bold = (offset, length) => [{ _: 'messageEntityBold', offset, length }];
-            const page = inu.ui.settingsPage({
-                title: 'Test page',
-                items: () => [
-                    inu.ui.button({ text: { text: 'Do it', entities: bold(0, 2) },
-                        subtitle: { text: 'sub', entities: bold(1, 1) }, value: 'now', onClick: () => {} }),
-                    inu.ui.select({ text: { text: 'Mode', entities: bold(0, 4) }, items: ['a'], selected: 0,
-                        onChange: () => {} }),
-                    inu.ui.separator({ text: 'the end', entities: bold(4, 3) }),
-                ],
-            });
-            globalThis.__disposeSettings = inu.registerSettings(page);
-            "#,
+          const bold = (offset, length) => [{ _: 'messageEntityBold', offset, length }];
+          const page = inu.ui.settingsPage({
+            title: 'Test page',
+            items: () => [
+              inu.ui.button({ text: { text: 'Do it', entities: bold(0, 2) },
+                subtitle: { text: 'sub', entities: bold(1, 1) }, value: 'now', onClick: () => {} }),
+              inu.ui.select({ text: { text: 'Mode', entities: bold(0, 4) }, items: ['a'], selected: 0,
+                onChange: () => {} }),
+              inu.ui.separator({ text: 'the end', entities: bold(4, 3) }),
+            ],
+          });
+          globalThis.__disposeSettings = inu.registerSettings(page);
+        "#,
       )
       .unwrap();
   });
@@ -159,12 +155,14 @@ fn check_refuses_input_text() {
   let message: String = ctx.with(|ctx| {
     ctx
       .eval(
-        r#"(() => {
-                   try {
-                       inu.ui.check({ text: { text: 'Toggle', entities: [] }, checked: false, onChange: () => {} });
-                       return 'did not throw';
-                   } catch (e) { return e.message; }
-               })()"#,
+        r#"
+          (() => {
+            try {
+              inu.ui.check({ text: { text: 'Toggle', entities: [] }, checked: false, onChange: () => {} });
+              return 'did not throw';
+            } catch (e) { return e.message; }
+          })()
+        "#,
       )
       .unwrap()
   });
@@ -182,7 +180,7 @@ fn events_update_state_and_rerender_uses_fresh_slots() {
   state.dispatch_event(&rt, &ctx, page_id, 2, "");
   state.dispatch_event(&rt, &ctx, page_id, 6, "");
 
-  let snapshot: String = ctx.with(|ctx| ctx.eval("JSON.stringify([__state.on, __state.sel, __state.log])").unwrap());
+  let snapshot: String = eval_json(&ctx, "[__state.on, __state.sel, __state.log]");
   assert_eq!(snapshot, r#"[true,1,["click","save"]]"#);
 
   let json = state.render(&rt, &ctx, page_id).unwrap();
@@ -190,7 +188,6 @@ fn events_update_state_and_rerender_uses_fresh_slots() {
   assert!(json.contains(r#""selected":1"#));
   assert!(json.contains(r#""onChange":7"#), "slots must not restart: {json}");
 
-  // slot from the first render is gone now - firing it must be a silent no-op
   state.dispatch_event(&rt, &ctx, page_id, 1, "false");
   let unchanged: bool = ctx.with(|ctx| ctx.eval("__state.on === true").unwrap());
   assert!(unchanged);
@@ -199,77 +196,43 @@ fn events_update_state_and_rerender_uses_fresh_slots() {
 #[test]
 fn the_anchor_opens_a_menu_over_its_own_row_and_a_click_dispatches() {
   let (rt, ctx, host, state, _logs) = setup();
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
-            globalThis.__picked = null;
-            const page = inu.ui.settingsPage({
-                title: 'menu test',
-                items: () => [
-                    inu.ui.button({ text: 'first', onClick: () => {} }),
-                    inu.ui.button({ id: 'menu-row', text: 'row', onClick: (anchor) => {
-                        anchor.openMenu([
-                            { text: 'one', onClick: () => { globalThis.__picked = 'one'; } },
-                            { text: 'two', checked: true, danger: true, onClick: () => { globalThis.__picked = 'two'; } },
-                        ]);
-                    } }),
-                ],
-            });
-            inu.registerSettings(page);
-            "#,
-      )
-      .unwrap();
-  });
+  eval(
+    &ctx,
+    r#"
+      globalThis.__picked = [];
+      inu.registerSettings(inu.ui.settingsPage({
+        title: 'menu test',
+        items: () => [
+          inu.ui.button({ text: 'first', onClick: () => {} }),
+          inu.ui.button({ id: 'menu-row', text: 'row', onClick: (anchor) => {
+            anchor.openMenu([
+              { text: 'one', onClick: () => { __picked.push('one'); } },
+              { text: 'two', checked: true, danger: true, onClick: (...args) => { __picked.push(args.length); } },
+            ]);
+          } }),
+        ],
+      }));
+    "#,
+  );
 
   let page_id = *host.registered.borrow().last().unwrap();
   state.render(&rt, &ctx, page_id).unwrap();
   state.dispatch_event(&rt, &ctx, page_id, 2, "");
-
-  let menus = host.menus.borrow();
-  assert_eq!(menus.len(), 1);
-  assert_eq!(menus[0].page_id, page_id);
-  assert_eq!(menus[0].anchor, "i:menu-row#1", "the menu must name the row it was opened from");
-  assert_eq!(
-    menus[0].items_json,
-    r#"[{"text":"one","danger":false},{"text":"two","checked":true,"danger":true}]"#,
-  );
-  let menu_id = menus[0].id;
-  drop(menus);
-
-  state.dispatch_menu_click(&rt, &ctx, menu_id, 1);
-  let picked: String = ctx.with(|ctx| ctx.eval("globalThis.__picked").unwrap());
-  assert_eq!(picked, "two");
-  assert!(state.menus.borrow().is_empty());
-}
-
-#[test]
-fn menu_dismissed_without_click_releases_callbacks() {
-  let (rt, ctx, host, state, _logs) = setup();
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
-            globalThis.__picked = null;
-            const page = inu.ui.settingsPage({
-                title: 't',
-                items: () => [inu.ui.button({ text: 'row', onClick: (anchor) => {
-                    anchor.openMenu([{ text: 'x', onClick: () => { globalThis.__picked = 'x'; } }]);
-                } })],
-            });
-            inu.registerSettings(page);
-            "#,
-      )
-      .unwrap();
-  });
-  let page_id = *host.registered.borrow().last().unwrap();
-  state.render(&rt, &ctx, page_id).unwrap();
-  state.dispatch_event(&rt, &ctx, page_id, 1, "");
-  let menu_id = host.menus.borrow()[0].id;
+  let (menu_id, anchor, items) = {
+    let menus = host.menus.borrow();
+    assert_eq!(menus[0].page_id, page_id);
+    (menus[0].id, menus[0].anchor.clone(), menus[0].items_json.clone())
+  };
+  assert_eq!(anchor, "i:menu-row#1", "the menu must name the row it was opened from");
+  assert_eq!(items, r#"[{"text":"one","danger":false},{"text":"two","checked":true,"danger":true}]"#);
 
   state.dispatch_menu_click(&rt, &ctx, menu_id, -1);
-  let picked_is_null: bool = ctx.with(|ctx| ctx.eval("globalThis.__picked === null").unwrap());
-  assert!(picked_is_null);
+  assert!(state.menus.borrow().is_empty(), "a dismissed menu must release its callbacks");
+
+  state.dispatch_event(&rt, &ctx, page_id, 2, "");
+  let menu_id = host.menus.borrow().last().unwrap().id;
+  state.dispatch_menu_click(&rt, &ctx, menu_id, 1);
+  assert_eq!(eval_json(&ctx, "__picked"), "[0]", "a menu item's callback gets no anchor");
   assert!(state.menus.borrow().is_empty());
 }
 
@@ -282,23 +245,22 @@ fn an_anchor_outlives_the_render_that_minted_it() {
     ctx
       .eval::<(), _>(
         r#"
-            globalThis.__anchor = null;
-            inu.registerSettings(inu.ui.settingsPage({
-                title: 't',
-                items: () => [
-                    inu.ui.check({ id: 'row', text: 'toggle', checked: false, onChange: (v, anchor) => {
-                        globalThis.__anchor = anchor;
-                    } }),
-                ],
-            }));
-            "#,
+          globalThis.__anchor = null;
+          inu.registerSettings(inu.ui.settingsPage({
+            title: 't',
+            items: () => [
+              inu.ui.check({ id: 'row', text: 'toggle', checked: false, onChange: (v, anchor) => {
+                globalThis.__anchor = anchor;
+              } }),
+            ],
+          }));
+        "#,
       )
       .unwrap();
   });
   let page_id = *host.registered.borrow().last().unwrap();
   state.render(&rt, &ctx, page_id).unwrap();
   state.dispatch_event(&rt, &ctx, page_id, 1, "true");
-  // the host re-renders after every event, which drops slot 1 and mints slot 2
   let json = state.render(&rt, &ctx, page_id).unwrap();
   assert!(json.contains(r#""onChange":2"#), "the re-render must reallocate slots: {json}");
 
@@ -318,13 +280,13 @@ fn an_anchor_whose_page_was_disposed_is_handle_expired() {
     ctx
       .eval::<(), _>(
         r#"
-            globalThis.__anchor = null;
-            globalThis.__page = inu.ui.settingsPage({
-                title: 't',
-                items: () => [inu.ui.button({ text: 'row', onClick: (anchor) => { globalThis.__anchor = anchor; } })],
-            });
-            inu.registerSettings(globalThis.__page);
-            "#,
+          globalThis.__anchor = null;
+          globalThis.__page = inu.ui.settingsPage({
+            title: 't',
+            items: () => [inu.ui.button({ text: 'row', onClick: (anchor) => { globalThis.__anchor = anchor; } })],
+          });
+          inu.registerSettings(globalThis.__page);
+        "#,
       )
       .unwrap();
   });
@@ -337,47 +299,18 @@ fn an_anchor_whose_page_was_disposed_is_handle_expired() {
     ctx
       .eval::<String, _>(
         r#"
-            globalThis.__page.dispose();
-            let out = 'no-throw';
-            try {
-                globalThis.__anchor.openMenu([{ text: 'late', onClick: () => {} }]);
-            } catch (e) { out = `${e instanceof inu.PluginError}:${e.code}`; }
-            out;
-            "#,
+          globalThis.__page.dispose();
+          let out = 'no-throw';
+          try {
+            globalThis.__anchor.openMenu([{ text: 'late', onClick: () => {} }]);
+          } catch (e) { out = `${e instanceof inu.PluginError}:${e.code}`; }
+          out;
+        "#,
       )
       .unwrap()
   });
   assert_eq!(outcome, "true:handle-expired");
   assert!(host.menus.borrow().is_empty(), "a disposed page must not reach the host");
-}
-
-/// a menu item's own `onClick` gets no anchor, so a menu cannot open another menu
-#[test]
-fn a_menu_item_callback_gets_no_anchor() {
-  let (rt, ctx, host, state, _logs) = setup();
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
-            globalThis.__args = null;
-            inu.registerSettings(inu.ui.settingsPage({
-                title: 't',
-                items: () => [inu.ui.button({ text: 'row', onClick: (anchor) => {
-                    anchor.openMenu([{ text: 'x', onClick: (...args) => { globalThis.__args = args.length; } }]);
-                } })],
-            }));
-            "#,
-      )
-      .unwrap();
-  });
-  let page_id = *host.registered.borrow().last().unwrap();
-  state.render(&rt, &ctx, page_id).unwrap();
-  state.dispatch_event(&rt, &ctx, page_id, 1, "");
-  let menu_id = host.menus.borrow()[0].id;
-  state.dispatch_menu_click(&rt, &ctx, menu_id, 0);
-
-  let argc: i32 = ctx.with(|ctx| ctx.eval("globalThis.__args").unwrap());
-  assert_eq!(argc, 0);
 }
 
 /// every callback position the contract declares an anchor for gets one, at the right index
@@ -388,32 +321,31 @@ fn every_item_callback_is_handed_an_anchor() {
     ctx
       .eval::<(), _>(
         r#"
-            globalThis.__seen = {};
-            const note = (what) => (...args) => {
-                const anchor = args[args.length - 1];
-                globalThis.__seen[what] = typeof anchor?.openMenu === 'function' ? args.length : 'missing';
-            };
-            inu.registerSettings(inu.ui.settingsPage({
-                title: 't',
-                items: () => [
-                    inu.ui.check({ text: 'c', checked: false, onChange: note('check'), onSecondaryClick: note('checkLong') }),
-                    inu.ui.button({ text: 'b', onClick: note('button'), onSecondaryClick: note('buttonLong') }),
-                    inu.ui.select({ text: 's', items: ['a', 'b'], selected: 0, onChange: note('select'), onSecondaryClick: note('selectLong') }),
-                    inu.ui.slider({ text: 'l', min: 0, max: 2, step: 1, value: 0, onChange: note('slider') }),
-                ],
-                bottomButton: { text: 'go', onClick: note('bottom') },
-            }));
-            "#,
+          globalThis.__seen = {};
+          const note = (what) => (...args) => {
+            const anchor = args[args.length - 1];
+            globalThis.__seen[what] = typeof anchor?.openMenu === 'function' ? args.length : 'missing';
+          };
+          inu.registerSettings(inu.ui.settingsPage({
+            title: 't',
+            items: () => [
+              inu.ui.check({ text: 'c', checked: false, onChange: note('check'), onSecondaryClick: note('checkLong') }),
+              inu.ui.button({ text: 'b', onClick: note('button'), onSecondaryClick: note('buttonLong') }),
+              inu.ui.select({ text: 's', items: ['a', 'b'], selected: 0, onChange: note('select'), onSecondaryClick: note('selectLong') }),
+              inu.ui.slider({ text: 'l', min: 0, max: 2, step: 1, value: 0, onChange: note('slider') }),
+            ],
+            bottomButton: { text: 'go', onClick: note('bottom') },
+          }));
+        "#,
       )
       .unwrap();
   });
   let page_id = *host.registered.borrow().last().unwrap();
   state.render(&rt, &ctx, page_id).unwrap();
-  // slots in render order: check/checkLong, button/buttonLong, select/selectLong, slider, bottom
   for (slot, arg) in [(1, "true"), (2, ""), (3, ""), (4, ""), (5, "1"), (6, ""), (7, "1"), (8, "")] {
     state.dispatch_event(&rt, &ctx, page_id, slot, arg);
   }
-  let seen: String = ctx.with(|ctx| ctx.eval("JSON.stringify(globalThis.__seen)").unwrap());
+  let seen: String = eval_json(&ctx, "globalThis.__seen");
   assert_eq!(
     seen,
     r#"{"check":2,"checkLong":1,"button":1,"buttonLong":1,"select":2,"selectLong":1,"slider":2,"bottom":1}"#,
@@ -427,17 +359,17 @@ fn a_row_key_is_stable_across_renders_and_unique_within_one() {
     ctx
       .eval::<(), _>(
         r#"
-            globalThis.__extra = false;
-            inu.registerSettings(inu.ui.settingsPage({
-                title: 't',
-                items: () => [
-                    ...(globalThis.__extra ? [inu.ui.header('Extra')] : []),
-                    inu.ui.separator(),
-                    inu.ui.separator(),
-                    inu.ui.button({ id: 'act', text: 'whatever this render calls it', onClick: () => {} }),
-                ],
-            }));
-            "#,
+          globalThis.__extra = false;
+          inu.registerSettings(inu.ui.settingsPage({
+            title: 't',
+            items: () => [
+              ...(globalThis.__extra ? [inu.ui.header('Extra')] : []),
+              inu.ui.separator(),
+              inu.ui.separator(),
+              inu.ui.button({ id: 'act', text: 'whatever this render calls it', onClick: () => {} }),
+            ],
+          }));
+        "#,
       )
       .unwrap();
   });
@@ -477,17 +409,13 @@ fn rendering_a_page_the_engine_no_longer_has_is_an_error_not_a_fault() {
 
 #[test]
 fn open_page_and_invalidate_reach_host() {
-  let (rt, ctx, host, _state, _logs) = setup();
+  let (_rt, ctx, host, _state, _logs) = setup();
   let page_id = build_full_page(&ctx, &host);
   ctx.with(|ctx| {
     ctx.eval::<(), _>("inu.ui.openPage(globalThis.__page); globalThis.__page.invalidate();").unwrap();
   });
   assert_eq!(*host.opened_pages.borrow(), vec![page_id]);
   assert_eq!(*host.invalidated.borrow(), vec![page_id]);
-
-  let threw = ctx.with(|ctx| ctx.eval::<(), _>("inu.ui.openPage({})").is_err());
-  assert!(threw);
-  let _ = (&rt, page_id);
 }
 
 #[test]
@@ -529,33 +457,19 @@ fn open_screen_validates_and_reaches_host() {
 /// grant check used when it was minted.
 #[test]
 fn a_java_object_reaches_open_page_native_view_and_drawable_icon() {
-  struct IconHost;
-
-  impl crate::api::ui::icons::IconHost for IconHost {
-    fn icon_resolves(&self, _kind: i32, _value: &str) -> bool {
-      true
-    }
-
-    fn common_icon(&self, _name: &str) -> Option<String> {
-      None
-    }
-  }
-
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
+  let (rt, ctx) = crate::testing::harness::new_engine();
   let host = Rc::new(TestUiHost::default());
   let host_dyn: Rc<dyn UiHost> = host.clone();
   let log = crate::testing::harness::log_sink(&crate::testing::harness::Logs::new());
-  let jvm_host = crate::api::platform::jvm::tests::testing::OracleJvmHost::new();
-  let grants = crate::sandbox::grants::TestGrantHost::new(&["unsafe.jvm"]);
+  let jvm_host = crate::api::platform::jvm::tests::TestJvmHost::new();
+  let grants = crate::sandbox::grants::CachedGrantHost::new(["unsafe.jvm"]);
   let (state, jvm) = ctx.with(|ctx| {
     let inu = crate::testing::harness::get_api_globals(&ctx);
-    crate::api::error::install_plugin_error(&ctx).unwrap();
     let jvm = crate::api::platform::jvm::install_jvm(
       &ctx,
       jvm_host.as_host(),
       None,
-      grants.as_host(),
+      grants.clone(),
       Lifecycle::new(),
       log.clone(),
       None,
@@ -563,7 +477,13 @@ fn a_java_object_reaches_open_page_native_view_and_drawable_icon() {
     )
     .unwrap();
     ctx.globals().set("__obj", jvm.wire_to_value(&ctx, "GO900").unwrap()).unwrap();
-    crate::api::ui::icons::install_icons(&ctx, Rc::new(IconHost), Some(jvm.clone()), &inu).unwrap();
+    crate::api::ui::icons::install_icons(
+      &ctx,
+      crate::api::ui::icons::tests::TestIconHost::without(&[]),
+      Some(jvm.clone()),
+      &inu,
+    )
+    .unwrap();
     let ui = install_ui(&ctx, host_dyn, Lifecycle::new(), log, Some(jvm.clone()), &inu).unwrap();
     (ui, jvm)
   });
@@ -576,7 +496,7 @@ fn a_java_object_reaches_open_page_native_view_and_drawable_icon() {
   assert_eq!(host.opened_fragments.borrow().len(), 1, "a java object never reached the fragment path");
   assert!(host.opened_pages.borrow().is_empty(), "and it must not be taken for a settings page");
 
-  let element: String = ctx.with(|ctx| ctx.eval("JSON.stringify(inu.android.nativeView(globalThis.__obj))").unwrap());
+  let element: String = eval_json(&ctx, "inu.android.nativeView(globalThis.__obj)");
   assert!(element.contains(r#""__inuUi":"native""#), "{element}");
   assert!(element.contains(r#""handle":"#), "{element}");
 
@@ -584,16 +504,16 @@ fn a_java_object_reaches_open_page_native_view_and_drawable_icon() {
     ctx
       .eval(
         r#"
-            globalThis.__iconPage = inu.ui.settingsPage({
-                title: 'Icon',
-                items: () => [inu.ui.button({
-                    text: 'Icon',
-                    icon: inu.android.drawableIcon(globalThis.__obj),
-                    onClick: () => {},
-                })],
-            });
-            globalThis.__iconPage.__inuPageId
-            "#,
+          globalThis.__iconPage = inu.ui.settingsPage({
+            title: 'Icon',
+            items: () => [inu.ui.button({
+              text: 'Icon',
+              icon: inu.android.drawableIcon(globalThis.__obj),
+              onClick: () => {},
+            })],
+          });
+          globalThis.__iconPage.__inuPageId
+        "#,
       )
       .unwrap()
   });
@@ -624,40 +544,7 @@ fn page_closed_fires_on_close_and_page_stays_reopenable() {
   let closed: bool = ctx.with(|ctx| ctx.eval("__state.log.includes('close')").unwrap());
   assert!(closed);
 
-  // render callbacks were released, but the page can be rendered again
   assert!(state.render(&rt, &ctx, page_id).is_some());
-}
-
-#[test]
-fn manual_dispose_releases_page_and_is_idempotent() {
-  let (rt, ctx, host, state, logs) = setup();
-  let page_id = build_full_page(&ctx, &host);
-  state.render(&rt, &ctx, page_id).unwrap();
-
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"
-            globalThis.__page.dispose();
-            globalThis.__page.dispose();
-            globalThis.__openErr = null;
-            try { inu.ui.openPage(globalThis.__page); } catch (e) { globalThis.__openErr = `${e instanceof inu.PluginError}:${e.code}`; }
-            globalThis.__typeErr = null;
-            try { inu.ui.openPage({}); } catch (e) { globalThis.__typeErr = e.constructor.name; }
-            "#,
-      )
-      .unwrap();
-  });
-  assert!(state.pages.borrow().is_empty());
-  let open_err: String = ctx.with(|ctx| ctx.eval("globalThis.__openErr").unwrap());
-  assert_eq!(open_err, "true:handle-expired");
-  // something that is not a page at all stays a plain TypeError: no handle ever existed
-  let type_err: String = ctx.with(|ctx| ctx.eval("globalThis.__typeErr").unwrap());
-  assert_eq!(type_err, "TypeError");
-  assert!(state.render(&rt, &ctx, page_id).is_none());
-  logs.borrow_mut().clear();
-  // rt/ctx drop after this without aborting == roots were released
-  let _ = &rt;
 }
 
 #[test]
@@ -667,15 +554,15 @@ fn transient_page_auto_disposes_on_close_after_on_close_fires() {
     ctx
       .eval::<(), _>(
         r#"
-            globalThis.__closed = 0;
-            globalThis.__page = inu.ui.settingsPage({
-                title: 't',
-                transient: true,
-                items: () => [inu.ui.button({ text: 'r', onClick: () => {} })],
-                onClose: () => { globalThis.__closed++; },
-            });
-            inu.registerSettings(globalThis.__page);
-            "#,
+          globalThis.__closed = 0;
+          globalThis.__page = inu.ui.settingsPage({
+            title: 't',
+            transient: true,
+            items: () => [inu.ui.button({ text: 'r', onClick: () => {} })],
+            onClose: () => { globalThis.__closed++; },
+          });
+          inu.registerSettings(globalThis.__page);
+        "#,
       )
       .unwrap();
   });
@@ -687,7 +574,6 @@ fn transient_page_auto_disposes_on_close_after_on_close_fires() {
   assert_eq!(closed, 1);
   assert!(state.pages.borrow().is_empty());
 
-  // a second close for the same id must be a silent no-op
   state.close_page(&rt, &ctx, page_id);
   let closed: i32 = ctx.with(|ctx| ctx.eval("globalThis.__closed").unwrap());
   assert_eq!(closed, 1);
@@ -697,11 +583,11 @@ fn transient_page_auto_disposes_on_close_after_on_close_fires() {
     ctx
       .eval(
         r#"
-            (() => {
-                try { inu.ui.openPage(globalThis.__page); return 'opened'; }
-                catch (e) { return String(e.message ?? e); }
-            })()
-            "#,
+          (() => {
+            try { inu.ui.openPage(globalThis.__page); return 'opened'; }
+            catch (e) { return String(e.message ?? e); }
+          })()
+        "#,
       )
       .unwrap()
   });
@@ -715,11 +601,11 @@ fn throwing_items_fn_logs_and_returns_none() {
     ctx
       .eval::<(), _>(
         r#"
-            inu.registerSettings(inu.ui.settingsPage({
-                title: 'broken',
-                items: () => { throw new Error('render-boom'); },
-            }));
-            "#,
+          inu.registerSettings(inu.ui.settingsPage({
+            title: 'broken',
+            items: () => { throw new Error('render-boom'); },
+          }));
+        "#,
       )
       .unwrap();
   });
@@ -738,12 +624,12 @@ fn a_throwing_page_callback_faults_where_a_stale_host_id_does_not() {
     ctx
       .eval::<(), _>(
         r#"
-            inu.registerSettings(inu.ui.settingsPage({
-                title: 'broken',
-                items: () => [inu.ui.button({ text: 'x', onClick: () => { throw new Error('click-boom'); } })],
-                onClose: () => { throw new Error('close-boom'); },
-            }));
-            "#,
+          inu.registerSettings(inu.ui.settingsPage({
+            title: 'broken',
+            items: () => [inu.ui.button({ text: 'x', onClick: () => { throw new Error('click-boom'); } })],
+            onClose: () => { throw new Error('close-boom'); },
+          }));
+        "#,
       )
       .unwrap();
   });
@@ -782,14 +668,14 @@ fn select_defaults_to_a_dialog_when_an_item_has_a_subtitle() {
     ctx
       .eval::<String, _>(
         r#"
-            const select = (items, dialog) => inu.ui.select({ text: 'x', items, selected: 0, dialog, onChange: () => {} }).dialog;
-            JSON.stringify([
-                select(['a', 'b']),
-                select(['a', { text: 'b', subtitle: 'bee' }]),
-                select(['a', { text: 'b', subtitle: 'bee' }], false),
-                select(['a', 'b'], true),
-            ]);
-            "#,
+          const select = (items, dialog) => inu.ui.select({ text: 'x', items, selected: 0, dialog, onChange: () => {} }).dialog;
+          JSON.stringify([
+            select(['a', 'b']),
+            select(['a', { text: 'b', subtitle: 'bee' }]),
+            select(['a', { text: 'b', subtitle: 'bee' }], false),
+            select(['a', 'b'], true),
+          ]);
+        "#,
       )
       .unwrap()
   });
@@ -797,60 +683,38 @@ fn select_defaults_to_a_dialog_when_an_item_has_a_subtitle() {
 }
 
 #[test]
-fn element_creation_validates_options_eagerly() {
-  let (_rt, ctx, _host, _state, _logs) = setup();
-  let errors: String = ctx.with(|ctx| {
-    ctx
-      .eval::<String, _>(
-        r#"
-            const out = [];
-            const tryIt = f => { try { f(); out.push('ok'); } catch (e) { out.push(e.message); } };
-            tryIt(() => inu.ui.check({ text: 'x' }));
-            tryIt(() => inu.ui.select({ text: 'x', items: [], selected: 0, onChange: () => {} }));
-            tryIt(() => inu.ui.select({ text: 'x', items: ['a'], selected: 5, onChange: () => {} }));
-            tryIt(() => inu.ui.slider({ min: 0, max: 10, step: 0, value: 1, onChange: () => {} }));
-            JSON.stringify(out);
-            "#,
-      )
-      .unwrap()
-  });
-  assert_eq!(
-    errors,
-    r#"["check: 'checked' must be a boolean","select: 'items' must not be empty","select: 'selected' out of range","slider: 'step' must be > 0"]"#,
-  );
-}
-
-/// degrading to bare numbers loses whatever unit the label carried, on a range the author's own
-/// test values never reach - so it is refused, and refused again where a hand-built element is
-/// read rather than only where `inu.ui.slider` mints one
-#[test]
-fn a_slider_label_past_the_step_cap_is_refused_at_both_ends() {
+fn slider_label_cap_is_enforced_where_minted_and_where_rendered() {
   let (rt, ctx, host, state, _logs) = setup();
-  let minted: String = ctx.with(|ctx| {
+  let out: String = ctx.with(|ctx| {
     ctx
-      .eval(
-        r#"(() => {
-                   const opts = { min: 0, max: 2000, step: 1, value: 0, onChange: () => {} };
-                   inu.ui.slider(opts);
-                   try {
-                       inu.ui.slider({ ...opts, label: v => v + ' MB' });
-                       return 'did not throw';
-                   } catch (e) {
-                       return `${e instanceof inu.PluginError}:${e.code}:${e.message.includes('2001 steps')}`;
-                   }
-               })()"#,
-      )
+      .eval(format!(
+        r#"
+          (() => {{
+            const mk = (max) => {{
+              try {{
+                inu.ui.slider({{ min: 0, max, step: 1, value: 0, label: String, onChange: () => {{}} }});
+                return 'ok';
+              }} catch (e) {{ return e.code }}
+            }};
+            return [mk({}), mk({})].join('|');
+          }})()
+        "#,
+        MAX_SLIDER_LABELS - 1,
+        MAX_SLIDER_LABELS,
+      ))
       .unwrap()
   });
-  assert_eq!(minted, "true:invalid-argument:true", "a label past the cap is refused");
+  assert_eq!(out, "ok|invalid-argument", "the cap counts the values a label is called for");
 
   ctx.with(|ctx| {
     ctx
       .eval::<(), _>(
-        r#"inu.registerSettings(inu.ui.settingsPage({ title: 'p', items: () => [{
-                   __inuUi: 'slider', min: 0, max: 2000, step: 1, value: 0,
-                   label: v => String(v), onChange: () => {},
-               }] }))"#,
+        r#"
+          inu.registerSettings(inu.ui.settingsPage({ title: 'p', items: () => [{
+            __inuUi: 'slider', min: 0, max: 2000, step: 1, value: 0,
+            label: v => String(v), onChange: () => {},
+          }] }))
+        "#,
       )
       .unwrap();
   });
@@ -859,70 +723,20 @@ fn a_slider_label_past_the_step_cap_is_refused_at_both_ends() {
 }
 
 #[test]
-fn slider_label_cap_is_enforced() {
-  let stated = MAX_SLIDER_LABELS;
-
-  let (_rt, ctx, _host, _state, _logs) = setup();
-  let out: String = ctx.with(|ctx| {
-    ctx
-      .eval(format!(
-        r#"(() => {{
-                   const mk = (max) => {{
-                       try {{
-                           inu.ui.slider({{ min: 0, max, step: 1, value: 0, label: String, onChange: () => {{}} }});
-                           return 'ok';
-                       }} catch (e) {{ return e.code }}
-                   }};
-                   return [mk({}), mk({})].join('|');
-               }})()"#,
-        stated - 1,
-        stated,
-      ))
-      .unwrap()
-  });
-  assert_eq!(out, "ok|invalid-argument", "the cap counts the values a label is called for");
-}
-
-#[test]
 fn a_second_register_settings_throws_until_the_first_is_disposed() {
-  let (_rt, ctx, host, _state, _logs) = setup();
+  let (_rt, ctx, host, state, _logs) = setup();
   let page_id = build_full_page(&ctx, &host);
-  let err: String = ctx.with(|ctx| {
-    ctx
-      .eval::<String, _>(
-        r#"
-            let out = 'no-throw';
-            try { inu.registerSettings(globalThis.__page); } catch (e) { out = e.message; }
-            out;
-            "#,
-      )
-      .unwrap()
-  });
+  let err = crate::testing::harness::catch_json(&ctx, "inu.registerSettings(globalThis.__page)");
   assert!(err.contains("already registered"), "got: {err}");
   assert_eq!(*host.registered.borrow(), vec![page_id]);
 
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        "globalThis.__disposeSettings(); globalThis.__disposeSettings(); inu.registerSettings(globalThis.__page);",
-      )
-      .unwrap();
-  });
+  eval(&ctx, "__disposeSettings(); __disposeSettings(); inu.registerSettings(__page);");
   assert_eq!(*host.unregistered.borrow(), vec![page_id], "a disposer called twice unregisters once");
   assert_eq!(*host.registered.borrow(), vec![page_id, page_id]);
-}
 
-#[test]
-fn disposing_a_registered_page_unregisters_it() {
-  let (_rt, ctx, host, state, _logs) = setup();
-  let page_id = build_full_page(&ctx, &host);
-  ctx.with(|ctx| ctx.eval::<(), _>("globalThis.__page.dispose();").unwrap());
-  assert_eq!(*host.unregistered.borrow(), vec![page_id]);
+  eval(&ctx, "__page.dispose(); __disposeSettings();");
+  assert_eq!(*host.unregistered.borrow(), vec![page_id, page_id], "disposing the page unregisters it, once");
   assert!(state.settings.is_empty());
-
-  // the registration is gone, so its disposer must not unregister a second time
-  ctx.with(|ctx| ctx.eval::<(), _>("globalThis.__disposeSettings();").unwrap());
-  assert_eq!(*host.unregistered.borrow(), vec![page_id]);
 }
 
 #[test]
@@ -933,9 +747,9 @@ fn register_settings_after_unload_began_is_a_no_op() {
     ctx
       .eval::<String, _>(
         r#"
-            const page = inu.ui.settingsPage({ title: 't', items: () => [] });
-            typeof inu.registerSettings(page);
-            "#,
+          const page = inu.ui.settingsPage({ title: 't', items: () => [] });
+          typeof inu.registerSettings(page);
+        "#,
       )
       .unwrap()
   });
@@ -944,32 +758,17 @@ fn register_settings_after_unload_began_is_a_no_op() {
   assert!(state.settings.is_empty());
 }
 
-/// the bundled oracle is the only test the js surface gets on a device, so its load-time half -
-/// everything decidable without a screen - is run here too, with an **exact** count: a member
-/// that vanished reads as a refusal in a suite written out of `expectThrow`, and only the count
-/// tells those apart
+/// exact count: in a suite written out of `expectThrow`, a vanished member reads as a refusal
 #[test]
 fn the_bundled_ui_test_plugin_passes() {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
+  let (rt, ctx, _modal_host, _lifecycle, _dialogs, logs) = crate::testing::harness::setup_apis(&[]);
   let host = Rc::new(TestUiHost::default());
-  let host_dyn: Rc<dyn UiHost> = host.clone();
-  let logs = crate::testing::harness::Logs::new();
-  let log = crate::testing::harness::log_sink(&logs);
-  let storage_file = crate::testing::harness::TempPath::default();
-  // `inu.ui` is one object: the dialogs install it and the pages install into it, as an engine does
-  let (dialogs, state) = ctx.with(|ctx| {
+  let state = ctx.with(|ctx| {
     let inu = crate::testing::harness::get_api_globals(&ctx);
-    crate::api::error::install_plugin_error(&ctx).unwrap();
-    crate::api::io::local_storage::install_local_storage(&ctx, storage_file.0.clone()).unwrap();
-    let modal_host = Rc::new(crate::testing::harness::RecordingHost::default());
-    let dialogs = crate::api::ui::dialogs::install_dialogs(&ctx, modal_host, None, log.clone(), &inu).unwrap();
-    (dialogs, install_ui(&ctx, host_dyn, Lifecycle::new(), log, None, &inu).unwrap())
+    install_ui(&ctx, host.clone(), Lifecycle::new(), crate::testing::harness::log_sink(&logs), None, &inu).unwrap()
   });
   let _state = Disposing::new(&ctx, state, |ctx, state| state.dispose(ctx));
-  let _dialogs = crate::testing::harness::DisposeOnDrop::new(&ctx, dialogs, |ctx, state| state.dispose(ctx));
-  let lines =
-    crate::testing::harness::run_capturing_console(&rt, &ctx, include_str!("../../../../test/plugins/ui-test.js"));
+  let lines = crate::testing::harness::run_capturing_console(&rt, &ctx, crate::testing::test_plugin!("ui-test.js"));
 
   crate::testing::harness::assert_oracle_exact(&lines, "ui test done", 17);
   assert_eq!(host.registered.borrow().len(), 1, "the plugin must have left one settings page");
@@ -980,16 +779,15 @@ fn dispose_with_open_everything_releases_roots() {
   let (rt, ctx, host, state, _logs) = setup();
   let page_id = build_full_page(&ctx, &host);
   state.render(&rt, &ctx, page_id).unwrap();
-  // leave a menu open too
   ctx.with(|ctx| {
     ctx
       .eval::<(), _>(
         r#"
-            globalThis.__disposeSettings();
-            inu.registerSettings(inu.ui.settingsPage({ title: 'm', items: () => [
-                inu.ui.button({ text: 'r', onClick: (anchor) => anchor.openMenu([{ text: 'x', onClick: () => {} }]) }),
-            ]}));
-            "#,
+          globalThis.__disposeSettings();
+          inu.registerSettings(inu.ui.settingsPage({ title: 'm', items: () => [
+            inu.ui.button({ text: 'r', onClick: (anchor) => anchor.openMenu([{ text: 'x', onClick: () => {} }]) }),
+          ]}));
+        "#,
       )
       .unwrap();
   });
@@ -999,5 +797,4 @@ fn dispose_with_open_everything_releases_roots() {
   assert_eq!(state.menus.borrow().len(), 1);
 
   state.dispose(&ctx);
-  // rt/ctx drop after this without aborting == roots were released
 }

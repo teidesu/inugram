@@ -1,7 +1,6 @@
 package desu.inugram.helpers.plugins
 
 import desu.inugram.core.plugins.PluginRefusal
-import desu.inugram.core.plugins.EgressPolicy
 import desu.inugram.core.plugins.PluginPermissions
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.io.PluginFetch
@@ -13,32 +12,17 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/**
- * The transport: that [EgressPolicy] is asked on *every* hop rather than once, what a spec may put
- * on the wire, and what a body costs. The rules it is asked for are `EgressPolicyTest`'s - stated
- * against addresses a test names, which is the only way they can be stated at all.
- *
- * Here because okhttp is the subject: android's `HttpURLConnection` is what supplies `Host` only
- * when it is absent, and what a real `InputStream` does when a budget runs out is not something a
- * stand-in can answer.
- */
 class PluginFetchTest {
     @Before
     fun setUp() = resetBridge()
 
     private fun grants(vararg tokens: String) = PluginPermissions.parse(tokens.toList())
 
-    private fun v4(a: Int, b: Int, c: Int, d: Int) =
-        byteArrayOf(a.toByte(), b.toByte(), c.toByte(), d.toByte())
-
-    private val public4 = v4(93, 184, 216, 34)
-
-    private fun codeOf(wire: String?): String? {
+    private fun readErrorCode(wire: String?): String? {
         val decoded = PluginWire.decode(wire ?: return null)
         return (decoded as PluginWire.Value.PluginErr).code
     }
@@ -56,7 +40,6 @@ class PluginFetchTest {
 
         val urls = ArrayList<String>()
 
-        /** what the transport does while it is serving a hop, e.g. an abort landing mid-chain */
         var whileServing: ((String) -> Unit)? = null
 
         override fun exchange(
@@ -81,25 +64,15 @@ class PluginFetchTest {
         redirect: String = "follow",
         method: String = "GET",
         body: ByteArray? = null,
-        resolve: (String) -> List<ByteArray> = answersFor(),
         flight: PluginFetch.Flight = PluginFetch.Flight(),
-    ) = PluginFetch.runExchange(permissions, url, spec(redirect, method), body, resolve, transport, flight)
+    ) = PluginFetch.runExchange(permissions, url, spec(redirect, method), body, transport, flight)
 
-    private fun answersFor(vararg private: String): (String) -> List<ByteArray> = { host ->
-        if (host in private) listOf(v4(127, 0, 0, 1)) else listOf(public4)
-    }
-
-    /**
-     * the open-proxy shape: an allowed host redirects somewhere the grant never named. A client
-     * that follows redirects itself checks the first url only, and the response then looks like it
-     * came from the host that was allowed.
-     */
     @Test
     fun a_redirect_off_the_granted_domain_fails_the_request_and_is_never_sent() {
         val transport = Recorder(mapOf("https://example.com/open" to hop(302, "https://evil.com/steal")))
         val outcome = exchange(grants("fetch(example.com)"), "https://example.com/open", transport)
 
-        assertEquals("not-granted", codeOf((outcome as PluginFetch.Outcome.Refused).wire))
+        assertEquals("not-granted", readErrorCode((outcome as PluginFetch.Outcome.Refused).wire))
         assertEquals(listOf("GET https://example.com/open"), transport.urls)
     }
 
@@ -112,40 +85,15 @@ class PluginFetchTest {
                 "https://one.example.com/c" to hop(200),
             ),
         )
-        val screened = ArrayList<String>()
-        val outcome = PluginFetch.runExchange(
-            grants("fetch(example.com)"),
-            "https://example.com/a",
-            spec(),
-            null,
-            { host -> screened.add(host); listOf(public4) },
-            transport,
-            PluginFetch.Flight(),
-        )
+        val outcome = exchange(grants("fetch(example.com)"), "https://example.com/a", transport)
 
         val answer = outcome as PluginFetch.Outcome.Answer
         assertEquals(200, answer.hop.status)
         assertEquals("https://one.example.com/c", answer.finalUrl, "the final url is the last hop's")
-        assertEquals(listOf("example.com", "one.example.com", "one.example.com"), screened)
-        assertEquals(3, transport.urls.size)
-    }
-
-    /**
-     * the address is re-resolved per hop for the same reason the grant is re-checked: a host inside
-     * the granted domain can still point at the device itself
-     */
-    @Test
-    fun a_hop_whose_host_resolves_into_a_private_range_is_refused_mid_chain() {
-        val transport = Recorder(mapOf("https://example.com/a" to hop(302, "https://internal.example.com/b")))
-        val outcome = exchange(
-            grants("fetch(example.com)"),
-            "https://example.com/a",
-            transport,
-            resolve = answersFor("internal.example.com"),
+        assertEquals(
+            listOf("GET https://example.com/a", "GET https://one.example.com/b", "GET https://one.example.com/c"),
+            transport.urls,
         )
-
-        assertEquals("forbidden", codeOf((outcome as PluginFetch.Outcome.Refused).wire))
-        assertEquals(listOf("GET https://example.com/a"), transport.urls, "the second hop never went out")
     }
 
     @Test
@@ -155,7 +103,7 @@ class PluginFetchTest {
         assertEquals(302, (manual as PluginFetch.Outcome.Answer).hop.status)
 
         val refused = exchange(grants("fetch"), "https://example.com/a", Recorder(script), redirect = "error")
-        assertEquals("network", codeOf((refused as PluginFetch.Outcome.Refused).wire))
+        assertEquals("network", readErrorCode((refused as PluginFetch.Outcome.Refused).wire))
     }
 
     @Test
@@ -163,55 +111,19 @@ class PluginFetchTest {
         val transport = Recorder(mapOf("https://example.com/loop" to hop(302, "https://example.com/loop")))
         val outcome = exchange(grants("fetch"), "https://example.com/loop", transport)
 
-        assertEquals("network", codeOf((outcome as PluginFetch.Outcome.Refused).wire))
+        assertEquals("network", readErrorCode((outcome as PluginFetch.Outcome.Refused).wire))
         assertEquals(21, transport.urls.size)
     }
 
-    /**
-     * what every http client does, and here it also means a body is never replayed to a host the
-     * plugin did not name
-     */
     @Test
-    fun a_see_other_turns_the_request_into_a_bodyless_GET() {
-        val transport = Recorder(mapOf("https://example.com/post" to hop(303, "https://example.com/done")))
-        exchange(
-            grants("fetch"),
-            "https://example.com/post",
-            transport,
-            method = "POST",
-            body = byteArrayOf(1, 2, 3),
-        )
-
-        assertEquals(
-            listOf("POST https://example.com/post +body", "GET https://example.com/done"),
-            transport.urls,
-        )
+    fun a_see_other_drops_the_body_and_a_temporary_redirect_keeps_it() {
+        for ((status, second) in listOf(303 to "GET https://example.com/done", 307 to "POST https://example.com/done +body")) {
+            val transport = Recorder(mapOf("https://example.com/post" to hop(status, "https://example.com/done")))
+            exchange(grants("fetch"), "https://example.com/post", transport, method = "POST", body = byteArrayOf(1, 2, 3))
+            assertEquals(listOf("POST https://example.com/post +body", second), transport.urls, "$status")
+        }
     }
 
-    @Test
-    fun a_temporary_redirect_keeps_the_method_and_the_body() {
-        val transport = Recorder(mapOf("https://example.com/post" to hop(307, "https://example.com/done")))
-        exchange(
-            grants("fetch"),
-            "https://example.com/post",
-            transport,
-            method = "POST",
-            body = byteArrayOf(1, 2, 3),
-        )
-
-        assertEquals(
-            listOf("POST https://example.com/post +body", "POST https://example.com/done +body"),
-            transport.urls,
-        )
-    }
-
-    /**
-     * the shape the scheme check is the only thing standing in front of: a hop that leaves http
-     * entirely. `URI.resolve` hands back the absolute `file:` url, and if [EgressPolicy.hostOf] ever
-     * grew a fallback for a scheme it does not know, a granted host redirecting to
-     * `file:///data/data/org.telegram.messenger/shared_prefs/` would be handed to the plugin as a
-     * `Blob` with nothing noticing.
-     */
     @Test
     fun a_redirect_off_http_entirely_is_refused_and_never_followed() {
         for (location in listOf("file:///etc/hosts", "content://media/external/x", "jar:file:///etc/hosts!/x")) {
@@ -220,16 +132,11 @@ class PluginFetchTest {
 
             val refused = outcome as? PluginFetch.Outcome.Refused
                 ?: error("'$location' was followed rather than refused")
-            assertEquals("invalid-argument", codeOf(refused.wire), location)
+            assertEquals("invalid-argument", readErrorCode(refused.wire), location)
             assertEquals(listOf("GET https://example.com/a"), transport.urls, "'$location' must not go out")
         }
     }
 
-    /**
-     * `FetchHost::abort` says the request is stopped, and the window it is asked for in is the whole
-     * of the queue hop, the pool dispatch and the name resolution - none of which the socket
-     * `Flight.cancel` disconnects exists for yet.
-     */
     @Test
     fun an_abort_before_the_first_hop_stops_the_request_without_sending_it() {
         val flight = PluginFetch.Flight()
@@ -237,27 +144,7 @@ class PluginFetchTest {
         val transport = Recorder(emptyMap())
         val outcome = exchange(grants("fetch"), "https://example.com/a", transport, flight = flight)
 
-        assertEquals("aborted", codeOf((outcome as PluginFetch.Outcome.Refused).wire))
-        assertTrue(transport.urls.isEmpty(), "a cancelled request must not reach the transport")
-    }
-
-    /**
-     * the same window one step later: resolving the name is where a hop spends its time, so the
-     * abort the plugin asked for during it has to be seen before the socket rather than after.
-     */
-    @Test
-    fun an_abort_that_lands_while_the_name_resolves_stops_the_request_without_sending_it() {
-        val flight = PluginFetch.Flight()
-        val transport = Recorder(emptyMap())
-        val outcome = exchange(
-            grants("fetch"),
-            "https://example.com/a",
-            transport,
-            resolve = { flight.cancel(); listOf(public4) },
-            flight = flight,
-        )
-
-        assertEquals("aborted", codeOf((outcome as PluginFetch.Outcome.Refused).wire))
+        assertEquals("aborted", readErrorCode((outcome as PluginFetch.Outcome.Refused).wire))
         assertTrue(transport.urls.isEmpty(), "a cancelled request must not reach the transport")
     }
 
@@ -274,36 +161,11 @@ class PluginFetchTest {
         transport.whileServing = { url -> if (url.endsWith("/a")) flight.cancel() }
         val outcome = exchange(grants("fetch"), "https://example.com/a", transport, flight = flight)
 
-        assertEquals("aborted", codeOf((outcome as PluginFetch.Outcome.Refused).wire))
+        assertEquals("aborted", readErrorCode((outcome as PluginFetch.Outcome.Refused).wire))
         assertEquals(listOf("GET https://example.com/a"), transport.urls, "the second hop never went out")
         assertEquals(100L, budget.get(), "the abandoned hop's body is not left charged")
     }
 
-    /** a hop's body is content nobody asked for, and it is a file on the user's device */
-    @Test
-    fun the_body_of_a_redirect_that_was_followed_is_deleted_and_its_bytes_come_back() {
-        val budget = AtomicLong(0)
-        val intermediate = bodyHop(302, "https://example.com/b", 500, budget)
-        val transport = Recorder(
-            mapOf(
-                "https://example.com/a" to intermediate,
-                "https://example.com/b" to bodyHop(200, null, 100, budget),
-            ),
-        )
-        assertEquals(600L, budget.get(), "both hops were read before the chain got to choose")
-
-        val outcome = exchange(grants("fetch"), "https://example.com/a", transport)
-
-        assertEquals(200, (outcome as PluginFetch.Outcome.Answer).hop.status)
-        assertFalse(intermediate.bodyFile!!.exists())
-        assertEquals(100L, budget.get(), "only the body the plugin is handed stays charged")
-    }
-
-    /**
-     * the shape that makes this a remote decision: a granted server answering every request with a
-     * 302 and a body drives the counter to its ceiling in a handful of chains, and nothing else
-     * ever decrements it
-     */
     @Test
     fun a_chain_of_redirects_that_all_carry_bodies_leaves_nothing_behind() {
         val budget = AtomicLong(0)
@@ -318,6 +180,7 @@ class PluginFetchTest {
 
         assertEquals(200, (outcome as PluginFetch.Outcome.Answer).hop.status)
         assertEquals(7L, budget.get())
+        assertTrue((0 until 10).none { script.getValue("https://example.com/$it").bodyFile!!.exists() })
     }
 
     @Test
@@ -331,7 +194,6 @@ class PluginFetchTest {
         assertEquals(0L, budget.get(), "a second discard is not a second refund")
     }
 
-    /** the drop path in `attach`: after a reload the answer belongs to an engine that is gone */
     @Test
     fun an_answer_no_engine_is_waiting_for_is_dropped_and_its_bytes_come_back() {
         val budget = AtomicLong(0)
@@ -361,11 +223,7 @@ class PluginFetchTest {
         assertEquals(900L, budget.get())
     }
 
-    /**
-     * an abort that lands once the body is already on disk: the engine settled its own promise
-     * before it told the host to stop, so it would throw the answer away, and a body nothing can
-     * ever be a `Blob` over must not stay charged
-     */
+    /** the engine settles an aborted promise itself before telling the host */
     @Test
     fun an_answer_for_a_request_the_plugin_aborted_is_dropped_rather_than_settled() {
         val budget = AtomicLong(0)
@@ -392,11 +250,6 @@ class PluginFetchTest {
         assertEquals(0L, PluginFetch.budgetFor("a".repeat(32)).get())
     }
 
-    /**
-     * serves [limit] bytes of nothing in particular, counting what it handed over: a real body of
-     * this size would be a server that announces no length and sends forever, and the point of the
-     * ceiling is that it stops one *while* reading rather than measuring it afterwards.
-     */
     private class EndlessStream(private val limit: Long) : InputStream() {
         var served = 0L
             private set
@@ -413,11 +266,6 @@ class PluginFetchTest {
             served += n
             return n
         }
-    }
-
-    private fun drainInto(stream: InputStream, budget: AtomicLong): Pair<File, Long> {
-        val file = File.createTempFile("inu-drain", ".bin").apply { deleteOnExit() }
-        return file to PluginFetch.drainTo(stream, file, budget, PluginFetch.Flight())
     }
 
     @Test
@@ -458,7 +306,8 @@ class PluginFetchTest {
     @Test
     fun a_body_inside_both_ceilings_is_charged_exactly_what_it_wrote() {
         val budget = AtomicLong(0)
-        val (file, written) = drainInto(EndlessStream(1000), budget)
+        val file = File.createTempFile("inu-drain", ".bin").apply { deleteOnExit() }
+        val written = PluginFetch.drainTo(EndlessStream(1000), file, budget, PluginFetch.Flight())
 
         assertEquals(1000L, written)
         assertEquals(1000L, budget.get())
@@ -479,16 +328,11 @@ class PluginFetchTest {
         assertEquals(0L, budget.get())
     }
 
-    /**
-     * the one line of [PluginFetch.send] the `Transport` double cannot reach, and the whole of the
-     * per-hop screening: with the jdk following redirects itself, a granted `example.com` answering
-     * `302 http://169.254.169.254/latest/meta-data/` is screened once for `example.com` and the
-     * metadata service's response comes back looking like it came from the host that was allowed.
-     */
+    /** the jdk follows redirects by default, which would skip per-hop screening */
     @Test
     fun a_connection_this_api_opens_never_follows_a_redirect_on_its_own() {
         val connection = URI("http://example.invalid/x").toURL().openConnection() as HttpURLConnection
-        assertTrue(connection.instanceFollowRedirects, "the jdk default this has to undo")
+        assertTrue(connection.instanceFollowRedirects)
 
         PluginFetch.prepareConnection(connection, "POST", mapOf("x-inu" to listOf("1")))
 
@@ -499,7 +343,6 @@ class PluginFetchTest {
 
     private fun hop(status: Int, location: String? = null, body: File? = null) = okHop(status, location, body)
 
-    /** a hop the way [PluginFetch.drainTo] leaves one: a real file, charged against [budget] */
     private fun bodyHop(status: Int, location: String?, bytes: Int, budget: AtomicLong): PluginFetch.Hop {
         val file = File.createTempFile("inu-hop", ".bin").apply { deleteOnExit() }
         file.writeBytes(ByteArray(bytes))

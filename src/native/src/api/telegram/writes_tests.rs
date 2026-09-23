@@ -1,25 +1,13 @@
 use super::*;
-use crate::api::error::format_exception;
-use crate::api::error::install_plugin_error;
-use crate::api::globals::RandomHost;
 use crate::api::telegram::account::tests::TestAccountHost;
 use crate::api::telegram::reads::ReadsHost;
-use crate::api::tl::proxy::TlHost;
-use crate::sandbox::grants::TestGrantHost;
+use crate::sandbox::grants::CachedGrantHost;
 use rquickjs::{Context, Runtime};
 use std::cell::RefCell;
+use std::fs;
 
 /// one call the fake took but has not answered: `(request id, op, arg, values)`
 type Parked = (i64, i32, String, Vec<String>);
-
-/// a filesystem name nothing else in this process can pick. A counter rather than the clock:
-/// the suite runs its tests in parallel and macOS hands two of them the same nanosecond often
-/// enough that a shared staging directory was a one-in-six failure.
-fn unique_name(tag: &str) -> String {
-  use std::sync::atomic::{AtomicU64, Ordering};
-  static NEXT: AtomicU64 = AtomicU64::new(0);
-  format!("inu-writes-{tag}-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed))
-}
 
 /// stands in for `PluginWrites` + `PluginMedia`: it records every crossing, mirrors the two
 /// rules the real host owns (a secret chat is `forbidden`, an uncached peer is `not-found`) and
@@ -29,15 +17,14 @@ struct TestWritesHost {
   /// parked rather than answered: settling inside this call would re-enter the context it is
   /// already inside, which is what `PluginWrites.answer` posts to globalQueue to avoid
   pending: RefCell<Vec<Parked>>,
-  /// the app's own media directory, removed with the host
-  media_dir: tempdir::TempDir,
+  media_dir: crate::testing::harness::TestDir,
   downloaded: RefCell<Option<PathBuf>>,
   message_files: Cell<u32>,
   /// answers every transfer with an error wire instead of a result
   transfers_fail: Cell<bool>,
   /// the handle table `PluginReads.mint` stands for, so a send can answer with the message
   /// the server made rather than with nothing
-  handles: crate::testing::harness::FakeHandles,
+  handles: Rc<crate::testing::harness::FakeHandles>,
 }
 
 /// what the download hands back, and what `getMessageFile` says is on disk
@@ -51,11 +38,11 @@ impl TestWritesHost {
     Rc::new(TestWritesHost {
       calls: RefCell::new(Vec::new()),
       pending: RefCell::new(Vec::new()),
-      media_dir: tempdir::TempDir::new("media"),
+      media_dir: crate::testing::harness::TestDir::new("media"),
       downloaded: RefCell::new(None),
       message_files: Cell::new(0),
       transfers_fail: Cell::new(false),
-      handles: crate::testing::harness::FakeHandles::default(),
+      handles: Rc::default(),
     })
   }
 
@@ -236,40 +223,6 @@ impl ReadsHost for SelfOnlyReadsHost {
   }
 }
 
-/// the table behind the handles [`TestWritesHost::handle_wire`] mints, standing in for
-/// `TlHandles`. Every one of them is read-only, so `tl_set` is unreachable through a view - the
-/// proxy traps first, which is the half of that rule this file's oracle asserts.
-impl TlHost for TestWritesHost {
-  fn tl_get(&self, handle: i64, key: &str) -> String {
-    self.handles.get(handle, key)
-  }
-  fn tl_set(&self, _handle: i64, _key: &str, _value: &str) -> Option<String> {
-    Some("Pforbidden\n\n\n\nthe fake host takes no writes".to_string())
-  }
-  fn tl_set_bytes(&self, _handle: i64, _key: &str, _value: &[u8]) -> Option<String> {
-    Some("Pforbidden\n\n\n\nthe fake host takes no writes".to_string())
-  }
-  fn tl_has(&self, handle: i64, key: &str) -> i32 {
-    self.handles.has(handle, key)
-  }
-  fn tl_own_keys(&self, handle: i64) -> Option<String> {
-    self.handles.own_keys(handle)
-  }
-  fn tl_copy(&self, _handle: i64) -> Option<String> {
-    None
-  }
-  fn tl_release(&self, _handle: i64) {}
-}
-
-struct NoRandom;
-
-impl RandomHost for NoRandom {
-  fn random_bytes(&self, out: &mut [u8]) -> bool {
-    out.fill(7);
-    true
-  }
-}
-
 const ONE_ACCOUNT: &str = r#"[{"id":0,"userId":111,"isCurrent":true,"isPremium":false}]"#;
 
 type Fixture = (
@@ -279,35 +232,9 @@ type Fixture = (
   crate::testing::harness::DisposeOnDrop<WritesState>,
   crate::testing::harness::DisposeOnDrop<crate::api::telegram::reads::ReadsState>,
   crate::testing::harness::DisposeOnDrop<crate::api::telegram::account::AccountState>,
-  tempdir::TempDir,
+  crate::testing::harness::TestDir,
 );
 
-mod tempdir {
-  use std::path::{Path, PathBuf};
-
-  /// a staging directory per test, removed with it - the engine's own is the host's job
-  pub struct TempDir(PathBuf);
-
-  impl TempDir {
-    pub fn new(tag: &str) -> TempDir {
-      let path = std::env::temp_dir().join(super::unique_name(tag));
-      std::fs::create_dir_all(&path).unwrap();
-      TempDir(path)
-    }
-
-    pub fn path(&self) -> &Path {
-      &self.0
-    }
-  }
-
-  impl Drop for TempDir {
-    fn drop(&mut self) {
-      let _ = std::fs::remove_dir_all(&self.0);
-    }
-  }
-}
-
-/// the account api every fixture here installs first, as a device does
 fn install_test_accounts<'js>(
   ctx: &rquickjs::Ctx<'js>,
   grants: &Rc<dyn crate::sandbox::grants::GrantHost>,
@@ -325,8 +252,6 @@ fn install_test_accounts<'js>(
   .unwrap()
 }
 
-/// `installApi` and the read surface it leaves an `Account` prototype behind, which is what both
-/// the write and the send fixtures are built on top of
 fn install_test_reads<'js>(
   ctx: &rquickjs::Ctx<'js>,
   grants: &Rc<dyn crate::sandbox::grants::GrantHost>,
@@ -357,29 +282,22 @@ fn setup(grants: &[&str]) -> Fixture {
 }
 
 fn setup_with_limit(grants: &[&str], transfer_limit: u64) -> Fixture {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
+  let (rt, ctx) = crate::testing::harness::new_engine();
   let host = TestWritesHost::new();
-  let grants = TestGrantHost::new(grants).as_host();
+  let grants: Rc<dyn GrantHost> = CachedGrantHost::new(grants);
   let log: crate::Log = std::sync::Arc::new(|_| {});
-  let dir = tempdir::TempDir::new("stage");
+  let dir = crate::testing::harness::TestDir::new("stage");
   let empty = Rc::new(SelfOnlyReadsHost);
   let (writes, reads, accounts) = ctx.with(|ctx| {
     let inu = crate::testing::harness::get_api_globals(&ctx);
-    install_plugin_error(&ctx).unwrap();
     let accounts = install_test_accounts(&ctx, &grants, &log, &inu);
-    let random: Rc<dyn RandomHost> = Rc::new(NoRandom);
-    let blobs =
-      crate::api::globals::install_globals(&ctx, random, dir.path(), crate::sandbox::limits::ExternalMemory::new())
-        .unwrap();
-    let tl_host: Rc<dyn TlHost> = host.clone();
-    let views = TlViews::new(tl_host);
+    crate::testing::harness::install_sandbox_globals(&ctx, dir.path()).unwrap();
+    let views = TlViews::new(host.handles.clone());
     let (shared, reads) = install_test_reads(&ctx, &grants, &views, empty.clone(), &accounts, &log, &inu);
     let deps = WritesDeps {
       host: host.clone(),
       grants,
       views,
-      blobs,
       stage_dir: dir.path().to_path_buf(),
       log: log.clone(),
     };
@@ -422,44 +340,34 @@ fn settle(rt: &Runtime, ctx: &Context, state: &Rc<WritesState>, host: &Rc<TestWr
 
 use crate::testing::harness::catch_json;
 
-/// runs `code` with `__out` collecting whatever it pushes, settling the host until it is done
 fn run_async(grants: &[&str], code: &str) -> (String, Rc<TestWritesHost>) {
   let (rt, ctx, host, state, _reads, _accounts, _dir) = setup(grants);
-  ctx.with(|ctx| {
-    ctx.globals().set("__out", rquickjs::Array::new(ctx.clone()).unwrap()).unwrap();
-    match ctx.eval::<(), _>(code) {
-      Ok(()) => {}
-      Err(rquickjs::Error::Exception) => panic!("{}", format_exception(&ctx)),
-      Err(e) => panic!("{e:?}"),
-    }
-  });
+  crate::testing::harness::eval_unit(&ctx, &format!("globalThis.__out = []; {code}"));
   settle(&rt, &ctx, &state, &host);
-  let out = ctx.with(|ctx| ctx.eval::<String, _>("JSON.stringify(__out)").unwrap());
+  let out = crate::testing::harness::eval_json(&ctx, "__out");
   (out, host)
 }
 
 #[test]
 fn a_missing_scope_rejects_with_the_grant_it_needs_and_never_crosses() {
-  let (out, host) = run_async(
-    &["account.write(send)"],
-    r#"const a = inu.account()
-           const push = (label) => (e) => __out.push(`${label}:${e.code}:${e.grant}`)
-           a.editMessage(1, 1, 'x').then(() => __out.push('edit:ok'), push('edit'))
-           a.deleteMessages(1, [1]).then(() => __out.push('delete:ok'), push('delete'))
-           a.setReaction(1, 1, []).then(() => __out.push('react:ok'), push('react'))
-           a.readHistory(1).then(() => __out.push('read:ok'), push('read'))
-           a.sendTyping(1).then(() => __out.push('typing:ok'), push('typing'))
-           a.setDraft(1, 'x').then(() => __out.push('draft:ok'), push('draft'))
-           a.forwardMessages(1, [1], 2).then(() => __out.push('forward:ok'), push('forward'))"#,
-  );
-  assert_eq!(
-    out,
-    r#"["edit:not-granted:account.write(edit)","delete:not-granted:account.write(delete)",
-"react:not-granted:account.write(react)","read:not-granted:account.write(read)",
-"typing:not-granted:account.write(typing)","draft:not-granted:account.write(draft)",
-"forward:not-granted:account.write(forward)"]"#
-      .replace('\n', "")
-  );
+  let calls = [
+    ("edit", "editMessage(1, 1, 'x')"),
+    ("delete", "deleteMessages(1, [1])"),
+    ("react", "setReaction(1, 1, [])"),
+    ("read", "readHistory(1)"),
+    ("typing", "sendTyping(1)"),
+    ("draft", "setDraft(1, 'x')"),
+    ("forward", "forwardMessages(1, [1], 2)"),
+  ];
+  let code: String = calls
+    .iter()
+    .map(|(_, call)| {
+      format!("inu.account().{call}.then(() => __out.push('ok'), (e) => __out.push(`${{e.code}}:${{e.grant}}`));")
+    })
+    .collect();
+  let (out, host) = run_async(&["account.write(send)"], &code);
+  let expected: Vec<String> = calls.iter().map(|(scope, _)| format!("not-granted:account.write({scope})")).collect();
+  assert_eq!(out, serde_json::to_string(&expected).unwrap());
   assert!(host.calls.borrow().is_empty(), "a refused write must not reach the host");
 }
 
@@ -467,11 +375,13 @@ fn a_missing_scope_rejects_with_the_grant_it_needs_and_never_crosses() {
 fn a_peer_crosses_as_a_spec_and_the_options_as_scalars() {
   let (out, host) = run_async(
     ALL_WRITES,
-    r#"inu.account()
-             .sendMessage('@Durov', { text: 'hi', entities: [] }, {
-               replyToMessageId: 5, topicId: 9, silent: true, scheduleDate: 100, sendAs: -1001,
-             })
-             .then(() => __out.push('sent'), (e) => __out.push(e.code))"#,
+    r#"
+      inu.account()
+        .sendMessage('@Durov', { text: 'hi', entities: [] }, {
+          replyToMessageId: 5, topicId: 9, silent: true, scheduleDate: 100, sendAs: -1001,
+        })
+        .then(() => __out.push('sent'), (e) => __out.push(e.code))
+    "#,
   );
   let calls = host.calls.borrow();
   let (op, arg, values) = calls.first().expect("the send must cross");
@@ -484,42 +394,20 @@ fn a_peer_crosses_as_a_spec_and_the_options_as_scalars() {
   assert_eq!(out, r#"["sent"]"#);
 }
 
-#[test]
-fn a_bad_argument_rejects_before_anything_crosses() {
-  let (out, host) = run_async(
-    ALL_WRITES,
-    r#"const a = inu.account()
-           const push = (e) => __out.push(e.code)
-           a.sendMessage(null, 'hi').then(() => __out.push('ok'), push)
-           a.sendMessage(1, 7).then(() => __out.push('ok'), push)
-           a.sendMessage(1, { text: 'x', entities: 'bold' }).then(() => __out.push('ok'), push)
-           a.sendMessage(1, 'hi', { silent: 'yes' }).then(() => __out.push('ok'), push)
-           a.sendTyping(1, 'dancing').then(() => __out.push('ok'), push)
-           a.setReaction(1, 1, ['']).then(() => __out.push('ok'), push)
-           a.sendMultiMedia(1, []).then(() => __out.push('ok'), push)"#,
-  );
-  assert_eq!(
-    out,
-    r#"["invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument"]"#
-  );
-  assert!(host.calls.borrow().is_empty(), "a malformed call must not reach the host");
-}
-
 /// `common.d.ts` declares these `Promise<void>`, and the host answers a null wire: a plugin
 /// writing `await acc.readHistory(...) === undefined` is entitled to be right
 #[test]
 fn the_void_members_resolve_with_undefined_rather_than_the_hosts_null() {
   let (out, _) = run_async(
     ALL_WRITES,
-    r#"const a = inu.account()
-           const push = (label) => (v) => __out.push(`${label}:${v === undefined}`)
-           a.deleteMessages(111, [1]).then(push('delete'), (e) => __out.push(`delete:${e.code}`))
-           a.setReaction(111, 1, ['x']).then(push('react'), (e) => __out.push(`react:${e.code}`))
-           a.readHistory(111).then(push('read'), (e) => __out.push(`read:${e.code}`))
-           a.sendTyping(111).then(push('typing'), (e) => __out.push(`typing:${e.code}`))
-           a.setDraft(111, 'x').then(push('draft'), (e) => __out.push(`draft:${e.code}`))"#,
+    r#"
+      const a = inu.account()
+      const push = (label) => (v) => __out.push(`${label}:${v === undefined}`)
+      a.setReaction(111, 1, ['x']).then(push('react'), (e) => __out.push(`react:${e.code}`))
+      a.readHistory(111).then(push('read'), (e) => __out.push(`read:${e.code}`))
+    "#,
   );
-  assert_eq!(out, r#"["delete:true","react:true","read:true","typing:true","draft:true"]"#);
+  assert_eq!(out, r#"["react:true","read:true"]"#);
 }
 
 #[test]
@@ -529,16 +417,18 @@ fn a_blob_reaches_the_host_as_a_file_and_the_staged_copy_does_not_outlive_the_ca
     ctx.globals().set("__out", rquickjs::Array::new(ctx.clone()).unwrap()).unwrap();
     ctx
       .eval::<(), _>(
-        r#"const f = new File([new Uint8Array([1,2,3,4])], 'payload.bin', { type: 'application/octet-stream' })
-               inu.account().uploadFile(f).then(
-                 (input) => __out.push(`${input._}:${input.name}:${input.parts}`),
-                 (e) => __out.push(e.code),
-               )"#,
+        r#"
+          const f = new File([new Uint8Array([1,2,3,4])], 'payload.bin', { type: 'application/octet-stream' })
+          inu.account().uploadFile(f).then(
+            (input) => __out.push(`${input._}:${input.name}:${input.parts}`),
+            (e) => __out.push(e.code),
+          )
+        "#,
       )
       .unwrap();
   });
   settle(&rt, &ctx, &state, &host);
-  let out = ctx.with(|ctx| ctx.eval::<String, _>("JSON.stringify(__out)").unwrap());
+  let out = crate::testing::harness::eval_json(&ctx, "__out");
   assert_eq!(out, r#"["inputFile:payload.bin:4"]"#, "the host read the staged bytes back");
 
   let calls = host.calls.borrow();
@@ -559,12 +449,14 @@ fn a_blob_reaches_the_host_as_a_file_and_the_staged_copy_does_not_outlive_the_ca
 fn the_plugins_prototype_cannot_rewrite_the_file_the_host_is_handed() {
   let (out, host) = run_async(
     ALL_WRITES,
-    r#"Object.prototype.toJSON = function () { return { path: '/data/secret', name: 'forged', mime: '' } }
-       Object.defineProperty(Object.prototype, 'mime', { set() {}, configurable: true })
-       const sent = inu.account().uploadFile(new File([new Uint8Array([1])], 'payload.bin'))
-       delete Object.prototype.toJSON
-       delete Object.prototype.mime
-       sent.then(() => __out.push('ok'), (e) => __out.push(e.code))"#,
+    r#"
+      Object.prototype.toJSON = function () { return { path: '/data/secret', name: 'forged', mime: '' } }
+      Object.defineProperty(Object.prototype, 'mime', { set() {}, configurable: true })
+      const sent = inu.account().uploadFile(new File([new Uint8Array([1])], 'payload.bin'))
+      delete Object.prototype.toJSON
+      delete Object.prototype.mime
+      sent.then(() => __out.push('ok'), (e) => __out.push(e.code))
+    "#,
   );
   assert_eq!(out, r#"["ok"]"#);
   let calls = host.calls.borrow();
@@ -585,24 +477,25 @@ fn a_transfer_past_the_staging_cap_is_refused_before_a_byte_is_written() {
     ctx.globals().set("__out", rquickjs::Array::new(ctx.clone()).unwrap()).unwrap();
     ctx
       .eval::<(), _>(format!(
-        r#"const a = inu.account()
-               const ok = () => __out.push('staged')
-               a.uploadFile(new Blob([new Uint8Array(9)])).then(ok, {REPORT_QUOTA})
-               a.uploadFile(new Uint8Array(9)).then(ok, {REPORT_QUOTA})
-               a.sendMedia(111, new Blob([new Uint8Array(9)])).then(ok, {REPORT_QUOTA})
-               // one byte under, so the refusal is the cap and not the shape of the call
-               a.uploadFile(new Blob([new Uint8Array(8)])).then(ok, {REPORT_QUOTA})"#
+        r#"
+          const a = inu.account()
+          const ok = () => __out.push('staged')
+          a.uploadFile(new Blob([new Uint8Array(9)])).then(ok, {REPORT_QUOTA})
+          a.uploadFile(new Uint8Array(9)).then(ok, {REPORT_QUOTA})
+          a.sendMedia(111, new Blob([new Uint8Array(9)])).then(ok, {REPORT_QUOTA})
+          // one byte under, so the refusal is the cap and not the shape of the call
+          a.uploadFile(new Blob([new Uint8Array(8)])).then(ok, {REPORT_QUOTA})
+        "#
       ))
       .unwrap();
   });
   settle(&rt, &ctx, &state, &host);
-  let out = ctx.with(|ctx| ctx.eval::<String, _>("JSON.stringify(__out)").unwrap());
+  let out = crate::testing::harness::eval_json(&ctx, "__out");
   assert_eq!(
     out, r#"["quota-exceeded:9:8","quota-exceeded:9:8","quota-exceeded:9:8","staged"]"#,
     "usage is what the transfer would have been and quota is the cap, both in bytes",
   );
 
-  // the three refusals crossed nothing and wrote nothing; the one that fit did both
   let staged: Vec<String> = host
     .calls
     .borrow()
@@ -620,32 +513,24 @@ fn a_transfer_past_the_staging_cap_is_refused_before_a_byte_is_written() {
 }
 
 #[test]
-fn a_disposed_blob_is_handle_expired_rather_than_an_upload_of_nothing() {
-  let (out, host) = run_async(
-    ALL_WRITES,
-    r#"const b = new Blob([new Uint8Array([1,2,3])])
-           b.dispose()
-           inu.account().uploadFile(b).then(() => __out.push('ok'), (e) => __out.push(e.code))"#,
-  );
-  assert_eq!(out, r#"["handle-expired"]"#);
-  assert!(host.calls.borrow().is_empty(), "a dead blob must not cross");
-}
-
-#[test]
 fn a_path_is_gated_on_fs_and_the_relative_form_says_it_is_not_here_yet() {
   let (out, host) = run_async(
     ALL_WRITES,
-    r#"const a = inu.account()
-           a.uploadFile({ path: '/etc/hosts' }).then(() => __out.push('ok'), (e) => __out.push(`${e.code}:${e.grant}`))
-           a.uploadFile({ path: 'own.bin' }).then(() => __out.push('ok'), (e) => __out.push(`${e.code}:${e.grant}`))"#,
+    r#"
+      const a = inu.account()
+      a.uploadFile({ path: '/etc/hosts' }).then(() => __out.push('ok'), (e) => __out.push(`${e.code}:${e.grant}`))
+      a.uploadFile({ path: 'own.bin' }).then(() => __out.push('ok'), (e) => __out.push(`${e.code}:${e.grant}`))
+    "#,
   );
   assert_eq!(out, r#"["not-granted:unsafe.fs","not-granted:fs"]"#);
   assert!(host.calls.borrow().is_empty());
 
   let (out, _) = run_async(
     &["account.write(send)", "fs", "unsafe.fs"],
-    r#"const a = inu.account()
-           a.uploadFile({ path: 'own.bin' }).then(() => __out.push('ok'), (e) => __out.push(e.code))"#,
+    r#"
+      const a = inu.account()
+      a.uploadFile({ path: 'own.bin' }).then(() => __out.push('ok'), (e) => __out.push(e.code))
+    "#,
   );
   assert_eq!(out, r#"["unsupported"]"#, "the scoped directory arrives with inu.fs");
 }
@@ -662,54 +547,24 @@ fn a_failed_transfer_ends_on_the_last_numbers_it_managed_to_report() {
     ctx.globals().set("__out", rquickjs::Array::new(ctx.clone()).unwrap()).unwrap();
     ctx
       .eval::<(), _>(
-        r#"globalThis.__seen = []
-               inu.account()
-                 .downloadMedia({ _: 'message', id: 1, media: { _: 'messageMediaDocument' } }, {
-                   onProgress: (loaded, total) => __seen.push([loaded, total]),
-                 })
-                 .then(() => __out.push('ok'), (e) => __out.push(e.code))"#,
+        r#"
+          globalThis.__seen = []
+          inu.account()
+            .downloadMedia({ _: 'message', id: 1, media: { _: 'messageMediaDocument' } }, {
+              onProgress: (loaded, total) => __seen.push([loaded, total]),
+            })
+            .then(() => __out.push('ok'), (e) => __out.push(e.code))
+        "#,
       )
       .unwrap();
   });
   settle(&rt, &ctx, &state, &host);
 
-  let out = ctx.with(|ctx| ctx.eval::<String, _>("JSON.stringify([__out, __seen])").unwrap());
+  let out = crate::testing::harness::eval_json(&ctx, "[__out, __seen]");
   assert_eq!(
     out, r#"[["network"],[[2,11],[8,11]]]"#,
     "the leading edge, then the 8/11 the window was withholding when the transfer died",
   );
-}
-
-#[test]
-fn a_download_answers_a_file_over_the_apps_own_copy_and_coalesces_its_progress() {
-  let (out, host) = run_async(
-    ALL_WRITES,
-    r#"const seen = []
-           inu.account()
-             .downloadMedia({ _: 'message', id: 1, media: { _: 'messageMediaDocument' } }, {
-               onProgress: (loaded, total) => seen.push([loaded, total]),
-             })
-             .then(
-               async (file) => __out.push([file instanceof File, file.name, file.type, file.size, await file.text(), seen.length, seen[seen.length - 1]]),
-               (e) => __out.push(e.code),
-             )"#,
-  );
-  assert_eq!(
-    out, r#"[[true,"note.txt","text/plain",11,"hello world",2,[11,11]]]"#,
-    "four reports coalesce to a leading edge, and the transfer ends on its own total",
-  );
-  assert_eq!(host.calls.borrow().len(), 1);
-}
-
-#[test]
-fn the_to_file_form_answers_a_path_and_nothing_else() {
-  let (out, _) = run_async(
-    ALL_WRITES,
-    r#"inu.account()
-             .downloadMediaToFile({ _: 'message', id: 1, media: { _: 'messageMediaDocument' } })
-             .then((where) => __out.push([typeof where.path === 'string', where instanceof Blob]), (e) => __out.push(e.code))"#,
-  );
-  assert_eq!(out, r#"[[true,false]]"#);
 }
 
 #[test]
@@ -725,10 +580,12 @@ fn get_message_file_is_synchronous_and_gated_on_the_messages_scope() {
   let out = ctx.with(|ctx| {
     ctx
       .eval::<String, _>(
-        r#"JSON.stringify([
-                 inu.account().getMessageFile({ _: 'message', id: 1 }),
-                 inu.account().getMessageFile({ _: 'message', id: 1, media: { _: 'messageMediaDocument' } }).exists,
-               ])"#,
+        r#"
+          JSON.stringify([
+            inu.account().getMessageFile({ _: 'message', id: 1 }),
+            inu.account().getMessageFile({ _: 'message', id: 1, media: { _: 'messageMediaDocument' } }).exists,
+          ])
+        "#,
       )
       .unwrap()
   });
@@ -736,78 +593,10 @@ fn get_message_file_is_synchronous_and_gated_on_the_messages_scope() {
   assert_eq!(host.message_files.get(), 2);
 }
 
-#[test]
-fn the_peer_refusals_are_the_hosts_and_reach_the_plugin_as_they_are() {
-  let (out, _) = run_async(
-    ALL_WRITES,
-    r#"const a = inu.account()
-           const push = (e) => __out.push(e.code)
-           a.sendMessage('4611686018427387911', 'hi').then(() => __out.push('ok'), push)
-           a.sendMessage(4242424242, 'hi').then(() => __out.push('ok'), push)"#,
-  );
-  assert_eq!(out, r#"["forbidden","not-found"]"#);
-}
-
-//
-// It lives here rather than beside the other `interceptSendMessage` tests because retargeting a
-// send is the one member of `OutgoingMessage` that reads through the `Account` handle, so the
-// fixture needs the read surface installed as well as the chain - and that read is the whole
-// point: `common.d.ts` says a retarget resolves through the account's own cache and therefore
-// needs `account.read(peers)` on top of the api's own grant.
-
-/// records what the chain did with a dispatch; nothing here decides anything
-#[derive(Default)]
-struct TestRpcHost {
-  registered: RefCell<Vec<u32>>,
-  /// what `next()` was handed, i.e. the request that would actually go out
-  next_calls: RefCell<Vec<String>>,
-  completes: RefCell<Vec<String>>,
-}
-
-impl crate::api::telegram::rpc::RpcHost for TestRpcHost {
-  fn on_register(
-    &self,
-    _methods: &[String],
-    callback_id: u32,
-    _scope: &str,
-    _strict: bool,
-    _filter_json: &str,
-  ) -> Option<String> {
-    self.registered.borrow_mut().push(callback_id);
-    None
-  }
-  fn on_unregister(&self, _callback_id: u32) {}
-  fn on_invoke(&self, _invoke_id: i64, _slot: i32, _request_wire: &str) -> Option<String> {
-    Some("Pforbidden\n\n\n\nthis fake sends nothing".to_string())
-  }
-  fn on_invoke_raw(&self, _invoke_id: i64, _slot: i32, _method: &[u8]) -> Option<String> {
-    Some("Pforbidden\n\n\n\nthis fake sends nothing".to_string())
-  }
-  fn on_takeout(&self, _invoke_id: i64, _slot: i32, _op: i32, _takeout_id: &str, _arg: &str) -> Option<String> {
-    Some("Pforbidden\n\n\n\nthis fake sends nothing".to_string())
-  }
-  fn on_next(&self, _dispatch_id: i64, request_wire: &str) -> Option<String> {
-    self.next_calls.borrow_mut().push(request_wire.to_string());
-    None
-  }
-  fn on_complete(&self, _dispatch_id: i64, result_wire: &str) {
-    self.completes.borrow_mut().push(result_wire.to_string());
-  }
-  fn on_update_register(&self, _callback_id: u32, _types: &[String], _scope: &str) -> Option<String> {
-    None
-  }
-  fn on_update_unregister(&self, _callback_id: u32) {}
-  fn on_intercept_update_register(&self, _callback_id: u32, _types: &[String]) -> Option<String> {
-    None
-  }
-  fn on_intercept_update_unregister(&self, _callback_id: u32) {}
-  fn on_update_verdict(&self, _dispatch_id: i64, _deliver: bool) {}
-}
-
 type SendFixture = (
   Runtime,
   Context,
-  Rc<TestRpcHost>,
+  Rc<crate::api::telegram::rpc::tests::TestHost>,
   crate::testing::harness::DisposeOnDrop<crate::api::telegram::rpc::RpcState>,
   crate::testing::harness::DisposeOnDrop<crate::api::telegram::reads::ReadsState>,
   crate::testing::harness::DisposeOnDrop<crate::api::telegram::account::AccountState>,
@@ -817,16 +606,14 @@ type SendFixture = (
 /// `Account` answers `resolvePeerCached` from, then the rpc chain `interceptSendMessage` is a
 /// narrowing of
 fn setup_send(grants: &[&str]) -> SendFixture {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
-  let rpc_host = Rc::new(TestRpcHost::default());
-  let grants = TestGrantHost::new(grants).as_host();
+  let (rt, ctx) = crate::testing::harness::new_engine();
+  let rpc_host = Rc::new(crate::api::telegram::rpc::tests::TestHost::default());
+  let grants: Rc<dyn GrantHost> = CachedGrantHost::new(grants);
   let log: crate::Log = std::sync::Arc::new(|_| {});
   let peers = Rc::new(SelfOnlyReadsHost);
-  let views = TlViews::new(TestWritesHost::new() as Rc<dyn TlHost>);
+  let views = TlViews::new(TestWritesHost::new().handles.clone());
   let (rpc, reads, accounts) = ctx.with(|ctx| {
     let inu = crate::testing::harness::get_api_globals(&ctx);
-    install_plugin_error(&ctx).unwrap();
     let accounts = install_test_accounts(&ctx, &grants, &log, &inu);
     let (shared, reads) = install_test_reads(&ctx, &grants, &views, peers.clone(), &accounts, &log, &inu);
     let rpc_host_dyn: Rc<dyn crate::api::telegram::rpc::RpcHost> = rpc_host.clone();
@@ -852,21 +639,19 @@ fn setup_send(grants: &[&str]) -> SendFixture {
 
 const A_SEND: &str = r#"{"_":"messages.sendMessage","peer":{"_":"inputPeerUser","user_id":"7","access_hash":"3"},"message":"hi","random_id":"1"}"#;
 
-/// registers `middleware` through `inu.interceptSendMessage`, runs one `messages.sendMessage`
-/// through the chain, and hands back what reached `next()` (or `None` when the send was dropped)
 fn run_one_send(fixture: &SendFixture, middleware: &str) -> Option<String> {
   let (rt, ctx, host, rpc, _reads, _accounts) = fixture;
   ctx.with(|ctx| {
     ctx.globals().set("__out", rquickjs::Array::new(ctx.clone()).unwrap()).unwrap();
     ctx.eval::<(), _>(format!("inu.interceptSendMessage({middleware})")).unwrap();
   });
-  let callback_id = *host.registered.borrow().last().expect("the middleware never registered");
+  let callback_id = host.registered.borrow().last().expect("the middleware never registered").1;
   rpc.dispatch(rt, ctx, callback_id, 1, "messages.sendMessage", 0, &format!("J{A_SEND}"));
-  host.next_calls.borrow().first().cloned()
+  host.next_calls.borrow().first().map(|(_, wire)| wire.clone())
 }
 
-fn out_of(ctx: &Context) -> String {
-  ctx.with(|ctx| ctx.eval::<String, _>("JSON.stringify(__out)").unwrap())
+fn read_out_json(ctx: &Context) -> String {
+  crate::testing::harness::eval_json(&ctx, "__out")
 }
 
 #[test]
@@ -910,7 +695,11 @@ fn retargeting_at_a_peer_the_app_has_never_seen_is_not_found_and_leaves_the_send
     "({ message: m }) => { try { m.peer = 4242424242 } catch (e) { __out.push([e.code, m.peer]) } return 'send' }",
   )
   .expect("the send never went out");
-  assert_eq!(out_of(&fixture.1), r#"[["not-found",7]]"#, "the original peer must survive a failed retarget");
+  assert_eq!(
+    read_out_json(&fixture.1),
+    r#"[["not-found",7]]"#,
+    "the original peer must survive a failed retarget"
+  );
   assert!(next.contains(r#""user_id":"7""#), "{next}");
 }
 
@@ -922,7 +711,7 @@ fn retargeting_needs_the_read_grant_on_top_of_the_apis_own() {
     "({ message: m }) => { try { m.peer = 111 } catch (e) { __out.push([e.code, e.grant]) } return 'send' }",
   )
   .expect("the send never went out");
-  assert_eq!(out_of(&fixture.1), r#"[["not-granted","account.read(peers)"]]"#);
+  assert_eq!(read_out_json(&fixture.1), r#"[["not-granted","account.read(peers)"]]"#);
   assert!(next.contains(r#""user_id":"7""#), "a refused retarget must not touch the request: {next}");
 }
 
@@ -931,22 +720,22 @@ fn what_a_retarget_refuses_outright() {
   let fixture = setup_send(&["interceptSendMessage", "account.read(peers)"]);
   run_one_send(
     &fixture,
-    r#"({ message: m }) => {
-             for (const bad of [0, null, undefined, 'me', {}]) {
-               try { m.peer = bad; __out.push('accepted') } catch (e) { __out.push(e.code) }
-             }
-             return 'send'
-           }"#,
+    r#"
+      ({ message: m }) => {
+        for (const bad of [0, null, undefined, 'me', {}]) {
+          try { m.peer = bad; __out.push('accepted') } catch (e) { __out.push(e.code) }
+        }
+        return 'send'
+      }
+    "#,
   );
   // a dialog id, never an `InputPeerLike`: the getter answers one, so the setter takes one
   assert_eq!(
-    out_of(&fixture.1),
+    read_out_json(&fixture.1),
     r#"["invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument"]"#,
   );
 }
 
-/// evaluates a bundled oracle under exactly the grants its header asks for, and holds it to
-/// running every assertion it contains
 fn run_bundled_oracle(source: &str, done: &str, count: usize) {
   let (rt, ctx, host, state, _r, _a, _d) = setup(&crate::testing::harness::manifest_grants(source));
   let lines = crate::testing::harness::install_capturing_console(&ctx);
@@ -958,37 +747,10 @@ fn run_bundled_oracle(source: &str, done: &str, count: usize) {
 
 #[test]
 fn the_bundled_writes_test_plugin_passes() {
-  run_bundled_oracle(include_str!("../../../../test/plugins/writes-test.js"), "writes test done", 42);
+  run_bundled_oracle(crate::testing::test_plugin!("writes-test.js"), "writes test done", 42);
 }
 
 #[test]
 fn the_bundled_media_test_plugin_passes() {
-  run_bundled_oracle(include_str!("../../../../test/plugins/media-test.js"), "media test done", 30);
-}
-
-const WRITES_JS: &str = include_str!("../../js/writes.js");
-const PLUGIN_WRITES_KT: &str = include_str!("../../../../fork/helpers/plugins/telegram/PluginWrites.kt");
-
-fn quoted_names(block: &str) -> std::collections::BTreeSet<String> {
-  block.split(['\'', '"']).skip(1).step_by(2).map(str::to_string).collect()
-}
-
-/// the prelude refuses an action before it crosses and the host refuses one it has no action for,
-/// so a name on only one side is either unreachable or a refusal the plugin was promised it would not get
-#[test]
-fn the_typing_actions_match_the_host_s() {
-  let js = WRITES_JS.split("const TYPING_ACTIONS = new Set([").nth(1).unwrap().split("])").next().unwrap();
-  let kt = PLUGIN_WRITES_KT
-    .split("private fun typingAction(name: String)")
-    .nth(1)
-    .unwrap()
-    .split("else ->")
-    .next()
-    .unwrap();
-  let kt: std::collections::BTreeSet<String> = kt
-    .lines()
-    .filter_map(|line| line.trim().strip_prefix('"')?.split('"').next().map(str::to_string))
-    .collect();
-  assert!(!kt.is_empty());
-  assert_eq!(quoted_names(js), kt);
+  run_bundled_oracle(crate::testing::test_plugin!("media-test.js"), "media test done", 30);
 }

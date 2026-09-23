@@ -47,7 +47,7 @@ class PluginJvmRoutineTest {
     }
 
     private fun buildRoutine(plugin: Plugin, definition: String, vararg args: String): String =
-        plugin.js.listener!!.jvm(PluginJvm.OP_ROUTINE, 0, definition, arrayOf(*args))
+        plugin.jvm(PluginJvm.OP_ROUTINE, 0, definition, *args)
 
     private fun createRoutine(plugin: Plugin, definition: String, vararg args: String): Runnable {
         val wire = buildRoutine(plugin, definition, *args)
@@ -55,23 +55,16 @@ class PluginJvmRoutineTest {
         return PluginJvm.bridgeFor(plugin.js)!!.decode("G" + wire.substring(2)) as Runnable
     }
 
-    private fun handleOf(plugin: Plugin, value: Any): String =
-        "G" + PluginJvm.bridgeFor(plugin.js)!!.encode(value).substring(2)
-
     @Test fun routine_runs_java_on_the_calling_thread() {
         val plugin = startPlugin("routine", "unsafe.jvm")
         val fixture = JvmFixture()
         val task = createRoutine(
             plugin,
             program("""["capture",0],["capture",1],["call",1,["currentThread"],[]],["set",0,["payload"],2]"""),
-            handleOf(plugin, fixture),
-            handleOf(plugin, Thread::class.java),
+            plugin.jvmWire(fixture),
+            plugin.jvmWire(Thread::class.java),
         )
-        val thread = Thread(task)
-        thread.start()
-        thread.join(5000)
-        assertTrue(!thread.isAlive)
-        assertEquals(thread, fixture.payload)
+        assertEquals(runOnCaller(task), fixture.payload)
     }
 
     @Test fun a_skipped_branch_runs_nothing_and_a_run_starts_from_scratch() {
@@ -83,7 +76,7 @@ class PluginJvmRoutineTest {
                 """["capture",0],["jumpIfFalsy",[false],4],["call",0,["boom"],[]],["jump",4],
                    ["get",0,["count"]],["add",4,[2]],["set",0,["count"],5]""",
             ),
-            handleOf(plugin, fixture),
+            plugin.jvmWire(fixture),
         )
         task.run()
         assertEquals(5, fixture.count)
@@ -94,48 +87,33 @@ class PluginJvmRoutineTest {
         assertEquals(7, fixture.count)
     }
 
-    /** an operand the bridge refuses to carry stops the routine where it stands, writes included */
     @Test fun a_refused_result_stops_the_routine_before_writes() {
         val plugin = startPlugin("routine", "unsafe.jvm")
         val fixture = JvmFixture().apply { label = "x".repeat(PluginJvm.VALUE_LIMIT_BYTES + 1) }
         createRoutine(
             plugin,
             program("""["capture",0],["get",0,["label"]],["set",0,["count"],[99]]"""),
-            handleOf(plugin, fixture),
+            plugin.jvmWire(fixture),
         ).run()
         assertEquals(3, fixture.count)
     }
 
-    @Test fun catch_takes_over_after_a_java_exception_and_binds_what_was_thrown() {
+    @Test fun catch_takes_over_after_a_java_exception_or_error_and_binds_what_was_thrown() {
         val plugin = startPlugin("routine", "unsafe.jvm")
-        val fixture = JvmFixture()
-        createRoutine(
-            plugin,
-            program(
-                """["capture",0],["call",0,["boom"],[]],["jump",5],["catch"],["set",0,["payload"],3],
-                   ["set",0,["count"],[99]]""",
-                tries = "[[1,3,3]]",
-            ),
-            handleOf(plugin, fixture),
-        ).run()
-        assertEquals(99, fixture.count)
-        assertTrue(fixture.payload is Throwable, "the catch register holds what was thrown")
-    }
-
-    @Test fun catch_takes_over_after_a_java_error_too() {
-        val plugin = startPlugin("routine", "unsafe.jvm")
-        val fixture = JvmFixture()
-        createRoutine(
-            plugin,
-            program(
-                """["capture",0],["call",0,["detonate"],[]],["jump",5],["catch"],["set",0,["payload"],3],
-                   ["set",0,["count"],[99]]""",
-                tries = "[[1,3,3]]",
-            ),
-            handleOf(plugin, fixture),
-        ).run()
-        assertEquals(99, fixture.count)
-        assertTrue(fixture.payload is AssertionError, "the catch register holds what was thrown")
+        for ((method, thrown) in listOf("boom" to IllegalStateException::class, "detonate" to AssertionError::class)) {
+            val fixture = JvmFixture()
+            createRoutine(
+                plugin,
+                program(
+                    """["capture",0],["call",0,["$method"],[]],["jump",5],["catch"],["set",0,["payload"],3],
+                       ["set",0,["count"],[99]]""",
+                    tries = "[[1,3,3]]",
+                ),
+                plugin.jvmWire(fixture),
+            ).run()
+            assertEquals(99, fixture.count, method)
+            assertTrue(thrown.isInstance(fixture.payload), "$method: ${fixture.payload}")
+        }
     }
 
     @Test fun an_error_nothing_catches_is_not_swallowed() {
@@ -144,7 +122,7 @@ class PluginJvmRoutineTest {
         val routine = createRoutine(
             plugin,
             program("""["capture",0],["call",0,["detonate"],[]]"""),
-            handleOf(plugin, fixture),
+            plugin.jvmWire(fixture),
         )
         assertFailsWith<AssertionError> { routine.run() }
     }
@@ -169,7 +147,7 @@ class PluginJvmRoutineTest {
     @Test fun comparisons_preserve_large_integers_and_do_not_coerce_types() {
         val plugin = startPlugin("comparisons", "unsafe.jvm")
         val fixture = JvmFixture()
-        val target = handleOf(plugin, fixture)
+        val target = plugin.jvmWire(fixture)
         for ((op, left, right, expected) in listOf(
             listOf("eq", "I9007199254740993", "I9007199254740992", false),
             listOf("gt", "I9007199254740993", "D9007199254740992", true),
@@ -196,7 +174,7 @@ class PluginJvmRoutineTest {
     @Test fun conditional_jumps_skip_the_side_that_must_not_run() {
         val plugin = startPlugin("booleans", "unsafe.jvm")
         val fixture = JvmFixture()
-        val target = handleOf(plugin, fixture)
+        val target = plugin.jvmWire(fixture)
         for ((jump, operand, expected) in listOf(
             Triple("jumpIfFalsy", "I0", false),
             Triple("jumpIfTruthy", "Syes", true),
@@ -227,7 +205,7 @@ class PluginJvmRoutineTest {
                    ["getSlot",0],["mul",5,[2]],["setSlot",0,6],["getSlot",0],["set",0,["count"],8]""",
                 slots = 1,
             ),
-            handleOf(plugin, fixture),
+            plugin.jvmWire(fixture),
         )
         repeat(2) {
             task.run()
@@ -238,7 +216,7 @@ class PluginJvmRoutineTest {
     @Test fun arithmetic_failure_stops_later_writes() {
         val plugin = startPlugin("routine", "unsafe.jvm")
         val fixture = JvmFixture()
-        val target = handleOf(plugin, fixture)
+        val target = plugin.jvmWire(fixture)
         for (operands in listOf(arrayOf("I1", "I0"), arrayOf("I-9223372036854775808", "I-1"))) {
             createRoutine(
                 plugin,
@@ -261,7 +239,7 @@ class PluginJvmRoutineTest {
                    ["getSlot",0],["set",0,["count"],9]""",
                 slots = 1,
             ),
-            handleOf(plugin, fixture),
+            plugin.jvmWire(fixture),
         ).run()
         assertEquals(6, fixture.count)
     }
@@ -275,8 +253,8 @@ class PluginJvmRoutineTest {
                 """["capture",0],["capture",1],["new",1,[[42]]],["get",2,["madeBy"]],["set",0,["label"],3],
                    ["instanceOf",2,1],["set",0,["flag"],5]""",
             ),
-            handleOf(plugin, fixture),
-            handleOf(plugin, JvmFixture::class.java),
+            plugin.jvmWire(fixture),
+            plugin.jvmWire(JvmFixture::class.java),
         ).run()
         assertEquals("int", fixture.label)
         assertTrue(fixture.flag)
@@ -291,7 +269,7 @@ class PluginJvmRoutineTest {
                 """["capture",0],["get",0,["label"]],["add",1,["!"]],["set",0,["label"],2],
                    ["bitOr",[5],[2]],["shl",[1],[3]],["add",4,5],["set",0,["count"],6]""",
             ),
-            handleOf(plugin, fixture),
+            plugin.jvmWire(fixture),
         ).run()
         assertEquals("inugram!", fixture.label)
         assertEquals(15, fixture.count)
@@ -307,7 +285,7 @@ class PluginJvmRoutineTest {
                    ["set",0,["count"],4]""",
                 layout = "[-1,[-1,-1,-1]]",
             ),
-            handleOf(plugin, fixture),
+            plugin.jvmWire(fixture),
             "I10",
             "I20",
             "I30",

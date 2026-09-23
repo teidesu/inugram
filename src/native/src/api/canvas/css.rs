@@ -17,7 +17,6 @@ pub fn parse_color(text: &str) -> Option<i32> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Font {
   pub size: f32,
-  pub line_height: Option<f32>,
   pub weight: u16,
   pub italic: bool,
   pub small_caps: bool,
@@ -28,7 +27,6 @@ impl Font {
   pub fn default_font() -> Font {
     Font {
       size: 10.0,
-      line_height: None,
       weight: 400,
       italic: false,
       small_caps: false,
@@ -125,7 +123,6 @@ pub fn parse_font(text: &str) -> Option<Font> {
 
   let mut font = Font {
     size: 0.0,
-    line_height: None,
     weight: 400,
     italic: false,
     small_caps: false,
@@ -144,15 +141,12 @@ pub fn parse_font(text: &str) -> Option<Font> {
     if size <= 0.0 || !size.is_finite() {
       return None;
     }
+    if let Some(line) = line_part {
+      if parse_length(line).is_none() && !line.eq_ignore_ascii_case("normal") && line.parse::<f32>().is_err() {
+        return None;
+      }
+    }
     font.size = size;
-    font.line_height = match line_part {
-      Some(line) => match parse_length(line) {
-        Some(value) => Some(value),
-        None if line.eq_ignore_ascii_case("normal") => None,
-        None => Some(line.parse::<f32>().ok()? * size),
-      },
-      None => None,
-    };
     size_at = Some(index);
     break;
   }

@@ -4,11 +4,9 @@ import desu.inugram.core.plugins.PluginRefusal
 import desu.inugram.core.plugins.PluginWire.refuse
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.EngineDispatch
-import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.WritesListener
-import desu.inugram.helpers.plugins.tl.TlHandles
 import desu.inugram.helpers.plugins.tl.TlJson
 import desu.inugram.helpers.plugins.tl.TlReflect
 import org.json.JSONArray
@@ -22,15 +20,7 @@ import org.telegram.tgnet.TLObject
 import org.telegram.tgnet.TLRPC
 import org.telegram.tgnet.tl.TL_update
 
-/**
- * Implements Account writes and settles [PluginMedia] transfers (Rust: `writes.rs`).
- *
- * Writes use [send] and [PluginRpc.sendWithoutInterceptors] to bypass plugin interceptors.
- * They resolve peers through [writePeer], which rejects encrypted dialog IDs.
- *
- * JNI upcalls run on [EngineDispatch.scheduler] and never settle inline, as in [PluginReads].
- * Results are read-only because sent messages become app-owned once `processUpdates` applies them.
- */
+/** results are read-only: sent messages become app-owned once `processUpdates` applies them */
 object PluginWrites {
 
     // keep in sync with rust `writes::OP_*` and `writes.js`
@@ -48,9 +38,6 @@ object PluginWrites {
     const val OP_DOWNLOAD_MEDIA_TO_FILE = 11
     const val OP_UPLOAD_FILE = 12
     const val OP_SET_SEND_MEDIA = 13
-
-    /** batch results join their handles with this; keep in sync with rust `writes::SEPARATOR` */
-    const val LIST_SEPARATOR = "\n"
 
     fun listenerFor(session: PluginSession): WritesListener =
         object : WritesListener {
@@ -76,7 +63,7 @@ object PluginWrites {
     ): String? {
         val controller = PeerSpecs.controllerFor(accountId)
             ?: return PeerSpecs.noAccountWire("account write", accountId)
-        return try {
+        return EngineDispatch.produceWire("account write") {
             val json = JSONObject(arg)
             val call = Call(session, controller, accountId, requestId, json, values)
             when (op) {
@@ -95,55 +82,46 @@ object PluginWrites {
                 OP_SET_SEND_MEDIA -> PluginSendMorph.setMedia(call)
                 else -> PluginWire.encodePluginError("internal", "account write: unknown op $op")
             }
-        } catch (e: PluginRefusal) {
-            e.wire
-        } catch (e: Exception) {
-            PluginWire.encodePluginError("internal", "account write: ${e.message ?: e.toString()}")
         }
     }
 
     /**
-     * a channel the app only saw referenced from someone else's message has no `access_hash`, so
-     * stock addresses it as `inputPeerChannelFromMessage` - a *sibling* of `TL_inputPeerChannel`
-     * rather than a subclass. Missing it picks the peerless `messages.*` rpc, whose ids then address
-     * the user's own message-id space.
+     * an unhashed channel is `inputPeerChannelFromMessage`, a sibling of `TL_inputPeerChannel`, not a
+     * subclass. Missing it picks the `messages.*` rpc, addressing the user's own message-id space.
      */
     private fun isChannelPeer(peer: TLObject): Boolean =
         peer is TLRPC.TL_inputPeerChannel || peer is TLRPC.TL_inputPeerChannelFromMessage
 
-
     internal class Call(
-        val session: PluginSession,
-        val controller: MessagesController,
-        val accountId: Int,
-        val requestId: Long,
+        session: PluginSession,
+        controller: MessagesController,
+        accountId: Int,
+        requestId: Long,
         json: JSONObject,
         val values: Array<String>,
-    ) : JsonArgs(json) {
+    ) : AccountCall(session, controller, accountId, requestId, json, QuickJs.SETTLE_WRITES, "account write") {
         fun peer(key: String = "peer", kind: Int = PeerSpecs.KIND_PEER): TLObject =
             writePeer(controller, accountId, json.optString(key), kind)
 
-        // android's org.json answers `optString` with the four characters "null" for a json null, where the reference implementation the bridge tests run against answers the fallback
+        // android's org.json answers `optString` with "null" for a json null, unlike the reference implementation tests run on
         fun text(): String = if (json.isNull("text")) "" else json.optString("text")
 
         fun ids(): List<Int> = ints("ids")
     }
 
     /**
-     * every write's single exit, through the bypass lease: without it a plugin that rewrites sends
-     * and a plugin that sends are an infinite loop. The delegate runs on [Utilities.stageQueue],
-     * where stock answers one from and the only queue `processUpdates` may run on, so the app
-     * applies what a plugin sent where it applies what the ui sent.
+     * bypass lease, or a rewriting plugin and a sending plugin loop. The delegate runs on
+     * [Utilities.stageQueue], the only queue `processUpdates` may run on.
      */
-    internal fun send(call: Call, request: TLObject, produce: (TLObject?) -> String): String? {
-        // stock's own call sites set the optional bits by hand, `serializeToStream` recomputing only the boolean ones - so a request built here goes out without its `reply_to`/`entities` unless the words are synced
+    internal fun send(call: AccountCall, request: TLObject, produce: (TLObject?) -> String): String? {
+        // stock call sites set optional flag bits by hand; `serializeToStream` recomputes only the boolean ones
         TlReflect.syncFlagsDeep(request)
         val flags = ConnectionsManager.RequestFlagFailOnServerErrors
         PluginRpc.sendWithoutInterceptors(call.accountId, request, flags) { response, error ->
-            // stageQueue frees the response the moment this returns, before [answer]'s runnable reads it on the plugin queue, so ownership moves here
+            // stageQueue frees the response when this returns, before [answer]'s runnable reads it
             response?.disableFree = true
             if (response is TLRPC.Updates) {
-                // `processUpdates` removes the entries it applied from this very list, and the answer below is built out of it
+                // `processUpdates` removes the applied entries from this list
                 val sent = ArrayList(response.updates)
                 try {
                     MessagesController.getInstance(call.accountId).processUpdates(response, false)
@@ -152,15 +130,15 @@ object PluginWrites {
                 }
                 response.updates = sent
             }
-            answer(call, release = { PluginRpc.releaseUnowned(response) }) {
-                if (error != null) encodeRpcErrorWire(error)
+            call.answer(release = { PluginRpc.releaseUnowned(response) }) {
+                if (error != null) PluginWire.encodeRpcError(error.code, error.text ?: "")
                 else produce(response)
             }
         }
         return null
     }
 
-    /** `forbidden` rather than the `not-found` [PeerSpecs.dialogIdOf] would answer: a secret chat is not a peer that might resolve later */
+    /** `forbidden`, not `not-found`: a secret chat will never resolve */
     internal fun writePeer(
         controller: MessagesController,
         accountId: Int,
@@ -174,44 +152,6 @@ object PluginWrites {
         return PeerSpecs.requireInputPeer(controller, accountId, spec, kind)
     }
 
-    /** [release] gives back whatever the settle borrowed, and runs on the stale path too: an obligation dropped because the plugin reloaded is still an obligation */
-    internal fun answer(call: Call, release: () -> Unit = {}, produce: () -> String) {
-        EngineDispatch.settle(call.session, QuickJs.SETTLE_WRITES, call.requestId, "account write", release) {
-            try {
-                produce()
-            } catch (e: PluginRefusal) {
-                e.wire
-            }
-        }
-    }
-
-    /**
-     * A handle is resolved rather than rebuilt, so a message named for a download is the app's own
-     * instance - which is what lets stock refresh its file reference from it.
-     *
-     * A read-only handle is refused: whatever comes back becomes part of a request [send] walks
-     * with [TlReflect.syncFlagsDeep], so accepting one would rewrite the flag word of an object the app
-     * owns - and a `show_previews = false` whose bit is set reads as absent. [readValue] is the
-     * counterpart for the ops that only *name* an object.
-     */
-    internal fun tlValue(handles: TlHandles, wire: String): TLObject {
-        val decoded = PluginWire.decode(wire)
-        if (decoded is PluginWire.Value.Handle && handles.isReadOnly(decoded.id)) {
-            refuse("forbidden", TlHandles.READ_ONLY_MESSAGE)
-        }
-        return readValue(handles, decoded)
-    }
-
-    /** read-only is the normal shape here: everything an `Account` hands over is read-only, so the message a download names is one */
-    internal fun readValue(handles: TlHandles, wire: String): TLObject = readValue(handles, PluginWire.decode(wire))
-
-    private fun readValue(handles: TlHandles, decoded: PluginWire.Value): TLObject = when (decoded) {
-        is PluginWire.Value.Handle -> handles.resolveTlObject(decoded.id)
-            ?: refuse("handle-expired", PluginWire.HANDLE_EXPIRED_MESSAGE)
-        is PluginWire.Value.Json -> TlJson.fromJson(JSONObject(decoded.json))
-        else -> refuse("invalid-argument", "expected a TL object")
-    }
-
     private fun sendMessage(call: Call): String? {
         if (call.optedIn("optimistic") && PluginOptimisticSend.canSend(call)) {
             return PluginOptimisticSend.sendText(call) { answerRefusals(call) { sendMessageRequest(call) } }
@@ -219,15 +159,12 @@ object PluginWrites {
         return sendMessageRequest(call)
     }
 
-    /**
-     * a path the composer handed back runs on the plugin queue with nothing above it to catch a
-     * [PluginRefusal], and a write that refuses still owes its promise an answer
-     */
+    /** composer callbacks run with nothing above to catch a [PluginRefusal], and the promise still needs an answer */
     internal fun answerRefusals(call: Call, block: () -> Unit) {
         try {
             block()
         } catch (e: PluginRefusal) {
-            answer(call) { e.wire }
+            call.answer { e.wire }
         }
     }
 
@@ -240,7 +177,7 @@ object PluginWrites {
         request.no_webpage = call.flag("noWebpage")
         request.clear_draft = call.flag("clearDraft")
         request.schedule_date = call.int("scheduleDate")
-        request.entities = entitiesOf(call.json)
+        request.entities = readEntities(call.json)
         request.reply_to = replyTo(call)
         request.send_as = sendAs(call)
         return send(call, request) { response -> messageWire(call, response, request.random_id, request.message) }
@@ -252,14 +189,14 @@ object PluginWrites {
         request.id = call.int("id")
         request.message = call.text()
         request.no_webpage = call.flag("noWebpage")
-        request.entities = entitiesOf(call.json)
+        request.entities = readEntities(call.json)
         return send(call, request) { response -> messageWire(call, response, 0L, request.message) }
     }
 
     private fun deleteMessages(call: Call): String? {
         val ids = call.ids()
         if (ids.isEmpty()) refuse("invalid-argument", "deleteMessages: no message ids")
-        // a channel deletes by its own id and everything else by the message id alone. The peer is still resolved either way, so a write into a secret chat is refused before the shape is chosen
+        // the peer resolves either way so a secret-chat write is refused before the shape is chosen
         val peer = call.peer()
         val request: TLObject = if (isChannelPeer(peer)) {
             TLRPC.TL_channels_deleteMessages().apply {
@@ -312,7 +249,7 @@ object PluginWrites {
         val peer = call.peer() as TLRPC.InputPeer
         val maxId = call.int("maxId")
         val topicId = call.int("topicId")
-        // a topic is a thread, and marking one read is the rpc the app sends when a forum topic scrolls to the bottom
+        // the rpc the app sends when a forum topic scrolls to the bottom
         val request: TLObject = when {
             topicId > 0 -> TLRPC.TL_messages_readDiscussion().apply {
                 this.peer = peer
@@ -343,12 +280,12 @@ object PluginWrites {
         val request = TLRPC.TL_messages_saveDraft()
         request.peer = call.peer() as TLRPC.InputPeer
         request.message = call.text()
-        request.entities = entitiesOf(call.json)
+        request.entities = readEntities(call.json)
         request.reply_to = replyTo(call)
         return send(call, request) { PluginWire.encodeNull() }
     }
 
-    /** keep the names in step with `TYPING_ACTIONS` in `writes.js`, which refuses the rest before they cross */
+    /** keep in step with `TYPING_ACTIONS` in `writes.js` */
     private fun typingAction(name: String): TLRPC.SendMessageAction = when (name) {
         "typing" -> TLRPC.TL_sendMessageTypingAction()
         "cancel" -> TLRPC.TL_sendMessageCancelAction()
@@ -368,7 +305,7 @@ object PluginWrites {
         val topic = call.int("topicId")
         if (message == 0 && topic == 0) return null
         return TLRPC.TL_inputReplyToMessage().apply {
-            // a post into a topic with no reply of its own replies to the topic's root message, which is what makes it land in the topic at all
+            // a topic post with no reply of its own replies to the topic's root, which is what lands it in the topic
             reply_to_msg_id = if (message != 0) message else topic
             top_msg_id = topic
         }
@@ -379,7 +316,7 @@ object PluginWrites {
         return writePeer(call.controller, call.accountId, call.json.optString("sendAs")) as TLRPC.InputPeer
     }
 
-    internal fun entitiesOf(json: JSONObject): ArrayList<TLRPC.MessageEntity> {
+    internal fun readEntities(json: JSONObject): ArrayList<TLRPC.MessageEntity> {
         val out = ArrayList<TLRPC.MessageEntity>()
         val array = json.optJSONArray("entities") ?: return out
         for (index in 0 until array.length()) {
@@ -391,15 +328,15 @@ object PluginWrites {
         return out
     }
 
-    /** `updateShortSentMessage` carries only what changed, so the rest is rebuilt from the request - as the app does, from the local message it had already drawn */
+    /** `updateShortSentMessage` carries only what changed; the rest comes from the request, as the app does */
     internal fun messageWire(call: Call, response: TLObject?, randomId: Long, text: String): String {
         val handles = call.session.tl
         val message = when (response) {
             is TLRPC.TL_updateShortSentMessage -> shortSentMessage(call, response, randomId, text)
-            is TLRPC.Updates -> response.updates.firstNotNullOfOrNull { messageOf(it) }
+            is TLRPC.Updates -> response.updates.firstNotNullOfOrNull { extractUpdateMessage(it) }
             else -> null
         }
-        // the declared type is `Promise<Message>`, so an answer with no message in it is a failure rather than a null the plugin would have to guard against
+        // `Promise<Message>`: no message is a failure, not a null
         if (message == null) refuse("internal", "the server accepted the request without answering with a message")
         return PluginReads.mint(handles, message)
     }
@@ -407,10 +344,10 @@ object PluginWrites {
     internal fun messagesWire(call: Call, response: TLObject?): String {
         val handles = call.session.tl
         val updates = (response as? TLRPC.Updates)?.updates ?: return ""
-        return PluginReads.mintEach(handles, updates.mapNotNull { messageOf(it) })
+        return PluginReads.mintEach(handles, updates.mapNotNull { extractUpdateMessage(it) })
     }
 
-    private fun messageOf(update: TLRPC.Update): TLRPC.Message? = when (update) {
+    private fun extractUpdateMessage(update: TLRPC.Update): TLRPC.Message? = when (update) {
         is TL_update.TL_updateNewMessage -> update.message
         is TL_update.TL_updateNewChannelMessage -> update.message
         is TL_update.TL_updateEditMessage -> update.message
@@ -424,7 +361,7 @@ object PluginWrites {
         randomId: Long,
         text: String,
     ): TLRPC.Message {
-        val dialogId = PeerSpecs.dialogIdOf(call.controller, call.accountId, call.json.optString("peer")) ?: 0L
+        val dialogId = PeerSpecs.resolveDialogId(call.controller, call.accountId, call.json.optString("peer")) ?: 0L
         val message = TLRPC.TL_message()
         message.id = sent.id
         message.date = sent.date

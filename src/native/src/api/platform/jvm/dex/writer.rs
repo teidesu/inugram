@@ -96,9 +96,6 @@ fn write_mutf8(out: &mut Vec<u8>, text: &str) {
 fn create_index<T: Eq + std::hash::Hash + Clone>(values: &[T]) -> HashMap<T, u32> {
   values.iter().cloned().enumerate().map(|(i, v)| (v, i as u32)).collect()
 }
-fn get_u16_index(value: u32) -> Result<u16, String> {
-  u16::try_from(value).map_err(|_| "reference pool exceeds 16 bits".into())
-}
 pub(super) fn emit_dex(class: &Class) -> Result<Vec<u8>, String> {
   let mut types = BTreeSet::from([class.name.clone(), class.parent.clone()]);
   types.extend(class.interfaces.iter().cloned());
@@ -200,7 +197,7 @@ pub(super) fn emit_dex(class: &Class) -> Result<Vec<u8>, String> {
     list_start.get_or_insert(off as usize);
     write_u32(out, list.len() as u32);
     for t in list {
-      write_u16(out, get_u16_index(ti[t])?);
+      write_u16(out, ti[t] as u16);
     }
     lists.insert(list.to_vec(), off);
     Ok(off)
@@ -219,14 +216,14 @@ pub(super) fn emit_dex(class: &Class) -> Result<Vec<u8>, String> {
   }
   for (i, f) in fields.iter().enumerate() {
     let at = field_off + i * 8;
-    out[at..at + 2].copy_from_slice(&get_u16_index(ti[&f.owner])?.to_le_bytes());
-    out[at + 2..at + 4].copy_from_slice(&get_u16_index(ti[&f.ty])?.to_le_bytes());
+    out[at..at + 2].copy_from_slice(&(ti[&f.owner] as u16).to_le_bytes());
+    out[at + 2..at + 4].copy_from_slice(&(ti[&f.ty] as u16).to_le_bytes());
     write_u32_at(&mut out, at + 4, si[&f.name]);
   }
   for (i, m) in methods.iter().enumerate() {
     let at = method_off + i * 8;
-    out[at..at + 2].copy_from_slice(&get_u16_index(ti[&m.owner])?.to_le_bytes());
-    out[at + 2..at + 4].copy_from_slice(&get_u16_index(pi[&(m.result.clone(), m.params.clone())])?.to_le_bytes());
+    out[at..at + 2].copy_from_slice(&(ti[&m.owner] as u16).to_le_bytes());
+    out[at + 2..at + 4].copy_from_slice(&(pi[&(m.result.clone(), m.params.clone())] as u16).to_le_bytes());
     write_u32_at(&mut out, at + 4, si[&m.name]);
   }
   let mut code_offsets = HashMap::new();
@@ -242,13 +239,17 @@ pub(super) fn emit_dex(class: &Class) -> Result<Vec<u8>, String> {
         Err(format!("register v{r} out of bounds"))
       }
     };
+    let check_reg8 = |r: u16, what: &str| {
+      check_reg(r)?;
+      if r > 255 {
+        return Err(format!("{what} register exceeds 8 bits"));
+      }
+      Ok(())
+    };
     for op in &body.ops {
       match op {
         Op::Const(r, v) => {
-          check_reg(*r)?;
-          if *r > 255 {
-            return Err("const register exceeds 8 bits".into());
-          }
+          check_reg8(*r, "const")?;
           code.extend([0x13 | r << 8, *v as u16]);
         }
         Op::Move(d, s, k) => {
@@ -266,24 +267,18 @@ pub(super) fn emit_dex(class: &Class) -> Result<Vec<u8>, String> {
           if *d > 15 || *s > 15 {
             return Err("new-array register exceeds 4 bits".into());
           }
-          code.extend([0x23 | d << 8 | s << 12, get_u16_index(ti[t])?]);
+          code.extend([0x23 | d << 8 | s << 12, ti[t] as u16]);
         }
         Op::Aput(v, a, i) | Op::Aget(v, a, i) => {
           for r in [v, a, i] {
-            check_reg(*r)?;
-            if *r > 255 {
-              return Err("array access register exceeds 8 bits".into());
-            }
+            check_reg8(*r, "array access")?;
           }
           let opcode = if matches!(op, Op::Aput(..)) { 0x4d } else { 0x46 };
           code.extend([opcode | v << 8, *a | i << 8]);
         }
         Op::GetStatic(r, f) => {
-          check_reg(*r)?;
-          if *r > 255 {
-            return Err("sget register exceeds 8 bits".into());
-          }
-          code.extend([0x62 | r << 8, get_u16_index(fi[f])?]);
+          check_reg8(*r, "sget")?;
+          code.extend([0x62 | r << 8, fi[f] as u16]);
         }
         Op::Invoke(k, regs, m) => {
           if regs.len() > 5 || regs.iter().any(|r| *r > 15) {
@@ -301,7 +296,7 @@ pub(super) fn emit_dex(class: &Class) -> Result<Vec<u8>, String> {
           r[..regs.len()].copy_from_slice(regs);
           code.extend([
             u16::from(*k) | (regs.len() as u16) << 12 | r[4] << 8,
-            get_u16_index(mi[m])?,
+            mi[m] as u16,
             r[0] | r[1] << 4 | r[2] << 8 | r[3] << 12,
           ]);
         }
@@ -314,24 +309,18 @@ pub(super) fn emit_dex(class: &Class) -> Result<Vec<u8>, String> {
             return Err("range out of bounds".into());
           }
           outs = outs.max(*count);
-          code.extend([u16::from(*k) | count << 8, get_u16_index(mi[m])?, *start]);
+          code.extend([u16::from(*k) | count << 8, mi[m] as u16, *start]);
         }
         Op::Result(r, k) | Op::Return(r, k) => {
-          check_reg(*r)?;
-          if *r > 255 {
-            return Err("result register exceeds 8 bits".into());
-          }
+          check_reg8(*r, "result")?;
           if *k == 0x0b || *k == 0x10 {
             check_reg(r + 1)?;
           }
           code.push(u16::from(*k) | r << 8);
         }
         Op::Cast(r, t) => {
-          check_reg(*r)?;
-          if *r > 255 {
-            return Err("cast register exceeds 8 bits".into());
-          }
-          code.extend([0x1f | r << 8, get_u16_index(ti[t])?]);
+          check_reg8(*r, "cast")?;
+          code.extend([0x1f | r << 8, ti[t] as u16]);
         }
         Op::ReturnVoid => code.push(0x0e),
       }

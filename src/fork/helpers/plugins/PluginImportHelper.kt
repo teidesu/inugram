@@ -9,16 +9,11 @@ import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.LocaleController.formatString
 import org.telegram.messenger.LocaleController.getString
 import org.telegram.messenger.R
-import org.telegram.messenger.Utilities
 import org.telegram.ui.ActionBar.BaseFragment
 import org.telegram.ui.Components.BulletinFactory
 import java.io.File
 
-/**
- * Installs plugins from outside the plugins page. Parses and validates source, explains
- * unsupported plugins, and asks for approval before installing.
- * Parsing and obfuscation scanning run off the UI thread because both read the full file.
- */
+/** parsing and obfuscation scanning read the whole file, so they run off the ui thread */
 object PluginImportHelper {
     private const val SUFFIX = ".inu.js"
 
@@ -39,7 +34,6 @@ object PluginImportHelper {
         EngineDispatch.scheduler.postRunnable { present(fragment, source) }
     }
 
-    /** every bail on the plugin queue reports the same way: the dialog belongs to the ui thread */
     private fun failOnUi(fragment: BaseFragment, message: String) {
         AndroidUtilities.runOnUIThread { showError(fragment, message) }
     }
@@ -58,8 +52,7 @@ object PluginImportHelper {
         }
         val obfuscation = ObfuscationDetector.detect(source)
         val installed = PluginManager.findUpdateTarget(manifest)
-        // the file, not `installed.source`: something that rewrote it behind the app leaves the
-        // in-memory copy stale, and "already installed" about bytes we are not running is a lie
+        // the file, not `installed.source`: something may have rewritten it behind the app
         if (installed != null && runCatching { installed.file.readText() }.getOrElse { installed.source } == source) {
             AndroidUtilities.runOnUIThread {
                 BulletinFactory.of(fragment)
@@ -73,13 +66,11 @@ object PluginImportHelper {
         }
         AndroidUtilities.runOnUIThread {
             val context = fragment.context ?: fragment.parentActivity ?: return@runOnUIThread
-            // the per-plugin sheet says what this one asked for; what any plugin could do is read
-            // and accepted once, before the first install
+            // what any plugin could do is accepted once, before the first install
             PluginTrustSheet.requireConsent(context, fragment.resourceProvider) {
                 fragment.showDialog(
                     PluginInstallSheet(context, fragment, manifest, source, obfuscation, installed?.manifest) { enable ->
-                        // re-resolved rather than taken from the sheet: what it was built against is
-                        // what to *show*, and the installed set is the ui thread's to answer for
+                        // re-resolved: the installed set is the ui thread's to answer for
                         val target = PluginManager.findUpdateTarget(manifest)
                         if (target != null) confirmUpdate(fragment, target, manifest, source)
                         else confirmInstall(fragment, manifest, source, enable)
@@ -109,7 +100,7 @@ object PluginImportHelper {
         }
     }
 
-    /** no undo: the source it replaced is gone, and the stores an undo would have to protect are untouched anyway */
+    /** no undo: the replaced source is gone, and stores are untouched anyway */
     private fun confirmUpdate(
         fragment: BaseFragment,
         installed: Plugin,

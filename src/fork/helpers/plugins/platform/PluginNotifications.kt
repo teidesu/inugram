@@ -1,36 +1,24 @@
 package desu.inugram.helpers.plugins.platform
 
 import desu.inugram.core.plugins.OwnerRegistry
+import desu.inugram.helpers.plugins.UiObservation
 import desu.inugram.helpers.plugins.SessionResource
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.NotificationListener
-import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginSession
-import desu.inugram.helpers.plugins.QuickJs
 import java.lang.reflect.Modifier
-import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.UserConfig
-import org.telegram.messenger.Utilities
 
 /**
- * Connects `inu.android.addNotificationCenterDelegate` to the app's event bus
- * (Rust: `notifications.rs`). Requires `unsafe.notificationCenter` and `unsafe.jvm`.
+ * These events are not TL, so no TL filtering; the handles give the same access as `unsafe.jvm`.
  *
- * [PluginJvm.ValueBridge] passes scalars directly and other values as `JavaObject` handles
- * from the shared JVM/Xposed table. These events are not TL and cannot use TL filtering;
- * the handles provide the same access as `unsafe.jvm`.
- *
- * Encode inside the observer, before posting: stock owns the argument array and later observers
- * may change its contents, including mutable message lists. Release handles if the queued
- * dispatch is dropped before the engine takes them.
- *
- * [detach] removes every registration. NotificationCenter holds observers strongly, and each
- * observer retains its engine, so leaving one registered would retain an unloaded engine.
+ * Encoded inside the observer before posting: stock owns the argument array, and later observers may
+ * mutate it. NotificationCenter holds observers strongly, and each retains its engine.
  */
 object PluginNotifications : SessionResource {
-    /** read off the class rather than generated: the names are stock's own, so a rebase moves this with them and there is no table to regenerate */
+    /** the names are stock's, so a rebase moves this with them */
     private val idsByName: Map<String, Int> by lazy {
         val out = HashMap<String, Int>()
         for (field in NotificationCenter::class.java.declaredFields) {
@@ -47,32 +35,26 @@ object PluginNotifications : SessionResource {
     private class Registration(
         val session: PluginSession,
         val callbackId: Int,
-        val ids: IntArray,
+        ids: IntArray,
     ) {
-        var observer: NotificationCenter.NotificationCenterDelegate? = null
+        val observation = UiObservation(ids, ::centres) { id, accountId, args -> deliver(this, id, accountId, args) }
     }
 
     private val live = OwnerRegistry<PluginSession, Registration>()
 
-    /** what `inu.notifications.suppress` holds, belonging to no one account; keep in sync with rust */
     const val ANY_ACCOUNT = -1
 
     private class Suppression(val token: Int, val account: Int)
 
     /**
-     * `inu.notifications.suppress` and `Account.suppressNotifications`. A hold per token rather
-     * than a flag, so two plugins asking at once do not cancel each other and a plugin that is
-     * torn down without disposing releases only its own. Read by
-     * [desu.inugram.helpers.NotificationsHelper.shouldSuppressNotifications], which stock consults
-     * before posting, so a suppressed account dismisses rather than posting.
+     * a hold per token, so two plugins don't cancel each other and a torn-down plugin releases only its own.
+     * Read by [desu.inugram.helpers.NotificationsHelper.shouldSuppressNotifications] before stock posts.
      */
     private val suppressors = OwnerRegistry<PluginSession, Suppression>()
 
-    @JvmStatic
     fun areNotificationsSuppressed(account: Int): Boolean =
         anySuppressed && suppressors.any { it.account == ANY_ACCOUNT || it.account == account }
 
-    /** asked before every notification the app posts, and the registry behind it is synchronized */
     @Volatile private var anySuppressed = false
 
     private fun setSuppressed(session: PluginSession, token: Int, account: Int, on: Boolean) {
@@ -97,25 +79,17 @@ object PluginNotifications : SessionResource {
     private fun startObserving(session: PluginSession, callbackId: Int, events: Array<String>): String? {
         val ids = IntArray(events.size)
         for (index in events.indices) {
-            // a closed vocabulary: a name this app does not have is refused rather than silently never firing, which a plugin could not tell from an event that never happened
+            // closed vocabulary: an unknown name is refused, since a plugin could not tell it from an event that never fires
             ids[index] = idsByName[events[index]]
                 ?: return PluginWire.encodePluginError("invalid-argument", "no notification named '${events[index]}'")
         }
         val registration = Registration(session, callbackId, ids)
         live.add(session, registration)
-        AndroidUtilities.runOnUIThread {
-            val observer = NotificationCenter.NotificationCenterDelegate { id, accountId, args ->
-                deliver(registration, id, accountId, args)
-            }
-            registration.observer = observer
-            for (centre in centres()) {
-                for (id in ids) centre.addObserver(observer, id)
-            }
-        }
+        registration.observation.start()
         return null
     }
 
-    /** only ever called on the ui thread: [NotificationCenter.getInstance] and `getGlobalInstance` are both `@UiThread`, as is observing */
+    /** ui thread only: [NotificationCenter.getInstance] and `getGlobalInstance` are `@UiThread` */
     private fun centres(): List<NotificationCenter> {
         val out = ArrayList<NotificationCenter>(UserConfig.MAX_ACCOUNT_COUNT + 1)
         out.add(NotificationCenter.getGlobalInstance())
@@ -135,32 +109,16 @@ object PluginNotifications : SessionResource {
     }
 
     private fun stopObserving(session: PluginSession, callbackId: Int) {
-        val registration = live.remove(session) { it.callbackId == callbackId } ?: return
-        removeObserver(registration)
-    }
-
-    /** the remove takes the same ui hop the add did, which is the only thing that orders it behind one: `runOnUIThread` always posts */
-    private fun removeObserver(registration: Registration) {
-        AndroidUtilities.runOnUIThread {
-            val observer = registration.observer ?: return@runOnUIThread
-            registration.observer = null
-            for (centre in centres()) {
-                for (id in registration.ids) centre.removeObserver(observer, id)
-            }
-        }
+        live.remove(session) { it.callbackId == callbackId }?.observation?.stop()
     }
 
     override fun detach(session: PluginSession) {
-        for (registration in live.take(session)) removeObserver(registration)
+        for (registration in live.take(session)) registration.observation.stop()
         suppressors.take(session)
         anySuppressed = suppressors.any { true }
     }
 
-    /**
-     * One wire per argument, minted here on the observer's thread. A value the bridge refuses -
-     * the engine's own bridge package, or one past the value limit - is the one argument lost
-     * rather than the whole event, since a delegate reading `args[3]` must still find it there.
-     */
+    /** a refused value loses only its argument, since a delegate reading `args[3]` must still find it there */
     private fun encodeArgs(bridge: PluginJvm.ValueBridge, args: Array<Any?>): Array<String> =
         Array(args.size) { index ->
             try {

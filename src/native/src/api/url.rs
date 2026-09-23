@@ -1,11 +1,11 @@
 use std::cell::RefCell;
 
-use rquickjs::class::{JsClass, Readable, Trace, Tracer};
-use rquickjs::function::{Constructor, Opt, This};
-use rquickjs::{Array, Coerced, Ctx, Exception, Function, JsLifetime, Object, Result as JsResult, Value};
-use url::{form_urlencoded, Host, Url};
+use rquickjs::class::Trace;
+use rquickjs::function::{Opt, This};
+use rquickjs::{Array, Class, Coerced, Ctx, Exception, Function, JsLifetime, Object, Result as JsResult, Value};
+use url::{form_urlencoded, quirks, Host, Url};
 
-use crate::utils::shape::{define_accessor, define_getter, define_method, get_class_prototype};
+use crate::utils::qjs::qjs_load_prelude;
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/url.qbc"));
 
@@ -46,25 +46,153 @@ pub fn parse_http_url(api: &str, url: &str) -> Result<String, String> {
   Ok(host)
 }
 
+#[derive(Trace, JsLifetime)]
+#[rquickjs::class(rename = "URL", frozen)]
 pub struct UrlBox {
+  #[qjs(skip_trace)]
   inner: RefCell<Url>,
 }
 
-impl<'js> Trace<'js> for UrlBox {
-  fn trace<'a>(&self, _tracer: Tracer<'a, 'js>) {}
-}
+#[rquickjs::methods]
+impl<'js> UrlBox {
+  #[qjs(constructor)]
+  fn new(ctx: Ctx<'js>, input: Coerced<String>, base: Opt<Value<'js>>) -> JsResult<Self> {
+    let (input, base) = read_args(input, base);
+    match parse(&input, base.as_deref()) {
+      Ok(url) => Ok(UrlBox { inner: RefCell::new(url) }),
+      Err(e) => Err(Exception::throw_type(&ctx, &format!("URL: {e}"))),
+    }
+  }
 
-// SAFETY: `UrlBox` contains no JavaScript-lifetime-bound data.
-unsafe impl<'js> JsLifetime<'js> for UrlBox {
-  type Changed<'to> = UrlBox;
-}
+  #[qjs(static, rename = "canParse")]
+  fn can_parse(input: Coerced<String>, base: Opt<Value<'js>>) -> bool {
+    let (input, base) = read_args(input, base);
+    parse(&input, base.as_deref()).is_ok()
+  }
 
-impl<'js> JsClass<'js> for UrlBox {
-  const NAME: &'static str = "URL";
-  type Mutable = Readable;
+  #[qjs(static, rename = "parse")]
+  fn parse_or_null(ctx: Ctx<'js>, input: Coerced<String>, base: Opt<Value<'js>>) -> JsResult<Value<'js>> {
+    let (input, base) = read_args(input, base);
+    match parse(&input, base.as_deref()) {
+      Ok(url) => Ok(Class::instance(ctx.clone(), UrlBox { inner: RefCell::new(url) })?.into_value()),
+      Err(_) => Ok(Value::new_null(ctx)),
+    }
+  }
 
-  fn constructor(_ctx: &Ctx<'js>) -> JsResult<Option<Constructor<'js>>> {
-    Ok(None)
+  #[qjs(get, enumerable, configurable, rename = "href")]
+  fn get_href(&self) -> String {
+    quirks::href(&self.inner.borrow()).to_string()
+  }
+
+  #[qjs(set, rename = "href")]
+  fn set_href(&self, ctx: Ctx<'js>, value: Coerced<String>) -> JsResult<()> {
+    quirks::set_href(&mut self.inner.borrow_mut(), &value.0)
+      .map_err(|e| Exception::throw_type(&ctx, &format!("URL: href: {e}")))
+  }
+
+  #[qjs(get, enumerable, configurable, rename = "origin")]
+  fn get_origin(&self) -> String {
+    quirks::origin(&self.inner.borrow())
+  }
+
+  #[qjs(get, enumerable, configurable, rename = "protocol")]
+  fn get_protocol(&self) -> String {
+    quirks::protocol(&self.inner.borrow()).to_string()
+  }
+
+  #[qjs(set, rename = "protocol")]
+  fn set_protocol(&self, value: Coerced<String>) {
+    let _ = quirks::set_protocol(&mut self.inner.borrow_mut(), &value.0);
+  }
+
+  #[qjs(get, enumerable, configurable, rename = "username")]
+  fn get_username(&self) -> String {
+    quirks::username(&self.inner.borrow()).to_string()
+  }
+
+  #[qjs(set, rename = "username")]
+  fn set_username(&self, value: Coerced<String>) {
+    let _ = quirks::set_username(&mut self.inner.borrow_mut(), &value.0);
+  }
+
+  #[qjs(get, enumerable, configurable, rename = "password")]
+  fn get_password(&self) -> String {
+    quirks::password(&self.inner.borrow()).to_string()
+  }
+
+  #[qjs(set, rename = "password")]
+  fn set_password(&self, value: Coerced<String>) {
+    let _ = quirks::set_password(&mut self.inner.borrow_mut(), &value.0);
+  }
+
+  #[qjs(get, enumerable, configurable, rename = "host")]
+  fn get_host(&self) -> String {
+    quirks::host(&self.inner.borrow()).to_string()
+  }
+
+  #[qjs(set, rename = "host")]
+  fn set_host(&self, value: Coerced<String>) {
+    let _ = quirks::set_host(&mut self.inner.borrow_mut(), &value.0);
+  }
+
+  #[qjs(get, enumerable, configurable, rename = "hostname")]
+  fn get_hostname(&self) -> String {
+    quirks::hostname(&self.inner.borrow()).to_string()
+  }
+
+  #[qjs(set, rename = "hostname")]
+  fn set_hostname(&self, value: Coerced<String>) {
+    let _ = quirks::set_hostname(&mut self.inner.borrow_mut(), &value.0);
+  }
+
+  #[qjs(get, enumerable, configurable, rename = "port")]
+  fn get_port(&self) -> String {
+    quirks::port(&self.inner.borrow()).to_string()
+  }
+
+  #[qjs(set, rename = "port")]
+  fn set_port(&self, value: Coerced<String>) {
+    let _ = quirks::set_port(&mut self.inner.borrow_mut(), &value.0);
+  }
+
+  #[qjs(get, enumerable, configurable, rename = "pathname")]
+  fn get_pathname(&self) -> String {
+    quirks::pathname(&self.inner.borrow()).to_string()
+  }
+
+  #[qjs(set, rename = "pathname")]
+  fn set_pathname(&self, value: Coerced<String>) {
+    quirks::set_pathname(&mut self.inner.borrow_mut(), &value.0);
+  }
+
+  #[qjs(get, enumerable, configurable, rename = "search")]
+  fn get_search(&self) -> String {
+    quirks::search(&self.inner.borrow()).to_string()
+  }
+
+  #[qjs(set, rename = "search")]
+  fn set_search(&self, value: Coerced<String>) {
+    quirks::set_search(&mut self.inner.borrow_mut(), &value.0);
+  }
+
+  #[qjs(get, enumerable, configurable, rename = "hash")]
+  fn get_hash(&self) -> String {
+    quirks::hash(&self.inner.borrow()).to_string()
+  }
+
+  #[qjs(set, rename = "hash")]
+  fn set_hash(&self, value: Coerced<String>) {
+    quirks::set_hash(&mut self.inner.borrow_mut(), &value.0);
+  }
+
+  #[qjs(rename = "toString")]
+  fn serialize(&self) -> String {
+    self.get_href()
+  }
+
+  #[qjs(rename = "toJSON")]
+  fn serialize_json(&self) -> String {
+    self.get_href()
   }
 }
 
@@ -86,59 +214,8 @@ fn read_args(input: Coerced<String>, base: Opt<Value<'_>>) -> (String, Option<St
   (input.0, base)
 }
 
-fn optional_component(value: &str, delimiter: char) -> Option<String> {
-  let trimmed = value.strip_prefix(delimiter).unwrap_or(value);
-  if trimmed.is_empty() {
-    None
-  } else {
-    Some(trimmed.to_string())
-  }
-}
-
-fn mint<'js>(ctx: &Ctx<'js>, url: Url) -> JsResult<rquickjs::Class<'js, UrlBox>> {
-  rquickjs::Class::instance(ctx.clone(), UrlBox { inner: RefCell::new(url) })
-}
-
 pub fn install_url<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
-  let proto = get_class_prototype::<UrlBox>(ctx)?;
-  install_members(ctx, &proto)?;
-
-  let ctor = Constructor::new_class::<UrlBox, _, _>(
-    ctx.clone(),
-    |ctx: Ctx<'js>, input: Coerced<String>, base: Opt<Value<'js>>| -> JsResult<Value<'js>> {
-      let (input, base) = read_args(input, base);
-      match parse(&input, base.as_deref()) {
-        Ok(url) => Ok(mint(&ctx, url)?.into_value()),
-        Err(e) => Err(Exception::throw_type(&ctx, &format!("URL: {e}"))),
-      }
-    },
-  )?;
-
-  define_method(
-    &ctor,
-    "canParse",
-    Function::new(ctx.clone(), |input: Coerced<String>, base: Opt<Value<'js>>| {
-      let (input, base) = read_args(input, base);
-      parse(&input, base.as_deref()).is_ok()
-    })?,
-  )?;
-
-  define_method(
-    &ctor,
-    "parse",
-    Function::new(
-      ctx.clone(),
-      |ctx: Ctx<'js>, input: Coerced<String>, base: Opt<Value<'js>>| -> JsResult<Value<'js>> {
-        let (input, base) = read_args(input, base);
-        match parse(&input, base.as_deref()) {
-          Ok(url) => Ok(mint(&ctx, url)?.into_value()),
-          Err(_) => Ok(Value::new_null(ctx.clone())),
-        }
-      },
-    )?,
-  )?;
-
-  ctx.globals().set("URL", ctor)?;
+  Class::<UrlBox>::define(&ctx.globals())?;
 
   let natives = Object::new(ctx.clone())?;
   natives.set("parseQuery", Function::new(ctx.clone(), parse_query)?)?;
@@ -158,7 +235,7 @@ pub fn install_url<'js>(ctx: &Ctx<'js>) -> JsResult<()> {
     })?,
   )?;
 
-  let factory = crate::utils::prelude::load(ctx, PRELUDE)?;
+  let factory = qjs_load_prelude(ctx, PRELUDE)?;
   factory.call::<_, ()>((natives,))?;
   Ok(())
 }
@@ -184,156 +261,6 @@ fn serialize_query(pairs: Array<'_>) -> JsResult<String> {
     out.append_pair(&key.0, &value.0);
   }
   Ok(out.finish())
-}
-
-fn install_members<'js>(ctx: &Ctx<'js>, proto: &Object<'js>) -> JsResult<()> {
-  type Me<'js> = This<rquickjs::Class<'js, UrlBox>>;
-
-  define_accessor(
-    proto,
-    "href",
-    |this: Me<'js>| this.0.borrow().inner.borrow().as_str().to_string(),
-    |ctx: Ctx<'js>, this: Me<'js>, value: Coerced<String>| -> JsResult<()> {
-      match Url::parse(&value.0) {
-        Ok(parsed) => {
-          *this.0.borrow().inner.borrow_mut() = parsed;
-          Ok(())
-        }
-        Err(e) => Err(Exception::throw_type(&ctx, &format!("URL: href: {e}"))),
-      }
-    },
-  )?;
-
-  define_getter(proto, "origin", |this: Me<'js>| this.0.borrow().inner.borrow().origin().ascii_serialization())?;
-
-  define_accessor(
-    proto,
-    "protocol",
-    |this: Me<'js>| format!("{}:", this.0.borrow().inner.borrow().scheme()),
-    |this: Me<'js>, value: Coerced<String>| {
-      let scheme = value.0.strip_suffix(':').unwrap_or(&value.0).to_string();
-      let _ = this.0.borrow().inner.borrow_mut().set_scheme(&scheme);
-    },
-  )?;
-
-  define_accessor(
-    proto,
-    "username",
-    |this: Me<'js>| this.0.borrow().inner.borrow().username().to_string(),
-    |this: Me<'js>, value: Coerced<String>| {
-      let _ = this.0.borrow().inner.borrow_mut().set_username(&value.0);
-    },
-  )?;
-
-  define_accessor(
-    proto,
-    "password",
-    |this: Me<'js>| this.0.borrow().inner.borrow().password().unwrap_or_default().to_string(),
-    |this: Me<'js>, value: Coerced<String>| {
-      let password = if value.0.is_empty() { None } else { Some(value.0.as_str()) };
-      let _ = this.0.borrow().inner.borrow_mut().set_password(password);
-    },
-  )?;
-
-  define_accessor(
-    proto,
-    "host",
-    |this: Me<'js>| {
-      let class = this.0.borrow();
-      let url = class.inner.borrow();
-      match (url.host_str(), url.port()) {
-        (Some(host), Some(port)) => format!("{host}:{port}"),
-        (Some(host), None) => host.to_string(),
-        (None, _) => String::new(),
-      }
-    },
-    |this: Me<'js>, value: Coerced<String>| {
-      let class = this.0.borrow();
-      let mut url = class.inner.borrow_mut();
-      let (host, port) = split_host_port(&value.0);
-      if url.set_host(Some(host)).is_ok() {
-        let _ = url.set_port(port);
-      }
-    },
-  )?;
-
-  define_accessor(
-    proto,
-    "hostname",
-    |this: Me<'js>| this.0.borrow().inner.borrow().host_str().unwrap_or_default().to_string(),
-    |this: Me<'js>, value: Coerced<String>| {
-      let (host, _) = split_host_port(&value.0);
-      let _ = this.0.borrow().inner.borrow_mut().set_host(Some(host));
-    },
-  )?;
-
-  define_accessor(
-    proto,
-    "port",
-    |this: Me<'js>| this.0.borrow().inner.borrow().port().map(|p| p.to_string()).unwrap_or_default(),
-    |this: Me<'js>, value: Coerced<String>| {
-      let class = this.0.borrow();
-      let mut url = class.inner.borrow_mut();
-      if value.0.is_empty() {
-        let _ = url.set_port(None);
-      } else if let Ok(port) = value.0.parse::<u16>() {
-        let _ = url.set_port(Some(port));
-      }
-    },
-  )?;
-
-  define_accessor(
-    proto,
-    "pathname",
-    |this: Me<'js>| this.0.borrow().inner.borrow().path().to_string(),
-    |this: Me<'js>, value: Coerced<String>| this.0.borrow().inner.borrow_mut().set_path(&value.0),
-  )?;
-
-  define_accessor(
-    proto,
-    "search",
-    |this: Me<'js>| match this.0.borrow().inner.borrow().query() {
-      Some(query) if !query.is_empty() => format!("?{query}"),
-      _ => String::new(),
-    },
-    |this: Me<'js>, value: Coerced<String>| {
-      let query = optional_component(&value.0, '?');
-      this.0.borrow().inner.borrow_mut().set_query(query.as_deref());
-    },
-  )?;
-
-  define_accessor(
-    proto,
-    "hash",
-    |this: Me<'js>| match this.0.borrow().inner.borrow().fragment() {
-      Some(fragment) if !fragment.is_empty() => format!("#{fragment}"),
-      _ => String::new(),
-    },
-    |this: Me<'js>, value: Coerced<String>| {
-      let fragment = optional_component(&value.0, '#');
-      this.0.borrow().inner.borrow_mut().set_fragment(fragment.as_deref());
-    },
-  )?;
-
-  let f = Function::new(ctx.clone(), |this: Me<'js>| this.0.borrow().inner.borrow().as_str().to_string())?;
-  define_method(proto, "toString", f.clone())?;
-  define_method(proto, "toJSON", f)?;
-  Ok(())
-}
-
-fn split_host_port(value: &str) -> (&str, Option<u16>) {
-  let rest = match value.strip_prefix('[') {
-    Some(inside) => match inside.split_once(']') {
-      Some((_, rest)) => rest,
-      None => return (value, None),
-    },
-    None => value,
-  };
-  let Some((_, port)) = rest.split_once(':') else {
-    return (value, None);
-  };
-  let host = &value[..value.len() - port.len() - 1];
-  (host, port.parse::<u16>().ok())
 }
 
 #[cfg(test)]

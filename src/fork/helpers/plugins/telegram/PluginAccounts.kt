@@ -4,10 +4,8 @@ import desu.inugram.helpers.dialogs.AccountOrderHelper
 import desu.inugram.helpers.plugins.EngineDispatch
 
 import desu.inugram.helpers.plugins.AccountListener
-import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.PluginManager
-import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.ReadsListener
 import desu.inugram.helpers.plugins.WritesListener
 import org.json.JSONArray
@@ -15,7 +13,6 @@ import org.json.JSONObject
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.UserConfig
-import org.telegram.messenger.Utilities
 
 object PluginAccounts {
     private var watching = false
@@ -44,17 +41,16 @@ object PluginAccounts {
         }
     }
 
-    /** the account order is not a stock notification, so its only writer reports it here */
+    /** the account order has no stock notification */
     fun onOrderChanged() {
         AndroidUtilities.runOnUIThread {
             if (lastAccounts != null) notifyIfChanged()
         }
     }
 
-    /** runs on the ui thread, which owns [lastAccounts] */
+    /** ui thread, which owns [lastAccounts] */
     private fun notifyIfChanged() {
-        // a plugin started later reads the live snapshot at install, so there is nothing to
-        // keep up to date while none is running
+        // a plugin started later reads the live snapshot at install
         if (!PluginManager.anyRunning) return
         val current = accountsJson()
         if (current == lastAccounts) return

@@ -1,48 +1,9 @@
 // ==InuPlugin==
 // @name         icons test
-// @author       teidesu
-// @version      1.0
 // @description  asserts every UIIcon source and shows them in a settings page
-// @plugin-api   1
-// @platform     android
 // ==/InuPlugin==
 /* eslint-disable eslint-comments/no-unlimited-disable */
 /* eslint-disable */
-
-function pass(label, detail) {
-  console.log(detail === undefined ? `PASS ${label}` : `PASS ${label}: ${detail}`)
-}
-
-function fail(label, detail) {
-  console.error(`FAIL ${label}: ${detail}`)
-}
-
-function check(label, ok, detail) {
-  if (ok) pass(label, detail)
-  else fail(label, detail)
-}
-
-function expectThrow(label, code, fn) {
-  let error
-  try {
-    fn()
-  } catch (e) {
-    error = e
-  }
-  if (error === undefined) return fail(label, 'did not throw')
-  check(label, error instanceof inu.PluginError && error.code === code, `${error.name}: ${error.code}`)
-}
-
-function expectTypeError(label, fn) {
-  let error
-  try {
-    fn()
-  } catch (e) {
-    error = e
-  }
-  if (error === undefined) return fail(label, 'did not throw')
-  check(label, error instanceof TypeError, `${error.name}: ${error.message}`)
-}
 
 /** @type {Parameters<typeof inu.icons.common>[0][]} */
 const CURATED = [
@@ -52,10 +13,7 @@ const CURATED = [
   'plus', 'minus', 'check', 'close', 'more', 'translate', 'bookmark',
 ]
 
-// -- the curated set --
-
-// the one assertion that can only be made against a real build: every name the typings offer has
-// to answer with an asset this app actually ships, or the api promises an icon it cannot draw
+// only a real build can assert this: every name the typings offer answers with a shipped asset
 const missing = []
 const curated = {}
 for (const name of CURATED) {
@@ -71,25 +29,20 @@ check(`all ${CURATED.length} curated icons resolve`, missing.length === 0, missi
 expectThrow('an unknown name is refused', 'invalid-argument', () => inu.icons.common('lightbulb'))
 // @ts-expect-error the set is case-sensitive and so is the lookup
 expectThrow('and so is the wrong case', 'invalid-argument', () => inu.icons.common('Settings'))
-// a lookup keyed on a name must not answer for Object.prototype's own members
 // @ts-expect-error not a name in the set
 expectThrow('and so is a prototype member', 'invalid-argument', () => inu.icons.common('constructor'))
 // @ts-expect-error not a string at all
-expectTypeError('a name that is not a string is a TypeError', () => inu.icons.common(42))
+expectThrow('a name that is not a string is a TypeError', TypeError, () => inu.icons.common(42))
 
 check('the same name hands back an equivalent icon twice', inu.icons.common('star') !== undefined)
-
-// -- android.resourceIcon --
 
 check('a drawable the app ships resolves', inu.android.resourceIcon('msg_settings') !== undefined)
 expectThrow('a drawable it does not ship is not-found', 'not-found', () =>
   inu.android.resourceIcon('inu_no_such_drawable_anywhere'))
-// getIdentifier would take this as a reference to another resource type in another package
+// getIdentifier would read this as another resource type in another package
 expectThrow('a qualified resource reference is refused', 'invalid-argument', () =>
   inu.android.resourceIcon('org.telegram.messenger:raw/notification'))
 expectThrow('and so is an empty name', 'invalid-argument', () => inu.android.resourceIcon(''))
-
-// -- animated icons --
 
 /** @type {Parameters<typeof inu.icons.animation>[0][]} */
 const ANIMATIONS = ['success', 'error', 'info', 'loading']
@@ -109,8 +62,6 @@ expectThrow('a sticker needs one selector', 'invalid-argument', () => inu.icons.
 expectThrow('a sticker refuses multiple selectors', 'invalid-argument', () =>
   // @ts-expect-error selectors are exclusive
   inu.icons.sticker({ slug: 'teidesu_favs', index: 2, emoji: '🐶' }))
-
-// -- icons.svg --
 
 const HEART = '<svg viewBox="0 0 24 24"><path d="M12 21C12 21 3 14 3 8.5 3 5.4 5.4 3 8.5 3 10.4 3 12 4.2 12 4.2 12 4.2 13.6 3 15.5 3 18.6 3 21 5.4 21 8.5 21 14 12 21 12 21Z"/></svg>'
 check('an inline svg parses', inu.icons.svg(HEART) !== undefined)
@@ -139,9 +90,7 @@ check(
   quota && `${quota.usage}/${quota.quota}`,
 )
 
-// -- what a row will take --
-
-expectTypeError('a row refuses an icon it was not handed', () => inu.ui.button({
+expectThrow('a row refuses an icon it was not handed', TypeError, () => inu.ui.button({
   text: 'x',
   // @ts-expect-error a resource name is not a UIIcon
   icon: 'msg_settings',
@@ -159,15 +108,13 @@ check('a switch row takes one too', inu.ui.check({
   icon: curated.settings,
   onChange: () => {},
 }) !== undefined)
-expectTypeError('and refuses one it was not handed, the same way every other row does', () => inu.ui.check({
+expectThrow('and refuses one it was not handed, the same way every other row does', TypeError, () => inu.ui.check({
   text: 'x',
   checked: false,
   // @ts-expect-error a resource name is not a UIIcon
   icon: 'msg_settings',
   onChange: () => {},
 }))
-
-// -- the gallery, which is the part a person would actually want --
 
 const svgPage = inu.ui.settingsPage({
   title: 'Inline svg',

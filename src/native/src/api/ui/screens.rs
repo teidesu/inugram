@@ -4,11 +4,11 @@ use std::rc::Rc;
 
 use rquickjs::{Array, Ctx, Function, Object, Persistent, Result as JsResult, Runtime, Value};
 
-use crate::api::error::{call_callback, format_exception};
+use crate::api::error::{call_callback, describe_js_error};
 use crate::api::telegram::account::{self, AccountState};
 use crate::runtime::pump_jobs;
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
-use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle};
+use crate::sandbox::registry::{CallbackRegistry, Lifecycle};
 
 pub trait ScreenHost {
   fn current_screen(&self) -> String;
@@ -106,16 +106,8 @@ pub fn install_screens<'js>(
   let state2 = state.clone();
   ui.set(
     "onScreenChanged",
-    Function::new(ctx.clone(), move |ctx: Ctx<'js>, cb: Function<'js>| -> JsResult<Function<'js>> {
-      if state2.lifecycle.is_unloading() {
-        return noop_disposer(&ctx);
-      }
-      let token = state2.changed_fns.alloc();
-      state2.changed_fns.register(&ctx, token, None, cb);
-      let state = state2.clone();
-      make_disposer(&ctx, move |ctx| {
-        state.changed_fns.dispose(ctx, token);
-      })
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>, cb: Function<'js>| {
+      CallbackRegistry::subscribe(&ctx, &state2, &state2.lifecycle, |s| &s.changed_fns, cb)
     })?,
   )?;
 
@@ -156,39 +148,33 @@ impl ScreenState {
     change_json: &str,
     stack_json: &str,
   ) {
-    let state = self;
-    if state.lifecycle.is_unloading() {
+    if self.lifecycle.is_unloading() {
       return;
     }
-    if state.changed_fns.is_empty() {
+    if self.changed_fns.is_empty() {
       return;
     }
     context.with(|ctx| {
-      let event = match state.build_event(&ctx, change_json, stack_json) {
+      let event = match self.build_event(&ctx, change_json, stack_json) {
         Ok(event) => event,
-        Err(rquickjs::Error::Exception) => {
-          (state.log)(&format!("onScreenChanged: bad change payload: {}", format_exception(&ctx)));
-          return;
-        }
         Err(e) => {
-          (state.log)(&format!("onScreenChanged: bad change payload: {e:?}"));
+          (self.log)(&format!("onScreenChanged: bad change payload: {}", describe_js_error(&ctx, e)));
           return;
         }
       };
-      for f in state.changed_fns.snapshot(&ctx) {
-        call_callback(&ctx, &state.log, "onScreenChanged callback", &f, (event.clone(),));
+      for f in self.changed_fns.snapshot(&ctx) {
+        call_callback(&ctx, &self.log, "onScreenChanged callback", &f, (event.clone(),));
       }
     });
-    pump_jobs(rt, context, state.log.as_ref());
+    pump_jobs(rt, context, self.log.as_ref());
   }
 }
 
 impl Dispose for ScreenState {
   fn dispose(&self, context: &rquickjs::Context) {
-    let state = self;
     context.with(|ctx| {
-      state.changed_fns.release_all(&ctx);
-      if let Some(factory) = state.event_factory.borrow_mut().take() {
+      self.changed_fns.release_all(&ctx);
+      if let Some(factory) = self.event_factory.borrow_mut().take() {
         let _ = factory.restore(&ctx);
       }
     });

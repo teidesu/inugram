@@ -1,29 +1,32 @@
 use crate::runtime::Dispose;
 use std::collections::HashMap;
 use std::ops::Deref;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
+
+use crate::api::globals::{install_globals, RandomHost};
+use crate::api::io::blob::BlobState;
+use crate::api::tl::proxy::TlHost;
+use crate::sandbox::limits::ExternalMemory;
+use rquickjs::Result as JsResult;
 
 use crate::api::lifecycle::LifecycleState;
 use crate::api::platform::clipboard::ClipboardHost;
 use crate::api::platform::open_url::OpenUrlHost;
 use crate::api::ui::dialogs::{DialogHost, DialogState};
-use crate::sandbox::grants::TestGrantHost;
+use crate::sandbox::grants::CachedGrantHost;
 use crate::sandbox::registry::Lifecycle;
 use rquickjs::{Context, Ctx, Runtime};
 use std::cell::{Cell, RefCell};
 
-/// One TL object behind a fake handle: its constructor name, and each field already as a wire.
 pub(crate) struct FakeObject {
   pub(crate) name: String,
   pub(crate) fields: Vec<(String, String)>,
 }
 
-/// Fake TL handle table for testing other modules' bridge calls. Stores minted objects and
-/// implements `TlHost` upcalls.
-///
-/// `tl_own_keys` joins names with commas, matching `proxy::keys_to_array`; any other separator
-/// would turn the whole list into one key.
+/// `tl_own_keys` joins names with commas, matching `proxy::keys_to_array`
 #[derive(Default)]
 pub(crate) struct FakeHandles {
   objects: RefCell<HashMap<i64, FakeObject>>,
@@ -79,10 +82,40 @@ impl FakeHandles {
   }
 }
 
-/// Evaluates for a string, reporting a thrown exception the way the engine formats one for the
-/// host rather than as rquickjs's opaque `Error::Exception`.
-/// The engine globals, which a real engine builds once in `nativeCreate` and hands to every
-/// `install_*`. Tests get-or-create the same shared object here.
+const NO_WRITES: &str = "Pforbidden\n\n\n\nthe fake host takes no writes";
+
+/// deliberately *not* the read-only refusal on writes: a test asserting on that one must be reading
+/// the engine's own, which a writable handle would skip
+impl TlHost for FakeHandles {
+  fn tl_get(&self, handle: i64, key: &str) -> String {
+    self.get(handle, key)
+  }
+
+  fn tl_set(&self, _handle: i64, _key: &str, _value_wire: &str) -> Option<String> {
+    Some(NO_WRITES.to_string())
+  }
+
+  fn tl_set_bytes(&self, _handle: i64, _key: &str, _value: &[u8]) -> Option<String> {
+    Some(NO_WRITES.to_string())
+  }
+
+  fn tl_has(&self, handle: i64, key: &str) -> i32 {
+    self.has(handle, key)
+  }
+
+  fn tl_own_keys(&self, handle: i64) -> Option<String> {
+    self.own_keys(handle)
+  }
+
+  fn tl_copy(&self, _handle: i64) -> Option<String> {
+    None
+  }
+
+  fn tl_release(&self, handle: i64) {
+    self.release(handle)
+  }
+}
+
 pub(crate) fn get_api_globals<'js>(ctx: &Ctx<'js>) -> crate::api::Globals<'js> {
   crate::api::error::install_plugin_error(ctx).unwrap();
   crate::api::Globals::get(ctx).unwrap()
@@ -100,45 +133,38 @@ pub(crate) fn eval_string(ctx: &Context, code: &str) -> String {
   eval_or_panic(ctx, code)
 }
 
-/// [`eval_string`] for code evaluated for its effect.
 pub(crate) fn eval_unit(ctx: &Context, code: &str) {
   eval_or_panic(ctx, code)
 }
 
-/// the runtime and context every fixture starts from
 pub(crate) fn new_engine() -> (Runtime, Context) {
   let rt = Runtime::new().unwrap();
   let ctx = Context::full(&rt).unwrap();
   (rt, ctx)
 }
 
-/// [`eval_string`] over `JSON.stringify`, for asserting on a shape rather than on a scalar.
 pub(crate) fn eval_json(ctx: &Context, code: &str) -> String {
   eval_string(ctx, &format!("JSON.stringify({code})"))
 }
 
-/// What a refusal looks like from JS: `[is a PluginError, code, grant, message]`, or `'no-throw'`.
-/// The grant is part of it because `not-granted` naming the wrong scope is the failure a test of a
-/// gate is written to catch.
+/// `[is a PluginError, code, grant, message]`, or `'no-throw'`
 pub(crate) fn catch_json(ctx: &Context, code: &str) -> String {
   eval_string(
     ctx,
     &format!(
-      r#"(() => {{
-                try {{ {code}; return 'no-throw'; }}
-                catch (e) {{
-                    return JSON.stringify([e instanceof inu.PluginError, e.code, e.grant ?? null, e.message]);
-                }}
-            }})()"#
+      r#"
+        (() => {{
+          try {{ {code}; return 'no-throw'; }}
+          catch (e) {{
+            return JSON.stringify([e instanceof inu.PluginError, e.code, e.grant ?? null, e.message]);
+          }}
+        }})()
+      "#
     ),
   )
 }
 
-/// What a test reads a module's diagnostics out of.
-///
-/// [`crate::Log`] is `Send + Sync`, so the `Rc<RefCell<Vec<String>>>` the suite used to build one
-/// out of no longer fits. Keeps `borrow`/`borrow_mut` rather than exposing the lock, so an
-/// assertion reads exactly as it did.
+/// keeps `borrow`/`borrow_mut` so an assertion reads as it would over a `RefCell`
 pub(crate) struct Logs(Mutex<Vec<String>>);
 
 impl Logs {
@@ -155,16 +181,13 @@ impl Logs {
   }
 }
 
-/// the [`crate::Log`] a module writes into this sink through
 pub(crate) fn log_sink(logs: &Arc<Logs>) -> crate::Log {
   let logs = logs.clone();
   Arc::new(move |msg: &str| logs.borrow_mut().push(msg.to_string()))
 }
 
-/// Disposes module state when the fixture drops, including after failed assertions. `Persistent`
-/// has no `Drop`; retained GC roots would make `JS_FreeRuntime` abort the entire test process.
-///
-/// Keeps a Context clone so the Runtime stays alive regardless of local drop order.
+/// `Persistent` has no `Drop`, and a GC root still held at `JS_FreeRuntime` aborts the whole test process.
+/// Holds a Context clone so the Runtime outlives the state whatever the local drop order.
 pub(crate) struct DisposeOnDrop<S> {
   ctx: Context,
   state: Rc<S>,
@@ -191,8 +214,6 @@ impl<S> Drop for DisposeOnDrop<S> {
   }
 }
 
-/// Runs a bundled oracle with captured console output, then drains pending jobs and returns the
-/// log. Oracles using only engine APIs need no device.
 pub(crate) fn run_capturing_console(rt: &Runtime, ctx: &Context, source: &str) -> Vec<String> {
   let lines = install_capturing_console(ctx);
   eval_unit(ctx, source);
@@ -203,8 +224,6 @@ pub(crate) fn run_capturing_console(rt: &Runtime, ctx: &Context, source: &str) -
   lines.clone()
 }
 
-/// The console half of [`run_capturing_console`], for an oracle whose assertions only run once the
-/// host has fed it something: install this, evaluate the source, drive the host, then read the lines.
 pub(crate) fn install_capturing_console(ctx: &Context) -> Arc<Logs> {
   let lines = Logs::new();
   let sink = lines.clone();
@@ -214,18 +233,12 @@ pub(crate) fn install_capturing_console(ctx: &Context) -> Arc<Logs> {
   lines
 }
 
-/// Requires each oracle to reach its final line with exactly the expected assertion count. No FAIL
-/// output alone is insufficient: the plugin may have stopped early. A missing API can also satisfy
-/// `expectThrow`, so an exact count catches cases a lower bound would miss.
-///
-/// Reject SKIPs. These harnesses provide the peer, network, and login conditions that device
-/// oracles may lack.
+/// Exact rather than a floor: a plugin that stopped early prints no FAIL, and a missing API can satisfy
+/// `expectThrow`. These harnesses provide the peer, network and login a device may lack, so no SKIPs.
 pub(crate) fn assert_oracle_exact(lines: &[String], done: &str, count: usize) {
   assert_oracle_exact_skipping(lines, done, count, &[]);
 }
 
-/// Like [`assert_oracle_exact`], but permits an explicit set of skips for unavailable network,
-/// chat, or forum data. Fails on missing or unexpected skips.
 pub(crate) fn assert_oracle_exact_skipping(lines: &[String], done: &str, count: usize, skips: &[&str]) {
   let failures: Vec<&String> = lines.iter().filter(|l| l.starts_with("FAIL")).collect();
   assert!(failures.is_empty(), "{failures:#?}");
@@ -243,8 +256,7 @@ fn header_lines(source: &str) -> impl Iterator<Item = &str> {
   source.lines().take_while(|line| !line.contains("==/InuPlugin=="))
 }
 
-/// Reads grants from the oracle's own manifest, as the device does. A hard-coded test grant list
-/// could hide a missing permission in the shipped plugin.
+/// from the oracle's own manifest: a hard-coded list could hide a grant the shipped plugin lacks
 pub(crate) fn manifest_grants(source: &str) -> Vec<&str> {
   header_lines(source)
     .filter_map(|line| line.trim().strip_prefix("// @grant"))
@@ -252,9 +264,7 @@ pub(crate) fn manifest_grants(source: &str) -> Vec<&str> {
     .collect()
 }
 
-/// Reads the oracle's manifest with lowercased base keys and one entry per value, matching
-/// `QuickJs.installInfo` and `PluginManifest.raw`. Build `inu.info().header` from this instead of
-/// test literals.
+/// lowercased base keys, one entry per value, as `QuickJs.installInfo` and `PluginManifest.raw` build it
 pub(crate) fn manifest_header(source: &str) -> Vec<(String, String)> {
   header_lines(source)
     .filter_map(|line| {
@@ -268,9 +278,7 @@ pub(crate) fn manifest_header(source: &str) -> Vec<(String, String)> {
     .collect()
 }
 
-/// The four surfaces that answer to one upcall each, faked together: [`setup_apis`] installs all of
-/// them over one of these, because each is a handful of members and the two bundled oracles reach
-/// across them. `fail_*` holds a verbatim error wire to answer with.
+/// `fail_*` holds a verbatim error wire to answer with
 #[derive(Default)]
 pub(crate) struct RecordingHost {
   pub(crate) storage_file: TempPath,
@@ -280,6 +288,7 @@ pub(crate) struct RecordingHost {
   pub(crate) fail_dialog: RefCell<Option<String>>,
   pub(crate) opened: RefCell<Vec<String>>,
   pub(crate) clipboard: RefCell<String>,
+  pub(crate) clipboard_reads: Cell<usize>,
   pub(crate) writes: RefCell<Vec<String>>,
   pub(crate) choosers: RefCell<Vec<(i64, String)>>,
   pub(crate) fail_chooser: RefCell<Option<String>>,
@@ -326,6 +335,7 @@ impl OpenUrlHost for RecordingHost {
 
 impl ClipboardHost for RecordingHost {
   fn read(&self) -> String {
+    self.clipboard_reads.set(self.clipboard_reads.get() + 1);
     self.clipboard.borrow().clone()
   }
 
@@ -335,8 +345,6 @@ impl ClipboardHost for RecordingHost {
   }
 }
 
-/// disposes on drop, so a failing assertion is one failed test rather than an abort in
-/// `JS_FreeRuntime` that takes the whole suite's reporting with it
 pub(crate) type ApiFixture = (
   Runtime,
   Context,
@@ -361,15 +369,100 @@ impl Drop for TempPath {
   fn drop(&mut self) {
     let _ = std::fs::remove_file(&self.0);
     let _ = std::fs::remove_dir_all(&self.0);
-    let _ = std::fs::remove_file(crate::api::io::local_storage::staged_path(&self.0));
-    let _ = std::fs::remove_file(crate::api::io::local_storage::quarantine_path(&self.0));
+    let _ = std::fs::remove_file(self.0.with_added_extension("tmp"));
+    let _ = std::fs::remove_file(self.0.with_added_extension("corrupt"));
   }
+}
+
+static NEXT_DIR: AtomicU64 = AtomicU64::new(0);
+static SUITE_ROOT: OnceLock<PathBuf> = OnceLock::new();
+/// every create/remove of the suite root is taken under this. The kernel fails a `mkdir` whose
+/// parent is being unlinked under it (EINVAL on apfs), ~3% of parallel runs.
+static LIVE_DIRS: Mutex<usize> = Mutex::new(0);
+
+/// The one directory this process owns. The fs escape assertions check that nothing landed in
+/// `<fixture>/..`, so a fixture straight in the machine's temp dir would read whatever others left there.
+fn suite_root() -> &'static Path {
+  SUITE_ROOT.get_or_init(|| {
+    let path = std::env::temp_dir().join(format!("inu-suite-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&path);
+    std::fs::create_dir_all(&path).unwrap();
+    path
+  })
+}
+
+pub(crate) struct TestDir(PathBuf);
+
+impl TestDir {
+  pub(crate) fn new(name: &str) -> Self {
+    let unique = NEXT_DIR.fetch_add(1, Ordering::Relaxed);
+    let path = suite_root().join(format!("{name}-{unique}"));
+    let mut live = LIVE_DIRS.lock().unwrap_or_else(|e| e.into_inner());
+    let _ = std::fs::remove_dir_all(&path);
+    std::fs::create_dir_all(&path).unwrap();
+    *live += 1;
+    TestDir(path)
+  }
+
+  pub(crate) fn path(&self) -> &Path {
+    &self.0
+  }
+
+  pub(crate) fn entries(&self) -> Vec<PathBuf> {
+    let Ok(read) = std::fs::read_dir(&self.0) else {
+      return Vec::new();
+    };
+    read.filter_map(|e| e.ok().map(|e| e.path())).collect()
+  }
+}
+
+impl Drop for TestDir {
+  fn drop(&mut self) {
+    let _ = std::fs::remove_dir_all(&self.0);
+    let mut live = LIVE_DIRS.lock().unwrap_or_else(|e| e.into_inner());
+    *live -= 1;
+    if *live == 0 {
+      let _ = std::fs::remove_dir(suite_root());
+    }
+  }
+}
+
+/// counts up from 1, so a test can see the array really was written through
+pub(crate) struct CountingRandom {
+  next: Cell<u8>,
+  pub(crate) available: Cell<bool>,
+}
+
+impl Default for CountingRandom {
+  fn default() -> Self {
+    CountingRandom {
+      next: Cell::new(1),
+      available: Cell::new(true),
+    }
+  }
+}
+
+impl RandomHost for CountingRandom {
+  fn random_bytes(&self, out: &mut [u8]) -> bool {
+    if !self.available.get() {
+      return false;
+    }
+    for byte in out.iter_mut() {
+      *byte = self.next.get();
+      self.next.set(self.next.get().wrapping_add(1));
+    }
+    true
+  }
+}
+
+pub(crate) fn install_sandbox_globals(ctx: &Ctx<'_>, spill_dir: &Path) -> JsResult<Rc<BlobState>> {
+  install_globals(ctx, Rc::new(CountingRandom::default()), spill_dir, ExternalMemory::new())
 }
 
 pub(crate) fn setup_apis(grants: &[&str]) -> ApiFixture {
   let (rt, ctx) = new_engine();
   let host = Rc::new(RecordingHost::default());
-  let grants = TestGrantHost::new(grants).as_host();
+  let grants = CachedGrantHost::new(grants);
   let logs = Logs::new();
   let log = log_sink(&logs);
   let (lifecycle, dialogs) = ctx.with(|ctx| {

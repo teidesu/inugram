@@ -2,7 +2,6 @@ package desu.inugram.helpers.plugins.ui
 
 import desu.inugram.helpers.plugins.EngineDispatch
 
-import desu.inugram.core.plugins.ScreenChangeAction
 import desu.inugram.core.plugins.ScreenRef
 import desu.inugram.core.plugins.ScreenStack
 import desu.inugram.helpers.plugins.PluginManager
@@ -10,7 +9,6 @@ import desu.inugram.ui.settings.SettingsPageActivity
 import org.json.JSONArray
 import org.json.JSONObject
 import org.telegram.messenger.DialogObject
-import org.telegram.messenger.Utilities
 import org.telegram.ui.ActionBar.BaseFragment
 import org.telegram.ui.ChatActivity
 import org.telegram.ui.DialogsActivity
@@ -18,18 +16,11 @@ import org.telegram.ui.LaunchActivity
 import org.telegram.ui.ProfileActivity
 
 /**
- * Implements `inu.ui.getCurrentScreen` and `onScreenChanged` (Rust: `screens.rs`).
- * Chains onto the single listener already used by `LaunchActivity`. The listener has no payload,
- * so [ScreenStack.diff] derives the navigation change.
- *
- * Reads the fragment stack on the UI thread, publishes an immutable snapshot, and posts events
- * to [EngineDispatch.scheduler]. [currentScreenWire] reads that snapshot synchronously.
- *
- * Before any activity exists, as on a push wakeup, the snapshot is empty and the result is `null`.
- * Recreating an activity produces an equal [ScreenRef] snapshot and no navigation event.
+ * Chains onto `LaunchActivity`'s single listener, which has no payload, so [ScreenStack.diff] derives
+ * the change. Recreating an activity yields an equal snapshot and no event.
  */
 object PluginScreens {
-    // ui-thread writes, globalQueue reads, hence @Volatile and an immutable list
+    // ui-thread writes, engine-queue reads
     @Volatile private var stack: List<ScreenRef> = emptyList()
 
     @JvmStatic
@@ -39,8 +30,7 @@ object PluginScreens {
         val previous = stack
         stack = next
         val action = ScreenStack.diff(previous, next) ?: return
-        // the stack above is kept whatever happens, so a plugin started later reads the real one;
-        // only the dispatch is skipped, and with the engine off that is every navigation
+        // the stack is kept regardless, so a plugin started later reads the real one
         if (!PluginManager.anyRunning) return
 
         val change = JSONObject()
@@ -69,16 +59,10 @@ object PluginScreens {
         return out
     }
 
-    /**
-     * A secret chat is opened as an ordinary [ChatActivity] whose `dialog_id` is
-     * `DialogObject.makeEncryptedDialogId(encId)`, so the id is dropped here for the same reason
-     * [desu.inugram.helpers.plugins.telegram.PeerSpecs.dialogIdOf] answers `null` for one and
-     * [ActionSurface] refuses one: `common.d.ts` says a secret chat has no `DialogId` to
-     * name. `type` still says there was a chat, which is what [toJson] omitting a zero id leaves.
-     */
+    /** a secret chat is an ordinary [ChatActivity] with an encrypted `dialog_id`, which `common.d.ts` says plugins cannot name */
     private fun namedDialogId(id: Long): Long = if (DialogObject.isEncryptedDialog(id)) 0L else id
 
-    /** stock has no marker for "this is a settings screen", so the fallback is the name every one of them is spelled with; getting it wrong costs a screen the `other` label */
+    /** stock has no settings-screen marker, so this goes by class name; a miss only costs the `other` label */
     private fun describe(fragment: BaseFragment): ScreenRef = when (fragment) {
         is ChatActivity -> ScreenRef(
             "chat",

@@ -1,14 +1,9 @@
-package desu.inugram.helpers.plugins.api
+package desu.inugram.helpers.plugins.io
 
 import desu.inugram.core.plugins.PluginInstalls
-import desu.inugram.helpers.plugins.io.PluginPaths
 import java.io.File
 
-/**
- * Locates each install's `localStorage` store. Rust `local_storage.rs` owns its contents and quota.
- * Uses `filesDir` to survive restarts and install IDs to preserve data across renames
- * without letting another plugin claim it by name.
- */
+/** rust `local_storage.rs` owns contents and quota */
 object PluginLocalStorage {
     private const val ROOT = "inu_local_storage"
 
@@ -16,7 +11,7 @@ object PluginLocalStorage {
 
     fun pathFor(installId: String): String = file(installId).apply { parentFile!!.mkdirs() }.absolutePath
 
-    /** rust's `local_storage::staged_path` and `quarantine_path`, which belong to the store beside them */
+    /** rust's `local_storage.rs` stages writes in `.tmp` and moves an unreadable store to `.corrupt` */
     private val SIDE_FILES = listOf(".tmp", ".corrupt")
 
     /** after the engine is closed */

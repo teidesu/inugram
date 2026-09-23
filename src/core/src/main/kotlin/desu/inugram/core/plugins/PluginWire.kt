@@ -1,8 +1,5 @@
 package desu.inugram.core.plugins
 
-/**
- * A host error carrying its wire representation. Throw where the failure is detected; catch when returning the host response.
- */
 class PluginRefusal(val wire: String) : RuntimeException(wire, null, false, false)
 
 /** Keep tags synchronized with `src/native/src/tl/proxy.rs`. */
@@ -27,8 +24,7 @@ object PluginWire {
         ) : Value()
     }
 
-    const val HANDLE_EXPIRED_MESSAGE =
-        "TL handle expired — object escaped back to native code; copy fields you need before returning"
+    const val HANDLE_EXPIRED_MESSAGE = "TL handle expired. Copy fields you need before returning/await-ing"
 
     fun encodeNull(): String = "N"
     fun encodeString(value: String): String = "S$value"
@@ -37,25 +33,14 @@ object PluginWire {
     fun encodeDouble(value: Double): String = "D$value"
     fun encodeBool(value: Boolean): String = if (value) "B1" else "B0"
     fun encodeBytes(base64: String): String = "Y$base64"
-    /**
-     * [classId] names the class whose field ordinals rust may use on this handle ([NO_CLASS] when
-     * the minter cannot say, which keeps the read on the by-name path). It is written after the id
-     * so a wire without one parses exactly as it did before.
-     */
     fun encodeHandle(vector: Boolean, id: Long, readOnly: Boolean, classId: Int = NO_CLASS): String =
-        "H${if (vector) "V" else "O"}${if (readOnly) "R" else "W"}$id${if (classId == NO_CLASS) "" else "$CLASS_SEPARATOR$classId"}"
+        "H${if (vector) "V" else "O"}${if (readOnly) "R" else "W"}$id${if (classId == NO_CLASS) "" else ".$classId"}"
 
     const val NO_CLASS = -1
-    const val CLASS_SEPARATOR = '.' 
 
-    /**
-     * Encodes a handle with scalar fields as JSON for Rust to cache without further bridge calls.
-     * [projection] must contain no raw newlines, which separate list entries; `JSONObject` escapes them.
-     */
     fun encodeHandle(vector: Boolean, id: Long, readOnly: Boolean, projection: String, classId: Int = NO_CLASS): String =
-        "${encodeHandle(vector, id, readOnly, classId)}$PROJECTION_SEPARATOR$projection"
+        "${encodeHandle(vector, id, readOnly, classId)}|$projection"
 
-    const val PROJECTION_SEPARATOR = '|'
     fun encodeJson(json: String): String = "J$json"
     fun encodeError(message: String): String = "E$message"
     fun encodeRpcError(code: Int, text: String): String = "R$code:$text"
@@ -95,7 +80,7 @@ object PluginWire {
                 if ((kind != 'O' && kind != 'V') || (mode != 'W' && mode != 'R')) {
                     throw IllegalArgumentException("PluginWire.decode: bad handle payload '$payload'")
                 }
-                val id = payload.substring(2).substringBefore(PROJECTION_SEPARATOR).substringBefore(CLASS_SEPARATOR)
+                val id = payload.substring(2).substringBefore("|").substringBefore(".")
                 Value.Handle(vector = kind == 'V', id = id.toLong(), readOnly = mode == 'R')
             }
             'J' -> Value.Json(payload)

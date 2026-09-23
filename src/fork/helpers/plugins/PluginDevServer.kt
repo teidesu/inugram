@@ -16,15 +16,9 @@ import org.telegram.messenger.R
 import org.telegram.ui.Components.BulletinFactory
 
 /**
- * Installs or reloads source pushed by `adb` into [DIR] under the app's external files directory,
- * then announced through [ACTION]. Used by `inu dev` (`sdk/cli`).
- *
- * Skips trust and permission review, with no undo. The receiver exists only after the user
- * enables [InuConfig.PLUGINS_DEV_MODE] through its warning sheet. It requires the sender's
- * `android.permission.DUMP`, held by `adb shell` and unavailable to ordinary installed apps.
- *
- * Reads source only from the drop directory, never broadcast extras. A broadcast must name
- * a file already placed there by something with write access.
+ * Skips review, with no undo. The receiver exists only after the user enables
+ * [InuConfig.PLUGINS_DEV_MODE] and requires the sender's `android.permission.DUMP`, which `adb shell`
+ * holds and ordinary apps cannot. Source is read only from the drop directory, never from extras.
  */
 object PluginDevServer {
     const val ACTION = "desu.inugram.plugins.DEV"
@@ -36,7 +30,7 @@ object PluginDevServer {
 
     private var registered = false
 
-    /** brings the receiver up or down to match the toggle; safe to call repeatedly */
+    /** idempotent */
     fun sync(context: Context) {
         val app = context.applicationContext
         if (InuConfig.PLUGINS_DEV_MODE.value) register(app) else unregister(app)
@@ -73,9 +67,7 @@ object PluginDevServer {
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action != ACTION) return
-            // reads and parses a file on the main thread, unlike every other install path: the reply
-            // below is what the script prints, and an ordered broadcast's result has to be set
-            // before onReceive returns. dev-only, and the file is the one being edited
+            // on the main thread, unlike other install paths: an ordered broadcast's result must be set before onReceive returns
             val reply = try {
                 handle(context, intent)
             } catch (e: Exception) {
@@ -130,11 +122,7 @@ object PluginDevServer {
         return JSONObject().put("ok", results.all { it.optBoolean("ok") }).put("results", arr)
     }
 
-    /**
-     * Shows a bulletin for a dev install, which has no review sheet or undo bulletin.
-     * Skip it in the background to avoid showing it on an unrelated screen later.
-     * Already runs on the main thread as part of the receiver.
-     */
+    /** dev installs have no review or undo bulletin. Skipped in the background, or it would show on an unrelated screen later */
     private fun announce(installed: List<JSONObject>) {
         if (installed.isEmpty() || !PluginAppVisibility.isForeground) return
         val text = if (installed.size == 1) {
@@ -177,10 +165,7 @@ object PluginDevServer {
         .put("file", file.name)
         .put("plugin", describe(plugin))
 
-    /**
-     * uninstalls what the dropped [name] identifies. Resolved through the file's own plugin id, the
-     * same way an install of it would land: the install's name on disk is its install id.
-     */
+    /** resolved through the file's plugin id, as an install would land */
     private fun remove(context: Context, name: String?): JSONObject {
         if (name == null) return fail("remove needs --es file <name>")
         val file = resolve(context, name).firstOrNull()
@@ -194,7 +179,7 @@ object PluginDevServer {
         return JSONObject().put("ok", true).put("action", "removed").put("plugin", described)
     }
 
-    /** the drop-dir files [name] means, refusing anything that isn't a plain name inside it */
+    /** refuses anything that isn't a plain name inside the drop dir */
     private fun resolve(context: Context, name: String?): List<File> {
         val dir = dropDir(context) ?: return emptyList()
         if (name == null) {

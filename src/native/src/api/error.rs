@@ -2,9 +2,9 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use rquickjs::function::{Constructor, IntoArgs};
-use rquickjs::{Coerced, Ctx, Function, Result as JsResult, Runtime, Value};
+use rquickjs::{Coerced, Context, Ctx, Exception, Function, JsLifetime, Result as JsResult, Runtime, Value};
 
-use crate::api::{telegram::rpc, Globals};
+use crate::api::Globals;
 
 pub(crate) fn format_thrown<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> String {
   let message = crate::sandbox::limits::describe_heap_exhaustion(value)
@@ -34,8 +34,6 @@ pub(crate) fn format_exception(ctx: &Ctx<'_>) -> String {
   format_thrown(ctx, &ctx.catch())
 }
 
-/// Formats a callback failure: JS exceptions include their message and stack; other failures use
-/// the rquickjs error.
 pub(crate) fn report_callback_error(log: &crate::Log, ctx: &Ctx<'_>, what: &str, error: rquickjs::Error) {
   if error.is_exception() {
     log(&crate::fault(format_args!("{what} threw: {}", format_exception(ctx))));
@@ -44,8 +42,6 @@ pub(crate) fn report_callback_error(log: &crate::Log, ctx: &Ctx<'_>, what: &str,
   }
 }
 
-/// Calls a plugin callback and reports failures as faults. Uses the thrown JS value when available,
-/// otherwise the rquickjs error.
 pub(crate) fn call_callback<'js, A: IntoArgs<'js>>(
   ctx: &Ctx<'js>,
   log: &crate::Log,
@@ -62,7 +58,6 @@ pub(crate) fn call_callback<'js, A: IntoArgs<'js>>(
   }
 }
 
-/// what an rquickjs error says once a thrown value has been read out of the context
 pub(crate) fn describe_js_error(ctx: &Ctx<'_>, error: rquickjs::Error) -> String {
   match error {
     rquickjs::Error::Exception => format_exception(ctx),
@@ -85,22 +80,10 @@ pub(crate) fn error_value_to_string<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> 
     .unwrap_or_else(|_| "unknown error".to_string())
 }
 
-pub(crate) fn make_error<'js>(ctx: &Ctx<'js>, message: &str) -> JsResult<Value<'js>> {
-  let constructor: Constructor = ctx.globals().get("Error")?;
-  constructor.construct((message,))
-}
-
-struct RejectionSlot {
+#[derive(JsLifetime)]
+struct Rejections {
   log: crate::Log,
-  pending: HashMap<u64, String>,
-}
-
-thread_local! {
-  static REJECTIONS: RefCell<HashMap<usize, RejectionSlot>> = RefCell::new(HashMap::new());
-}
-
-fn get_context_key(ctx: &Ctx<'_>) -> usize {
-  ctx.as_raw().as_ptr() as usize
+  pending: RefCell<HashMap<u64, String>>,
 }
 
 fn get_value_hash(value: &Value<'_>) -> u64 {
@@ -112,54 +95,36 @@ fn get_value_hash(value: &Value<'_>) -> u64 {
   hasher.finish()
 }
 
-pub(crate) fn install_rejection_tracker(runtime: &Runtime, log: crate::Log) {
-  runtime.set_host_promise_rejection_tracker(Some(Box::new(move |ctx, promise, reason, is_handled| {
-    let context_key = get_context_key(&ctx);
+pub(crate) fn install_rejection_tracker(runtime: &Runtime, context: &Context, log: crate::Log) -> JsResult<()> {
+  context.with(|ctx| {
+    ctx.store_userdata(Rejections {
+      log,
+      pending: RefCell::new(HashMap::new()),
+    })
+  })?;
+  runtime.set_host_promise_rejection_tracker(Some(Box::new(|ctx, promise, reason, is_handled| {
+    let Some(rejections) = ctx.userdata::<Rejections>() else {
+      return;
+    };
     let promise_hash = get_value_hash(&promise);
     if is_handled {
-      REJECTIONS.with(|rejections| {
-        if let Some(slot) = rejections.borrow_mut().get_mut(&context_key) {
-          slot.pending.remove(&promise_hash);
-        }
-      });
+      rejections.pending.borrow_mut().remove(&promise_hash);
     } else {
       let message = format_thrown(&ctx, &reason);
-      REJECTIONS.with(|rejections| {
-        rejections
-          .borrow_mut()
-          .entry(context_key)
-          .or_insert_with(|| RejectionSlot {
-            log: log.clone(),
-            pending: HashMap::new(),
-          })
-          .pending
-          .insert(promise_hash, message);
-      });
+      rejections.pending.borrow_mut().insert(promise_hash, message);
     }
   })));
+  Ok(())
 }
 
 pub(crate) fn report_rejections(ctx: &Ctx<'_>) {
-  let drained = REJECTIONS.with(|rejections| {
-    let mut rejections = rejections.borrow_mut();
-    let slot = rejections.get_mut(&get_context_key(ctx))?;
-    if slot.pending.is_empty() {
-      return None;
-    }
-    let messages = slot.pending.drain().map(|(_, message)| message).collect::<Vec<_>>();
-    Some((slot.log.clone(), messages))
-  });
-  if let Some((log, messages)) = drained {
-    for message in messages {
-      log(&crate::fault(format_args!("unhandled promise rejection: {message}")));
-    }
+  let Some(rejections) = ctx.userdata::<Rejections>() else {
+    return;
+  };
+  let messages = rejections.pending.borrow_mut().drain().map(|(_, message)| message).collect::<Vec<_>>();
+  for message in messages {
+    (rejections.log)(&crate::fault(format_args!("unhandled promise rejection: {message}")));
   }
-}
-
-pub(crate) fn dispose_rejection_tracker(ctx: &Ctx<'_>) {
-  REJECTIONS.with(|rejections| {
-    rejections.borrow_mut().remove(&get_context_key(ctx));
-  });
 }
 
 #[derive(Clone, Copy)]
@@ -277,7 +242,7 @@ fn parse_plugin_error(payload: &str) -> Option<PluginErrorWire<'_>> {
 
 fn structured_error_to_js<'js>(ctx: &Ctx<'js>, wire: &str) -> Option<JsResult<Value<'js>>> {
   if let Some((code, text)) = crate::api::tl::proxy::wire_rpc_error(wire) {
-    return Some(rpc::make_rpc_error(ctx, code, text));
+    return Some(Globals::get(ctx).and_then(|globals| globals.get_rpc_error(ctx)?.construct((code, text))));
   }
   let parsed = parse_plugin_error(wire.strip_prefix('P')?)?;
   Some(make_plugin_error(ctx, parsed.code, parsed.message, parsed.grant, parsed.usage, parsed.quota))
@@ -285,9 +250,16 @@ fn structured_error_to_js<'js>(ctx: &Ctx<'js>, wire: &str) -> Option<JsResult<Va
 
 pub fn wire_error_to_js<'js>(ctx: &Ctx<'js>, wire: &str) -> Option<JsResult<Value<'js>>> {
   if let Some(message) = wire.strip_prefix('E') {
-    return Some(make_error(ctx, message));
+    return Some(Exception::from_message(ctx.clone(), message).map(Exception::into_value));
   }
   structured_error_to_js(ctx, wire)
+}
+
+pub(crate) fn throw_wire_error(ctx: &Ctx<'_>, wire: &str) -> JsResult<()> {
+  match wire_error_to_js(ctx, wire) {
+    Some(built) => Err(ctx.throw(built?)),
+    None => Ok(()),
+  }
 }
 
 /// Decodes `P`/`R` errors from an error-only channel. Other strings represent bridge failures and

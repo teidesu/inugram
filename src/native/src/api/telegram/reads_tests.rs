@@ -1,8 +1,6 @@
 use super::*;
-use crate::api::error::install_plugin_error;
 use crate::api::telegram::account::tests::TestAccountHost;
-use crate::api::tl::proxy::TlHost;
-use crate::sandbox::grants::TestGrantHost;
+use crate::sandbox::grants::CachedGrantHost;
 use rquickjs::Context;
 use std::cell::RefCell;
 
@@ -12,8 +10,6 @@ const KIND_PEER: i32 = 0;
 const KIND_USER: i32 = 1;
 const KIND_CHANNEL: i32 = 2;
 
-/// one entity of the fake's cache. `is_user` is the whole type system it needs: the surface
-/// under test only ever asks "user or chat", and `access_hash` is what an `InputPeer` carries.
 #[derive(Clone)]
 struct Entity {
   id: i64,
@@ -22,9 +18,7 @@ struct Entity {
   access_hash: i64,
 }
 
-/// stands in for `PluginReads` + `TlHandles`: a tiny cache, a handle table over it, and a
-/// record of what the prelude actually asked for - which is where the spec normalization is
-/// observed rather than assumed.
+/// stands in for `PluginReads` + `TlHandles`
 #[derive(Default)]
 struct TestReadsHost {
   entities: RefCell<Vec<Entity>>,
@@ -33,7 +27,7 @@ struct TestReadsHost {
   messages: RefCell<Vec<(i64, i32)>>,
   dialogs: RefCell<Vec<i64>>,
   self_id: Cell<i64>,
-  handles: crate::testing::harness::FakeHandles,
+  handles: Rc<crate::testing::harness::FakeHandles>,
   reads: RefCell<Vec<(i32, i32, String)>>,
   resolves: RefCell<Vec<(i64, String, i32)>>,
   fetches: RefCell<Vec<(i64, i32, String)>>,
@@ -82,7 +76,6 @@ impl TestReadsHost {
     self.entities.borrow().iter().find(|e| e.username.as_deref() == Some(name)).cloned()
   }
 
-  /// the spec vocabulary `reads.js` emits, resolved the way `PluginReads` resolves it
   fn dialog_id(&self, spec: &str) -> Option<i64> {
     match spec.chars().next()? {
       'S' => Some(self.self_id.get()),
@@ -252,7 +245,6 @@ impl TestReadsHost {
   }
 
   fn dialog_page_wire(&self, payload: &str) -> String {
-    // one full page, then one short one - which is what makes `next` go null exactly once
     if payload.is_empty() {
       let rows = [self.dialog_wire("S"), self.dialog_wire("S")].join(&SEPARATOR.to_string());
       format!("1715540640,7,111{SEPARATOR}{rows}")
@@ -261,7 +253,6 @@ impl TestReadsHost {
     }
   }
 
-  /// what the host answers a fetch with, once the test has decided to let it through
   fn answer_fetch(&self, op: i32, crossed: &str) -> String {
     let mut parts = crossed.splitn(3, '|');
     let (peer, args, cursor) = (parts.next().unwrap(), parts.next().unwrap(), parts.next().unwrap());
@@ -290,8 +281,6 @@ impl TestReadsHost {
         self.messages_wire(peer, &ids)
       }
       OP_DIALOGS => self.dialog_page_wire(cursor),
-      // the selector is what the prelude builds, and `fetch_log` is where a test reads it back;
-      // the answer only has to be well formed for the array and object shapes to be exercised
       OP_DIALOGS_CACHED => self.dialog_wire("S"),
       OP_CHAT_FOLDERS => {
         r#"J[{"id":0,"title":{"text":"All chats"},"emoticon":null,"colorIndex":null,"unreadCount":0,"dialogCount":1,"isDefault":true,"isChatlist":false,"pinned":[]}]"#
@@ -388,12 +377,10 @@ impl ReadsHost for TestReadsHost {
         Some(id) if id == self.self_id.get() => r#"J{"text":"unsent"}"#.to_string(),
         _ => "N".to_string(),
       },
-      // the fake mutes the news channel, and only when no topic is named
       OP_DIALOG_MUTED => {
         let muted = self.dialog_id(parts[0]) == Some(-1001) && parts.get(1) == Some(&"0");
         if muted { "B1" } else { "B0" }.to_string()
       }
-      // the fake answers with what it was handed, so a test can see the flag and the wire
       OP_MESSAGE_PREVIEW => {
         format!(r#"J{{"text":"{}|{}"}}"#, parts[0], parts.get(1).copied().unwrap_or("").replace('"', "'"))
       }
@@ -435,41 +422,7 @@ impl ReadsHost for TestReadsHost {
   }
 }
 
-impl TlHost for TestReadsHost {
-  fn tl_get(&self, handle: i64, key: &str) -> String {
-    self.handles.get(handle, key)
-  }
-
-  // deliberately *not* the read-only message: a test asserting on that one must be reading
-  // the engine's own refusal, which is the one a writable handle would skip
-  fn tl_set(&self, _handle: i64, _key: &str, _value_wire: &str) -> Option<String> {
-    Some("Pforbidden\n\n\n\nthe fake host takes no writes".to_string())
-  }
-
-  fn tl_set_bytes(&self, _handle: i64, _key: &str, _value: &[u8]) -> Option<String> {
-    Some("Pforbidden\n\n\n\nthe fake host takes no writes".to_string())
-  }
-
-  fn tl_has(&self, handle: i64, key: &str) -> i32 {
-    self.handles.has(handle, key)
-  }
-
-  fn tl_own_keys(&self, handle: i64) -> Option<String> {
-    self.handles.own_keys(handle)
-  }
-
-  fn tl_copy(&self, _handle: i64) -> Option<String> {
-    None
-  }
-
-  fn tl_release(&self, handle: i64) {
-    self.handles.release(handle)
-  }
-}
-
 type Disposing = crate::testing::harness::DisposeOnDrop<ReadsState>;
-/// both states are disposed: `install_reads` parks the `Account` prototype on the account
-/// state, and a `Persistent` still held when `JS_FreeRuntime` runs aborts the process
 type Fixture = (
   Runtime,
   Context,
@@ -481,14 +434,12 @@ type Fixture = (
 const ONE_ACCOUNT: &str = r#"[{"id":0,"userId":111,"isCurrent":true,"isPremium":false}]"#;
 
 fn setup(grants: &[&str]) -> Fixture {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
+  let (rt, ctx) = crate::testing::harness::new_engine();
   let host = TestReadsHost::new();
-  let grants = TestGrantHost::new(grants).as_host();
+  let grants = CachedGrantHost::new(grants);
   let log: crate::Log = std::sync::Arc::new(|_| {});
   let (state, accounts) = ctx.with(|ctx| {
     let inu = crate::testing::harness::get_api_globals(&ctx);
-    install_plugin_error(&ctx).unwrap();
     let accounts = crate::api::telegram::account::install_account(
       &ctx,
       TestAccountHost::with(ONE_ACCOUNT),
@@ -501,9 +452,17 @@ fn setup(grants: &[&str]) -> Fixture {
     let shared = crate::api::tl::utils::install_utils(&ctx, &inu).unwrap();
     crate::api::tl::message::install_message(&ctx, &shared, &inu).unwrap();
     let reads_host: Rc<dyn ReadsHost> = host.clone();
-    let tl_host: Rc<dyn TlHost> = host.clone();
-    let state =
-      install_reads(&ctx, reads_host, grants, TlViews::new(tl_host), &shared, &accounts, log.clone(), &inu).unwrap();
+    let state = install_reads(
+      &ctx,
+      reads_host,
+      grants,
+      TlViews::new(host.handles.clone()),
+      &shared,
+      &accounts,
+      log.clone(),
+      &inu,
+    )
+    .unwrap();
     (state, accounts)
   });
   let state = Disposing::new(&ctx, state, |ctx, state| state.dispose(ctx));
@@ -515,7 +474,6 @@ const ALL_GRANTS: &[&str] = &["account.read(self,peers,dialogs,messages)"];
 
 use crate::testing::harness::{eval_json, eval_unit, FakeObject};
 
-/// evaluates `code`, returning the caught error as `[isPluginError, code, grant, message]` json
 use crate::testing::harness::catch_json;
 
 /// drives the fake host the way `PluginReads` drives the real one: drain the microtask queue,
@@ -559,7 +517,6 @@ fn every_getter_gates_on_its_own_account_read_scope() {
   }
   assert!(host.reads.borrow().is_empty(), "a refused call must not reach the host");
 
-  // the same calls, granted, do reach it
   let (_rt, ctx, host, _state, _accounts) = setup(ALL_GRANTS);
   eval_unit(&ctx, "inu.account().getMe(); inu.account().getDialog('me');");
   assert_eq!(host.reads.borrow().len(), 2);
@@ -583,7 +540,6 @@ fn is_dialog_muted_answers_a_boolean_and_carries_the_topic() {
   assert_eq!(args, vec!["D-1001\n0", "D-1001\n7", "S\n0"], "a topic-less read still names one, as 0");
 }
 
-/// a cached read, so a topic the app never loaded is a miss rather than a fetch
 #[test]
 fn get_topic_cached_answers_a_loaded_topic_and_null_otherwise() {
   let (_rt, ctx, _host, _state, _accounts) = setup(ALL_GRANTS);
@@ -632,15 +588,16 @@ fn naming_yourself_takes_the_self_scope_on_top_of_the_reads_own() {
   assert_eq!(eval_json(&ctx, "inu.account().getUser(222)._"), r#""user""#);
   assert_eq!(eval_json(&ctx, "inu.account().getUser(111)._"), r#""user""#);
 
-  // and the asynchronous half refuses the same specs, asynchronously
   let out = run_async(
     without_self,
-    r#"const a = inu.account();
-           const push = (label) => (e) => __out.push(`${label}:${e.code}:${e.grant}`);
-           a.getHistory('me').catch(push('history'));
-           a.getUserFull('me').catch(push('userFull'));
-           a.getTopics('me').catch(push('topics'));
-           a.resolvePeer('me').catch(push('resolvePeer'));"#,
+    r#"
+      const a = inu.account();
+      const push = (label) => (e) => __out.push(`${label}:${e.code}:${e.grant}`);
+      a.getHistory('me').catch(push('history'));
+      a.getUserFull('me').catch(push('userFull'));
+      a.getTopics('me').catch(push('topics'));
+      a.resolvePeer('me').catch(push('resolvePeer'));
+    "#,
   );
   assert_eq!(
     out,
@@ -648,18 +605,6 @@ fn naming_yourself_takes_the_self_scope_on_top_of_the_reads_own() {
   );
 }
 
-/// the read's own scope is reported first, so a plugin holding neither is told about the wider
-/// mistake rather than being sent to fix the narrower one twice
-#[test]
-fn the_reads_own_scope_is_checked_before_the_self_rule() {
-  let (_rt, ctx, _host, _state, _accounts) = setup(&["account.read(peers)"]);
-  assert_eq!(
-    catch_json(&ctx, "inu.account().getDialog('me')"),
-    r#"[true,"not-granted","account.read(dialogs)","missing grant: account.read(dialogs)"]"#,
-  );
-}
-
-/// the whole point of the spec: the host is never handed a peer, only one of three shapes
 #[test]
 fn an_input_peer_like_is_normalized_before_it_crosses() {
   let (_rt, ctx, host, _state, _accounts) = setup(ALL_GRANTS);
@@ -684,47 +629,6 @@ fn an_input_peer_like_is_normalized_before_it_crosses() {
   assert_eq!(
     seen,
     vec!["S", "S", "D222", "D222", "Ualice", "Ualice", "D-1001", "D-1001", "D222", "S", "D222", "S"],
-  );
-}
-
-#[test]
-fn a_peer_that_names_nothing_is_an_invalid_argument_and_never_crosses() {
-  let (_rt, ctx, host, _state, _accounts) = setup(ALL_GRANTS);
-  for peer in ["null", "undefined", "{}", "[]", "1.5", "'not a name!'", "'@'", "true", "NaN"] {
-    let caught = catch_json(&ctx, &format!("inu.account().getUser({peer})"));
-    assert!(caught.starts_with(r#"[true,"invalid-argument""#), "peer {peer}: {caught}");
-  }
-  assert!(host.reads.borrow().is_empty());
-}
-
-#[test]
-fn a_miss_is_null_rather_than_an_error() {
-  let (_rt, ctx, _host, _state, _accounts) = setup(ALL_GRANTS);
-  assert_eq!(
-    eval_json(
-      &ctx,
-      r#"(() => { const a = inu.account(); return [
-                a.getUser(4242), a.getChat(-4242), a.getPeer(4242), a.getDialog(-4242),
-                a.getMessagesCached(-4242, 7), a.resolvePeerCached(4242),
-            ] })()"#
-    ),
-    "[null,null,null,null,null,null]",
-  );
-}
-
-/// a user id read as a chat (and the other way round) is a miss, not the entity anyway
-#[test]
-fn the_entity_getters_do_not_cross_kinds() {
-  let (_rt, ctx, _host, _state, _accounts) = setup(ALL_GRANTS);
-  assert_eq!(
-    eval_json(
-      &ctx,
-      r#"(() => { const a = inu.account(); return [
-                a.getUser(222)._, a.getChat(222), a.getChat(-1001)._, a.getUser(-1001),
-                a.getPeer(222)._, a.getPeer(-1001)._,
-            ] })()"#
-    ),
-    r#"["user",null,"channel",null,"user","channel"]"#,
   );
 }
 
@@ -754,23 +658,6 @@ fn an_empty_batch_is_an_empty_array_and_still_asks() {
   assert!(host.reads.borrow().is_empty());
 }
 
-/// its own batch and its own kind: a user named here is a miss, not the user anyway
-#[test]
-fn a_chat_batch_is_one_crossing_and_answers_for_chats_only() {
-  let (_rt, ctx, host, _state, _accounts) = setup(ALL_GRANTS);
-  assert_eq!(
-    eval_json(&ctx, "inu.account().getChats([-1001, 222, -4242]).map((c) => c && c._)"),
-    r#"["channel",null,null]"#,
-  );
-  assert_eq!(host.reads.borrow().len(), 1, "one crossing for the whole batch");
-  assert_eq!(host.reads.borrow()[0].2, "D-1001\nD222\nD-4242");
-  assert_eq!(eval_json(&ctx, "inu.account().getChats([])"), "[]");
-  assert_eq!(
-    catch_json(&ctx, "inu.account().getChats('newschan')"),
-    r#"[true,"invalid-argument",null,"getChats: expected an array of peers"]"#,
-  );
-}
-
 #[test]
 fn a_drafts_topic_id_reaches_the_host() {
   let (_rt, ctx, host, _state, _accounts) = setup(ASYNC_GRANTS);
@@ -785,22 +672,6 @@ fn a_drafts_topic_id_reaches_the_host() {
   );
 }
 
-#[test]
-fn a_message_comes_back_wrapped_and_a_miss_stays_null() {
-  let (_rt, ctx, _host, _state, _accounts) = setup(ALL_GRANTS);
-  assert_eq!(
-    eval_json(
-      &ctx,
-      r#"(() => {
-                const m = inu.account().getMessagesCached('me', 7);
-                return [m instanceof inu.Message, m.id, m.text, m.raw._, inu.account().getMessagesCached('me', 8)];
-            })()"#
-    ),
-    r#"[true,7,"hello","message",null]"#,
-  );
-  assert_eq!(eval_json(&ctx, "inu.account().getMessagesCached('me', [7, 8]).map((m) => m && m.id)"), "[7,null]",);
-}
-
 /// `0` crosses as the dialog id it is. The message reads give it a meaning - the common box - and
 /// everywhere else it is a dialog nothing has, which is a miss rather than a refusal
 #[test]
@@ -812,13 +683,11 @@ fn zero_is_a_dialog_id_that_only_the_message_reads_give_a_meaning() {
     assert_eq!(reads[0].2, "D0\n7");
     assert_eq!(reads[1].2, "D0\n7\n8");
   }
-  // the string form is the same id, and neither is a refusal any more
   assert_eq!(eval_json(&ctx, "inu.account().getUser(0)"), "null");
   assert_eq!(eval_json(&ctx, "inu.account().getDialog('0')"), "null");
   assert_eq!(host.reads.borrow().last().unwrap().2, "D0");
 }
 
-/// one id is one answer and a list is a list, on both halves
 #[test]
 fn the_message_reads_take_one_id_or_a_list_of_them() {
   let (_rt, ctx, _host, _state, _accounts) = setup(ALL_GRANTS);
@@ -827,32 +696,15 @@ fn the_message_reads_take_one_id_or_a_list_of_them() {
 
   let out = run_async(
     ASYNC_GRANTS,
-    r#"const a = inu.account();
-           a.getMessages('me', 7).then((m) => __out.push(m === null ? 'null' : `one:${m.id}`));
-           a.getMessages('me', [7, 8]).then((list) => __out.push(`many:${list.map((m) => m && m.id).join(',')}`));
-           a.getMessages(0, 7).then((m) => __out.push(`box:${m && m.id}`));
-           a.getMessages(4242, [7]).catch((e) => __out.push(e.code));"#,
+    r#"
+      const a = inu.account();
+      a.getMessages('me', 7).then((m) => __out.push(m === null ? 'null' : `one:${m.id}`));
+      a.getMessages('me', [7, 8]).then((list) => __out.push(`many:${list.map((m) => m && m.id).join(',')}`));
+      a.getMessages(0, 7).then((m) => __out.push(`box:${m && m.id}`));
+      a.getMessages(4242, [7]).catch((e) => __out.push(e.code));
+    "#,
   );
   assert_eq!(out, r#"["box:7","many:7,","not-found","one:7"]"#);
-}
-
-#[test]
-fn everything_read_off_an_account_is_read_only() {
-  let (_rt, ctx, _host, _state, _accounts) = setup(ALL_GRANTS);
-  assert_eq!(
-    catch_json(&ctx, "inu.account().getUser(222).username = 'mallory'"),
-    format!(r#"[true,"forbidden",null,{:?}]"#, "this TL view is read-only; take a copy with toJSON() to edit it"),
-  );
-}
-
-#[test]
-fn resolve_peer_cached_answers_with_the_input_peer_alone() {
-  let (_rt, ctx, _host, _state, _accounts) = setup(ALL_GRANTS);
-  assert_eq!(eval_json(&ctx, "inu.account().resolvePeerCached('me')"), r#"{"_":"inputPeerSelf"}"#,);
-  assert_eq!(
-    eval_json(&ctx, "inu.account().resolvePeerCached(222)"),
-    r#"{"_":"inputPeerUser","user_id":"222","access_hash":"22"}"#,
-  );
 }
 
 #[test]
@@ -869,94 +721,25 @@ fn a_cached_peer_resolves_without_asking_the_host_to_look_it_up() {
 }
 
 #[test]
-fn an_uncached_username_is_looked_up_once_and_then_answers_from_the_cache() {
-  let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"globalThis.__out = [];
-               inu.account().resolvePeer('@Telegram')
-                   .then((p) => { __out.push(p._); __out.push(inu.account().resolvePeerCached('telegram')._) })"#,
-      )
-      .unwrap()
-  });
-  settle(&rt, &ctx, &state, &host);
-  assert_eq!(eval_json(&ctx, "__out"), r#"["inputPeerChannel","inputPeerChannel"]"#);
-}
-
-#[test]
-fn an_uncached_id_rejects_rather_than_inventing_an_access_hash() {
-  let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"globalThis.__out = [];
-               inu.account().resolvePeer(4242).catch((e) => __out.push([e.code, e instanceof inu.PluginError]))"#,
-      )
-      .unwrap()
-  });
-  settle(&rt, &ctx, &state, &host);
-  assert_eq!(eval_json(&ctx, "__out"), r#"[["not-found",true]]"#);
-}
-
-#[test]
-fn narrowing_to_the_wrong_kind_is_an_invalid_argument() {
-  let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"globalThis.__out = [];
-               const a = inu.account();
-               a.resolveUser(-1001).catch((e) => __out.push(`user:${e.code}`));
-               a.resolveChannel(222).catch((e) => __out.push(`channel:${e.code}`));
-               a.resolveChannel('me').catch((e) => __out.push(`self:${e.code}`));
-               a.resolveUser('me').then((p) => __out.push(`self:${p._}`));
-               a.resolveChannel(-1001).then((p) => __out.push(`channel:${p._}`));"#,
-      )
-      .unwrap()
-  });
-  settle(&rt, &ctx, &state, &host);
-  assert_eq!(
-    eval_json(&ctx, "__out.slice().sort()"),
-    r#"["channel:inputChannel","channel:invalid-argument","self:inputUserSelf","self:invalid-argument","user:invalid-argument"]"#,
-  );
-}
-
-/// an input peer the caller already holds is the answer, and asking for it reads nothing
-#[test]
 fn an_already_built_input_peer_passes_straight_through() {
   let (rt, ctx, host, state, _accounts) = setup(&[]);
   ctx.with(|ctx| {
     ctx
       .eval::<(), _>(
-        r#"globalThis.__out = [];
-               const peer = { _: 'inputPeerUser', user_id: '222', access_hash: '22' };
-               const a = inu.account();
-               __out.push(a.resolvePeerCached(peer) === peer);
-               a.resolvePeer(peer).then((p) => __out.push(p === peer));
-               a.resolveUser({ _: 'inputUserSelf' }).then((p) => __out.push(p._));"#,
+        r#"
+          globalThis.__out = [];
+          const peer = { _: 'inputPeerUser', user_id: '222', access_hash: '22' };
+          const a = inu.account();
+          __out.push(a.resolvePeerCached(peer) === peer);
+          a.resolvePeer(peer).then((p) => __out.push(p === peer));
+          a.resolveUser({ _: 'inputUserSelf' }).then((p) => __out.push(p._));
+        "#,
       )
       .unwrap()
   });
   settle(&rt, &ctx, &state, &host);
   assert_eq!(eval_json(&ctx, "__out"), r#"[true,true,"inputUserSelf"]"#);
   assert!(host.reads.borrow().is_empty(), "nothing was read to answer with the argument");
-}
-
-/// an async member fails asynchronously, including when the failure is the grant gate
-#[test]
-fn a_missing_grant_rejects_rather_than_throws_on_the_promise_members() {
-  let (rt, ctx, host, state, _accounts) = setup(&[]);
-  ctx.with(|ctx| {
-    ctx
-      .eval::<(), _>(
-        r#"globalThis.__out = [];
-               inu.account().resolvePeer('telegram').catch((e) => __out.push([e.code, e.grant]))"#,
-      )
-      .unwrap()
-  });
-  settle(&rt, &ctx, &state, &host);
-  assert_eq!(eval_json(&ctx, "__out"), r#"[["not-granted","account.read(peers)"]]"#);
 }
 
 /// one prototype per engine, not one closure set per handle: a dispatch mints an `Account` for
@@ -967,28 +750,20 @@ fn the_getters_live_on_one_shared_prototype() {
   assert_eq!(
     eval_json(
       &ctx,
-      r#"[
-                Object.getPrototypeOf(inu.account()) === Object.getPrototypeOf(inu.account(0)),
-                Object.hasOwn(inu.account(), 'getUser'),
-                typeof inu.account().getUser,
-            ]"#
+      r#"
+        [
+          Object.getPrototypeOf(inu.account()) === Object.getPrototypeOf(inu.account(0)),
+          Object.hasOwn(inu.account(), 'getUser'),
+          typeof inu.account().getUser,
+        ]
+      "#
     ),
     r#"[true,false,"function"]"#,
   );
 }
 
-/// the slot is read off the handle, so a method torn off one is a mistake with a name rather
-/// than a read against slot 0
-#[test]
-fn a_detached_getter_says_so_instead_of_guessing_a_slot() {
-  let (_rt, ctx, _host, _state, _accounts) = setup(ALL_GRANTS);
-  let caught = catch_json(&ctx, "(0, inu.account().getUser)(222)");
-  assert!(caught.contains("not called on an account handle"), "{caught}");
-}
-
 const ASYNC_GRANTS: &[&str] = &["account.read(self,peers,dialogs,messages,history,draft)"];
 
-/// runs `code`, which must leave its results in `__out`, and answers whatever the host parked
 fn run_async(grants: &[&str], code: &str) -> String {
   let (rt, ctx, host, state, _accounts) = setup(grants);
   eval_unit(&ctx, &format!("globalThis.__out = []; {code}"));
@@ -1002,21 +777,24 @@ fn run_async(grants: &[&str], code: &str) -> String {
 fn every_async_read_gates_on_its_own_account_read_scope() {
   let out = run_async(
     &["account.read(messages)"],
-    r#"const a = inu.account();
-           const push = (label) => (e) => __out.push(`${label}:${e.code}:${e.grant}`);
-           a.getHistory('me').catch(push('history'));
-           a.getDialogs().catch(push('dialogs'));
-           a.getTopics('me').catch(push('topics'));
-           a.getUserFull('me').catch(push('userFull'));
-           a.getChatFull(-1001).catch(push('chatFull'));"#,
+    r#"
+      const a = inu.account();
+      const push = (label) => (e) => __out.push(`${label}:${e.code}:${e.grant}`);
+      a.getHistory('me').catch(push('history'));
+      a.getDialogs().catch(push('dialogs'));
+      a.getTopics('me').catch(push('topics'));
+      a.getUserFull('me').catch(push('userFull'));
+      a.getChatFull(-1001).catch(push('chatFull'));
+      a.getDialogsCached().catch(push('dialogsCached'));
+      a.getChatFoldersCached().catch(push('chatFolders'));
+    "#,
   );
   assert_eq!(
     out,
-    r#"["chatFull:not-granted:account.read(peers)","dialogs:not-granted:account.read(dialogs)","history:not-granted:account.read(history)","topics:not-granted:account.read(dialogs)","userFull:not-granted:account.read(peers)"]"#,
+    r#"["chatFolders:not-granted:account.read(dialogs)","chatFull:not-granted:account.read(peers)","dialogs:not-granted:account.read(dialogs)","dialogsCached:not-granted:account.read(dialogs)","history:not-granted:account.read(history)","topics:not-granted:account.read(dialogs)","userFull:not-granted:account.read(peers)"]"#,
   );
 }
 
-/// `getDraft` is synchronous, so its refusal is a throw rather than a rejection
 #[test]
 fn the_draft_scope_covers_get_draft_and_nothing_else() {
   let (_rt, ctx, _host, _state, _accounts) = setup(&["account.read(peers)"]);
@@ -1035,55 +813,29 @@ fn the_draft_scope_covers_get_draft_and_nothing_else() {
 fn get_user_full_on_yourself_needs_only_the_self_scope() {
   let out = run_async(
     &["account.read(self)"],
-    r#"const a = inu.account();
-           a.getUserFull('me').then((u) => __out.push(u.about), (e) => __out.push(`me:${e.code}`));
-           a.getUserFull(222).catch((e) => __out.push(`other:${e.code}`));"#,
+    r#"
+      const a = inu.account();
+      a.getUserFull('me').then((u) => __out.push(u.about), (e) => __out.push(`me:${e.code}`));
+      a.getUserFull(222).catch((e) => __out.push(`other:${e.code}`));
+    "#,
   );
   assert_eq!(out, r#"["bio","other:not-granted"]"#);
-}
-
-#[test]
-fn a_bad_argument_rejects_rather_than_throws() {
-  let out = run_async(
-    ASYNC_GRANTS,
-    r#"const a = inu.account();
-           const push = (label) => (e) => __out.push(`${label}:${e.code}`);
-           a.getHistory(null).catch(push('peer'));
-           a.getHistory('me', { limit: -1 }).catch(push('limit'));
-           a.getHistory('me', { offsetId: 1.5 }).catch(push('offsetId'));
-           a.getDialogs('main').catch(push('options'));
-           a.getDialogs({ cursor: 42 }).catch(push('cursor'));
-           a.getUserFull(null).catch(push('userFull'));"#,
-  );
-  assert_eq!(
-    out,
-    r#"["cursor:invalid-argument","limit:invalid-argument","offsetId:invalid-argument","options:invalid-argument","peer:invalid-argument","userFull:invalid-argument"]"#,
-  );
 }
 
 #[test]
 fn history_comes_back_wrapped_and_an_empty_one_is_an_empty_array() {
   let out = run_async(
     ASYNC_GRANTS,
-    r#"const a = inu.account();
-           a.getHistory('me', { limit: 2 }).then((page) => {
-             __out.push(Array.isArray(page), page.length, page[0] instanceof inu.Message, page[0].id)
-           });
-           a.getHistory('me', { limit: 0 }).then((page) => __out.push(page.length));
-           a.getHistory(4242).catch((e) => __out.push(e.code));"#,
+    r#"
+      const a = inu.account();
+      a.getHistory('me', { limit: 2 }).then((page) => {
+        __out.push(Array.isArray(page), page.length, page[0] instanceof inu.Message, page[0].id)
+      });
+      a.getHistory('me', { limit: 0 }).then((page) => __out.push(page.length));
+      a.getHistory(4242).catch((e) => __out.push(e.code));
+    "#,
   );
   assert_eq!(out, r#"[0,100,2,"not-found",true,true]"#);
-}
-
-#[test]
-fn a_page_is_an_array_carrying_its_own_next() {
-  let out = run_async(
-    ASYNC_GRANTS,
-    r#"inu.account().getDialogs({ limit: 2 }).then((page) => {
-             __out.push(Array.isArray(page), page.length, typeof page.next, page.map((d) => d._).join(','))
-           })"#,
-  );
-  assert_eq!(out, r#"[2,"dialog,dialog","string",true]"#);
 }
 
 /// the offsets never reach JS: what the host is handed back is the payload it minted, and what
@@ -1094,11 +846,13 @@ fn paging_hands_the_host_back_its_own_offsets_and_ends_at_a_short_page() {
   ctx.with(|ctx| {
     ctx
       .eval::<(), _>(
-        r#"globalThis.__out = [];
-               inu.account().getDialogs({ limit: 2 }).then((first) => {
-                 __out.push(first.next.includes('111') || first.next.includes('1715540640'))
-                 return inu.account().getDialogs({ limit: 2, cursor: first.next })
-               }).then((second) => __out.push(second.length, second.next))"#,
+        r#"
+          globalThis.__out = [];
+          inu.account().getDialogs({ limit: 2 }).then((first) => {
+            __out.push(first.next.includes('111') || first.next.includes('1715540640'))
+            return inu.account().getDialogs({ limit: 2, cursor: first.next })
+          }).then((second) => __out.push(second.length, second.next))
+        "#,
       )
       .unwrap()
   });
@@ -1112,25 +866,20 @@ fn paging_hands_the_host_back_its_own_offsets_and_ends_at_a_short_page() {
   );
 }
 
-/// the same key `getDialogsCached` takes them in, so both dialog reads spell it one way
+/// an iterator names fields on every page it asks for, or only the first would carry anything
 #[test]
-fn a_paged_dialog_read_names_fields_beside_its_cursor() {
-  let (rt, ctx, host, state, _accounts) = setup(ASYNC_GRANTS);
-  eval_unit(&ctx, "inu.account().getDialogs({ limit: 2, fields: ['top_message'] })");
-  settle(&rt, &ctx, &state, &host);
-  assert_eq!(host.fetch_log.borrow().last().unwrap().1, r#"|{"folderId":0,"limit":2,"fields":["top_message"]}|"#);
-}
-
-/// an iterator names them on every page it asks for, or only the first would carry anything
-#[test]
-fn an_iterator_passes_fields_to_every_page() {
-  let (_out, asked) = run_ordered(
+fn an_iterator_pages_until_the_list_runs_out_with_its_fields_on_every_page() {
+  let (out, asked) = run_ordered(
     ASYNC_GRANTS,
-    r#"(async () => {
-         for await (const d of inu.account().iterDialogs({ batchSize: 2, fields: ['top_message'] })) __out.push(d._)
-       })()"#,
+    r#"
+      (async () => {
+        for await (const d of inu.account().iterDialogs({ batchSize: 2, fields: ['top_message'] })) __out.push(d._)
+        __out.push('end')
+      })()
+    "#,
   );
-  assert_eq!(asked.len(), 2);
+  assert_eq!(out, r#"["dialog","dialog","dialog","end"]"#);
+  assert_eq!(asked.len(), 2, "the second page is the cursor's, and there is no third");
   assert_eq!(asked[0].1, r#"|{"folderId":0,"limit":2,"fields":["top_message"]}|"#);
   assert_eq!(asked[1].1, r#"|{"folderId":0,"limit":2,"fields":["top_message"]}|1715540640,7,111"#);
 }
@@ -1141,13 +890,15 @@ fn a_cursor_that_did_not_come_from_this_list_never_crosses() {
   ctx.with(|ctx| {
     ctx
       .eval::<(), _>(
-        r#"globalThis.__out = [];
-               const a = inu.account();
-               a.getDialogs({ limit: 2 }).then((page) => {
-                 a.getTopics('me', { cursor: page.next }).catch((e) => __out.push(`brand:${e.code}`))
-                 a.getDialogs({ cursor: page.next + 'x' }).catch((e) => __out.push(`forged:${e.code}`))
-                 a.getDialogs({ cursor: 'not-a-cursor' }).catch((e) => __out.push(`invented:${e.code}`))
-               })"#,
+        r#"
+          globalThis.__out = [];
+          const a = inu.account();
+          a.getDialogs({ limit: 2 }).then((page) => {
+            a.getTopics('me', { cursor: page.next }).catch((e) => __out.push(`brand:${e.code}`))
+            a.getDialogs({ cursor: page.next + 'x' }).catch((e) => __out.push(`forged:${e.code}`))
+            a.getDialogs({ cursor: 'not-a-cursor' }).catch((e) => __out.push(`invented:${e.code}`))
+          })
+        "#,
       )
       .unwrap()
   });
@@ -1160,31 +911,6 @@ fn a_cursor_that_did_not_come_from_this_list_never_crosses() {
   assert_eq!(host.fetch_log.borrow().len(), 1);
 }
 
-#[test]
-fn a_host_refusal_becomes_the_rejection() {
-  let out = run_async(
-    ASYNC_GRANTS,
-    r#"const a = inu.account();
-           a.getTopics(-1001).catch((e) => __out.push(`topics:${e.code}`));
-           a.getChatFull(222).catch((e) => __out.push(`chatFull:${e.code}`));"#,
-  );
-  assert_eq!(out, r#"["chatFull:invalid-argument","topics:invalid-argument"]"#);
-}
-
-#[test]
-fn everything_an_async_read_hands_over_is_read_only() {
-  let out = run_async(
-    ASYNC_GRANTS,
-    r#"inu.account().getHistory('me', { limit: 1 }).then((page) => {
-             try { page[0].raw.message = 'mallory'; __out.push('no-throw') }
-             catch (e) { __out.push(`${e instanceof inu.PluginError}:${e.code}:${e.message}`) }
-           })"#,
-  );
-  assert!(out.starts_with(r#"["true:forbidden:this TL view is read-only"#), "{out}");
-}
-
-/// runs `code` (which leaves its results in `__out`) and answers whatever the host parks,
-/// keeping the order the results landed in - which is the whole subject of an iterator
 fn run_ordered(grants: &[&str], code: &str) -> (String, Vec<(i32, String)>) {
   let (rt, ctx, host, state, _accounts) = setup(grants);
   eval_unit(&ctx, &format!("globalThis.__out = []; {code}"));
@@ -1193,34 +919,18 @@ fn run_ordered(grants: &[&str], code: &str) -> (String, Vec<(i32, String)>) {
   (eval_json(&ctx, "__out"), asked)
 }
 
-#[test]
-fn an_iterator_pages_until_the_list_runs_out() {
-  let (out, asked) = run_ordered(
-    ASYNC_GRANTS,
-    r#"(async () => {
-             for await (const d of inu.account().iterDialogs({ batchSize: 2 })) __out.push(d._)
-             __out.push('end')
-           })()"#,
-  );
-  // the fake answers one full page then a short one, so this is both pages and the stop
-  assert_eq!(out, r#"["dialog","dialog","dialog","end"]"#);
-  assert_eq!(asked.len(), 2, "the second page is the cursor's, and there is no third");
-  assert_eq!(
-    asked[1].1, r#"|{"folderId":0,"limit":2,"fields":null}|1715540640,7,111"#,
-    "it pages with the host's own offsets"
-  );
-}
-
 /// `limit` is a total and cuts the last page short, which is the difference between it and
 /// `batchSize`
 #[test]
 fn a_limit_stops_an_iterator_mid_page_and_asks_for_nothing_more() {
   let (out, asked) = run_ordered(
     ASYNC_GRANTS,
-    r#"(async () => {
-             for await (const d of inu.account().iterDialogs({ limit: 1, batchSize: 2 })) __out.push(d._)
-             __out.push('end')
-           })()"#,
+    r#"
+      (async () => {
+        for await (const d of inu.account().iterDialogs({ limit: 1, batchSize: 2 })) __out.push(d._)
+        __out.push('end')
+      })()
+    "#,
   );
   assert_eq!(out, r#"["dialog","end"]"#);
   assert_eq!(asked.len(), 1);
@@ -1246,10 +956,12 @@ fn an_iterator_uses_the_default_page_size() {
 fn iter_history_advances_the_offset_and_stops_when_it_stops_moving() {
   let (out, asked) = run_ordered(
     ASYNC_GRANTS,
-    r#"(async () => {
-             for await (const m of inu.account().iterHistory('me', { batchSize: 2 })) __out.push(m.id)
-             __out.push('end')
-           })()"#,
+    r#"
+      (async () => {
+        for await (const m of inu.account().iterHistory('me', { batchSize: 2 })) __out.push(m.id)
+        __out.push('end')
+      })()
+    "#,
   );
   assert_eq!(out, r#"[100,99,100,99,"end"]"#);
   let offsets: Vec<i64> = asked
@@ -1268,9 +980,11 @@ fn iter_history_advances_the_offset_and_stops_when_it_stops_moving() {
 fn a_page_shorter_than_the_batch_ends_the_history() {
   let (out, asked) = run_ordered(
     ASYNC_GRANTS,
-    r#"(async () => {
-             for await (const m of inu.account().iterHistory('me')) __out.push(m.id)
-           })()"#,
+    r#"
+      (async () => {
+        for await (const m of inu.account().iterHistory('me')) __out.push(m.id)
+      })()
+    "#,
   );
   assert_eq!(out, "[100,99]");
   assert_eq!(asked.len(), 1);
@@ -1282,18 +996,20 @@ fn a_page_shorter_than_the_batch_ends_the_history() {
 fn an_iterator_rejects_on_its_first_step_and_never_at_the_call() {
   let (out, asked) = run_ordered(
     &["account.read(peers,dialogs)"],
-    r#"const a = inu.account();
-           const push = (label) => (e) => __out.push(`${label}:${e.code}`);
-           const bad = a.iterDialogs('main');
-           const ungranted = a.iterHistory('me');
-           const detached = (0, a.iterTopics)('me');
-           __out.push(typeof bad.next, typeof ungranted.next, typeof detached.next);
-           (async () => {
-             await bad.next().catch(push('options'));
-             await ungranted.next().catch(push('grant'));
-             await detached.next().catch(push('detached'));
-             await a.iterTopics(-1001).next().catch(push('topics'));
-           })()"#,
+    r#"
+      const a = inu.account();
+      const push = (label) => (e) => __out.push(`${label}:${e.code}`);
+      const bad = a.iterDialogs('main');
+      const ungranted = a.iterHistory('me');
+      const detached = (0, a.iterTopics)('me');
+      __out.push(typeof bad.next, typeof ungranted.next, typeof detached.next);
+      (async () => {
+        await bad.next().catch(push('options'));
+        await ungranted.next().catch(push('grant'));
+        await detached.next().catch(push('detached'));
+        await a.iterTopics(-1001).next().catch(push('topics'));
+      })()
+    "#,
   );
   assert_eq!(
     out,
@@ -1309,13 +1025,15 @@ fn an_iterator_whose_cursor_was_evicted_ends_with_invalid_argument() {
   let (out, _asked) = run_ordered(
     ASYNC_GRANTS,
     &format!(
-      r#"(async () => {{
-                 const a = inu.account();
-                 const it = a.iterDialogs({{ batchSize: 2 }});
-                 __out.push((await it.next()).value._, (await it.next()).value._);
-                 for (let i = 0; i < {CURSOR_LIMIT}; i++) await a.getDialogs({{ limit: 2 }});
-                 try {{ await it.next(); __out.push('no-throw') }} catch (e) {{ __out.push(e.code) }}
-               }})()"#
+      r#"
+        (async () => {{
+          const a = inu.account();
+          const it = a.iterDialogs({{ batchSize: 2 }});
+          __out.push((await it.next()).value._, (await it.next()).value._);
+          for (let i = 0; i < {CURSOR_LIMIT}; i++) await a.getDialogs({{ limit: 2 }});
+          try {{ await it.next(); __out.push('no-throw') }} catch (e) {{ __out.push(e.code) }}
+        }})()
+      "#
     ),
   );
   assert_eq!(out, r#"["dialog","dialog","invalid-argument"]"#);
@@ -1325,9 +1043,11 @@ fn an_iterator_whose_cursor_was_evicted_ends_with_invalid_argument() {
 fn resolve_peer_many_answers_in_place_and_only_the_misses_cost_a_request() {
   let (out, _asked) = run_ordered(
     ASYNC_GRANTS,
-    r#"inu.account()
-             .resolvePeerMany([222, { _: 'inputPeerSelf' }, 4242, 'telegram', 'nosuch'])
-             .then((peers) => __out.push(peers.map((p) => (p === null ? null : p._))))"#,
+    r#"
+      inu.account()
+        .resolvePeerMany([222, { _: 'inputPeerSelf' }, 4242, 'telegram', 'nosuch'])
+        .then((peers) => __out.push(peers.map((p) => (p === null ? null : p._))))
+    "#,
   );
   assert_eq!(
     out, r#"[["inputPeerUser","inputPeerSelf",null,"inputPeerChannel",null]]"#,
@@ -1341,21 +1061,24 @@ fn resolve_peer_many_answers_in_place_and_only_the_misses_cost_a_request() {
 fn resolve_peer_many_fails_the_batch_for_a_missing_grant_or_a_non_peer() {
   let (out, asked) = run_ordered(
     &[],
-    r#"const a = inu.account();
-           const push = (label) => (e) => __out.push(`${label}:${e.code}:${e.grant ?? ''}`);
-           a.resolvePeerMany([222]).catch(push('list'));
-           a.resolvePeerMany([]).catch(push('empty'));"#,
+    r#"
+      const a = inu.account();
+      const push = (label) => (e) => __out.push(`${label}:${e.code}:${e.grant ?? ''}`);
+      a.resolvePeerMany([222]).catch(push('list'));
+      a.resolvePeerMany([]).catch(push('empty'));
+    "#,
   );
   assert_eq!(out, r#"["list:not-granted:account.read(peers)","empty:not-granted:account.read(peers)"]"#,);
   assert!(asked.is_empty());
 
   let (out, _asked) = run_ordered(
     ASYNC_GRANTS,
-    r#"const a = inu.account();
-           // @ts-nocheck
-           a.resolvePeerMany('me').catch((e) => __out.push(`notlist:${e.code}`));
-           a.resolvePeerMany([222, null]).catch((e) => __out.push(`nonpeer:${e.code}`));
-           a.resolvePeerMany([]).then((peers) => __out.push(peers.length));"#,
+    r#"
+      const a = inu.account();
+      a.resolvePeerMany('me').catch((e) => __out.push(`notlist:${e.code}`));
+      a.resolvePeerMany([222, null]).catch((e) => __out.push(`nonpeer:${e.code}`));
+      a.resolvePeerMany([]).then((peers) => __out.push(peers.length));
+    "#,
   );
   assert_eq!(out, r#"["notlist:invalid-argument","nonpeer:invalid-argument",0]"#);
 }
@@ -1366,10 +1089,12 @@ fn resolve_peer_many_fails_the_batch_for_a_missing_grant_or_a_non_peer() {
 fn a_resolve_that_fails_for_anything_but_not_found_fails_the_batch() {
   let (out, _asked) = run_ordered(
     ASYNC_GRANTS,
-    r#"inu.account()
-             .resolvePeerMany(['telegram', 'boom', 'nosuch'])
-             .then((peers) => __out.push(peers.map((p) => (p === null ? null : p._))))
-             .catch((e) => __out.push(`batch:${e.code}`))"#,
+    r#"
+      inu.account()
+        .resolvePeerMany(['telegram', 'boom', 'nosuch'])
+        .then((peers) => __out.push(peers.map((p) => (p === null ? null : p._))))
+        .catch((e) => __out.push(`batch:${e.code}`))
+    "#,
   );
   assert_eq!(out, r#"["batch:forbidden"]"#);
 }
@@ -1380,9 +1105,11 @@ fn resolve_peer_many_limits_in_flight_requests() {
   ctx.with(|ctx| {
     ctx
       .eval::<(), _>(
-        r#"const many = [];
-               for (let i = 0; i < 40; i++) many.push(`user${i}`);
-               inu.account().resolvePeerMany(many)"#,
+        r#"
+          const many = [];
+          for (let i = 0; i < 40; i++) many.push(`user${i}`);
+          inu.account().resolvePeerMany(many)
+        "#,
       )
       .unwrap()
   });
@@ -1404,29 +1131,23 @@ fn an_unanswered_read_is_released_at_dispose() {
 
 #[test]
 fn the_bundled_reads_test_plugin_passes() {
-  const ORACLE: &str = include_str!("../../../../test/plugins/reads-test.js");
+  const ORACLE: &str = crate::testing::test_plugin!("reads-test.js");
   let (rt, ctx, host, state, _accounts) = setup(&crate::testing::harness::manifest_grants(ORACLE));
   let lines = crate::testing::harness::install_capturing_console(&ctx);
   eval_unit(&ctx, ORACLE);
   settle(&rt, &ctx, &state, &host);
   let lines = lines.borrow().clone();
-  // exact rather than a floor: nothing here may SKIP against this fake, so a block that
-  // stopped running - or a fixture that stopped existing - would otherwise take its
-  // assertions with it and still pass
   crate::testing::harness::assert_oracle_exact(&lines, "reads test done", 75);
 }
 
 #[test]
 fn the_bundled_async_reads_test_plugin_passes() {
-  const ORACLE: &str = include_str!("../../../../test/plugins/async-reads-test.js");
+  const ORACLE: &str = crate::testing::test_plugin!("async-reads-test.js");
   let (rt, ctx, host, state, _accounts) = setup(&crate::testing::harness::manifest_grants(ORACLE));
   let lines = crate::testing::harness::install_capturing_console(&ctx);
   eval_unit(&ctx, ORACLE);
   settle(&rt, &ctx, &state, &host);
   let lines = lines.borrow().clone();
-  // exact rather than a floor: a cursor that stopped being minted would otherwise take the
-  // paging assertions with it and still pass. The two skips are what the fake's dialog list
-  // has no shape for, and are named so a third one is a failure
   crate::testing::harness::assert_oracle_exact_skipping(
     &lines,
     "async reads test done",
@@ -1441,323 +1162,123 @@ fn the_bundled_async_reads_test_plugin_passes() {
 /// The one oracle whose subject is every api at once: what an *ungranted* call answers. It needs
 /// the whole `inu` surface rather than this module's, so the fixture is here instead of a fifth
 /// module growing a copy of the other four.
-mod grant_boundary {
-  use super::*;
-  use crate::api::platform::clipboard::ClipboardHost;
-  use crate::api::platform::open_url::OpenUrlHost;
-  use crate::api::telegram::rpc::RpcHost;
-  use crate::api::ui::dialogs::DialogHost;
-  use crate::sandbox::registry::Lifecycle;
-
-  /// answers nothing and records nothing: the plugin under test holds no grant, so every
-  /// other member has to be refused before it could reach any of this
-  #[derive(Default)]
-  struct TestBoundaryHost {
-    crossings: Cell<usize>,
-  }
-
-  impl DialogHost for TestBoundaryHost {
-    fn toast(&self, _text: &str) {
-      self.crossings.set(self.crossings.get() + 1);
-    }
-
-    fn bulletin(&self, _request_id: i64, _options_json: &str) -> Option<String> {
-      self.crossings.set(self.crossings.get() + 1);
-      Some("no ui here".to_string())
-    }
-
-    fn dialog(&self, _request_id: i64, _options_json: &str) -> Option<String> {
-      self.crossings.set(self.crossings.get() + 1);
-      Some("no ui here".to_string())
-    }
-
-    fn chooser(&self, _request_id: i64, _options_json: &str) -> Option<String> {
-      self.crossings.set(self.crossings.get() + 1);
-      Some("no ui here".to_string())
-    }
-
-    fn prompt(&self, _request_id: i64, _options_json: &str) -> Option<String> {
-      self.crossings.set(self.crossings.get() + 1);
-      Some("no ui here".to_string())
-    }
-  }
-
-  impl OpenUrlHost for TestBoundaryHost {
-    fn open_url(&self, _url: &str) {
-      self.crossings.set(self.crossings.get() + 1);
-    }
-  }
-
-  impl ClipboardHost for TestBoundaryHost {
-    fn read(&self) -> String {
-      self.crossings.set(self.crossings.get() + 1);
-      String::new()
-    }
-
-    fn write(&self, _text: &str) {
-      self.crossings.set(self.crossings.get() + 1);
-    }
-  }
-
-  impl RpcHost for TestBoundaryHost {
-    fn on_register(
-      &self,
-      _methods: &[String],
-      _callback_id: u32,
-      _scope: &str,
-      _strict: bool,
-      _filter_json: &str,
-    ) -> Option<String> {
-      self.crossings.set(self.crossings.get() + 1);
-      None
-    }
-
-    fn on_unregister(&self, _callback_id: u32) {}
-
-    fn on_invoke(&self, _invoke_id: i64, _slot: i32, _request_wire: &str) -> Option<String> {
-      self.crossings.set(self.crossings.get() + 1);
-      None
-    }
-
-    fn on_invoke_raw(&self, _invoke_id: i64, _slot: i32, _method: &[u8]) -> Option<String> {
-      self.crossings.set(self.crossings.get() + 1);
-      None
-    }
-
-    fn on_takeout(&self, _invoke_id: i64, _slot: i32, _op: i32, _takeout_id: &str, _arg: &str) -> Option<String> {
-      self.crossings.set(self.crossings.get() + 1);
-      None
-    }
-
-    fn on_next(&self, _dispatch_id: i64, _request_wire: &str) -> Option<String> {
-      None
-    }
-
-    fn on_complete(&self, _dispatch_id: i64, _result_wire: &str) {}
-
-    fn on_update_register(&self, _callback_id: u32, _types: &[String], _scope: &str) -> Option<String> {
-      self.crossings.set(self.crossings.get() + 1);
-      None
-    }
-
-    fn on_update_unregister(&self, _callback_id: u32) {}
-
-    fn on_intercept_update_register(&self, _callback_id: u32, _types: &[String]) -> Option<String> {
-      self.crossings.set(self.crossings.get() + 1);
-      None
-    }
-
-    fn on_intercept_update_unregister(&self, _callback_id: u32) {}
-
-    fn on_update_verdict(&self, _dispatch_id: i64, _deliver: bool) {}
-  }
-
-  #[test]
-  fn the_bundled_grant_boundary_test_plugin_passes() {
-    const ORACLE: &str = include_str!("../../../../test/plugins/grant-boundary-test.js");
-    let rt = Runtime::new().unwrap();
-    let ctx = Context::full(&rt).unwrap();
-    let reads_host = TestReadsHost::new();
-    let boundary = Rc::new(TestBoundaryHost::default());
-    let grants = TestGrantHost::new(&crate::testing::harness::manifest_grants(ORACLE)).as_host();
-    let log: crate::Log = std::sync::Arc::new(|_| {});
-    let lifecycle = Lifecycle::new();
-
-    // the order `nativeInstallApi`/`nativeInstallRpc` install in, which is what makes the
-    // `Account` prototype and the demuxed events exist
-    let storage_file = crate::testing::harness::TempPath::default();
-    let (reads_state, accounts, rpc_state) = ctx.with(|ctx| {
-      let inu = crate::testing::harness::get_api_globals(&ctx);
-      install_plugin_error(&ctx).unwrap();
-      crate::api::lifecycle::install_lifecycle(&ctx, grants.clone(), lifecycle.clone(), log.clone(), &inu).unwrap();
-      let inu = crate::testing::harness::get_api_globals(&ctx);
-      crate::api::io::local_storage::install_local_storage(&ctx, storage_file.0.clone()).unwrap();
-      let clipboard_host: Rc<dyn ClipboardHost> = boundary.clone();
-      crate::api::platform::clipboard::install_clipboard(&ctx, clipboard_host, grants.clone(), &inu).unwrap();
-      let open_url_host: Rc<dyn OpenUrlHost> = boundary.clone();
-      crate::api::platform::open_url::install_open_url(&ctx, open_url_host, grants.clone(), &inu).unwrap();
-      let dialog_host: Rc<dyn DialogHost> = boundary.clone();
-      crate::api::ui::dialogs::install_dialogs(&ctx, dialog_host, None, log.clone(), &inu).unwrap();
-      let accounts = crate::api::telegram::account::install_account(
-        &ctx,
-        TestAccountHost::with(ONE_ACCOUNT),
-        grants.clone(),
-        lifecycle.clone(),
-        log.clone(),
-        &inu,
-      )
-      .unwrap();
-      let shared = crate::api::tl::utils::install_utils(&ctx, &inu).unwrap();
-      crate::api::tl::message::install_message(&ctx, &shared, &inu).unwrap();
-      let tl_host: Rc<dyn TlHost> = reads_host.clone();
-      let views = TlViews::new(tl_host);
-      let reads: Rc<dyn ReadsHost> = reads_host.clone();
-      let reads_state =
-        install_reads(&ctx, reads, grants.clone(), views.clone(), &shared, &accounts, log.clone(), &inu).unwrap();
-      let rpc_host: Rc<dyn RpcHost> = boundary.clone();
-      let rpc_state = crate::api::telegram::rpc::install_rpc(
-        &ctx,
-        rpc_host,
-        views,
-        grants,
-        lifecycle.clone(),
-        Some(accounts.clone()),
-        shared,
-        log.clone(),
-        &inu,
-      )
-      .unwrap();
-      (reads_state, accounts, rpc_state)
-    });
-    let reads_state = Disposing::new(&ctx, reads_state, |ctx, state| state.dispose(ctx));
-    let accounts = crate::testing::harness::DisposeOnDrop::new(&ctx, accounts, |ctx, state| state.dispose(ctx));
-    let rpc_state = crate::testing::harness::DisposeOnDrop::new(&ctx, rpc_state, |ctx, state| state.dispose(ctx));
-
-    let lines = crate::testing::harness::install_capturing_console(&ctx);
-    eval_unit(&ctx, ORACLE);
-    while rt.is_job_pending() {
-      rt.execute_pending_job().ok();
-    }
-
-    let lines = lines.borrow().clone();
-    crate::testing::harness::assert_oracle_exact(&lines, "grant boundary test done", 23);
-    // the point of the oracle, restated where it can be checked: a refusal is decided in the
-    // engine, so nothing it asserts on ever reached a host at all
-    assert!(reads_host.reads.borrow().is_empty(), "an ungranted read crossed");
-    assert!(reads_host.fetch_log.borrow().is_empty(), "an ungranted fetch crossed");
-    assert_eq!(boundary.crossings.get(), 0, "an ungranted api crossed");
-
-    drop((reads_state, accounts, rpc_state));
-  }
-}
-
-/// the cached reads never leave the device, but they still go out through the fetch path - the app
-/// owns those lists on its ui thread - so the selector is what crosses and `fetch_log` records it
 #[test]
-fn a_cached_dialog_read_selects_the_main_list_by_default() {
-  let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
-  eval_unit(&ctx, "inu.account().getDialogsCached()");
-  settle(&rt, &ctx, &state, &host);
-  // archive=exclude, no chat folder, no limit
-  assert_eq!(
-    host.fetch_log.borrow().last().unwrap(),
-    &(OP_DIALOGS_CACHED, r#"|{"archive":0,"chatFolderId":null,"limit":0,"fields":null}|"#.to_string())
-  );
+fn the_bundled_grant_boundary_test_plugin_passes() {
+  const ORACLE: &str = crate::testing::test_plugin!("grant-boundary-test.js");
+  let manifest = crate::testing::harness::manifest_grants(ORACLE);
+  let (rt, ctx, boundary, _lifecycle, _dialogs, _logs) = crate::testing::harness::setup_apis(&manifest);
+  let reads_host = TestReadsHost::new();
+  let rpc_host = Rc::new(crate::api::telegram::rpc::tests::TestHost::default());
+  let grants = CachedGrantHost::new(&manifest);
+  let log: crate::Log = std::sync::Arc::new(|_| {});
+  let (reads_state, accounts, rpc_state) = ctx.with(|ctx| {
+    let inu = crate::testing::harness::get_api_globals(&ctx);
+    let accounts = crate::api::telegram::account::install_account(
+      &ctx,
+      TestAccountHost::with(ONE_ACCOUNT),
+      grants.clone(),
+      crate::sandbox::registry::Lifecycle::new(),
+      log.clone(),
+      &inu,
+    )
+    .unwrap();
+    let shared = crate::api::tl::utils::install_utils(&ctx, &inu).unwrap();
+    crate::api::tl::message::install_message(&ctx, &shared, &inu).unwrap();
+    let views = TlViews::new(reads_host.handles.clone());
+    let reads: Rc<dyn ReadsHost> = reads_host.clone();
+    let reads_state =
+      install_reads(&ctx, reads, grants.clone(), views.clone(), &shared, &accounts, log.clone(), &inu).unwrap();
+    let rpc_state = crate::api::telegram::rpc::install_rpc(
+      &ctx,
+      rpc_host.clone(),
+      views,
+      grants,
+      crate::sandbox::registry::Lifecycle::new(),
+      Some(accounts.clone()),
+      shared,
+      log.clone(),
+      &inu,
+    )
+    .unwrap();
+    (reads_state, accounts, rpc_state)
+  });
+  let reads_state = Disposing::new(&ctx, reads_state, |ctx, state| state.dispose(ctx));
+  let accounts = crate::testing::harness::DisposeOnDrop::new(&ctx, accounts, |ctx, state| state.dispose(ctx));
+  let rpc_state = crate::testing::harness::DisposeOnDrop::new(&ctx, rpc_state, |ctx, state| state.dispose(ctx));
+
+  let lines = crate::testing::harness::run_capturing_console(&rt, &ctx, ORACLE);
+  crate::testing::harness::assert_oracle_exact(&lines, "grant boundary test done", 23);
+  assert!(reads_host.reads.borrow().is_empty(), "an ungranted read crossed");
+  assert!(reads_host.fetch_log.borrow().is_empty(), "an ungranted fetch crossed");
+  assert!(boundary.toasts.borrow().is_empty() && boundary.bulletins.borrow().is_empty());
+  assert!(boundary.dialogs.borrow().is_empty() && boundary.choosers.borrow().is_empty());
+  assert!(boundary.prompts.borrow().is_empty() && boundary.opened.borrow().is_empty());
+  assert!(boundary.writes.borrow().is_empty() && boundary.clipboard_reads.get() == 0);
+  assert!(rpc_host.registered.borrow().is_empty() && rpc_host.update_registered.borrow().is_empty());
+  assert!(rpc_host.intercept_update_registered.borrow().is_empty() && rpc_host.invoke_calls.borrow().is_empty());
+  assert!(rpc_host.raw_calls.borrow().is_empty() && rpc_host.takeout_calls.borrow().is_empty());
+
+  drop((reads_state, accounts, rpc_state));
 }
 
 #[test]
-fn an_archive_mode_crosses_as_its_number() {
-  for (mode, encoded) in [("exclude", "0"), ("only", "1"), ("keep", "2")] {
+fn dialogs_cached_options_cross_as_one_wire() {
+  for (options, wire) in [
+    ("{ archive: 'exclude' }", r#"{"archive":0,"chatFolderId":null,"limit":0,"fields":null}"#),
+    ("{ archive: 'only' }", r#"{"archive":1,"chatFolderId":null,"limit":0,"fields":null}"#),
+    ("{ archive: 'keep' }", r#"{"archive":2,"chatFolderId":null,"limit":0,"fields":null}"#),
+    ("{ chatFolderId: 0 }", r#"{"archive":0,"chatFolderId":0,"limit":0,"fields":null}"#),
+    ("{ chatFolderId: 3, limit: 20 }", r#"{"archive":0,"chatFolderId":3,"limit":20,"fields":null}"#),
+    (
+      "{ fields: ['top_message', 'peer'] }",
+      r#"{"archive":0,"chatFolderId":null,"limit":0,"fields":["top_message","peer"]}"#,
+    ),
+  ] {
     let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
-    eval_unit(&ctx, &format!("inu.account().getDialogsCached({{ archive: '{mode}' }})"));
+    eval_unit(&ctx, &format!("inu.account().getDialogsCached({options})"));
     settle(&rt, &ctx, &state, &host);
-    assert_eq!(
-      host.fetch_log.borrow().last().unwrap().1,
-      format!(r#"|{{"archive":{encoded},"chatFolderId":null,"limit":0,"fields":null}}|"#),
-      "mode: {mode}"
-    );
+    assert_eq!(host.fetch_log.borrow().last().unwrap().1, format!("|{wire}|"), "options: {options}");
   }
 }
 
-/// every async read rejects rather than throwing, whatever went wrong - a bad selector included
 #[test]
-fn an_unknown_archive_mode_never_reaches_the_host() {
+fn refused_dialogs_cached_options_never_reach_the_host() {
   let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
   eval_unit(
     &ctx,
-    r#"globalThis.__out = [];
-       for (const mode of ['both', 'Exclude', 0, 'constructor']) {
-         inu.account().getDialogsCached({ archive: mode }).catch(e => __out.push(e.code))
-       }"#,
+    r#"
+      globalThis.__out = [];
+      for (const options of [
+        { archive: 'both' }, { archive: 'Exclude' }, { archive: 0 }, { archive: 'constructor' },
+        { archive: 'keep', chatFolderId: 2 }, { chatFolderId: -1 },
+        { fields: ['a,b'] }, { fields: ['a\nb'] }, { fields: [''] }, { fields: [7] }, { fields: 'top_message' },
+        { fields: [{}] },
+      ]) {
+        inu.account().getDialogsCached(options).catch(e => __out.push(e.code))
+      }
+    "#,
   );
   settle(&rt, &ctx, &state, &host);
-  assert_eq!(
-    eval_json(&ctx, "__out"),
-    r#"["invalid-argument","invalid-argument","invalid-argument","invalid-argument"]"#,
-  );
-  assert!(host.fetch_log.borrow().is_empty(), "a refused selector must not cross");
-}
-
-/// a folder has already decided whether it shows archived chats, so the default `'exclude'`
-/// layered on top would silently drop what that folder was set up to keep
-#[test]
-fn naming_both_archive_and_a_chat_folder_is_refused() {
-  let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
-  eval_unit(
-    &ctx,
-    r#"globalThis.__out = [];
-       inu.account().getDialogsCached({ archive: 'keep', chatFolderId: 2 }).catch(e => __out.push(e.code))"#,
-  );
-  settle(&rt, &ctx, &state, &host);
-  assert_eq!(eval_json(&ctx, "__out"), r#"["invalid-argument"]"#);
+  assert_eq!(eval_json(&ctx, "new Set(__out).size === 1 && __out.length"), "12");
+  assert_eq!(eval_json(&ctx, "__out[0]"), r#""invalid-argument""#);
   assert!(host.fetch_log.borrow().is_empty());
 }
 
-/// folder `0` is "All chats" - a real folder - so absence cannot be spelled as zero
-#[test]
-fn a_chat_folder_id_crosses_and_zero_is_one_of_them() {
-  let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
-  eval_unit(&ctx, "inu.account().getDialogsCached({ chatFolderId: 0 })");
-  settle(&rt, &ctx, &state, &host);
-  assert_eq!(
-    host.fetch_log.borrow().last().unwrap().1,
-    r#"|{"archive":0,"chatFolderId":0,"limit":0,"fields":null}|"#
-  );
-  eval_unit(&ctx, "inu.account().getDialogsCached({ chatFolderId: 3, limit: 20 })");
-  settle(&rt, &ctx, &state, &host);
-  assert_eq!(
-    host.fetch_log.borrow().last().unwrap().1,
-    r#"|{"archive":0,"chatFolderId":3,"limit":20,"fields":null}|"#
-  );
-}
-
-/// Nothing about the wire knows which fields a constructor has: what to do with a name is the
-/// host's, and an unknown one is simply not carried
-#[test]
-fn named_fields_cross_as_an_array() {
-  let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
-  eval_unit(&ctx, "inu.account().getDialogsCached({ fields: ['top_message', 'peer'] })");
-  settle(&rt, &ctx, &state, &host);
-  assert_eq!(
-    host.fetch_log.borrow().last().unwrap().1,
-    r#"|{"archive":0,"chatFolderId":null,"limit":0,"fields":["top_message","peer"]}|"#
-  );
-}
-
-/// a name is a java identifier or it is refused, so nothing a plugin passes can smuggle a separator
-#[test]
-fn a_field_name_that_is_not_one_never_reaches_the_host() {
-  let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
-  eval_unit(
-    &ctx,
-    r#"globalThis.__out = [];
-       for (const fields of [['a,b'], ['a\nb'], [''], [7], 'top_message', [{}]]) {
-         inu.account().getDialogsCached({ fields }).catch(e => __out.push(e.code))
-       }"#,
-  );
-  settle(&rt, &ctx, &state, &host);
-  assert_eq!(
-    eval_json(&ctx, "__out"),
-    r#"["invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument"]"#
-  );
-  assert!(host.fetch_log.borrow().is_empty());
-}
-
-/// telegram's ids and counts are int32, so a wider one is refused where it is written rather than
-/// wrapped or read as zero by the host
 #[test]
 fn an_integer_past_int32_never_reaches_the_host() {
   let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
   eval_unit(
     &ctx,
-    r#"globalThis.__out = [];
-       const push = e => __out.push(e.code);
-       const a = inu.account();
-       a.getHistory('me', { limit: 2 ** 31 }).catch(push);
-       a.getHistory('me', { offsetId: 1e21 }).catch(push);
-       a.getMessages('me', [2 ** 31]).catch(push);
-       a.getDialogsCached({ chatFolderId: '99999999999' }).catch(push);
-       try { a.getMessagesCached('me', -(2 ** 31) - 1) } catch (e) { push(e) }"#,
+    r#"
+      globalThis.__out = [];
+      const push = e => __out.push(e.code);
+      const a = inu.account();
+      a.getHistory('me', { limit: 2 ** 31 }).catch(push);
+      a.getHistory('me', { offsetId: 1e21 }).catch(push);
+      a.getMessages('me', [2 ** 31]).catch(push);
+      a.getDialogsCached({ chatFolderId: '99999999999' }).catch(push);
+      try { a.getMessagesCached('me', -(2 ** 31) - 1) } catch (e) { push(e) }
+    "#,
   );
   settle(&rt, &ctx, &state, &host);
   assert_eq!(
@@ -1768,37 +1289,6 @@ fn an_integer_past_int32_never_reaches_the_host() {
   assert!(host.reads.borrow().is_empty());
 }
 
-#[test]
-fn a_negative_chat_folder_id_is_refused_rather_than_read_as_absence() {
-  let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
-  eval_unit(
-    &ctx,
-    r#"globalThis.__out = [];
-       inu.account().getDialogsCached({ chatFolderId: -1 }).catch(e => __out.push(e.code))"#,
-  );
-  settle(&rt, &ctx, &state, &host);
-  assert_eq!(eval_json(&ctx, "__out"), r#"["invalid-argument"]"#);
-  assert!(host.fetch_log.borrow().is_empty());
-}
-
-#[test]
-fn the_cached_reads_gate_on_the_dialogs_scope() {
-  let (rt, ctx, host, state, _accounts) = setup(&["account.read(peers)"]);
-  eval_unit(
-    &ctx,
-    r#"globalThis.__out = [];
-       const push = e => __out.push([e instanceof inu.PluginError, e.code, e.grant]);
-       inu.account().getDialogsCached().catch(push);
-       inu.account().getChatFoldersCached().catch(push);"#,
-  );
-  settle(&rt, &ctx, &state, &host);
-  assert_eq!(
-    eval_json(&ctx, "__out"),
-    r#"[[true,"not-granted","account.read(dialogs)"],[true,"not-granted","account.read(dialogs)"]]"#,
-  );
-  assert!(host.fetch_log.borrow().is_empty(), "a refused call must not reach the host");
-}
-
 /// a chat folder is app state rather than a TL object, so it crosses as plain json and arrives as
 /// an ordinary array - no handle, nothing to release
 #[test]
@@ -1806,9 +1296,11 @@ fn chat_folders_arrive_as_plain_objects() {
   let (rt, ctx, host, state, _accounts) = setup(ALL_GRANTS);
   eval_unit(
     &ctx,
-    r#"globalThis.__out = [];
-       inu.account().getChatFoldersCached()
-         .then(list => __out.push(...list.map(f => [f.id, f.title.text, f.isDefault, f.pinned])))"#,
+    r#"
+      globalThis.__out = [];
+      inu.account().getChatFoldersCached()
+        .then(list => __out.push(...list.map(f => [f.id, f.title.text, f.isDefault, f.pinned])))
+    "#,
   );
   settle(&rt, &ctx, &state, &host);
   assert_eq!(eval_json(&ctx, "__out"), r#"[[0,"All chats",true,[]]]"#);

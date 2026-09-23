@@ -3,7 +3,6 @@ use writer::{create_method, get_word_count, Body, Class, Field, Op};
 const TARGET: &str = "Ldesu/inugram/helpers/plugins/platform/PluginJvmClass$MethodTarget;";
 const OBJECT: &str = "Ljava/lang/Object;";
 const ARRAY: &str = "[Ljava/lang/Object;";
-/// a primitive descriptor's box class and the method that unwraps one
 fn get_box_pair(t: &str) -> Option<(&'static str, &'static str)> {
   Some(match t {
     "I" => ("Ljava/lang/Integer;", "intValue"),
@@ -20,13 +19,13 @@ fn get_box_pair(t: &str) -> Option<(&'static str, &'static str)> {
 fn get_box_type(t: &str) -> Option<&'static str> {
   get_box_pair(t).map(|(box_type, _)| box_type)
 }
-fn get_move_kind(t: &str) -> u8 {
+fn select_by_kind(t: &str, wide: u8, primitive: u8, object: u8) -> u8 {
   if get_word_count(t) == 2 {
-    0x06
+    wide
   } else if get_box_type(t).is_some() {
-    0x03
+    primitive
   } else {
-    0x09
+    object
   }
 }
 fn append_cast(ops: &mut Vec<Op>, t: &str) {
@@ -49,7 +48,7 @@ fn add_body(class: &mut Class, name: &str, result: &str, params: &[&str], is_sta
   let mut ops = vec![Op::Const(0, params.len() as i16), Op::NewArray(2, 0, ARRAY.into())];
   let mut reg = locals + u16::from(!is_static);
   for (i, t) in params.iter().enumerate() {
-    ops.push(Op::Move(0, reg, get_move_kind(t)));
+    ops.push(Op::Move(0, reg, select_by_kind(t, 0x06, 0x03, 0x09)));
     reg += get_word_count(t);
     if let Some(b) = get_box_type(t) {
       ops.push(Op::Invoke(
@@ -72,7 +71,7 @@ fn add_body(class: &mut Class, name: &str, result: &str, params: &[&str], is_sta
     for (i, t) in super_params.iter().enumerate() {
       ops.extend([Op::Const(4, i as i16), Op::Aget(0, 5, 4)]);
       append_cast(&mut ops, t);
-      ops.push(Op::Move(next, 0, get_move_kind(t)));
+      ops.push(Op::Move(next, 0, select_by_kind(t, 0x06, 0x03, 0x09)));
       next += get_word_count(t);
     }
     ops.push(Op::InvokeRange(0x76, 6, next - 6, create_method(&class.parent, "<init>", "V", super_params)));
@@ -86,16 +85,7 @@ fn add_body(class: &mut Class, name: &str, result: &str, params: &[&str], is_sta
     ops.push(Op::ReturnVoid);
   } else {
     append_cast(&mut ops, result);
-    ops.push(Op::Return(
-      0,
-      if get_word_count(result) == 2 {
-        0x10
-      } else if get_box_type(result).is_some() {
-        0x0f
-      } else {
-        0x11
-      },
-    ));
+    ops.push(Op::Return(0, select_by_kind(result, 0x10, 0x0f, 0x11)));
   }
   class.methods.push(Body {
     method: create_method(&class.name, name, result, params),

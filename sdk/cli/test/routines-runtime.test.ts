@@ -155,7 +155,7 @@ it('pins compiler output consumed by PluginJvmRoutineTest on device', async () =
     expect(parsed.errors).toEqual([])
     const call = findRoutineCalls(parsed.program)[0]
     if (!isRoutineFunction(call.body)) throw new Error('fixture must be a routine body')
-    const program = compileRoutine(call.body, wrapped, { mode: 'method', file: 'fixture.ts' })
+    const program = compileRoutine(call.body, wrapped, { mode: 'method' })
     verifyProgram(program, false)
     return { ...test, program }
   })

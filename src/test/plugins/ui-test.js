@@ -1,51 +1,9 @@
 // ==InuPlugin==
 // @name         ui test
-// @author       teidesu
-// @version      1.0
 // @description  exercises the settings page: every element, anchored menus, prompt, page lifetime
-// @plugin-api   1
-// @platform     android
 // ==/InuPlugin==
 
-// the load-time half runs on its own and its count is checked exactly; the interactive half
-// reports as you touch the page, which is the only way an anchor or a menu can be exercised at all
-
-let ran = 0
-
-function pass(label, detail) {
-  ran++
-  console.log(detail === undefined ? `PASS ${label}` : `PASS ${label}: ${detail}`)
-}
-
-function fail(label, detail) {
-  ran++
-  console.error(`FAIL ${label}: ${detail}`)
-}
-
-function check(label, ok, detail) {
-  if (ok) pass(label, detail)
-  else fail(label, detail)
-}
-
-function expectThrow(label, fn) {
-  try {
-    fn()
-  } catch (e) {
-    return pass(label, `${e.name}: ${e.message}`)
-  }
-  fail(label, 'did not throw')
-}
-
-function expectPluginError(label, code, fn) {
-  let error
-  try {
-    fn()
-  } catch (e) {
-    error = e
-  }
-  if (error === undefined) return fail(label, 'did not throw')
-  check(label, error instanceof inu.PluginError && error.code === code, `${error.name}: ${error.code}`)
-}
+// the load-time count is exact; the interactive half reports as you touch the page
 
 const state = {
   enabled: localStorage.getItem('enabled') === 'true',
@@ -177,8 +135,7 @@ const mainPage = inu.ui.settingsPage({
       },
     }),
     inu.ui.button({
-      // the whole reason the anchor is a value: by the time this resumes, the auto-invalidate has
-      // re-rendered the page and thrown away every callback slot this render allocated
+      // by the time this resumes, the auto-invalidate re-rendered the page and freed this render's callback slots
       id: 'anchor-after-await',
       text: 'Menu after an await',
       subtitle: 'the anchor has to survive the re-render',
@@ -220,9 +177,9 @@ const mainPage = inu.ui.settingsPage({
           title: 'Transient #' + stamp,
           transient: true,
           items: () => [inu.ui.separator('this page def is freed once you navigate back')],
-          // the dispose happens after onClose returns, so the check has to be a hop later
+          // the dispose happens after onClose returns
           onClose: () => queueMicrotask(() => {
-            expectPluginError('a transient page is disposed once its onClose returned', 'handle-expired', () => {
+            expectThrow('a transient page is disposed once its onClose returned', 'handle-expired', () => {
               inu.ui.openPage(page)
             })
           }),
@@ -270,15 +227,10 @@ const mainPage = inu.ui.settingsPage({
 
 inu.registerSettings(mainPage)
 
-// -- load-time oracle: everything decidable without a screen --
-
-// exact, not a floor: a member that vanishes reads as a refusal in a suite written out of
-// expectThrow, so only the count catches it
 const EXPECTED = 17
 const before = ran
 
-// a member that vanished would satisfy every expectThrow below by not being a function at all,
-// so the surface is asserted positively first
+// a vanished member satisfies every expectThrow, so the surface is asserted positively first
 const MEMBERS = ['settingsPage', 'openPage', 'header', 'check', 'button', 'select', 'slider', 'separator', 'prompt']
 check(
   'inu.ui declares every member this page uses',
@@ -291,29 +243,28 @@ check(
   inu.ui.openMenu === undefined,
 )
 
-expectThrow('check refuses a missing `checked`', () => {
+expectThrow('check refuses a missing `checked`', null, () => {
   // @ts-expect-error
   inu.ui.check({ text: 'x', onChange: () => {} })
 })
-expectThrow('button refuses a missing `onClick`', () => {
+expectThrow('button refuses a missing `onClick`', null, () => {
   // @ts-expect-error
   inu.ui.button({ text: 'x' })
 })
-expectThrow('select refuses an empty item list', () => {
+expectThrow('select refuses an empty item list', null, () => {
   inu.ui.select({ text: 'x', items: [], selected: 0, onChange: () => {} })
 })
-expectThrow('select refuses a `selected` out of range', () => {
+expectThrow('select refuses a `selected` out of range', null, () => {
   inu.ui.select({ text: 'x', items: ['a'], selected: 5, onChange: () => {} })
 })
-expectThrow('slider refuses a zero step', () => {
+expectThrow('slider refuses a zero step', null, () => {
   inu.ui.slider({ min: 0, max: 10, step: 0, value: 1, onChange: () => {} })
 })
-expectThrow('slider refuses max <= min', () => {
+expectThrow('slider refuses max <= min', null, () => {
   inu.ui.slider({ min: 10, max: 10, step: 1, value: 10, onChange: () => {} })
 })
-// the whole strip is precomputed, so a label that would be called 2001 times is refused rather
-// than dropped - a cache-size slider losing its 'MB' is not something its author would ever see
-expectPluginError('slider refuses a label strip past the step cap', 'invalid-argument', () => {
+// the strip is precomputed, so a label past the step cap is refused rather than silently dropped
+expectThrow('slider refuses a label strip past the step cap', 'invalid-argument', () => {
   inu.ui.slider({ min: 0, max: 2000, step: 1, value: 0, label: (v) => v + ' MB', onChange: () => {} })
 })
 check(
@@ -326,7 +277,7 @@ check('header and a textless separator are elements', [
   inu.ui.separator('with a footer'),
 ].every(e => typeof e === 'object'))
 
-expectThrow('a second registerSettings throws rather than picking a winner', () => {
+expectThrow('a second registerSettings throws rather than picking a winner', null, () => {
   inu.registerSettings(mainPage)
 })
 mainPage.invalidate()
@@ -336,13 +287,13 @@ const throwaway = inu.ui.settingsPage({ title: 'throwaway', items: () => [] })
 throwaway.dispose()
 throwaway.dispose()
 pass('a second dispose() is a no-op')
-expectPluginError('opening a disposed page is handle-expired', 'handle-expired', () => {
+expectThrow('opening a disposed page is handle-expired', 'handle-expired', () => {
   inu.ui.openPage(throwaway)
 })
-expectPluginError('registering a disposed page is handle-expired', 'handle-expired', () => {
+expectThrow('registering a disposed page is handle-expired', 'handle-expired', () => {
   inu.registerSettings(throwaway)
 })
-expectThrow('openPage refuses something that is not a page at all', () => {
+expectThrow('openPage refuses something that is not a page at all', null, () => {
   // @ts-expect-error
   inu.ui.openPage({})
 })
@@ -352,5 +303,4 @@ if (actual !== EXPECTED) {
   console.error(`FAIL oracle: ${actual} load-time assertions ran, expected exactly ${EXPECTED}`)
 }
 
-// open plugin settings from the plugins list for the interactive half
 console.log('ui test done')

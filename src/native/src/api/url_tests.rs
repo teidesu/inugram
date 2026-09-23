@@ -2,15 +2,12 @@ use super::*;
 use rquickjs::{Context, Runtime};
 
 fn setup() -> (Runtime, Context) {
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
+  let (rt, ctx) = crate::testing::harness::new_engine();
   ctx.with(|ctx| install_url(&ctx).unwrap());
   (rt, ctx)
 }
 
-/// Evaluates JS source and returns a string. Wraps each case in a block so tests can reuse bindings
-/// such as `const u` in the shared context. The block preserves the final expression result and
-/// avoids reinstalling globals for every case.
+/// each case runs in its own block, so cases can reuse bindings like `const u`
 fn eval(ctx: &Context, source: &str) -> String {
   let source = format!("{{ {source} }}");
   ctx.with(|ctx| match ctx.eval::<Coerced<String>, _>(source.as_str()) {
@@ -82,17 +79,14 @@ mod parsing {
   #[test]
   fn the_components_read_as_the_spec_names_them() {
     let (_rt, ctx) = setup();
-    let u = "const u = new URL('https://user:pw@example.com:8443/a/b?x=1&y=2#frag');";
-    assert_eq!(eval(&ctx, &format!("{u} u.protocol")), "https:");
-    assert_eq!(eval(&ctx, &format!("{u} u.username")), "user");
-    assert_eq!(eval(&ctx, &format!("{u} u.password")), "pw");
-    assert_eq!(eval(&ctx, &format!("{u} u.host")), "example.com:8443");
-    assert_eq!(eval(&ctx, &format!("{u} u.hostname")), "example.com");
-    assert_eq!(eval(&ctx, &format!("{u} u.port")), "8443");
-    assert_eq!(eval(&ctx, &format!("{u} u.pathname")), "/a/b");
-    assert_eq!(eval(&ctx, &format!("{u} u.search")), "?x=1&y=2");
-    assert_eq!(eval(&ctx, &format!("{u} u.hash")), "#frag");
-    assert_eq!(eval(&ctx, &format!("{u} u.origin")), "https://example.com:8443");
+    assert_eq!(
+      eval(
+        &ctx,
+        "const u = new URL('https://user:pw@example.com:8443/a/b?x=1&y=2#frag'); \
+         JSON.stringify([u.protocol, u.username, u.password, u.host, u.hostname, u.port, u.pathname, u.search, u.hash, u.origin])",
+      ),
+      r##"["https:","user","pw","example.com:8443","example.com","8443","/a/b","?x=1&y=2","#frag","https://example.com:8443"]"##,
+    );
   }
 
   #[test]
@@ -161,7 +155,7 @@ mod setters {
   fn the_host_setter_takes_a_port_and_the_hostname_setter_does_not() {
     let (_rt, ctx) = setup();
     assert_eq!(eval(&ctx, "const u = new URL('https://a.com/'); u.host = 'b.com:81'; u.href"), "https://b.com:81/");
-    assert_eq!(eval(&ctx, "const u = new URL('https://a.com/'); u.hostname = 'b.com:81'; u.href"), "https://b.com/");
+    assert_eq!(eval(&ctx, "const u = new URL('https://a.com/'); u.hostname = 'b.com:81'; u.href"), "https://a.com/");
     assert_eq!(eval(&ctx, "const u = new URL('https://a.com:81/'); u.port = ''; u.href"), "https://a.com/");
   }
 
@@ -226,15 +220,15 @@ mod search_params {
   #[test]
   fn the_accessors_behave_as_the_spec_says() {
     let (_rt, ctx) = setup();
-    let p = "const p = new URLSearchParams('a=1&b=2&a=3');";
-    assert_eq!(eval(&ctx, &format!("{p} p.get('a')")), "1");
-    assert_eq!(eval(&ctx, &format!("{p} String(p.get('zz'))")), "null");
-    assert_eq!(eval(&ctx, &format!("{p} p.getAll('a').join(',')")), "1,3");
-    assert_eq!(eval(&ctx, &format!("{p} String(p.has('b'))")), "true");
-    assert_eq!(eval(&ctx, &format!("{p} String(p.has('a','3'))")), "true");
-    assert_eq!(eval(&ctx, &format!("{p} String(p.has('a','9'))")), "false");
-    assert_eq!(eval(&ctx, &format!("{p} String(p.size)")), "3");
-    assert_eq!(eval(&ctx, &format!("{p} p.delete('a','3'); p.toString()")), "a=1&b=2");
+    assert_eq!(
+      eval(
+        &ctx,
+        "const p = new URLSearchParams('a=1&b=2&a=3'); \
+         const read = [p.get('a'), p.get('zz'), p.getAll('a'), p.has('b'), p.has('a', '3'), p.has('a', '9'), p.size]; \
+         p.delete('a', '3'); JSON.stringify([...read, p.toString()])",
+      ),
+      r#"["1",null,["1","3"],true,true,false,3,"a=1&b=2"]"#,
+    );
   }
 
   /// `set` replaces the first match in place and drops the rest, which is what keeps the ordering
@@ -255,14 +249,13 @@ mod search_params {
   #[test]
   fn it_iterates_every_way_the_spec_offers() {
     let (_rt, ctx) = setup();
-    let p = "const p = new URLSearchParams('a=1&b=2');";
-    assert_eq!(eval(&ctx, &format!("{p} [...p].map(e => e.join(':')).join(',')")), "a:1,b:2");
-    assert_eq!(eval(&ctx, &format!("{p} [...p.entries()].map(e => e.join(':')).join(',')")), "a:1,b:2");
-    assert_eq!(eval(&ctx, &format!("{p} [...p.keys()].join(',')")), "a,b");
-    assert_eq!(eval(&ctx, &format!("{p} [...p.values()].join(',')")), "1,2");
     assert_eq!(
-      eval(&ctx, &format!("{p} const o = []; p.forEach((v,k) => o.push(k+'='+v)); o.join('&')")),
-      "a=1&b=2"
+      eval(
+        &ctx,
+        "const p = new URLSearchParams('a=1&b=2'); const o = []; p.forEach((v, k) => o.push(k + '=' + v)); \
+         JSON.stringify([[...p], [...p.entries()], [...p.keys()], [...p.values()], o])",
+      ),
+      r#"[[["a","1"],["b","2"]],[["a","1"],["b","2"]],["a","b"],["1","2"],["a=1","b=2"]]"#,
     );
   }
 

@@ -8,41 +8,21 @@ import desu.inugram.core.plugins.PluginPermissions
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.FetchListener
-import desu.inugram.helpers.plugins.Plugin
 import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.QuickJs
 import java.io.File
 import java.io.InputStream
 import java.net.HttpURLConnection
-import java.net.InetAddress
 import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.ThreadFactory
 import java.util.concurrent.atomic.AtomicLong
 import org.json.JSONObject
-import org.telegram.messenger.Utilities
 
-/**
- * Transport for global `fetch` (Rust: `fetch.rs`). Applies [EgressPolicy] to every hop.
- *
- * Automatic redirects are disabled. [runExchange] screens each destination, preventing an
- * allowed host's open redirect from bypassing grants.
- *
- * DNS rebinding remains possible between screening and the socket's resolution. Closing that
- * gap requires a socket pinned to the checked address with explicit `Host` and SNI.
- *
- * Charge [BODY_BUDGET_BYTES] only for bodies returned to the plugin. Redirect bodies must
- * release their charge, or repeated 302 responses with large bodies could exhaust the budget.
- */
 object PluginFetch : SessionResource {
-    /** past this, a chain is a loop somebody else is running. Same number chromium uses. */
     private const val MAX_REDIRECTS = 20
-
-    /** what one response body may be, matching rust `blob::BUILD_LIMIT_BYTES` */
     const val MAX_BODY_BYTES = 32L * 1024 * 1024
-
-    /** a body file lives until the engine stops, so without a ceiling a plugin polling an endpoint fills the cache partition */
     const val BODY_BUDGET_BYTES = 256L * 1024 * 1024
 
     private const val CONNECT_TIMEOUT_MS = 30_000
@@ -50,8 +30,6 @@ object PluginFetch : SessionResource {
 
     private const val BODIES_DIR = "fetch"
 
-    // the plugin's own `timeout`/`AbortSignal` is the engine's business; this only keeps a socket
-    // that answers nothing at all from holding a worker forever
     private val transfers by lazy {
         Executors.newFixedThreadPool(4, ThreadFactory { r ->
             Thread(r, "inuPluginFetch").apply { isDaemon = true }
@@ -60,26 +38,17 @@ object PluginFetch : SessionResource {
 
     private class InFlight(val requestId: Long, val flight: Flight)
 
-    /** per session rather than per plugin: a reload restarts request ids at 1, so two engines of one plugin can each have a request #1 in the air */
     private val flights = OwnerRegistry<PluginSession, InFlight>()
     private val used = ConcurrentHashMap<String, AtomicLong>()
-
-    /** four hops run at once on [transfers], and two reading the same clock would write one file */
     private val nextBody = AtomicLong(1)
 
-    /**
-     * [connection] only exists once a worker opened one, and everything before that (the queue hop,
-     * the pool dispatch, the name resolution) is time an abort has to be *asked for* rather than
-     * delivered - hence [cancelled] being read at the top of every hop and again once the name has
-     * resolved, both in [runExchange] so a test can reach them.
-     */
     class Flight {
         @Volatile var cancelled = false
         @Volatile var connection: HttpURLConnection? = null
 
         fun cancel() {
             cancelled = true
-            // the worker is blocked in read(); this is what makes it return
+            // the worker is blocked in read()
             runCatching { connection?.disconnect() }
         }
     }
@@ -117,29 +86,22 @@ object PluginFetch : SessionResource {
         }
 
     class Delivery(val wire: String, private val body: Hop?) {
-        /** nobody took the body, so the file goes and the budget it holds comes back */
         fun drop() {
             body?.discard()
         }
     }
 
-    /**
-     * both ways an answer reaches nobody, and both must drop the body rather than leave it charged:
-     * the plugin reloaded onto another engine whose request ids restart (identity, not just null),
-     * or it aborted - which it does *after* settling its own promise.
-     */
     fun deliver(session: PluginSession, requestId: Long, delivery: Delivery, flight: Flight) {
         if (!session.isCurrent() || flight.cancelled) delivery.drop()
         else session.engine.settle(QuickJs.SETTLE_FETCH, requestId, delivery.wire)
     }
 
-    /** a stopped plugin's requests stop with it, rather than finishing into a directory its teardown deletes */
     override fun detach(session: PluginSession) {
         for (inFlight in flights.take(session)) inFlight.flight.cancel()
     }
 
-    /** [PluginBlobs.wipe] already deletes the tree; this is what gives the budget back */
     fun wipe(installId: String) {
+        // [PluginBlobs.wipe] already deletes the tree
         used.remove(installId)
         for (inFlight in flights.takeWhere { it.plugin.id == installId }) inFlight.flight.cancel()
     }
@@ -160,7 +122,7 @@ object PluginFetch : SessionResource {
                 val headers = LinkedHashMap<String, MutableList<String>>()
                 for (at in 0 until pairs.size / 2) {
                     val value = pairs[at * 2 + 1]
-                    // what okhttp would put on the wire as a second header line
+                    // okhttp would put these on the wire as a second header line
                     if (value.any { it == '\r' || it == '\n' }) {
                         throw PluginRefusal(PluginWire.encodePluginError("internal", "fetch: a header value with a line break reached the transport"))
                     }
@@ -171,7 +133,7 @@ object PluginFetch : SessionResource {
         }
     }
 
-    /** kept close to rust `fetch::parse_target`, which pre-flights the same thing; this side is the authority, being the one that connects */
+    /** rust `url::parse_http_url` pre-flights the same; this side connects, so it is the authority */
     private fun refuse(code: String, message: String, grant: String? = null) =
         PluginWire.encodePluginError(code, message, grant = grant)
 
@@ -205,17 +167,12 @@ object PluginFetch : SessionResource {
         class Refused(val wire: String) : Outcome()
     }
 
-    /**
-     * the method and body are dropped on the hops where every client drops them, so a `POST` body is
-     * never replayed to a host the plugin did not name. [Flight.cancelled] is read before each hop:
-     * an abort landing during hop 1 must not be followed by twenty more.
-     */
+    /** method and body are dropped where every client drops them, so a `POST` body never reaches an unnamed host */
     fun runExchange(
         permissions: PluginPermissions,
         startUrl: String,
         spec: Spec,
         body: ByteArray?,
-        resolve: (String) -> List<ByteArray>,
         transport: Transport,
         flight: Flight,
     ): Outcome {
@@ -225,10 +182,7 @@ object PluginFetch : SessionResource {
         var hops = 0
         while (true) {
             if (flight.cancelled) return aborted()
-            EgressPolicy.screenHop(permissions, url, resolve)?.let { return Outcome.Refused(it) }
-            // again on the far side of the screen: resolving the name is the longest stretch of a
-            // hop nothing else looks at, and there is no socket yet for `Flight.cancel` to reach
-            if (flight.cancelled) return aborted()
+            EgressPolicy.screenHop(permissions, url)?.let { return Outcome.Refused(it) }
             val hop = transport.exchange(url, method, spec.headers, payload)
             val location = hop.location
             if (hop.status !in 300..399 || location == null || spec.redirect == "manual") {
@@ -270,7 +224,7 @@ object PluginFetch : SessionResource {
             send(hopUrl, method, headers, payload, bodiesDir, budget, flight)
         }
         val outcome = try {
-            runExchange(permissions, url, spec, body, ::resolveAddresses, transport, flight)
+            runExchange(permissions, url, spec, body, transport, flight)
         } catch (e: BodyTooBig) {
             return Delivery(
                 PluginWire.encodePluginError(
@@ -310,12 +264,8 @@ object PluginFetch : SessionResource {
         return PluginWire.encodeJson(json.toString())
     }
 
-    private fun resolveAddresses(host: String): List<ByteArray> =
-        InetAddress.getAllByName(host).map { it.address }
-
     class BodyTooBig(message: String, val usage: Long, val quota: Long) : Exception(message)
 
-    /** split off [send], which opens a real socket: the one line that matters here is `instanceFollowRedirects`, the whole reason [runExchange] exists */
     fun prepareConnection(connection: HttpURLConnection, method: String, headers: Map<String, List<String>>) {
         connection.instanceFollowRedirects = false
         connection.connectTimeout = CONNECT_TIMEOUT_MS
@@ -352,8 +302,7 @@ object PluginFetch : SessionResource {
                 headerFields[name.lowercase()] = values
             }
             val stream = if (status >= 400) connection.errorStream else connection.inputStream
-            // always a file, even for a 204: a body that exists as an empty `Blob` is one shape
-            // fewer for a plugin to branch on than a `null` body
+            // always a file, even for a 204, so a body is always a `Blob`
             val file = File(bodiesDir, "b${nextBody.getAndIncrement()}-$status")
             return Hop(
                 status = status,
@@ -370,16 +319,14 @@ object PluginFetch : SessionResource {
         }
     }
 
-    /** refused past the ceilings *while* reading rather than after, so a server announcing nothing and sending forever is stopped rather than measured */
+    /** refused while reading, so a server sending forever is stopped */
     fun drainTo(stream: InputStream?, file: File, budget: AtomicLong, flight: Flight): Long {
         if (stream == null) {
             file.writeBytes(ByteArray(0))
             return 0
         }
         var written = 0L
-        // what this transfer has actually added to [budget], which is what a failure gives back.
-        // never derived from [written]: the two diverge for exactly one chunk, the one a ceiling
-        // refuses, and refunding that chunk would credit the plugin bytes it was never charged
+        // never derived from [written]: they diverge by the one refused chunk, which was never charged
         var charged = 0L
         try {
             file.outputStream().use { out ->
@@ -397,9 +344,7 @@ object PluginFetch : SessionResource {
                                 MAX_BODY_BYTES,
                             )
                         }
-                        // charged as it is read rather than measured against a read-only view of the
-                        // counter: four of these run at once on the pool, and a check that only reads
-                        // lets every one of them pass the same headroom and overshoot by its own size
+                        // four of these run at once, so a read-only check would let each overshoot the same headroom
                         val held = budget.addAndGet(read.toLong())
                         charged += read
                         if (held > BODY_BUDGET_BYTES) {

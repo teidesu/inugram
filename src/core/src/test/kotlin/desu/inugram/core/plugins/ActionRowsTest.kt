@@ -14,14 +14,14 @@ class ActionRowsTest {
     private fun ActionRegistry<Owner>.ids(kind: Int, order: List<Owner>, placements: Int = -1): List<Pair<Owner, String>> =
         registrationsInOrder(kind, order, placements).map { it.owner to it.id }
 
-    private fun ActionRegistry<Owner>.tokenOf(owner: Owner, kind: Int, id: String): Int =
+    private fun ActionRegistry<Owner>.findToken(owner: Owner, kind: Int, id: String): Int =
         registrationsInOrder(kind, listOf(owner)).single { it.id == id }.token
 
     private val chat = 1
     private val message = 2
 
     @Test
-    fun rowsAreCountedPerOwnerAndPerKind() {
+    fun rows_are_counted_per_owner_and_per_kind() {
         val registry = ActionRegistry<Owner>()
         val a = Owner("a")
         val b = Owner("b")
@@ -39,7 +39,7 @@ class ActionRowsTest {
     }
 
     @Test
-    fun unregisterDropsOneRowAndForgetDropsTheOwner() {
+    fun unregister_drops_one_row_and_forget_drops_the_owner() {
         val registry = ActionRegistry<Owner>()
         val a = Owner("a")
         registry.register(a, chat, 1, "one")
@@ -56,7 +56,7 @@ class ActionRowsTest {
     }
 
     @Test
-    fun theCapIsPerOwnerPerKindAndNamesTheRowItRefused() {
+    fun the_cap_is_per_owner_per_kind_and_names_the_row_it_refused() {
         val registry = ActionRegistry<Owner>(perKindLimit = 2)
         val a = Owner("a")
         val b = Owner("b")
@@ -72,7 +72,7 @@ class ActionRowsTest {
     }
 
     @Test
-    fun placementsAreCappedAndListedIndependently() {
+    fun placements_are_capped_and_listed_independently() {
         val registry = ActionRegistry<Owner>(perKindLimit = 2)
         val owner = Owner("a")
         val bubble = 1
@@ -97,33 +97,33 @@ class ActionRowsTest {
     }
 
     @Test
-    fun reRegisteringAnIdSwapsItsTokenInPlaceRatherThanAddingARow() {
+    fun re_registering_an_id_swaps_its_token_in_place_rather_than_adding_a_row() {
         val registry = ActionRegistry<Owner>()
         val a = Owner("a")
         assertNull(registry.register(a, chat, 1, "one"))
         assertNull(registry.register(a, chat, 2, "one"))
         assertEquals(1, registry.count(a, chat))
-        assertEquals(2, registry.tokenOf(a, chat, "one"))
+        assertEquals(2, registry.findToken(a, chat, "one"))
 
         registry.unregister(a, chat, 1)
         assertEquals("retiring the displaced token does not take the replacement with it", 1, registry.count(a, chat))
-        assertEquals(2, registry.tokenOf(a, chat, "one"))
+        assertEquals(2, registry.findToken(a, chat, "one"))
     }
 
     @Test
-    fun aKeyedReRegistrationAtTheCapIsAReplacementAndNotANinthRow() {
+    fun a_keyed_re_registration_at_the_cap_is_a_replacement_and_not_a_ninth_row() {
         val registry = ActionRegistry<Owner>(perKindLimit = 2)
         val a = Owner("a")
         assertNull(registry.register(a, chat, 1, "one"))
         assertNull(registry.register(a, chat, 2, "two"))
         assertNull("updating a row is how a plugin changes it, and the cap must not forbid that", registry.register(a, chat, 3, "one"))
         assertEquals(2, registry.count(a, chat))
-        assertEquals(3, registry.tokenOf(a, chat, "one"))
+        assertEquals(3, registry.findToken(a, chat, "one"))
         assertNotNull("a genuinely new row is still refused", registry.register(a, chat, 4, "three"))
     }
 
     @Test
-    fun aDisposedRowFreesItsPlaceUnderTheCap() {
+    fun a_disposed_row_frees_its_place_under_the_cap() {
         val registry = ActionRegistry<Owner>(perKindLimit = 1)
         val a = Owner("a")
         assertNull(registry.register(a, chat, 1, "one"))
@@ -133,7 +133,7 @@ class ActionRowsTest {
     }
 
     @Test
-    fun rowsFollowTheGivenOrderNotTheRegistrationOrder() {
+    fun rows_follow_the_given_order_not_the_registration_order() {
         val registry = ActionRegistry<Owner>()
         val a = Owner("a")
         val b = Owner("b")
@@ -147,7 +147,7 @@ class ActionRowsTest {
     }
 
     @Test
-    fun idsAndTokensCanBeResolvedInLiveOwnerOrder() {
+    fun ids_and_tokens_can_be_resolved_in_live_owner_order() {
         val registry = ActionRegistry<Owner>()
         val a = Owner("a")
         val b = Owner("b")
@@ -160,7 +160,7 @@ class ActionRowsTest {
     }
 
     @Test
-    fun registrationsCarryCachedPresentationAndDynamicFields() {
+    fun registrations_carry_cached_presentation_and_dynamic_fields() {
         val registry = ActionRegistry<Owner>()
         val owner = Owner("a")
         registry.register(owner, chat, 7, "row", text = "Static", icon = "rmsg_pin", dynamicFields = 4)
@@ -172,7 +172,7 @@ class ActionRowsTest {
     }
 
     @Test
-    fun anOwnerMissingFromTheOrderIsNotDrawn() {
+    fun an_owner_missing_from_the_order_is_not_drawn() {
         val registry = ActionRegistry<Owner>()
         val a = Owner("a")
         val gone = Owner("gone")

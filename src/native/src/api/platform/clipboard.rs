@@ -9,35 +9,26 @@ pub trait ClipboardHost {
   fn write(&self, text: &str);
 }
 
-struct ClipboardState {
-  host: Rc<dyn ClipboardHost>,
-  grants: Rc<dyn GrantHost>,
-}
-
 pub fn install_clipboard<'js>(
   ctx: &Ctx<'js>,
   host: Rc<dyn ClipboardHost>,
   grants: Rc<dyn GrantHost>,
   globals: &crate::api::Globals<'js>,
 ) -> JsResult<()> {
-  let state = Rc::new(ClipboardState { host, grants });
   let clipboard = Object::new(ctx.clone())?;
-
-  let state2 = state.clone();
+  let (read_host, read_grants) = (host.clone(), grants.clone());
   clipboard.set(
     "read",
     Function::new(ctx.clone(), move |ctx: Ctx<'js>| -> JsResult<String> {
-      state2.grants.check_grant(&ctx, "clipboard.read", None, MATCH_EXACT)?;
-      Ok(state2.host.read())
+      read_grants.check_grant(&ctx, "clipboard.read", None, MATCH_EXACT)?;
+      Ok(read_host.read())
     })?,
   )?;
-
-  let state2 = state.clone();
   clipboard.set(
     "write",
     Function::new(ctx.clone(), move |ctx: Ctx<'js>, text: rquickjs::Coerced<String>| -> JsResult<()> {
-      state2.grants.check_grant(&ctx, "clipboard.write", None, MATCH_EXACT)?;
-      state2.host.write(&text.0);
+      grants.check_grant(&ctx, "clipboard.write", None, MATCH_EXACT)?;
+      host.write(&text.0);
       Ok(())
     })?,
   )?;

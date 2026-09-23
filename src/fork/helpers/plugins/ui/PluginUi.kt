@@ -2,6 +2,8 @@ package desu.inugram.helpers.plugins.ui
 
 import desu.inugram.helpers.plugins.SessionResource
 import android.content.Context
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffColorFilter
 import android.os.Bundle
 import android.text.SpannableString
 import android.text.Spanned
@@ -11,7 +13,6 @@ import android.widget.LinearLayout
 import android.widget.FrameLayout
 import android.widget.TextView
 import android.widget.Toast
-import desu.inugram.core.plugins.CommonIcons
 import desu.inugram.core.plugins.PluginRefusal
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.core.plugins.PluginWire.refuse
@@ -22,6 +23,7 @@ import desu.inugram.helpers.plugins.PluginManager
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.UiListener
 import desu.inugram.helpers.plugins.platform.PluginJvm
+import desu.inugram.helpers.plugins.telegram.PeerSpecs
 import desu.inugram.helpers.dialogs.DrawerHelper
 import desu.inugram.ui.settings.PluginSettingsActivity
 import desu.inugram.ui.showInputDialog
@@ -35,7 +37,6 @@ import org.telegram.messenger.MessagesController
 import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.R
 import org.telegram.messenger.UserConfig
-import org.telegram.messenger.Utilities
 import org.telegram.tgnet.TLObject
 import org.telegram.ui.ActionBar.AlertDialog
 import org.telegram.ui.ActionBar.BaseFragment
@@ -52,14 +53,6 @@ import org.telegram.ui.LaunchActivity
 import org.telegram.ui.ProfileActivity
 import org.telegram.ui.SettingsActivity
 
-/**
- * Kotlin side of the settings-page ui bridge (rust: `pages.rs`): presents [PluginSettingsActivity]
- * pages, routes `page.invalidate()` to open pages, anchors `UIAnchor.openMenu` popups to the row
- * the anchor names, and shows bulletins plus the `inu.ui.dialog`/`prompt`/`chooser` modals.
- *
- * Threading: upcalls arrive on [EngineDispatch.scheduler]; anything view-touching hops to the UI
- * thread and settles back on the plugin queue with the usual engine-identity check.
- */
 object PluginUi : SessionResource {
 
     /** stock's `Bulletin.UsersLayout`: a 24dp avatar stepped by 12dp, in a slot sized for three */
@@ -75,12 +68,8 @@ object PluginUi : SessionResource {
     const val OP_PICK_FILE = 3
     const val OP_SAVE_FILE = 4
 
-    // UI-thread state: open page views, keyed per engine so page ids can't cross plugins
-    private class PageKey(val session: PluginSession, val pageId: Long) {
-        override fun equals(other: Any?): Boolean =
-            other is PageKey && other.session === session && other.pageId == pageId
-        override fun hashCode(): Int = System.identityHashCode(session) * 31 + pageId.hashCode()
-    }
+    // keyed per engine so page ids can't cross plugins. ui thread only
+    private data class PageKey(val session: PluginSession, val pageId: Long)
     private val openPages = HashMap<PageKey, MutableList<PluginSettingsActivity>>()
 
     fun listenerFor(session: PluginSession): UiListener = object : UiListener {
@@ -96,7 +85,10 @@ object PluginUi : SessionResource {
 
         override fun uiCurrentScreen(): String = PluginScreens.currentScreenWire()
 
-        override fun uiOpenPage(pageId: Long): String? = openPage(session, pageId)
+        override fun uiOpenPage(pageId: Long): String? {
+            openPage(session, pageId)
+            return null
+        }
 
         override fun uiOpenFragment(handle: Long): String? = openFragment(session.engine, handle)
 
@@ -113,7 +105,7 @@ object PluginUi : SessionResource {
 
         override fun iconResolves(kind: Int, value: String): Boolean = PluginIcons.iconResolves(kind, value)
 
-        override fun commonIcon(name: String): String? = CommonIcons.resolve(name)
+        override fun commonIcon(name: String): String? = PluginIcons.commonIconName(name)
 
         override fun actionRegister(
             kind: Int,
@@ -146,31 +138,26 @@ object PluginUi : SessionResource {
         }
     }
 
-    /**
-     * the engine is closed right after this, and a frozen page whose rows do nothing is worse than
-     * no page. The key is dropped before the fragment is, so the teardown that follows does not
-     * try to tell the (by then closed) engine that its page closed.
-     */
+    /** the key goes before the fragment, so teardown does not notify the closed engine */
     override fun detach(session: PluginSession) {
         AndroidUtilities.runOnUIThread {
             val mine = openPages.filterKeys { it.session === session }
             for ((key, list) in mine) {
                 openPages.remove(key)
-                // not finishFragment(), which closes whatever is on top: a plugin page can be buried under one the user opened from it
+                // not finishFragment(), which closes whatever is on top
                 for (activity in list.toList()) activity.removeSelfFromStack()
             }
         }
     }
 
-    fun openPage(session: PluginSession, pageId: Long): String? {
+    fun openPage(session: PluginSession, pageId: Long) {
         AndroidUtilities.runOnUIThread {
             val fragment = LaunchActivity.getSafeLastFragment() ?: return@runOnUIThread
             fragment.presentFragment(PluginSettingsActivity(session, pageId))
         }
-        return null
     }
 
-    /** the handle is resolved before the ui-thread hop, so naming something that is not a `BaseFragment` throws where the plugin can catch it */
+    /** resolved before the ui hop, so a non-`BaseFragment` throws where the plugin can catch it */
     fun openFragment(engine: QuickJs, handle: Long): String? {
         val fragment = PluginJvm.objectAt(engine, handle)
             ?: return PluginWire.encodePluginError("handle-expired", "openPage: that java object is gone")
@@ -193,11 +180,8 @@ object PluginUi : SessionResource {
             return PluginWire.encodePluginError("invalid-argument", "openPage: malformed screen")
         }
         val accountId = if (options.has("accountId")) options.optInt("accountId", -1) else UserConfig.selectedAccount
-        val controller = if (accountId in 0 until UserConfig.MAX_ACCOUNT_COUNT && UserConfig.isValidAccount(accountId)) {
-            MessagesController.getInstance(accountId)
-        } else {
-            return PluginWire.encodePluginError("not-found", "openPage: account #$accountId is not logged in")
-        }
+        val controller = PeerSpecs.controllerFor(accountId)
+            ?: return PluginWire.encodePluginError("not-found", "openPage: account #$accountId is not logged in")
         val type = options.optString("type")
         val dialogId = options.optLong("dialogId")
         if ((type == "chat" || type == "profile") && DialogObject.isEncryptedDialog(dialogId)) {
@@ -231,7 +215,7 @@ object PluginUi : SessionResource {
         PluginManager.notifyChanged()
     }
 
-    /** guarded by the page id: disposing a page the plugin has already replaced must not clear it */
+    /** disposing a page the plugin already replaced must not clear it */
     fun unregisterSettings(session: PluginSession, pageId: Long) {
         if (session.settingsPageId != pageId) return
         session.settingsPageId = null
@@ -244,11 +228,7 @@ object PluginUi : SessionResource {
         }
     }
 
-    /**
-     * the anchor names a row, not a view: by the time a plugin opens a menu the page may have
-     * re-rendered and the row's view been recycled onto another row. So a row no longer on screen
-     * leaves the menu unopened and settled as dismissed - the same answer as tapping outside.
-     */
+    /** the row's view may be recycled after a re-render, so a row off screen settles as dismissed */
     fun openMenu(session: PluginSession, menuId: Long, pageId: Long, anchorKey: String, itemsJson: String): String? {
         val items = try {
             parseMenuItems(itemsJson)
@@ -267,7 +247,7 @@ object PluginUi : SessionResource {
             }
             var clicked = false
             val opts = ItemOptions.makeOptions(activity, anchorView)
-            // any item specifying `checked` (even false) makes the menu radio-style, so every row goes through addChecked to align on the checkmark column
+            // any `checked` (even false) makes the menu radio-style, aligning every row on the checkmark column
             val radioStyle = items.any { it.checked != null }
             items.forEachIndexed { index, item ->
                 val onClick = Runnable {
@@ -303,10 +283,7 @@ object PluginUi : SessionResource {
         }
     }
 
-    /**
-     * Read off the plugin queue, before anything is shown, so an icon the engine cannot resolve is
-     * a refusal the plugin is thrown rather than a bulletin that never appears.
-     */
+    /** read on the plugin queue so an unresolvable icon throws instead of never showing */
     private class BulletinSpec(session: PluginSession, options: JSONObject) {
         val text: String = options.getString("text")
         val textEntities: String = options.optJSONArray("textEntities")?.toString() ?: ""
@@ -317,14 +294,13 @@ object PluginUi : SessionResource {
             (0 until array.length()).map { array.getLong(it) }
         } ?: emptyList()
         val duration: Int = options.optInt("duration", Bulletin.DURATION_LONG)
-        /** the avatars belong to an account, which is not always the one looking at the screen */
+        /** the avatars' account is not always the current one */
         val account: Int = options.optInt("account", UserConfig.selectedAccount)
         val top: Boolean? = if (options.has("top")) options.getBoolean("top") else null
         val button: String? = if (options.has("button")) options.getString("button") else null
 
         val animation = PluginIcons.parseAnimationSpec(iconSpec).takeIf { iconSpec.startsWith('a') }
 
-        /** the drawable is resolved here for the same reason the spec is: a gone handle is a refusal */
         val drawable = if (iconSpec.startsWith('j')) {
             PluginIcons.resolveImmediateDrawable(ApplicationLoader.applicationContext, iconSpec, session.engine)
                 ?: refuse("handle-expired", "bulletin: drawable icon is gone")
@@ -334,7 +310,7 @@ object PluginUi : SessionResource {
 
         init {
             val animationName = animation?.value
-            if (animationName != null && PluginIcons.getRawAnimationResourceId(animationName) == 0) {
+            if (animationName != null && !PluginIcons.iconResolves(PluginIcons.KIND_RAW_ANIMATION, animationName)) {
                 refuse("not-found", "bulletin: animation '$animationName' is unavailable")
             }
         }
@@ -343,14 +319,7 @@ object PluginUi : SessionResource {
             get() = animation != null && !animation.isStatic && (animation.repeatCount == 0 || animation.repeatCount == null)
     }
 
-    /**
-     * One of stock's three bulletin layouts, picked by what the plugin asked for: avatars make it a
-     * `UsersLayout`, a subtitle without them a `TwoLineLottieLayout`, and neither the plain
-     * `LottieLayout` a one-line bulletin has always been.
-     *
-     * The outcome is settled once, by whichever came first: the button, a tap on the body, or the
-     * bulletin going away on its own.
-     */
+    /** settled once, by the button, a body tap, or the bulletin hiding */
     private fun showBulletin(session: PluginSession, spec: BulletinSpec, settle: (String) -> Unit) {
         val fragment = LaunchActivity.getSafeLastFragment()
         val factory = fragment?.let { BulletinFactory.of(it) } ?: BulletinFactory.global()
@@ -383,8 +352,7 @@ object PluginUi : SessionResource {
             subtitle = null
         }
 
-        // an emoji whose image is still loading draws blank until the view is told to redraw, and
-        // stock arms that on the layouts' titles only - never on a subtitle
+        // stock arms emoji-loading redraws on layout titles only, never on a subtitle
         NotificationCenter.listenEmojiLoading(title)
         title.text = PluginText.formatted(spec.text, spec.textEntities, title.paint.fontMetricsInt)
         if (subtitle != null && hasSubtitle) {
@@ -402,13 +370,12 @@ object PluginUi : SessionResource {
         layout.setOnClickListener { settle("clicked") }
 
         val bulletin = factory.create(layout, spec.duration)
-        // whatever else happened, the bulletin going away is what ends the wait - and a settle
-        // after the first one is dropped, so the button and a tap still win on their own
+        // a settle after the first is dropped, so button and tap still win
         bulletin.setOnHideListener { settle("dismissed") }
         if (spec.top == null) bulletin.show() else bulletin.show(spec.top)
     }
 
-    /** `false` when the icon could not be drawn, which leaves the bulletin unshown and the wait to time out on its own */
+    /** `false` leaves the bulletin unshown and the wait to time out */
     private fun applyIcon(
         session: PluginSession,
         spec: BulletinSpec,
@@ -416,7 +383,7 @@ object PluginUi : SessionResource {
         provider: Theme.ResourcesProvider?,
     ): Boolean {
         if (spec.iconSpec.isNotEmpty() && spec.iconSpec[0] in "rset") {
-            imageView.colorFilter = PluginManifestIcons.tintOf(Theme.getColor(Theme.key_undo_infoColor, provider))
+            imageView.colorFilter = PorterDuffColorFilter(Theme.getColor(Theme.key_undo_infoColor, provider), PorterDuff.Mode.SRC_IN)
         }
         if (spec.drawable != null) {
             imageView.setImageDrawable(spec.drawable)
@@ -425,7 +392,7 @@ object PluginUi : SessionResource {
         return PluginIcons.setIcon(imageView, spec.iconSpec, session.engine, if (spec.largeAnimation) 36f else 24f)
     }
 
-    /** stock's own avatar stack: a peer the app does not know is skipped rather than drawn blank */
+    /** a peer the app does not know is skipped rather than drawn blank */
     private fun fillAvatars(layout: Bulletin.UsersLayout, account: Int, dialogIds: List<Long>) {
         val controller = MessagesController.getInstance(account)
         var count = 0
@@ -441,10 +408,7 @@ object PluginUi : SessionResource {
         shrinkAvatarSlot(layout, count)
     }
 
-    /**
-     * stock reserves the slot for three avatars and starts its text past it, so a stack of one or
-     * two leaves a gap the layout was never meant to show
-     */
+    /** stock reserves a slot for three avatars and starts text past it */
     private fun shrinkAvatarSlot(layout: Bulletin.UsersLayout, count: Int) {
         val reserved = if (count == 0) 0 else AVATAR_SIZE_DP + AVATAR_STEP_DP * (count - 1) + 8
         val shrinkBy = AndroidUtilities.dp((AVATAR_SLOT_DP - reserved).toFloat())
@@ -454,72 +418,61 @@ object PluginUi : SessionResource {
         avatars.layoutParams = (avatars.layoutParams as FrameLayout.LayoutParams).also {
             it.width = AndroidUtilities.dp(reserved.toFloat())
         }
-        // the text sits in a linear layout when there is a subtitle, and in the bulletin itself
-        // when there is not
         val holder = (layout.textView.parent as? View)?.takeIf { it !== layout } ?: layout.textView
         holder.layoutParams = (holder.layoutParams as FrameLayout.LayoutParams).also {
             if (LocaleController.isRTL) it.rightMargin -= shrinkBy else it.leftMargin -= shrinkBy
         }
     }
 
-    fun modal(session: PluginSession, op: Int, requestId: Long, optionsJson: String): String? = when (op) {
-        OP_BULLETIN -> {
-            val spec = try {
-                BulletinSpec(session, JSONObject(optionsJson))
-            } catch (e: PluginRefusal) {
-                return e.wire
-            } catch (e: Exception) {
-                return PluginWire.encodePluginError("invalid-argument", "bulletin: ${e.message}")
-            }
-            showModal(
+    fun modal(session: PluginSession, op: Int, requestId: Long, optionsJson: String): String? {
+        val resolveString: (String) -> Unit = { session.engine.settle(QuickJs.SETTLE_MODAL, requestId, PluginWire.encodeString(it)) }
+        return when (op) {
+            OP_BULLETIN -> showModal(
                 session,
                 "bulletin",
                 dismissed = "dismissed",
-                resolve = { session.engine.settle(QuickJs.SETTLE_MODAL, requestId, PluginWire.encodeString(it)) },
-                prepare = { spec },
-            ) { prepared, settle -> showBulletin(session, prepared, settle) }
+                resolve = resolveString,
+                prepare = { BulletinSpec(session, JSONObject(optionsJson)) },
+            ) { spec, settle -> showBulletin(session, spec, settle) }
+
+            OP_DIALOG -> showModal(
+                session,
+                "dialog",
+                dismissed = "dismissed",
+                resolve = resolveString,
+                prepare = { JSONObject(optionsJson) },
+            ) { options, settle -> showDialog(session.engine, options, settle) }
+
+            OP_PROMPT -> showModal<JSONObject, String?>(
+                session,
+                "prompt",
+                dismissed = null,
+                resolve = { session.engine.settle(QuickJs.SETTLE_MODAL, requestId, it?.let(PluginWire::encodeString) ?: PluginWire.encodeNull()) },
+                prepare = { JSONObject(optionsJson) },
+            ) { options, settle -> showPrompt(options, settle) }
+
+            OP_CHOOSER -> showModal<ChooserSpec, List<Int>?>(
+                session,
+                "chooser",
+                dismissed = null,
+                resolve = { picked ->
+                    val wire = picked?.let { PluginWire.encodeJson(JSONArray(it).toString()) } ?: PluginWire.encodeNull()
+                    session.engine.settle(QuickJs.SETTLE_MODAL, requestId, wire)
+                },
+                prepare = { ChooserSpec(JSONObject(optionsJson)) },
+            ) { spec, settle -> showChooser(spec, settle) }
+
+            OP_PICK_FILE -> PluginFilePicker.pick(session, requestId, optionsJson)
+
+            OP_SAVE_FILE -> PluginFilePicker.save(session, requestId, optionsJson)
+
+            else -> PluginWire.encodePluginError("internal", "modal: unknown op $op")
         }
-
-        OP_DIALOG -> showModal(
-            session,
-            "dialog",
-            dismissed = "dismissed",
-            resolve = { session.engine.settle(QuickJs.SETTLE_MODAL, requestId, PluginWire.encodeString(it)) },
-            prepare = { JSONObject(optionsJson) },
-        ) { options, settle -> showDialog(session.engine, options, settle) }
-
-        OP_PROMPT -> showModal<JSONObject, String?>(
-            session,
-            "prompt",
-            dismissed = null,
-            resolve = { session.engine.settle(QuickJs.SETTLE_MODAL, requestId, it?.let(PluginWire::encodeString) ?: PluginWire.encodeNull()) },
-            prepare = { JSONObject(optionsJson) },
-        ) { options, settle -> showPrompt(options, settle) }
-
-        OP_CHOOSER -> showModal<ChooserSpec, List<Int>?>(
-            session,
-            "chooser",
-            dismissed = null,
-            resolve = { picked ->
-                val wire = picked?.let { PluginWire.encodeJson(JSONArray(it).toString()) } ?: PluginWire.encodeNull()
-                session.engine.settle(QuickJs.SETTLE_MODAL, requestId, wire)
-            },
-            prepare = { ChooserSpec(JSONObject(optionsJson)) },
-        ) { spec, settle -> showChooser(spec, settle) }
-
-        OP_PICK_FILE -> PluginFilePicker.pick(session, requestId, optionsJson)
-
-        OP_SAVE_FILE -> PluginFilePicker.save(session, requestId, optionsJson)
-
-        else -> PluginWire.encodePluginError("internal", "modal: unknown op $op")
     }
 
     /**
-     * every modal is the same shape: read the options (a failure there is the refusal the engine
-     * answers the plugin with, before anything is shown), hop to the ui thread, and settle exactly
-     * once - the engine drops a second settle, but a promise left hanging is left hanging forever.
-     * So [dismissed] is what a [show] that threw answers with, each one handling for itself the
-     * case it has no ui to attach to.
+     * options failing to parse is the refusal, before anything shows. Must settle exactly once: the engine
+     * drops a second settle, but a missing one hangs forever, so [dismissed] answers a [show] that threw.
      */
     private fun <S, T> showModal(
         session: PluginSession,
@@ -531,6 +484,8 @@ object PluginUi : SessionResource {
     ): String? {
         val prepared = try {
             prepare()
+        } catch (e: PluginRefusal) {
+            return e.wire
         } catch (e: Exception) {
             return PluginWire.encodePluginError("invalid-argument", "$name: ${e.message}")
         }
@@ -561,23 +516,18 @@ object PluginUi : SessionResource {
         val builder = AlertDialog.Builder(activity)
         options.formatted("title")?.let(builder::setTitle)
         options.formatted("message")?.let(builder::setMessage)
-        // rust already refused every element but `inu.android.nativeView`, which is a jvm
-        // handle id; one the plugin has since released simply leaves the dialog bodiless
+        // rust already refused everything but a `nativeView` jvm handle; a released one leaves the dialog bodiless
         options.optJSONObject("body")?.optLong("handle")?.let { handle ->
             (PluginJvm.objectAt(engine, handle) as? View)?.let { builder.setView(it) }
         }
         options.text("positive")?.let { builder.setPositiveButton(it) { _, _ -> settle("positive") } }
         options.text("negative")?.let { builder.setNegativeButton(it) { _, _ -> settle("negative") } }
         options.text("neutral")?.let { builder.setNeutralButton(it) { _, _ -> settle("neutral") } }
-        // buttons settle first (their click listeners run before dismissal), so this only
-        // catches back-press / outside-tap / activity teardown
+        // button clicks settle before dismissal, so this catches back-press, outside tap and teardown
         presentModal(LaunchActivity.getSafeLastFragment(), builder.create()) { settle("dismissed") }
     }
 
-    /**
-     * BaseFragment.showDialog replaces the dialog's own dismiss listener, and returns null when it
-     * refuses to show (mid-transition etc.) - either way a promise would otherwise hang forever
-     */
+    /** BaseFragment.showDialog replaces the dismiss listener and returns null when it refuses (mid-transition) */
     private fun presentModal(fragment: BaseFragment?, dialog: AlertDialog, onDismiss: () -> Unit) {
         if (fragment?.showDialog(dialog) { onDismiss() } == null) {
             dialog.setOnDismissListener { onDismiss() }
@@ -608,7 +558,6 @@ object PluginUi : SessionResource {
         }
     }
 
-    /** one dialog for both modes, the engine having normalized `selected` into a list */
     private fun showChooser(spec: ChooserSpec, settle: (List<Int>?) -> Unit) {
         val activity = LaunchActivity.instance
         if (activity == null || activity.isFinishing) {
@@ -640,7 +589,7 @@ object PluginUi : SessionResource {
             )
         }
 
-    /** danger is a red text colour rather than a cell flag: no stock list cell exposes one */
+    /** no stock list cell exposes a danger flag */
     private fun chooserLabel(item: ChooserItem, theme: Theme.ResourcesProvider?): CharSequence {
         if (!item.danger) return item.text
         val text = SpannableString(item.text)
@@ -717,8 +666,7 @@ object PluginUi : SessionResource {
         EngineDispatch.scheduler.postRunnable {
             val session = plugin.session ?: return@postRunnable
             val pageId = session.settingsPageId ?: return@postRunnable
-            val err = openPage(session, pageId)
-            if (err != null) session.log.e("ui", "openRegisteredSettings: $err")
+            openPage(session, pageId)
         }
     }
 }

@@ -1,4 +1,6 @@
+use crate::api::telegram::account::{account_slot, AccountState};
 use crate::runtime::Dispose;
+use crate::utils::qjs::qjs_object_freeze;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -10,7 +12,7 @@ use crate::api::error::{host_error_to_js, report_callback_error, PluginErrorCode
 use crate::api::platform::jvm::JvmState;
 use crate::runtime::pump_jobs;
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT, MATCH_NAMESPACE};
-use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry, Token};
+use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry};
 
 pub trait NotificationHost {
   fn notification_register(&self, callback_id: u32, events: &[String]) -> Option<String>;
@@ -24,7 +26,6 @@ pub trait NotificationHost {
 
 const SUPPRESS_GRANT: &str = "notifications.suppress";
 
-/// what an app-level hold names, since it belongs to no one account
 pub const ANY_ACCOUNT: i32 = -1;
 
 struct Delegate {
@@ -95,8 +96,7 @@ pub fn install_notifications<'js>(
 }
 
 impl NotificationState {
-  /// Suppresses notifications while any plugin holds a token. Teardown releases only that plugin's
-  /// tokens, preserving other plugins' holds.
+  /// Teardown releases only this plugin's tokens.
   fn js_suppress<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, account: i32) -> JsResult<Function<'js>> {
     if self.lifecycle.is_unloading() {
       return noop_disposer(ctx);
@@ -115,28 +115,21 @@ impl NotificationState {
     })
   }
 
-  /// `Account.suppressNotifications`, layered on the prototype the reads and writes built, the way
-  /// `invokeRpc` is: this installs before either of them exists.
-  pub fn install_account_suppress<'js>(
-    self: &Rc<Self>,
-    ctx: &Ctx<'js>,
-    accounts: &Rc<crate::api::telegram::account::AccountState>,
-  ) -> JsResult<()> {
+  /// Layered on the account prototype like `invokeRpc`: this installs before reads and writes build it.
+  pub fn install_account_suppress<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, accounts: &Rc<AccountState>) -> JsResult<()> {
     let prototype = rquickjs::Object::new(ctx.clone())?;
     let state = self.clone();
     prototype.set(
       "suppressNotifications",
       Function::new(ctx.clone(), move |ctx: Ctx<'js>, this: rquickjs::function::This<Value<'js>>| {
-        let slot = crate::api::telegram::account::account_slot(&ctx, &this, "suppressNotifications")?;
+        let slot = account_slot(&ctx, &this, "suppressNotifications")?;
         state.js_suppress(&ctx, slot)
       })?,
     )?;
     if let Some(inner) = accounts.take_prototype(ctx) {
       prototype.set_prototype(Some(&inner))?;
     }
-    let object_ctor: rquickjs::Object = ctx.globals().get("Object")?;
-    let freeze: Function = object_ctor.get("freeze")?;
-    freeze.call::<_, Value>((prototype.clone(),))?;
+    qjs_object_freeze(&prototype)?;
     accounts.set_prototype(ctx, &prototype);
     Ok(())
   }
@@ -200,33 +193,30 @@ impl NotificationState {
     self: &Rc<Self>,
     rt: &Runtime,
     context: &rquickjs::Context,
-    callback_id: Token,
+    callback_id: u32,
     name: &str,
     account: i32,
     args: &[String],
   ) {
-    let state = self;
-    if state.lifecycle.is_unloading() {
+    if self.lifecycle.is_unloading() {
       return;
     }
     context.with(|ctx| {
-      let Some(delegate) = state.delegates.get(callback_id) else {
+      let Some(delegate) = self.delegates.get(callback_id) else {
         return;
       };
       let Some(handler) = delegate.handler(&ctx, name) else {
         return;
       };
-      let Some(jvm) = state.jvm.as_ref() else {
+      let Some(jvm) = self.jvm.as_ref() else {
         return;
       };
-      // Decode before calling the handler so malformed host wires are reported as host errors. Each
-      // entry uses the Xposed value format: scalars pass through; other values use the JVM handle
-      // table.
+      // decoded before the handler runs, so a malformed wire is a host error
       let decoded: JsResult<Vec<Value<'_>>> = args.iter().map(|wire| jvm.wire_to_value(&ctx, wire)).collect();
       let decoded = match decoded {
         Ok(decoded) => decoded,
         Err(_) => {
-          (state.log)(&format!("{name}: bad notification payload: {}", format_exception(&ctx)));
+          (self.log)(&format!("{name}: bad notification payload: {}", format_exception(&ctx)));
           return;
         }
       };
@@ -239,18 +229,17 @@ impl NotificationState {
         handler.call_arg(call_args)
       })();
       if let Err(error) = result {
-        report_callback_error(&state.log, &ctx, &format!("notification handler for '{name}'"), error);
+        report_callback_error(&self.log, &ctx, &format!("notification handler for '{name}'"), error);
       }
     });
-    pump_jobs(rt, context, state.log.as_ref());
+    pump_jobs(rt, context, self.log.as_ref());
   }
 }
 
 impl Dispose for NotificationState {
   fn dispose(&self, context: &rquickjs::Context) {
-    let state = self;
     context.with(|ctx| {
-      for delegate in state.delegates.remove_matching(|_| true) {
+      for delegate in self.delegates.remove_matching(|_| true) {
         delegate.release(&ctx);
       }
     });

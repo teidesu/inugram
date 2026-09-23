@@ -4,7 +4,7 @@ use std::rc::Rc;
 use rquickjs::function::This;
 use rquickjs::{Ctx, Function, Persistent, Result as JsResult, Value};
 
-pub type Token = u32;
+use crate::utils::qjs::qjs_symbol_dispose_atom;
 
 pub struct RequestIds(Cell<i64>);
 
@@ -23,14 +23,14 @@ impl RequestIds {
 }
 
 struct Entry<T> {
-  token: Token,
+  token: u32,
   key: Option<String>,
   value: T,
 }
 
 pub struct Registry<T> {
   entries: RefCell<Vec<Entry<T>>>,
-  next_token: Cell<Token>,
+  next_token: Cell<u32>,
 }
 
 impl<T> Default for Registry<T> {
@@ -43,13 +43,13 @@ impl<T> Default for Registry<T> {
 }
 
 impl<T> Registry<T> {
-  pub fn alloc(&self) -> Token {
+  pub fn alloc(&self) -> u32 {
     let token = self.next_token.get();
     self.next_token.set(token.wrapping_add(1));
     token
   }
 
-  pub fn insert(&self, token: Token, key: Option<String>, value: T) -> Option<T> {
+  pub fn insert(&self, token: u32, key: Option<String>, value: T) -> Option<T> {
     let mut entries = self.entries.borrow_mut();
     if let Some(key) = key.as_deref() {
       if let Some(slot) = entries.iter_mut().find(|e| e.key.as_deref() == Some(key)) {
@@ -61,36 +61,25 @@ impl<T> Registry<T> {
     None
   }
 
-  pub fn remove(&self, token: Token) -> Option<T> {
+  pub fn remove(&self, token: u32) -> Option<T> {
     let mut entries = self.entries.borrow_mut();
     let index = entries.iter().position(|e| e.token == token)?;
     Some(entries.remove(index).value)
   }
 
-  pub fn get(&self, token: Token) -> Option<T>
+  pub fn get(&self, token: u32) -> Option<T>
   where
     T: Clone,
   {
     self.entries.borrow().iter().find(|e| e.token == token).map(|e| e.value.clone())
   }
 
-  pub fn contains(&self, token: Token) -> bool {
+  pub fn contains(&self, token: u32) -> bool {
     self.entries.borrow().iter().any(|e| e.token == token)
   }
 
   pub fn remove_matching(&self, predicate: impl Fn(&T) -> bool) -> Vec<T> {
-    let mut entries = self.entries.borrow_mut();
-    let mut retained = Vec::with_capacity(entries.len());
-    let mut removed = Vec::with_capacity(entries.len());
-    for entry in std::mem::take(&mut *entries) {
-      if predicate(&entry.value) {
-        removed.push(entry.value);
-      } else {
-        retained.push(entry);
-      }
-    }
-    *entries = retained;
-    removed
+    self.entries.borrow_mut().extract_if(.., |e| predicate(&e.value)).map(|e| e.value).collect()
   }
 
   pub fn values(&self) -> Vec<T>
@@ -112,13 +101,30 @@ impl<T> Registry<T> {
 pub type CallbackRegistry = Registry<Persistent<Function<'static>>>;
 
 impl CallbackRegistry {
-  pub fn register<'js>(&self, ctx: &Ctx<'js>, token: Token, key: Option<String>, callback: Function<'js>) {
-    if let Some(previous) = self.insert(token, key, Persistent::save(ctx, callback)) {
-      let _ = previous.restore(ctx);
-    }
+  pub fn register<'js>(&self, ctx: &Ctx<'js>, token: u32, callback: Function<'js>) {
+    self.insert(token, None, Persistent::save(ctx, callback));
   }
 
-  pub fn restore<'js>(&self, ctx: &Ctx<'js>, token: Token) -> Option<Function<'js>> {
+  /// `callback` until its disposer runs, or nothing once the plugin is unloading
+  pub fn subscribe<'js, S: 'js>(
+    ctx: &Ctx<'js>,
+    owner: &Rc<S>,
+    lifecycle: &Lifecycle,
+    registry: fn(&S) -> &CallbackRegistry,
+    callback: Function<'js>,
+  ) -> JsResult<Function<'js>> {
+    if lifecycle.is_unloading() {
+      return noop_disposer(ctx);
+    }
+    let token = registry(owner).alloc();
+    registry(owner).register(ctx, token, callback);
+    let owner = owner.clone();
+    make_disposer(ctx, move |ctx| {
+      registry(&owner).dispose(ctx, token);
+    })
+  }
+
+  pub fn restore<'js>(&self, ctx: &Ctx<'js>, token: u32) -> Option<Function<'js>> {
     let persistent = self.entries.borrow().iter().find(|e| e.token == token).map(|e| e.value.clone())?;
     persistent.restore(ctx).ok()
   }
@@ -128,14 +134,8 @@ impl CallbackRegistry {
     persistents.into_iter().filter_map(|p| p.restore(ctx).ok()).collect()
   }
 
-  pub fn dispose(&self, ctx: &Ctx<'_>, token: Token) -> bool {
-    match self.remove(token) {
-      Some(persistent) => {
-        let _ = persistent.restore(ctx);
-        true
-      }
-      None => false,
-    }
+  pub fn dispose(&self, _ctx: &Ctx<'_>, token: u32) -> bool {
+    self.remove(token).is_some()
   }
 
   pub fn take_all<'js>(&self, ctx: &Ctx<'js>) -> Vec<Function<'js>> {
@@ -143,10 +143,9 @@ impl CallbackRegistry {
     persistents.into_iter().filter_map(|p| p.restore(ctx).ok()).collect()
   }
 
-  pub fn release_all(&self, ctx: &Ctx<'_>) {
-    for persistent in self.entries.borrow_mut().drain(..) {
-      let _ = persistent.value.restore(ctx);
-    }
+  pub fn release_all(&self, _ctx: &Ctx<'_>) {
+    let entries = std::mem::take(&mut *self.entries.borrow_mut());
+    drop(entries);
   }
 }
 
@@ -202,8 +201,7 @@ pub fn make_disposer<'js>(ctx: &Ctx<'js>, dispose: impl Fn(&Ctx<'js>) + 'js) -> 
 
 /// every disposer is also a `Disposable`, so `using` and `DisposableStack` take one as they are
 fn disposable<'js>(ctx: &Ctx<'js>, f: Function<'js>) -> JsResult<Function<'js>> {
-  let symbol: rquickjs::Symbol = ctx.globals().get::<_, rquickjs::Object>("Symbol")?.get("dispose")?;
-  f.set(symbol, f.clone())?;
+  f.set(qjs_symbol_dispose_atom(ctx)?, f.clone())?;
   Ok(f)
 }
 
@@ -214,8 +212,7 @@ pub fn resolve_disposer<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> Option<Functi
     return Some(function.clone());
   }
   let object = value.as_object()?;
-  let symbol: rquickjs::Symbol = ctx.globals().get::<_, rquickjs::Object>("Symbol").ok()?.get("dispose").ok()?;
-  let dispose: Function<'js> = object.get(symbol).ok()?;
+  let dispose: Function<'js> = object.get(qjs_symbol_dispose_atom(ctx).ok()?).ok()?;
   let bind: Function<'js> = dispose.get("bind").ok()?;
   bind.call((This(dispose), object.clone())).ok()
 }

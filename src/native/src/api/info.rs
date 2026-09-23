@@ -44,3 +44,7 @@ pub(crate) fn install_inu<'js>(
   globals.inu.set("info", info_fn)?;
   Ok(())
 }
+
+#[cfg(test)]
+#[path = "info_tests.rs"]
+mod tests;

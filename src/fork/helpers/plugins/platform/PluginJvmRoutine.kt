@@ -15,28 +15,21 @@ internal class PluginJvmRoutine(
     private val host: PluginJvm.Session,
     private val hookMode: Boolean,
 ) : Runnable {
-    /** a budget or cancellation failure, which the routine's own `try` may not catch */
+    /** the routine's own `try` must not catch this */
     private class Abort(message: String) : RuntimeException(message)
 
-    /**
-     * The instruction vocabulary, hand-kept in step with `sdk/cli/src/routines/ops.ts`. Dispatch is
-     * exhaustive over it, so an op added here without a branch to run it does not compile.
-     */
+    /** see `sdk/cli/src/routines/ops.ts` */
     private enum class Op(
         val wire: String,
-        /** how many operands the shared branch reads; an op with a branch of its own reads its own fields */
         val operands: Int = 0,
-        /** refused outside `inu.xposed.routine`, where there is no call to read */
         val hookOnly: Boolean = false,
-        /** refused in `inu.xposed.routine`, which is never a defineClass body */
         val methodOnly: Boolean = false,
-        /** crosses the bridge, so a run checks its budget and its liveness before it */
         val java: Boolean = false,
     ) {
         THIS("this"),
         OWNER("owner", methodOnly = true),
         ARG("arg", operands = 1),
-        CAPTURE("capture"),
+        CAPTURE("capture", operands = 1),
 
         ARG_COUNT("argCount", hookOnly = true),
         SET_ARG("setArg", operands = 2, hookOnly = true),
@@ -46,28 +39,28 @@ internal class PluginJvmRoutine(
         SET_RESULT("setResult", operands = 1, hookOnly = true),
         SET_THROWABLE("setThrowable", operands = 1, hookOnly = true),
 
-        GET_SLOT("getSlot"),
-        SET_SLOT("setSlot"),
+        GET_SLOT("getSlot", operands = 1),
+        SET_SLOT("setSlot", operands = 2),
 
-        JUMP("jump"),
-        JUMP_IF_FALSY("jumpIfFalsy"),
-        JUMP_IF_TRUTHY("jumpIfTruthy"),
-        JUMP_IF_NULL("jumpIfNull"),
-        JUMP_IF_NOT_NULL("jumpIfNotNull"),
-        LOOP("loop"),
+        JUMP("jump", operands = 1),
+        JUMP_IF_FALSY("jumpIfFalsy", operands = 2),
+        JUMP_IF_TRUTHY("jumpIfTruthy", operands = 2),
+        JUMP_IF_NULL("jumpIfNull", operands = 2),
+        JUMP_IF_NOT_NULL("jumpIfNotNull", operands = 2),
+        LOOP("loop", operands = 1),
         RETURN("return"),
         THROW("throw", operands = 1),
         CATCH("catch"),
 
         GET("get", operands = 2, java = true),
-        SET("set", java = true),
-        CALL("call", java = true),
-        CALL_SUPER("callSuper", java = true),
-        NEW("new", java = true),
-        ARRAY("array"),
+        SET("set", operands = 3, java = true),
+        CALL("call", operands = 3, java = true),
+        CALL_SUPER("callSuper", operands = 4, java = true),
+        NEW("new", operands = 2, java = true),
+        ARRAY("array", operands = 1),
 
         ITERATE("iterate", operands = 1, java = true),
-        ADVANCE("advance"),
+        ADVANCE("advance", operands = 2),
 
         EQ("eq", operands = 2),
         NE("ne", operands = 2),
@@ -113,11 +106,10 @@ internal class PluginJvmRoutine(
     private val tries: IntArray
     private val slotCount: Int
 
-    /** what a run has to set up for, decided once: a predicate over arguments needs no clock */
     private val usesClock: Boolean
 
     init {
-        require(definition.toByteArray(Charsets.UTF_8).size <= VALUE_LIMIT) { "routine: definition exceeds 1 MB" }
+        require(definition.toByteArray(Charsets.UTF_8).size <= PluginJvm.VALUE_LIMIT_BYTES) { "routine: definition exceeds 1 MB" }
         val graph = JSONObject(definition)
         require(graph.optInt("v", 0) == 1) { "routine: unsupported bytecode version" }
 
@@ -130,7 +122,6 @@ internal class PluginJvmRoutine(
 
         val code = graph.getJSONArray("code")
         val count = code.length()
-        // a body that does nothing compiles to nothing, and running nothing is what it means
         require(count <= MAX_INSTRUCTIONS) { "routine: at most $MAX_INSTRUCTIONS instructions" }
 
         opcodes = Array(count) { at ->
@@ -154,7 +145,7 @@ internal class PluginJvmRoutine(
             if (op.java || op == Op.LOOP) clock = true
 
             fun operand(field: Int): Int = readOperand(node, field, at, pool).also {
-                // an iterator is the one value a run holds that never crossed the bridge's checks
+                // an iterator is the one value a run holds that never passed the bridge's checks
                 require(it < 0 || !cursors[it]) { "routine: an iterator reaches nothing but its advance" }
             }
             fun target(field: Int): Int {
@@ -166,75 +157,55 @@ internal class PluginJvmRoutine(
             fun immediate(field: Int, limit: Int): Int =
                 node.getInt(field).also { require(it in 0 until limit) { "routine: index out of range" } }
 
+            require(if (op == Op.RETURN) node.length() <= 2 else node.length() == op.operands + 1) {
+                "routine: malformed '${op.wire}'"
+            }
             when (op) {
-                Op.THIS, Op.OWNER, Op.ARG_COUNT, Op.METHOD, Op.RESULT, Op.THROWABLE, Op.CATCH ->
-                    require(node.length() == 1) { "routine: malformed '${op.wire}'" }
-                Op.CAPTURE -> {
-                    require(node.length() == 2) { "routine: malformed '${op.wire}'" }
-                    fieldA[at] = immediate(1, captureCount)
-                }
-                Op.GET_SLOT -> {
-                    require(node.length() == 2) { "routine: malformed '${op.wire}'" }
-                    fieldA[at] = immediate(1, slotCount)
-                }
+                Op.CAPTURE -> fieldA[at] = immediate(1, captureCount)
+                Op.GET_SLOT -> fieldA[at] = immediate(1, slotCount)
                 Op.SET_SLOT -> {
-                    require(node.length() == 3) { "routine: malformed '${op.wire}'" }
                     fieldA[at] = immediate(1, slotCount)
                     fieldB[at] = operand(2)
                 }
-                Op.JUMP, Op.LOOP -> {
-                    require(node.length() == 2) { "routine: malformed '${op.wire}'" }
-                    fieldA[at] = target(1)
-                }
+                Op.JUMP, Op.LOOP -> fieldA[at] = target(1)
                 Op.ADVANCE -> {
-                    require(node.length() == 3) { "routine: malformed '${op.wire}'" }
                     fieldA[at] = readOperand(node, 1, at, pool)
                     require(fieldA[at] >= 0 && cursors[fieldA[at]]) { "routine: advance expects an iterator" }
                     fieldB[at] = target(2)
                 }
                 Op.JUMP_IF_FALSY, Op.JUMP_IF_TRUTHY, Op.JUMP_IF_NULL, Op.JUMP_IF_NOT_NULL -> {
-                    require(node.length() == 3) { "routine: malformed '${op.wire}'" }
                     fieldA[at] = operand(1)
                     fieldB[at] = target(2)
                 }
                 Op.RETURN -> {
-                    require(node.length() <= 2) { "routine: malformed '${op.wire}'" }
                     fieldA[at] = if (node.length() == 1) NO_OPERAND else operand(1)
                     require(!hookMode || fieldA[at] == NO_OPERAND) {
                         "routine: a hook routine answers through setReturnValue"
                     }
                 }
                 Op.SET -> {
-                    require(node.length() == 4) { "routine: malformed '${op.wire}'" }
                     fieldA[at] = operand(1)
                     fieldB[at] = operand(2)
                     fieldC[at] = operand(3)
                 }
                 Op.CALL -> {
-                    require(node.length() == 4) { "routine: malformed '${op.wire}'" }
                     fieldA[at] = operand(1)
                     fieldB[at] = operand(2)
                     argLists[at] = readArguments(node, 3, at, pool, cursors)
                 }
                 Op.CALL_SUPER -> {
-                    require(node.length() == 5) { "routine: malformed '${op.wire}'" }
                     fieldA[at] = operand(1)
                     fieldB[at] = operand(2)
                     fieldC[at] = operand(3)
                     argLists[at] = readArguments(node, 4, at, pool, cursors)
                 }
                 Op.NEW -> {
-                    require(node.length() == 3) { "routine: malformed '${op.wire}'" }
                     fieldA[at] = operand(1)
                     argLists[at] = readArguments(node, 2, at, pool, cursors)
                 }
-                Op.ARRAY -> {
-                    require(node.length() == 2) { "routine: malformed '${op.wire}'" }
-                    argLists[at] = readArguments(node, 1, at, pool, cursors)
-                }
+                Op.ARRAY -> argLists[at] = readArguments(node, 1, at, pool, cursors)
                 else -> {
                     val arity = op.operands
-                    require(node.length() == arity + 1) { "routine: malformed '${op.wire}'" }
                     if (arity > 0) fieldA[at] = operand(1)
                     if (arity > 1) fieldB[at] = operand(2)
                     if (op == Op.ITERATE) cursors[at] = true
@@ -251,14 +222,14 @@ internal class PluginJvmRoutine(
     private fun readOperand(node: JSONArray, field: Int, at: Int, pool: ArrayList<Any?>): Int {
         val value = node.get(field)
         if (value is JSONArray) {
-            pool.add(literalOf(value))
+            pool.add(decodeLiteral(value))
             return -pool.size
         }
         require(value is Int && value >= 0 && value < at) { "routine: an operand reads a later register" }
         return value
     }
 
-    private fun literalOf(value: JSONArray): Any? {
+    private fun decodeLiteral(value: JSONArray): Any? {
         if (value.length() == 2) {
             require(value.getString(0) == "L") { "routine: unknown literal tag" }
             return value.getString(1).toLongOrNull() ?: error("routine: malformed long literal")
@@ -315,10 +286,7 @@ internal class PluginJvmRoutine(
         return table
     }
 
-    /**
-     * An array capture crosses flattened into the value list, because captures cross one wire each.
-     * [layout] says how to put them back: `-1` for a plain value, or the nested shape of an array.
-     */
+    /** captures cross one wire each. [layout] is `-1` for a plain value, or the nested shape of an array */
     private fun rebuildCaptures(layout: JSONArray?, values: List<Any?>): List<Any?> {
         if (layout == null) return values
         val cursor = intArrayOf(0)
@@ -340,10 +308,7 @@ internal class PluginJvmRoutine(
 
     override fun run() { execute(null) }
 
-    /**
-     * Converts the filter's return value to a boolean. Runs the hook if the filter fails,
-     * so an error cannot silently disable it.
-     */
+    /** a failing filter runs the hook, so an error cannot silently disable it */
     fun decide(receiver: Any?, args: Array<Any?>): Boolean = try {
         getTruthiness(execute(null, receiver, args))
     } catch (e: Throwable) {
@@ -380,7 +345,7 @@ internal class PluginJvmRoutine(
                         Op.THIS -> if (hookMode) host.checkedOperand(requireNotNull(context).getThisObject()) else host.checkedOperand(methodSelf)
                         Op.OWNER -> owner ?: throw IllegalStateException("routine: inu.jvm.superOf needs the routine to be a defineClass body")
                         Op.ARG -> {
-                            val index = indexOf(read(fieldA[pc], registers))
+                            val index = requireIndex(read(fieldA[pc], registers))
                             if (hookMode) {
                                 val hook = requireNotNull(context)
                                 if (index in hook.arguments.indices) host.checkedOperand(hook.getArgument(index)) else null
@@ -392,7 +357,7 @@ internal class PluginJvmRoutine(
                         Op.CAPTURE -> captures[fieldA[pc]]
                         Op.ARG_COUNT -> requireNotNull(context).arguments.size
                         Op.SET_ARG -> {
-                            val index = indexOf(read(fieldA[pc], registers))
+                            val index = requireIndex(read(fieldA[pc], registers))
                             requireNotNull(context).setArgument(index, read(fieldB[pc], registers))
                             null
                         }
@@ -453,25 +418,25 @@ internal class PluginJvmRoutine(
                             read(fieldC[pc], registers),
                         )
                         Op.CALL -> host.callMember(
-                            targetOf(read(fieldA[pc], registers)),
-                            nameOf(read(fieldB[pc], registers)),
+                            requireReceiver(read(fieldA[pc], registers)),
+                            requireMemberName(read(fieldB[pc], registers)),
                             readAll(argLists[pc]!!, registers),
                         )
                         Op.CALL_SUPER -> host.callSuper(
-                            targetOf(read(fieldA[pc], registers)),
+                            requireReceiver(read(fieldA[pc], registers)),
                             read(fieldB[pc], registers),
-                            nameOf(read(fieldC[pc], registers)),
+                            requireMemberName(read(fieldC[pc], registers)),
                             readAll(argLists[pc]!!, registers),
                         )
-                        Op.NEW -> host.newInstanceOf(
-                            targetOf(read(fieldA[pc], registers)),
+                        Op.NEW -> host.createInstance(
+                            requireReceiver(read(fieldA[pc], registers)),
                             readAll(argLists[pc]!!, registers),
                         )
                         Op.ARRAY -> {
                             val items = argLists[pc]!!
                             Array<Any?>(items.size) { read(items[it], registers) }
                         }
-                        Op.ITERATE -> host.iterate(targetOf(read(fieldA[pc], registers)))
+                        Op.ITERATE -> host.iterate(requireReceiver(read(fieldA[pc], registers)))
                         Op.ADVANCE -> {
                             val cursor = read(fieldA[pc], registers)
                             require(cursor is Iterator<*>) { "routine: expected an iterator" }
@@ -492,7 +457,7 @@ internal class PluginJvmRoutine(
                             bitwise(op, read(fieldA[pc], registers), read(fieldB[pc], registers))
                         Op.BIT_NOT -> {
                             val operand = read(fieldA[pc], registers)
-                            if (operand is Long) operand.inv() else intOf(operand).inv()
+                            if (operand is Long) operand.inv() else requireInt(operand).inv()
                         }
                         Op.NOT -> !getTruthiness(read(fieldA[pc], registers))
                     }
@@ -503,8 +468,7 @@ internal class PluginJvmRoutine(
             } catch (e: Throwable) {
                 val handler = if (e is Abort) -1 else handlerFor(pc)
                 if (handler < 0) {
-                    // a defineClass body answers its java caller; a runnable or a hook phase has
-                    // nobody to answer, and what it already changed stays changed
+                    // a runnable or hook phase has nobody to answer, and what it changed stays changed
                     if (methodArgs != null || e !is Exception) throw e
                     host.session.log.d("routine", "failed", e)
                     return methodResult
@@ -526,7 +490,7 @@ internal class PluginJvmRoutine(
         return values
     }
 
-    /** regions nest, so the innermost covering one is the narrowest: latest start, earliest end */
+    /** regions nest: the innermost is latest start, earliest end */
     private fun handlerFor(pc: Int): Int {
         var best = -1
         var bestStart = -1
@@ -545,28 +509,28 @@ internal class PluginJvmRoutine(
         return best
     }
 
-    private fun targetOf(value: Any?): Any = value ?: error("routine: null receiver")
+    private fun requireReceiver(value: Any?): Any = value ?: error("routine: null receiver")
 
-    private fun nameOf(value: Any?): String =
+    private fun requireMemberName(value: Any?): String =
         value as? String ?: refuse("invalid-argument", "routine: a member name must be text")
 
     private fun readMember(target: Any?, key: Any?): Any? {
-        val receiver = targetOf(target)
+        val receiver = requireReceiver(target)
         if (key is String) {
             if (key == "length" && receiver.javaClass.isArray) return host.getArrayLength(receiver)
             return host.getMember(receiver, key)
         }
-        return host.getElement(receiver, indexOf(key))
+        return host.getElement(receiver, requireIndex(key))
     }
 
     private fun writeMember(target: Any?, key: Any?, value: Any?): Any? {
-        val receiver = targetOf(target)
+        val receiver = requireReceiver(target)
         if (key is String) host.setMember(receiver, key, value)
-        else host.setElement(receiver, indexOf(key), value)
+        else host.setElement(receiver, requireIndex(key), value)
         return value
     }
 
-    private fun indexOf(value: Any?): Int {
+    private fun requireIndex(value: Any?): Int {
         if (value is Int) return value
         require(value is Number && value.toDouble().isFinite() && value.toDouble() == value.toInt().toDouble()) {
             "routine: expected an integer index"
@@ -588,7 +552,7 @@ internal class PluginJvmRoutine(
     private fun isIntegral(value: Any?): Boolean =
         value is Byte || value is Short || value is Int || value is Long
 
-    private fun intOf(value: Any?): Int {
+    private fun requireInt(value: Any?): Int {
         require(isIntegral(value)) { "routine: bitwise operands must be integers" }
         return (value as Number).toInt()
     }
@@ -638,19 +602,17 @@ internal class PluginJvmRoutine(
         else -> order >= 0
     }
 
-    /** js `+`, which concatenates as soon as either side is text */
     private fun add(left: Any?, right: Any?): Any? {
-        if (left is String || right is String) return textOf(left) + textOf(right)
+        // js `+` semantics
+        if (left is String || right is String) return "$left$right"
         return calculate(Op.ADD, left, right)
     }
-
-    private fun textOf(value: Any?): String = if (value == null) "null" else value.toString()
 
     private fun calculate(op: Op, left: Any?, right: Any?): Number {
         if (left is Int && right is Int) {
             val a = left.toLong()
             val b = right.toLong()
-            // two ints widened to 64 bits cannot overflow, so the exact forms have nothing to catch
+            // two ints widened to 64 bits cannot overflow
             return when (op) {
                 Op.ADD -> a + b
                 Op.SUB -> a - b
@@ -714,8 +676,8 @@ internal class PluginJvmRoutine(
                 else -> a ushr b.toInt()
             }
         }
-        val a = intOf(left)
-        val b = intOf(right)
+        val a = requireInt(left)
+        val b = requireInt(right)
         return when (op) {
             Op.BIT_AND -> a and b
             Op.BIT_OR -> a or b
@@ -727,10 +689,9 @@ internal class PluginJvmRoutine(
     }
 
     companion object {
-        private const val VALUE_LIMIT = 1024 * 1024
         private const val BUDGET_NANOS = 250_000_000L
 
-        /** how often a back edge reads the clock; every one of them checks liveness */
+        /** back edges between clock reads; every one checks liveness */
         private const val CLOCK_EVERY = 64
 
         private const val MAX_INSTRUCTIONS = 1024

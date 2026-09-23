@@ -1,61 +1,15 @@
 // ==InuPlugin==
 // @name         shell test
-// @author       teidesu
-// @version      1.0
 // @description  asserts inu.openUrl screens what it hands the system, and exercises inu.clipboard and inu.ui.chooser
 // @grant        openUrl
 // @grant        clipboard.read
 // @grant        clipboard.write
-// @plugin-api   1
-// @platform     android
 // ==/InuPlugin==
 
-// the load-time half is everything that can run without touching the user's device: a refused url
-// opens nothing and a refused chooser shows nothing. the half that does something the user would
-// notice - clobbering their clipboard, opening a browser, putting three dialogs on screen - is a
-// function, reached from a button on a device.
+// the load-time half opens nothing. the half the user would notice (clipboard, browser, three
+// dialogs) is a function, reached from a button on a device
 
-let ran = 0
-
-function pass(label, detail) {
-  ran++
-  console.log(detail === undefined ? `PASS ${label}` : `PASS ${label}: ${detail}`)
-}
-
-function fail(label, detail) {
-  ran++
-  console.error(`FAIL ${label}: ${detail}`)
-}
-
-function check(label, ok, detail) {
-  if (ok) pass(label, detail)
-  else fail(label, detail)
-}
-
-function expectThrow(label, fn) {
-  try {
-    fn()
-  } catch (e) {
-    return pass(label, `${e.name}: ${e.message}`)
-  }
-  fail(label, 'did not throw')
-}
-
-function expectPluginError(label, code, fn) {
-  let error
-  try {
-    fn()
-  } catch (e) {
-    error = e
-  }
-  if (error === undefined) return fail(label, 'did not throw')
-  check(label, error instanceof inu.PluginError && error.code === code, `${error.name}: ${error.code}`)
-}
-
-// -- load-time half --
-
-// exact, not a floor: every refusal below is satisfied by a member that stopped existing, so the
-// surface is asserted positively first and the count is what catches the rest
+// exact: a vanished member satisfies every refusal, so the surface is asserted positively and the count catches the rest
 const EXPECTED = 18
 const before = ran
 
@@ -75,7 +29,7 @@ try {
 }
 check('openUrl accepts Telegram deep links', deepLink === 'opened', deepLink)
 
-// the allowlist is the only thing between a url grant and "start any activity on the device with any extras"
+// the allowlist is all that stands between a url grant and starting any activity with any extras
 for (const url of [
   'intent://scan/#Intent;scheme=zxing;package=com.evil;end',
   'file:///data/data/org.telegram.messenger/files/plugins',
@@ -83,10 +37,9 @@ for (const url of [
   'javascript:alert(1)',
   'telegram.org',
 ]) {
-  expectPluginError(`openUrl refuses ${url}`, 'invalid-argument', () => inu.openUrl(url))
+  expectThrow(`openUrl refuses ${url}`, 'invalid-argument', () => inu.openUrl(url))
 }
 
-// and a url that is not the host it reads as
 for (const url of [
   'https://telegram.org@evil.com/',
   'https://evil.com\\@telegram.org/',
@@ -94,28 +47,28 @@ for (const url of [
   'https://telegram.org/a\nb',
   'https:///nohost',
 ]) {
-  expectPluginError(`openUrl refuses ${JSON.stringify(url)}`, 'invalid-argument', () => inu.openUrl(url))
+  expectThrow(`openUrl refuses ${JSON.stringify(url)}`, 'invalid-argument', () => inu.openUrl(url))
 }
 
-expectThrow('chooser refuses an empty item list', () => {
+expectThrow('chooser refuses an empty item list', null, () => {
   inu.ui.chooser({ items: [] })
 })
-expectThrow('chooser refuses items that are not a list', () => {
+expectThrow('chooser refuses items that are not a list', null, () => {
   // @ts-expect-error
   inu.ui.chooser({ items: 'first, second' })
 })
-expectThrow('chooser refuses an item that is neither text nor an object', () => {
+expectThrow('chooser refuses an item that is neither text nor an object', null, () => {
   // @ts-expect-error
   inu.ui.chooser({ items: [42] })
 })
-expectThrow('chooser refuses a `selected` out of range', () => {
+expectThrow('chooser refuses a `selected` out of range', null, () => {
   inu.ui.chooser({ items: ['first', 'second'], selected: 5 })
 })
-expectThrow('chooser refuses a list of indices unless `multiple` is set', () => {
+expectThrow('chooser refuses a list of indices unless `multiple` is set', null, () => {
   // @ts-expect-error
   inu.ui.chooser({ items: ['first', 'second'], selected: [0] })
 })
-expectThrow('chooser refuses a single index when `multiple` is set', () => {
+expectThrow('chooser refuses a single index when `multiple` is set', null, () => {
   // @ts-expect-error
   inu.ui.chooser({ items: ['first', 'second'], multiple: true, selected: 0 })
 })
@@ -123,8 +76,6 @@ expectThrow('chooser refuses a single index when `multiple` is set', () => {
 if (ran - before !== EXPECTED) {
   console.error(`FAIL oracle: ${ran - before} load-time assertions ran, expected exactly ${EXPECTED}`)
 }
-
-// -- the half that touches the device --
 
 async function runShell() {
   const text = 'inugram shell test'
@@ -152,11 +103,7 @@ async function runShell() {
     multiple: true,
     selected: [0, 2],
   })
-  check(
-    'a multi-select chooser resolves to a list of indices',
-    Array.isArray(many) && many.join(',') === '0,2',
-    JSON.stringify(many),
-  )
+  check('a multi-select chooser resolves to a list of indices', Array.isArray(many) && many.join(',') === '0,2', JSON.stringify(many))
 
   const none = await inu.ui.chooser({ title: 'select it, then cancel', items: ['first'] })
   check('a dismissed chooser resolves to null', none === null, JSON.stringify(none))
@@ -166,7 +113,6 @@ async function runShell() {
 
 globalThis.__shell = runShell
 
-// a device reaches the same function through a button; the harness has no settings pages
 if (typeof inu.ui.settingsPage === 'function') {
   inu.registerSettings(
     inu.ui.settingsPage({

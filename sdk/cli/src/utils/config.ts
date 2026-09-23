@@ -137,7 +137,7 @@ export async function loadConfig(cwd: string, explicit?: string): Promise<Resolv
   const vocabulary = await loadVocabulary(root)
   const config = await importConfig(configFile)
 
-  const entries = Object.entries(config.plugins ?? {})
+  const entries = Object.entries(config.plugins)
   if (entries.length === 0) throw new CliError(`${configFile} declares no plugins`)
   const outDir = resolve(root, config.outDir ?? 'dist')
   const schema = createManifestSchema(vocabulary)

@@ -26,14 +26,6 @@ pub struct Deadline {
   previously_tripped: bool,
 }
 
-pub fn arm_entry_deadline() -> Deadline {
-  arm(ENTRY_DEADLINE_MS)
-}
-
-pub fn arm_eval_deadline() -> Deadline {
-  arm(EVAL_DEADLINE_MS)
-}
-
 pub(crate) fn arm(limit_ms: u64) -> Deadline {
   let previous = ARMED.with(|a| a.get());
   let mut armed = Armed {
@@ -85,15 +77,69 @@ pub fn install_interrupt_handler(rt: &Runtime, log: crate::Log) {
   })));
 }
 
+/// What an entry leaves below the JS limit for native frames: host upcalls through JNI into ART,
+/// and quickjs's own C frames between two checks.
+pub const STACK_MARGIN_BYTES: usize = 256 * 1024;
+
+thread_local! {
+    static STACK_LOW: Cell<Option<usize>> = const { Cell::new(None) };
+}
+
+/// The lowest address of this thread's stack. Cached: a thread's stack never moves, and on the
+/// main thread bionic answers by reading `/proc/self/maps`.
+fn stack_low() -> Option<usize> {
+  if let Some(low) = STACK_LOW.with(|s| s.get()) {
+    return Some(low);
+  }
+  let low = query_stack_low()?;
+  STACK_LOW.with(|s| s.set(Some(low)));
+  Some(low)
+}
+
+#[cfg(not(target_vendor = "apple"))]
+fn query_stack_low() -> Option<usize> {
+  // SAFETY: `attr` is initialized by `pthread_getattr_np` before it is read, and destroyed once
+  unsafe {
+    let mut attr: libc::pthread_attr_t = std::mem::zeroed();
+    if libc::pthread_getattr_np(libc::pthread_self(), &mut attr) != 0 {
+      return None;
+    }
+    let mut addr: *mut libc::c_void = std::ptr::null_mut();
+    let mut size: libc::size_t = 0;
+    let got = libc::pthread_attr_getstack(&attr, &mut addr, &mut size);
+    libc::pthread_attr_destroy(&mut attr);
+    (got == 0).then_some(addr as usize)
+  }
+}
+
+#[cfg(target_vendor = "apple")]
+fn query_stack_low() -> Option<usize> {
+  // SAFETY: both only read the calling thread's own attributes
+  unsafe {
+    let this = libc::pthread_self();
+    (libc::pthread_get_stackaddr_np(this) as usize).checked_sub(libc::pthread_get_stacksize_np(this))
+  }
+}
+
+/// Fits quickjs's stack limit to the thread about to enter the runtime. quickjs measures from where
+/// the entry starts and defaults to 1 MB, which is more than an app thread entered part-way down
+/// its own 1 MB stack has left, so deep recursion would fault instead of throwing `RangeError`.
+/// Call before `Context::with`, which takes the lock this does.
+pub fn fit_stack_limit(rt: &Runtime) {
+  let Some(low) = stack_low() else {
+    return;
+  };
+  let here = 0u8;
+  let left = (&here as *const u8 as usize).saturating_sub(low);
+  // 0 would lift the limit altogether
+  rt.set_max_stack_size(left.saturating_sub(STACK_MARGIN_BYTES).max(1));
+}
+
 pub const HEAP_LIMIT_BYTES: usize = 32 * 1024 * 1024;
 
 pub const EXTERNAL_LIMIT_BYTES: usize = 64 * 1024 * 1024;
 
 const EXTERNAL_GC_STEP_BYTES: usize = 8 * 1024 * 1024;
-
-pub fn apply_heap_limit(rt: &Runtime) {
-  rt.set_memory_limit(HEAP_LIMIT_BYTES);
-}
 
 pub fn describe_heap_exhaustion<'js>(exception: &Value<'js>) -> Option<String> {
   let ceiling_mb = HEAP_LIMIT_BYTES / (1024 * 1024);

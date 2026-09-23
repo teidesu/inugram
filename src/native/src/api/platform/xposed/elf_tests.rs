@@ -17,7 +17,6 @@ const SHT_DYNSYM: u32 = 11;
 /// Builds an ELF64 image with the symbol tables described, plus an optional `.gnu_debugdata`
 /// section holding a second such image.
 struct Builder {
-  /// (section name, symbols as (name, value, defined))
   tables: Vec<SyntheticTable>,
   debugdata: Option<Vec<u8>>,
 }
@@ -41,7 +40,7 @@ impl Builder {
 
   fn build(self) -> Vec<u8> {
     let mut shstrtab = vec![0u8];
-    let name_of = |strings: &mut Vec<u8>, text: &str| {
+    let append_symbol_name = |strings: &mut Vec<u8>, text: &str| {
       let at = strings.len() as u32;
       strings.extend_from_slice(text.as_bytes());
       strings.push(0);
@@ -56,7 +55,7 @@ impl Builder {
       let mut strtab = vec![0u8];
       let mut entries = Vec::new();
       for (symbol, value, defined) in symbols {
-        let at = name_of(&mut strtab, symbol);
+        let at = append_symbol_name(&mut strtab, symbol);
         let mut entry = [0u8; SYM_SIZE];
         entry[0..4].copy_from_slice(&at.to_le_bytes());
         entry[6..8].copy_from_slice(&if *defined { 1u16 } else { SHN_UNDEF }.to_le_bytes());
@@ -66,22 +65,22 @@ impl Builder {
 
       let strtab_index = sections.len() + 1;
       sections.push(header(
-        name_of(&mut shstrtab, name),
+        append_symbol_name(&mut shstrtab, name),
         if *name == ".dynsym" { SHT_DYNSYM } else { SHT_SYMTAB },
         strtab_index as u32,
         SYM_SIZE as u64,
       ));
       blobs.push(entries);
-      sections.push(header(name_of(&mut shstrtab, ".strtab"), 3, 0, 0));
+      sections.push(header(append_symbol_name(&mut shstrtab, ".strtab"), 3, 0, 0));
       blobs.push(strtab);
     }
 
     if let Some(compressed) = &self.debugdata {
-      sections.push(header(name_of(&mut shstrtab, ".gnu_debugdata"), 1, 0, 0));
+      sections.push(header(append_symbol_name(&mut shstrtab, ".gnu_debugdata"), 1, 0, 0));
       blobs.push(compressed.clone());
     }
 
-    sections.push(header(name_of(&mut shstrtab, ".shstrtab"), 3, 0, 0));
+    sections.push(header(append_symbol_name(&mut shstrtab, ".shstrtab"), 3, 0, 0));
     let shstrndx = sections.len() - 1;
     blobs.push(shstrtab);
 
@@ -144,31 +143,16 @@ fn a_prefix_matches_the_first_defined_symbol_that_starts_with_it() {
   assert_eq!(symbols.prefix("_ZN3art9Something"), None);
 }
 
+/// libart's .dynsym carries plenty of undefined symbols, and they name no address
 #[test]
-fn an_undefined_symbol_is_not_an_answer() {
-  // libart's .dynsym carries plenty of these, and they name no address
-  let image = Builder::new().table(".dynsym", &[("memcpy", 0x99, false), ("memcpy", 0x77, true)]).build();
-  let symbols = Symbols::parse(image).expect("parses");
-  assert_eq!(symbols.exact("memcpy"), Some(0x77));
-}
-
-#[test]
-fn a_zero_valued_symbol_is_not_an_answer() {
+fn an_undefined_or_zero_valued_symbol_is_not_an_answer_in_either_table() {
   let image = Builder::new()
+    .table(".dynsym", &[("memcpy", 0x99, false), ("memcpy", 0x77, true)])
     .table(".symtab", &[("_ZN3art3Foo3BarEv", 0, true), ("_ZN3art3Foo3BarEv", 0x40, true)])
     .build();
   let symbols = Symbols::parse(image).expect("parses");
+  assert_eq!(symbols.exact("memcpy"), Some(0x77));
   assert_eq!(symbols.exact("_ZN3art3Foo3BarEv"), Some(0x40));
-}
-
-#[test]
-fn symtab_is_searched_as_well_as_dynsym() {
-  let image = Builder::new()
-    .table(".dynsym", &[("exported", 0x10, true)])
-    .table(".symtab", &[("local_only", 0x20, true)])
-    .build();
-  let symbols = Symbols::parse(image).expect("parses");
-  assert_eq!(symbols.exact("local_only"), Some(0x20));
 }
 
 #[test]

@@ -46,7 +46,7 @@ it('checks capture count, including holes and spreads, without trusting binding 
   const source = 'inu.jvm.routine(() => CAPTURE)'
   const call = findRoutineCalls(parseFile('routine.ts', source).program)[0]
   if (!isRoutineFunction(call.body)) throw new Error('expected a routine')
-  const program = compileRoutine(call.body, source, { mode: 'method', file: 'routine.ts' })
+  const program = compileRoutine(call.body, source, { mode: 'method' })
   const emitted = emitRoutineCall('inu.jvm.routine', program)
   for (const passed of ['[renamed]', '[42]', '[object.member]']) {
     expect(verifyFile('built.js', emitted.replace(', [CAPTURE])', `, ${passed})`))[0].problem).toBeNull()
