@@ -144,13 +144,16 @@ Rust and Kotlin; do not add a schema/code-generation layer for them.
   Never resolve an old callback ID through `plugin.engine`. `QuickJs` has no
   session back-reference; JNI/resource utilities may take the engine alone.
 - Install IDs are minted independently of manifests and survive reload/rename.
-  They key storage; uninstall must wipe every per-install store.
+  A source file is named `<install id>.js`, so `PLUGINS_STATE` only adds order and flags.
+  They key storage; uninstall must wipe every per-install store, and `sweepOrphans` at load
+  drops stores and settings of ids with no source file.
 - `PluginManifest.id` is `@id` verbatim, or a slug derived from `@author` and
   `@name` when there is none. It decides only what an install replaces, never
   storage. `@inugram/cli` writes the same derivation, so keep the two in step.
 - Boot the grant-selected early cohort in `ApplicationLoader.postInitApplication`,
   bounded by `BootCohort.EARLY_BUDGET_MILLIS`; load the rest at first UI.
-  `BootGuard` must survive process death during one plugin start, not a whole pass.
+  `BootGuard` must survive process death during one plugin start, not a whole pass, and
+  keeps its flags in its own files, never the shared prefs.
 - Call `stopDispatching()` before teardown. `onUnload` gets a shared two-second
   cleanup phase; only runnables created for cleanup bypass stopped
   admission. Reload and uninstall wait for teardown. Poll without the engine lease.

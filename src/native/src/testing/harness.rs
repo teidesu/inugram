@@ -362,6 +362,7 @@ impl Drop for TempPath {
     let _ = std::fs::remove_file(&self.0);
     let _ = std::fs::remove_dir_all(&self.0);
     let _ = std::fs::remove_file(crate::api::io::local_storage::staged_path(&self.0));
+    let _ = std::fs::remove_file(crate::api::io::local_storage::quarantine_path(&self.0));
   }
 }
 

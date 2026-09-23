@@ -1,7 +1,7 @@
 package desu.inugram.helpers.plugins
 
-import androidx.core.content.edit
-import desu.inugram.InuConfig
+import java.io.File
+import java.nio.file.Files
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -18,31 +18,39 @@ import org.junit.Test
  * A crashed process is modelled the way it presents to the next start - the arming write landed and
  * the clearing write never did - which is the state on disk and not an approximation of it.
  *
- * These share the app's own prefs file, so [clear] runs on both sides of every case: a guard flag
- * left behind puts the *device* into safe mode for the next suite and the next launch.
+ * Each case gets its own directory, so a flag left behind cannot put the device into safe mode.
  */
 class BootGuardTest {
+    private lateinit var dir: File
+    private var now = 1_000L
+
     @Before
     fun setUp() {
         resetBridge()
-        clear()
+        dir = Files.createTempDirectory("boot-guard").toFile()
     }
 
     @After
-    fun tearDown() = clear()
-
-    private fun clear() = InuConfig.prefs.edit(commit = true) {
-        remove(BootGuard.GUARD_KEY)
-        remove(BootGuard.FORCED_KEY)
+    fun tearDown() {
+        dir.deleteRecursively()
     }
 
     /** what the next process reads; a fresh instance is a fresh start over the same disk */
-    private fun restart() = BootGuard()
+    private fun restart() = BootGuard(dir) { now }
 
-    private fun armed(): Boolean = InuConfig.prefs.getBoolean(BootGuard.GUARD_KEY, false)
+    private fun armed(): Boolean = File(dir, BootGuard.STARTING).exists()
 
     /** a process that died with plugin code on the stack: the arming write landed, the clearing one did not */
-    private fun crash() = InuConfig.prefs.edit(commit = true) { putBoolean(BootGuard.GUARD_KEY, true) }
+    private fun crash() = File(dir, BootGuard.STARTING).apply { parentFile!!.mkdirs() }.writeText("")
+
+    /** a process whose plugins started and which then died of an uncaught exception [after] millis later */
+    private fun crashAfterStart(after: Long) {
+        val guard = restart()
+        assertTrue(guard.startPass())
+        guard.guardPlugin {}
+        now += after
+        guard.recordCrash()
+    }
 
     @Test
     fun a_plugin_that_came_back_leaves_nothing_behind_for_the_next_start() {
@@ -85,7 +93,7 @@ class BootGuardTest {
         val guard = restart()
         assertTrue(guard.startPass())
         var duringWrite = false
-        guard.guardPlugin { duringWrite = InuConfig.prefs.getBoolean(BootGuard.GUARD_KEY, false) }
+        guard.guardPlugin { duringWrite = armed() }
         assertTrue(duringWrite, "a plugin ran with nothing committed to catch it")
         assertFalse(armed())
     }
@@ -126,7 +134,7 @@ class BootGuardTest {
         guard.guardPlugin {}
         assertTrue(guard.startPass())
         var duringWrite = false
-        guard.guardPlugin { duringWrite = InuConfig.prefs.getBoolean(BootGuard.GUARD_KEY, false) }
+        guard.guardPlugin { duringWrite = armed() }
         assertTrue(duringWrite)
         assertFalse(armed())
     }
@@ -140,6 +148,46 @@ class BootGuardTest {
         assertEquals(BootGuard.Reason.FORCED, next.reason)
 
         assertTrue(restart().startPass())
+    }
+
+    @Test
+    fun two_processes_crashing_soon_after_their_plugins_started_are_a_loop() {
+        crashAfterStart(1_000)
+        assertTrue(restart().startPass(), "one crash is not a loop")
+        crashAfterStart(1_000)
+
+        val next = restart()
+        assertFalse(next.startPass())
+        assertEquals(BootGuard.Reason.CRASH_LOOP, next.reason)
+        assertTrue(restart().startPass(), "the count is spent by the safe start it caused")
+    }
+
+    @Test
+    fun a_crash_long_after_the_plugins_started_is_not_counted() {
+        crashAfterStart(1_000)
+        crashAfterStart(BootGuard.CRASH_WINDOW_MILLIS)
+        assertTrue(restart().startPass())
+    }
+
+    @Test
+    fun a_crash_before_any_plugin_ran_is_not_counted() {
+        repeat(BootGuard.CRASH_LIMIT) {
+            val guard = restart()
+            assertTrue(guard.startPass())
+            guard.recordCrash()
+        }
+        assertTrue(restart().startPass())
+    }
+
+    @Test
+    fun a_process_that_survived_the_window_resets_the_count() {
+        crashAfterStart(1_000)
+        val survivor = restart()
+        assertTrue(survivor.startPass())
+        survivor.guardPlugin {}
+        survivor.survivedWindow()
+        crashAfterStart(1_000)
+        assertTrue(restart().startPass(), "the crashes were not consecutive")
     }
 
     @Test

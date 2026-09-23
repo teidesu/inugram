@@ -370,14 +370,27 @@ fn a_torn_frame_loses_itself_and_nothing_written_after() {
 }
 
 #[test]
-fn a_file_that_is_not_a_store_reads_as_empty_and_is_replaced_on_open() {
+fn a_file_that_is_not_a_store_is_moved_aside_and_the_store_starts_empty() {
   let file = TempPath::default();
-  fs::write(&file.0, b"not a store").unwrap();
+  fs::write(&file.0, b"INUKV\x02 from a newer build").unwrap();
   let ls = open(&file.0);
   assert_eq!(ls.eval("Object.keys(localStorage)"), "[]");
   ls.eval("localStorage.setItem('a', '1')");
   drop(ls);
   assert_eq!(open(&file.0).eval("localStorage.getItem('a')"), "1");
+  assert_eq!(fs::read(quarantine_path(&file.0)).unwrap(), b"INUKV\x02 from a newer build");
+}
+
+#[test]
+fn a_torn_magic_reads_as_empty_and_is_not_moved_aside() {
+  let file = TempPath::default();
+  fs::write(&file.0, &MAGIC[..3]).unwrap();
+  let ls = open(&file.0);
+  assert_eq!(ls.eval("Object.keys(localStorage)"), "[]");
+  ls.eval("localStorage.setItem('a', '1')");
+  drop(ls);
+  assert_eq!(open(&file.0).eval("localStorage.getItem('a')"), "1");
+  assert!(!quarantine_path(&file.0).exists());
 }
 
 #[test]

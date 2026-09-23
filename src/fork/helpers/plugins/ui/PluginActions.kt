@@ -67,6 +67,7 @@ object PluginActions : SessionResource {
     const val MESSAGE_PLACEMENT_BUBBLE = 1
     const val MESSAGE_PLACEMENT_SELECTION = 2
     private const val ALL_PLACEMENTS = -1
+    private const val PLUGIN_ORDER_PREFIX = "p:"
 
     // keep in sync with rust `actions::DYNAMIC_*`
     const val DYNAMIC_TEXT = 1
@@ -254,7 +255,23 @@ object PluginActions : SessionResource {
 
     fun builtInOrderKey(key: String): String = "b:$key"
 
-    fun pluginOrderKey(key: ActionKey): String = "p:${key.storageKey}"
+    fun pluginOrderKey(key: ActionKey): String = "$PLUGIN_ORDER_PREFIX${key.storageKey}"
+
+    /** drops every setting keyed by an install outside [live], which nothing could otherwise reach again */
+    fun retainInstalls(live: Set<String>) {
+        fun keeps(storageKey: String) = storageKey.substringBefore(':') in live
+        for (kind in intArrayOf(KIND_CHAT, KIND_MESSAGE)) {
+            val config = config(kind)
+            val current = config.value
+            val retained = PluginActionSettings(
+                disabled = current.disabled.filterTo(HashSet(), ::keeps),
+                pinned = current.pinned.filterTo(HashSet(), ::keeps),
+                mainOrder = current.mainOrder.filter { !it.startsWith(PLUGIN_ORDER_PREFIX) || keeps(it.removePrefix(PLUGIN_ORDER_PREFIX)) },
+                pluginOrder = current.pluginOrder.filter(::keeps),
+            )
+            if (retained != current) config.value = retained
+        }
+    }
 
     fun renderSettings(kind: Int, onRows: (List<ActionRow>) -> Unit) {
         render(kind, ALL_PLACEMENTS, true, { "null" }, onRows)

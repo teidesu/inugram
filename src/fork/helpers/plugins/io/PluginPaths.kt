@@ -10,6 +10,8 @@ import org.telegram.messenger.Utilities
  * be created instead of failing the plugin. Each owner chooses and initializes its root.
  */
 internal object PluginPaths {
+    private const val TRASH = "inu_plugins_trash"
+
     fun scopedDir(installId: String, dirOf: (String) -> File?): String {
         require(PluginInstalls.isValidId(installId)) { "malformed install id" }
         return ensure(dirOf(installId))
@@ -29,6 +31,28 @@ internal object PluginPaths {
     fun wipe(installId: String, dirOf: (String) -> File?) {
         if (!PluginInstalls.isValidId(installId)) return
         dirOf(installId)?.deleteRecursively()
+    }
+
+    /**
+     * Moves every entry of [root] that [idOf] attributes to an install outside [live] into the
+     * trash, then empties the trash off the caller's thread. Call before any plugin starts: the
+     * move is what keeps a store from being deleted under an engine that just created it.
+     */
+    fun sweepOrphans(root: String, live: Set<String>, idOf: (String) -> String?) {
+        val entries = File(ApplicationLoader.applicationContext.filesDir, root).listFiles() ?: return
+        val trash = File(ApplicationLoader.applicationContext.filesDir, TRASH)
+        for (entry in entries) {
+            val id = idOf(entry.name)?.takeIf(PluginInstalls::isValidId) ?: continue
+            if (id in live) continue
+            if (!trash.isDirectory && !trash.mkdirs()) return
+            entry.renameTo(File(trash, PluginInstalls.mintId()))
+        }
+    }
+
+    fun emptyTrash() {
+        Utilities.cacheClearQueue.postRunnable {
+            File(ApplicationLoader.applicationContext.filesDir, TRASH).listFiles()?.forEach { it.deleteRecursively() }
+        }
     }
 
     /**

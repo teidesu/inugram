@@ -36,7 +36,8 @@ enum Change<'a> {
 
 /// An append-only log replayed into memory on open. Each frame contains a length and changes. If
 /// process death interrupts a write, replay stops at the first incomplete frame; the next write
-/// rewrites the recovered store.
+/// rewrites the recovered store. A file that does not start with the magic was not torn by this
+/// format, so it is moved to [`quarantine_path`] rather than rewritten.
 struct Store {
   path: PathBuf,
   entries: BTreeMap<String, String>,
@@ -49,13 +50,17 @@ struct Store {
 
 impl Store {
   fn open(path: &Path) -> io::Result<Store> {
-    let bytes = match fs::read(path) {
+    let mut bytes = match fs::read(path) {
       Ok(bytes) => bytes,
       Err(e) if e.kind() == io::ErrorKind::NotFound => Vec::new(),
       Err(e) => return Err(e),
     };
+    if !bytes.starts_with(MAGIC) && !MAGIC.starts_with(&bytes) {
+      fs::rename(path, quarantine_path(path))?;
+      bytes.clear();
+    }
     let mut entries = BTreeMap::new();
-    let whole = bytes.is_empty() || replay(&bytes, &mut entries);
+    let whole = bytes.len() < MAGIC.len() || replay(&bytes, &mut entries);
     let used = entries.iter().map(|(key, value)| key.len() + value.len()).sum();
     let mut store = Store {
       path: path.to_path_buf(),
@@ -67,7 +72,7 @@ impl Store {
     };
     if !whole {
       store.compact()?;
-    } else if !bytes.is_empty() {
+    } else if bytes.len() >= MAGIC.len() {
       store.log = Some(OpenOptions::new().append(true).open(path)?);
       store.log_bytes = bytes.len() as u64;
     }
@@ -202,8 +207,18 @@ enum Refusal {
 
 /// where [`Store::compact`] writes before the rename; `PluginLocalStorage.wipe` removes it alongside the store
 pub(crate) fn staged_path(path: &Path) -> PathBuf {
+  suffixed(path, ".tmp")
+}
+
+/// Where a file without the magic is moved aside: a newer build's format or a damaged header, either
+/// of which may still be recovered. One slot; `PluginLocalStorage.wipe` removes it alongside the store.
+pub(crate) fn quarantine_path(path: &Path) -> PathBuf {
+  suffixed(path, ".corrupt")
+}
+
+fn suffixed(path: &Path, suffix: &str) -> PathBuf {
   let mut name = path.as_os_str().to_owned();
-  name.push(".tmp");
+  name.push(suffix);
   PathBuf::from(name)
 }
 

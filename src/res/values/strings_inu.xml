@@ -870,6 +870,7 @@
     <string name="InuPluginsSafeModeShortcut">Close app, next start is safe mode</string>
     <string name="InuPluginsSafeModeForced">No plugins are running in this session. Restart the app to run them again.</string>
     <string name="InuPluginsSafeModeCrashed">The app stopped last time while a plugin was starting, so no plugins are running in this session.</string>
+    <string name="InuPluginsSafeModeCrashLoop">The app crashed twice in a row soon after plugins started, so no plugins are running in this session.</string>
     <string name="InuPluginInstall">Install</string>
     <string name="InuPluginInstallTitle">Install plugin</string>
     <string name="InuPluginInstallEnable">Enable after installing</string>

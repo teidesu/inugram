@@ -15,6 +15,7 @@ import desu.inugram.core.plugins.GrantValidator
 import desu.inugram.core.plugins.PluginInstalls
 import desu.inugram.core.plugins.PluginManifest
 import desu.inugram.core.plugins.PluginManifestParser
+import desu.inugram.core.plugins.PluginPermissions
 import desu.inugram.core.plugins.TlTables
 import desu.inugram.helpers.plugins.PluginManager.fail
 import desu.inugram.helpers.plugins.PluginManager.init
@@ -29,6 +30,7 @@ import desu.inugram.helpers.plugins.io.PluginBlobs
 import desu.inugram.helpers.plugins.io.PluginTransfers
 import desu.inugram.helpers.plugins.io.PluginFetch
 import desu.inugram.helpers.plugins.io.PluginFs
+import desu.inugram.helpers.plugins.io.PluginPaths
 import desu.inugram.helpers.plugins.platform.PluginJvm
 import desu.inugram.helpers.plugins.platform.PluginNotifications
 import desu.inugram.helpers.plugins.platform.PluginPlatform
@@ -58,7 +60,6 @@ import org.telegram.messenger.Utilities
 import org.telegram.tgnet.TLRPC
 import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.LaunchActivity
-import java.io.File
 import java.util.IdentityHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
@@ -147,9 +148,24 @@ object PluginManager {
     fun ensureLoaded() {
         if (loaded) return
         loaded = true
-        plugins.addAll(PluginStore.load())
+        val stored = PluginStore.load()
+        plugins.addAll(stored.orEmpty())
         PluginStore.persist(plugins)
         republishOrder()
+        if (stored != null) sweepOrphans(PluginStore.installIds(plugins))
+    }
+
+    /**
+     * Drops what an install left behind once it has no source file: a file deleted behind the
+     * store's back, or an uninstall the process died in the middle of. Runs before any plugin can
+     * start, so no engine is creating a store as it goes.
+     */
+    private fun sweepOrphans(live: Set<String>) {
+        PluginFs.sweepOrphans(live)
+        PluginLocalStorage.sweepOrphans(live)
+        PluginJvm.sweepOrphans(live)
+        PluginPaths.emptyTrash()
+        PluginActions.retainInstalls(live)
     }
 
     fun isEngineEnabled(): Boolean = InuConfig.PLUGINS_ENABLED.value
@@ -181,7 +197,7 @@ object PluginManager {
         val loaded = CountDownLatch(1)
         EngineDispatch.scheduler.postRunnable {
             try {
-                runPass { it.enabled && BootCohort.bootsEarly(it.permissions) }
+                runPass { it.enabled && BootCohort.bootsEarly(PluginPermissions.parse(it.manifest.grants)) }
             } finally {
                 loaded.countDown()
             }
@@ -208,10 +224,28 @@ object PluginManager {
             return
         }
         for (plugin in plugins()) {
-            // [start] would skip a running plugin anyway, but arming is a durable commit
+            // [start] would skip a running plugin anyway, but arming is a durable write
             if (!wanted(plugin) || plugin.running) continue
+            watchCrashes()
             guard.guardPlugin { start(plugin) }
         }
+    }
+
+    private var watchingCrashes = false
+
+    /** plugin queue only; counts this process into [BootGuard]'s crash loop if it dies soon after its plugins start */
+    private fun watchCrashes() {
+        if (watchingCrashes) return
+        watchingCrashes = true
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, e ->
+            try {
+                guard.recordCrash()
+            } catch (_: Throwable) {
+            }
+            previous?.uncaughtException(thread, e)
+        }
+        EngineDispatch.scheduler.postRunnable({ guard.survivedWindow() }, BootGuard.CRASH_WINDOW_MILLIS)
     }
 
     /**
@@ -288,17 +322,18 @@ object PluginManager {
      * to load this boot. Reuse that record's install ID to preserve otherwise inaccessible storage.
      * Use [update] for plugins already present in the installed list, including broken ones.
      */
-    fun import(suggestedName: String, source: String, enabled: Boolean = true, dev: Boolean = false): ImportResult {
+    fun import(source: String, enabled: Boolean = true, dev: Boolean = false): ImportResult {
         val manifest = PluginManifestParser.parseOrNull(source)
             ?: return ImportResult.Refused(getString(R.string.InuPluginsErrorNoManifest))
         badGrants(manifest)?.let { return ImportResult.Refused(it) }
         val reclaimed = manifest.id?.let { PluginStore.findUnloaded(it) }
-        val target = if (reclaimed != null) File(PluginStore.dir, reclaimed.file) else PluginStore.fileFor(suggestedName)
+        val id = reclaimed?.id ?: PluginInstalls.mintId()
+        val target = PluginStore.fileFor(id)
         if (!PluginStore.writeSource(target, source)) {
             return ImportResult.Refused(getString(R.string.InuPluginsErrorWrite))
         }
         reclaimed?.let { PluginStore.dropUnloaded(it) }
-        val plugin = Plugin(reclaimed?.id ?: PluginInstalls.mintId(), target, source, manifest)
+        val plugin = Plugin(id, target, source, manifest)
             .apply {
                 this.enabled = enabled
                 this.dev = dev
@@ -357,6 +392,7 @@ object PluginManager {
         plugin.file.delete()
         plugins.remove(plugin)
         PluginStore.persist(plugins)
+        PluginActions.retainInstalls(PluginStore.installIds(plugins))
         republishOrder()
         notifyChanged()
     }

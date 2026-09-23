@@ -1,7 +1,6 @@
 package desu.inugram.helpers.plugins
 
 import desu.inugram.core.plugins.PluginManifest
-import desu.inugram.core.plugins.PluginPermissions
 import java.io.File
 import org.telegram.messenger.LocaleController.formatString
 import org.telegram.messenger.LocaleController.getString
@@ -40,20 +39,6 @@ class Plugin(
     @Volatile var source: String,
     @Volatile var manifest: PluginManifest,
 ) {
-    private class ParsedGrants(val of: PluginManifest, val permissions: PluginPermissions)
-
-    // one field, because both halves are read from the plugin queue and from stageQueue (PluginRpc's
-    // chainFor, off onUpdates): as two plain writes the identity could publish ahead of the
-    // permissions, and a reload that dropped a grant would still authorize an interceptor on it
-    @Volatile private var parsed: ParsedGrants? = null
-
-    val permissions: PluginPermissions
-        get() {
-            val current = manifest
-            parsed?.let { if (it.of === current) return it.permissions }
-            return PluginPermissions.parse(current.grants).also { parsed = ParsedGrants(current, it) }
-        }
-
     // written on the UI thread, read from the plugin queue by every queued engine op
     @Volatile var enabled: Boolean = true
 

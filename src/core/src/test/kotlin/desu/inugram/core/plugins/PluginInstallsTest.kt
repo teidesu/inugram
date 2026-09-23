@@ -3,12 +3,17 @@ package desu.inugram.core.plugins
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.random.Random
 
 class PluginInstallsTest {
     private fun seeded() = Random(1337)
+
+    private val a = "a".repeat(32)
+    private val b = "b".repeat(32)
+    private val c = "c".repeat(32)
 
     @Test
     fun mintedIdIsLowercaseHexOfFixedLength() {
@@ -38,83 +43,55 @@ class PluginInstallsTest {
     }
 
     @Test
-    fun reconcileKeepsPersistedIdsOrderAndEnabledBits() {
-        val persisted = listOf(
-            PluginInstall("a".repeat(32), "second.js", false),
-            PluginInstall("b".repeat(32), "first.js", true),
-        )
-        val out = PluginInstalls.reconcile(persisted, listOf("first.js", "second.js"), seeded())
-        assertEquals(persisted, out)
+    fun fileNameRoundTripsThroughIdOfFile() {
+        assertEquals(a, PluginInstalls.idOfFile(PluginInstalls.fileName(a)))
+        assertEquals("$a.js", PluginInstall(a, true).file)
     }
 
     @Test
-    fun reconcileMintsForUnknownFilesAndAppendsThemEnabled() {
-        val known = PluginInstall("a".repeat(32), "old.js", false)
-        val out = PluginInstalls.reconcile(listOf(known), listOf("new.js", "old.js"), seeded())
-        assertEquals(listOf("old.js", "new.js"), out.map { it.file })
-        assertEquals(known, out[0])
-        assertTrue(out[1].enabled)
-        assertTrue(PluginInstalls.isValidId(out[1].id))
-        assertNotEquals(known.id, out[1].id)
+    fun idOfFileIgnoresEverythingElse() {
+        assertNull(PluginInstalls.idOfFile("plugin.js"))
+        assertNull(PluginInstalls.idOfFile(a))
+        assertNull(PluginInstalls.idOfFile("$a.js.tmp"))
+        assertNull(PluginInstalls.idOfFile("${a.uppercase()}.js"))
+    }
+
+    @Test
+    fun reconcileKeepsPersistedOrderAndFlags() {
+        val persisted = listOf(
+            PluginInstall(b, false, "x.second", dev = true),
+            PluginInstall(a, true, "x.first"),
+        )
+        assertEquals(persisted, PluginInstalls.reconcile(persisted, listOf("$a.js", "$b.js")))
+    }
+
+    @Test
+    fun reconcileAppendsUnrecordedFilesDisabledInIdOrder() {
+        val known = PluginInstall(b, true)
+        val out = PluginInstalls.reconcile(listOf(known), listOf("$c.js", "$b.js", "$a.js"))
+        assertEquals(listOf(known, PluginInstall(a, false), PluginInstall(c, false)), out)
+    }
+
+    @Test
+    fun reconcileKeepsEveryIdWhenThePersistedStateIsLost() {
+        val out = PluginInstalls.reconcile(emptyList(), listOf("$a.js", "$b.js"))
+        assertEquals(listOf(a, b), out.map { it.id })
     }
 
     @Test
     fun reconcileDropsRecordsWhoseFileIsGone() {
-        val out = PluginInstalls.reconcile(
-            listOf(PluginInstall("a".repeat(32), "gone.js", true)),
-            emptyList(),
-            seeded(),
-        )
-        assertEquals(emptyList<PluginInstall>(), out)
+        assertEquals(emptyList<PluginInstall>(), PluginInstalls.reconcile(listOf(PluginInstall(a, true)), emptyList()))
     }
 
     @Test
-    fun reconcileRemintsUnusableIdsWithoutLosingTheSlot() {
-        val out = PluginInstalls.reconcile(
-            listOf(PluginInstall("inugram.dev/plugin", "p.js", false)),
-            listOf("p.js"),
-            seeded(),
-        )
-        assertEquals(1, out.size)
-        assertEquals("p.js", out[0].file)
-        assertFalse(out[0].enabled)
-        assertTrue(PluginInstalls.isValidId(out[0].id))
+    fun reconcileIgnoresFilesNotNamedAfterAnInstall() {
+        assertEquals(emptyList<PluginInstall>(), PluginInstalls.reconcile(emptyList(), listOf("plugin.js", "$a.js.tmp")))
     }
 
     @Test
-    fun reconcileKeepsThePluginIdOfARecordItRemints() {
-        val out = PluginInstalls.reconcile(
-            listOf(PluginInstall("nope", "p.js", true, "teidesu.my-plugin")),
-            listOf("p.js"),
-            seeded(),
-        )
-        assertEquals("teidesu.my-plugin", out[0].pluginId)
-    }
-
-    @Test
-    fun reconcileKeepsTheDevBitOfARecordItRemints() {
-        val out = PluginInstalls.reconcile(
-            listOf(PluginInstall("nope", "p.js", true, "teidesu.my-plugin", dev = true)),
-            listOf("p.js"),
-            seeded(),
-        )
-        assertTrue(out[0].dev)
-    }
-
-    @Test
-    fun reconcileKeepsOnlyTheFirstRecordPerFile() {
-        val first = PluginInstall("a".repeat(32), "p.js", true)
-        val out = PluginInstalls.reconcile(
-            listOf(first, PluginInstall("b".repeat(32), "p.js", false)),
-            listOf("p.js"),
-            seeded(),
-        )
+    fun reconcileKeepsOnlyTheFirstRecordPerId() {
+        val first = PluginInstall(a, true)
+        val out = PluginInstalls.reconcile(listOf(first, PluginInstall(a, false)), listOf("$a.js"))
         assertEquals(listOf(first), out)
-    }
-
-    @Test
-    fun reconcileGivesTwoCopiesOfTheSamePluginSeparateIdentities() {
-        val out = PluginInstalls.reconcile(emptyList(), listOf("dup.js", "dup-1.js"), seeded())
-        assertNotEquals(out[0].id, out[1].id)
     }
 }

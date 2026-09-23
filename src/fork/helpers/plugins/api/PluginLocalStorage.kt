@@ -16,11 +16,18 @@ object PluginLocalStorage {
 
     fun pathFor(installId: String): String = file(installId).apply { parentFile!!.mkdirs() }.absolutePath
 
-    /** after the engine is closed; `.tmp` is rust's `local_storage::staged_path` */
+    /** rust's `local_storage::staged_path` and `quarantine_path`, which belong to the store beside them */
+    private val SIDE_FILES = listOf(".tmp", ".corrupt")
+
+    /** after the engine is closed */
     fun wipe(installId: String) {
         if (!PluginInstalls.isValidId(installId)) return
         val store = file(installId)
         store.delete()
-        File("${store.path}.tmp").delete()
+        for (suffix in SIDE_FILES) File("${store.path}$suffix").delete()
+    }
+
+    fun sweepOrphans(live: Set<String>) = PluginPaths.sweepOrphans(ROOT, live) { name ->
+        SIDE_FILES.fold(name) { stripped, suffix -> stripped.removeSuffix(suffix) }
     }
 }
