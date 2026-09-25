@@ -1,5 +1,5 @@
 ((shared, PluginError) => {
-  const { baseName, toNumber, peerDialogId, peerUserId } = shared
+  const { baseName, toNumber, getMarkedPeerId, peerUserId } = shared
 
   const MEDIA_TYPES = Object.assign(Object.create(null), {
     messageMediaPhoto: 'photo',
@@ -97,13 +97,11 @@
 
     get dialogId() {
       if (isSecretMessage(this.raw)) return null
-      const annotated = toBigInt(this.raw.dialog_id)
-      if (annotated !== null && annotated !== 0n) return Number(annotated)
-      return peerDialogId(this.raw.peer_id)
+      return getMarkedPeerId(this.raw.peer_id)
     }
 
     get senderId() {
-      const from = peerDialogId(this.raw.from_id)
+      const from = getMarkedPeerId(this.raw.from_id)
       if (from !== null) return from
       // `from_id` is flags.8?Peer and the server omits it in a 1:1 dialog, where an incoming
       // message's sender is the dialog peer. outgoing, it is whoever we are, which is not

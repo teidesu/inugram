@@ -108,8 +108,8 @@ class PluginReadsTest {
     fun the_entity_getters_do_not_cross_kinds() {
         val plugin = granted()
         assertEquals("N", read(plugin, PluginReads.OP_CHAT, "D$alice"))
-        assertEquals("N", read(plugin, PluginReads.OP_USER, "D-$channel"))
-        assertEquals("channel", decodeString(readTlField(plugin, read(plugin, PluginReads.OP_PEER, "D-$channel"), "_")))
+        assertEquals("N", read(plugin, PluginReads.OP_USER, "D${PeerSpecs.ZERO_CHANNEL_ID - channel}"))
+        assertEquals("channel", decodeString(readTlField(plugin, read(plugin, PluginReads.OP_PEER, "D${PeerSpecs.ZERO_CHANNEL_ID - channel}"), "_")))
     }
 
     @Test
@@ -122,7 +122,7 @@ class PluginReadsTest {
         assertEquals("user", decodeString(readTlField(plugin, users[2], "_")))
         assertEquals("", read(plugin, PluginReads.OP_USERS, ""), "an empty batch is an empty answer")
 
-        val chats = read(plugin, PluginReads.OP_CHATS, "D-$channel\nD$alice\nD-4242").split("\n")
+        val chats = read(plugin, PluginReads.OP_CHATS, "D${PeerSpecs.ZERO_CHANNEL_ID - channel}\nD$alice\nD-4242").split("\n")
         assertEquals(3, chats.size)
         assertEquals("channel", decodeString(readTlField(plugin, chats[0], "_")))
         assertEquals("N", chats[1])
@@ -269,7 +269,7 @@ class PluginReadsTest {
     fun narrowing_to_the_wrong_kind_says_so_instead_of_answering_nothing() {
         val plugin = granted()
         assertPluginError("invalid-argument", inputPeer(plugin, "D$alice", PeerSpecs.KIND_CHANNEL))
-        assertPluginError("invalid-argument", inputPeer(plugin, "D-$channel", PeerSpecs.KIND_USER))
+        assertPluginError("invalid-argument", inputPeer(plugin, "D${PeerSpecs.ZERO_CHANNEL_ID - channel}", PeerSpecs.KIND_USER))
         assertPluginError("invalid-argument", inputPeer(plugin, "S", PeerSpecs.KIND_CHANNEL))
         assertPluginError("invalid-argument", inputPeer(plugin, "D-2002", PeerSpecs.KIND_CHANNEL))
     }
@@ -427,7 +427,7 @@ class PluginReadsTest {
         assertEquals("plain", json.getString("text"))
         assertTrue(json.isNull("entities") && !json.has("entities"))
 
-        assertEquals("N", draft(plugin, "D-$channel"), "a chat with no draft")
+        assertEquals("N", draft(plugin, "D${PeerSpecs.ZERO_CHANNEL_ID - channel}"), "a chat with no draft")
         TestApp.putDraft(self, 0L, TLRPC.TL_draftMessageEmpty())
         assertEquals("N", draft(plugin, "S"), "a cleared draft is the same as none")
     }
@@ -438,7 +438,7 @@ class PluginReadsTest {
         TestApp.putChat(broadcast(forum, "forumchan").apply { megagroup = true; this.forum = true })
         TestApp.putDraft(-forum, 0L, TLRPC.TL_draftMessage().apply { message = "root" }.synced())
         TestApp.putDraft(-forum, 7L, TLRPC.TL_draftMessage().apply { message = "in the topic" }.synced())
-        assertEquals("root", decodeJson(draft(plugin, "D-$forum")).getString("text"))
-        assertEquals("in the topic", decodeJson(draft(plugin, "D-$forum", topicId = 7L)).getString("text"))
+        assertEquals("root", decodeJson(draft(plugin, "D${PeerSpecs.ZERO_CHANNEL_ID - forum}")).getString("text"))
+        assertEquals("in the topic", decodeJson(draft(plugin, "D${PeerSpecs.ZERO_CHANNEL_ID - forum}", topicId = 7L)).getString("text"))
     }
 }

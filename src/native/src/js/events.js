@@ -1,4 +1,6 @@
 ((Message) => {
+  const ZERO_CHANNEL_ID = -1000000000000
+
   // int64 fields cross the bridge as decimal strings, and a peer id is never 0
   const toId = (value) => {
     const id = Number(value)
@@ -36,7 +38,7 @@
       // per account in the non-channel space, and resolving the dialog off one means a query
       // against the app's own message database that this dispatch cannot wait on
       const dialogId = 'channel_id' in update ? toId(update.channel_id) : null
-      callback(dialogId === null ? null : -dialogId, ids, account)
+      callback(dialogId === null ? null : ZERO_CHANNEL_ID - dialogId, ids, account)
     },
   })
 

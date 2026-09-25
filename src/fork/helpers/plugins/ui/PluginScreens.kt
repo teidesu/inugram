@@ -5,10 +5,12 @@ import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.core.plugins.ScreenRef
 import desu.inugram.core.plugins.ScreenStack
 import desu.inugram.helpers.plugins.PluginManager
+import desu.inugram.helpers.plugins.telegram.PeerSpecs
 import desu.inugram.ui.settings.SettingsPageActivity
 import org.json.JSONArray
 import org.json.JSONObject
 import org.telegram.messenger.DialogObject
+import org.telegram.messenger.MessagesController
 import org.telegram.ui.ActionBar.BaseFragment
 import org.telegram.ui.ChatActivity
 import org.telegram.ui.DialogsActivity
@@ -54,7 +56,9 @@ object PluginScreens {
 
     private fun toJson(screen: ScreenRef): JSONObject {
         val out = JSONObject().put("type", screen.type).put("account", screen.accountId)
-        if (screen.dialogId != 0L) out.put("dialogId", screen.dialogId)
+        if (screen.dialogId != 0L) {
+            out.put("dialogId", PeerSpecs.toMarkedPeerId(MessagesController.getInstance(screen.accountId), screen.dialogId))
+        }
         if (screen.topicId != 0) out.put("topicId", screen.topicId)
         return out
     }

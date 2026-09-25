@@ -1,6 +1,7 @@
 package desu.inugram.helpers.plugins
 
 import desu.inugram.core.plugins.PluginWire
+import desu.inugram.helpers.plugins.telegram.PeerSpecs
 import desu.inugram.helpers.plugins.telegram.PluginReads
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -119,7 +120,7 @@ class PluginReadsAsyncTest {
     @Test
     fun a_channel_names_itself_because_its_ids_mean_nothing_without_it() {
         val plugin = granted()
-        assertNull(fetch(plugin, PluginReads.OP_FETCH_MESSAGES, "D-$channel", "{\"ids\":[9]}"))
+        assertNull(fetch(plugin, PluginReads.OP_FETCH_MESSAGES, "D${PeerSpecs.ZERO_CHANNEL_ID - channel}", "{\"ids\":[9]}"))
 
         val request = awaitSent().request as TLRPC.TL_channels_getMessages
         assertEquals(channel, (request.channel as TLRPC.TL_inputChannel).channel_id)
@@ -183,7 +184,7 @@ class PluginReadsAsyncTest {
     @Test
     fun a_full_chat_is_one_rpc_for_a_channel_and_another_for_a_basic_group() {
         val plugin = granted()
-        assertNull(fetch(plugin, PluginReads.OP_CHAT_FULL, "D-$channel"))
+        assertNull(fetch(plugin, PluginReads.OP_CHAT_FULL, "D${PeerSpecs.ZERO_CHANNEL_ID - channel}"))
         assertTrue(connections().lastSent()!!.request is TLRPC.TL_channels_getFullChannel)
 
         val second = granted()
@@ -242,7 +243,7 @@ class PluginReadsAsyncTest {
     @Test
     fun a_topic_s_history_is_messages_getReplies() {
         val plugin = granted()
-        fetch(plugin, PluginReads.OP_HISTORY, "D-$forum", "{\"limit\":10,\"topicId\":5}")
+        fetch(plugin, PluginReads.OP_HISTORY, "D${PeerSpecs.ZERO_CHANNEL_ID - forum}", "{\"limit\":10,\"topicId\":5}")
         val request = connections().lastSent()!!.request as TLRPC.TL_messages_getReplies
         assertEquals(5, request.msg_id)
         assertEquals(10, request.limit)
@@ -379,7 +380,7 @@ class PluginReadsAsyncTest {
     @Test
     fun getTopics_refuses_anything_that_is_not_a_forum_before_it_sends() {
         val plugin = granted()
-        assertPluginError("invalid-argument", fetch(plugin, PluginReads.OP_TOPICS, "D-$channel", "{\"limit\":10}"))
+        assertPluginError("invalid-argument", fetch(plugin, PluginReads.OP_TOPICS, "D${PeerSpecs.ZERO_CHANNEL_ID - channel}", "{\"limit\":10}"))
         assertPluginError("invalid-argument", fetch(plugin, PluginReads.OP_TOPICS, "D$alice", "{\"limit\":10}"))
         assertPluginError("not-found", fetch(plugin, PluginReads.OP_TOPICS, "D-4242", "{\"limit\":10}"))
         assertTrue(connections().sent.isEmpty())
@@ -388,7 +389,7 @@ class PluginReadsAsyncTest {
     @Test
     fun a_page_of_topics_carries_a_cursor_built_from_its_last_topic() {
         val plugin = granted()
-        assertNull(fetch(plugin, PluginReads.OP_TOPICS, "D-$forum", "{\"limit\":2}"))
+        assertNull(fetch(plugin, PluginReads.OP_TOPICS, "D${PeerSpecs.ZERO_CHANNEL_ID - forum}", "{\"limit\":2}"))
 
         val request = connections().lastSent()!!.request as TL_forum.TL_messages_getForumTopics
         assertEquals(forum, (request.peer as TLRPC.TL_inputPeerChannel).channel_id)
@@ -408,7 +409,7 @@ class PluginReadsAsyncTest {
     @Test
     fun a_topic_cursor_s_offsets_are_what_the_next_page_is_asked_with() {
         val plugin = granted()
-        fetch(plugin, PluginReads.OP_TOPICS, "D-$forum", "{\"limit\":2}", "1715540000,11,7")
+        fetch(plugin, PluginReads.OP_TOPICS, "D${PeerSpecs.ZERO_CHANNEL_ID - forum}", "{\"limit\":2}", "1715540000,11,7")
         val request = connections().lastSent()!!.request as TL_forum.TL_messages_getForumTopics
         assertEquals(1715540000, request.offset_date)
         assertEquals(11, request.offset_id)

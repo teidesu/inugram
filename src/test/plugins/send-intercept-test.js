@@ -65,7 +65,7 @@ globalThis.__report = (sent) => {
 
   check('a text send carries no media', text.media === 0 && text.text === 'hi', JSON.stringify(text))
   check('a dialog id is what a peer reads as', text.peer === 7, String(text.peer))
-  check('a channel send reads as a negative dialog id', media.peer === -9, String(media.peer))
+  check('a channel send reads as a negative dialog id', media.peer === -1000000000009, String(media.peer))
   check('a basic group send reads as a negative dialog id', album.peer === -5, String(album.peer))
 
   check('a media send carries exactly one', media.media === 1, String(media.media))

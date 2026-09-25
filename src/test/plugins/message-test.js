@@ -57,18 +57,18 @@ equals('a service message is one, and has no text', [service.isService, service.
 // messages loaded from the app's own storage arrive as legacy constructors
 equals('a legacy message is still a message', [message({ _: 'message_old7' }).isService, message({ _: 'messageService_old2' }).isService], [false, true])
 
-equals('a channel dialog id is negative', message({ peer_id: { _: 'peerChannel', channel_id: '456' } }).dialogId, -456)
+equals('a channel dialog id is negative', message({ peer_id: { _: 'peerChannel', channel_id: '456' } }).dialogId, -1000000000456)
 equals('a basic group dialog id is negative', message({ peer_id: { _: 'peerChat', chat_id: '123' } }).dialogId, -123)
 equals(
-  'the app annotation wins over peer_id',
-  message({ peer_id: { _: 'peerUser', user_id: '4242' }, dialog_id: '4242' }).dialogId,
-  4242,
+  'the app\'s stock dialog_id annotation does not override the bot api form',
+  message({ peer_id: { _: 'peerChannel', channel_id: '456' }, dialog_id: '-456' }).dialogId,
+  -1000000000456,
 )
 
 // DialogObject.makeEncryptedDialogId(7)
 const ENCRYPTED = '4611686018427387911'
 const secret = message({ _: 'message_secret', peer_id: { _: 'peerUser', user_id: '4242' }, dialog_id: ENCRYPTED })
-equals('a secret message has no DialogId', secret.dialogId, null)
+equals('a secret message has no marked peer id', secret.dialogId, null)
 check('and its raw annotation is still readable', secret.raw.dialog_id === ENCRYPTED, secret.raw.dialog_id)
 const secretService = message({ _: 'messageService', peer_id: { _: 'peerUser', user_id: '4242' }, dialog_id: ENCRYPTED })
 equals(
@@ -106,8 +106,8 @@ equals('a live location is a location', message({ media: { _: 'messageMediaGeoLi
 equals('a giveaway result is a giveaway', message({ media: { _: 'messageMediaGiveawayResults' } }).mediaType, 'giveaway')
 equals('an unrecognised media is "other", not null', message({ media: { _: 'messageMediaDice' } }).mediaType, 'other')
 equals('a document with no attributes, or none at all, is a plain document', [withDocument().mediaType, message({ media: { _: 'messageMediaDocument', document: { _: 'documentEmpty' } } }).mediaType], ['document', 'document'])
-equals('a zero dialog_id annotation falls back to peer_id', message({ peer_id: { _: 'peerUser', user_id: '4242' }, dialog_id: '0' }).dialogId, 4242)
-equals('an old secret message or one with no peer has no DialogId', [message({ _: 'message_secret_old', peer_id: { _: 'peerUser', user_id: '4242' } }).dialogId, message({}).dialogId], [null, null])
+equals('dialogId reads peer_id rather than the dialog_id annotation', message({ peer_id: { _: 'peerUser', user_id: '4242' }, dialog_id: '0' }).dialogId, 4242)
+equals('an old secret message or one with no peer has no marked peer id', [message({ _: 'message_secret_old', peer_id: { _: 'peerUser', user_id: '4242' } }).dialogId, message({}).dialogId], [null, null])
 equals('messageMediaEmpty is no media at all', [
   message({ media: { _: 'messageMediaEmpty' } }).media,
   message({ media: { _: 'messageMediaEmpty' } }).mediaType,

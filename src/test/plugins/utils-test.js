@@ -74,18 +74,18 @@ for (const [what, format] of formatters) {
 /** @type {tl.RawChatPhotoEmpty} */
 const EMPTY_PHOTO = { _: 'chatPhotoEmpty' }
 
-equals('toDialogId of a user', peers.toDialogId({ _: 'peerUser', user_id: 777000 }), 777000)
-equals('toDialogId of a basic group', peers.toDialogId({ _: 'peerChat', chat_id: 123 }), -123)
-equals('toDialogId of a channel', peers.toDialogId({ _: 'peerChannel', channel_id: 456 }), -456)
-equals('toDialogId of an InputPeer', peers.toDialogId({ _: 'inputPeerChannel', channel_id: 456, access_hash: '1' }), -456)
-equals('toDialogId of a User', peers.toDialogId({ _: 'user', id: 42 }), 42)
-equals('toDialogId of a Chat', peers.toDialogId({ _: 'channelForbidden', id: 7, access_hash: '1', title: 'x' }), -7)
+equals('getMarkedPeerId of a user', peers.getMarkedPeerId({ _: 'peerUser', user_id: 777000 }), 777000)
+equals('getMarkedPeerId of a basic group', peers.getMarkedPeerId({ _: 'peerChat', chat_id: 123 }), -123)
+equals('getMarkedPeerId of a channel', peers.getMarkedPeerId({ _: 'peerChannel', channel_id: 456 }), -1000000000456)
+equals('getMarkedPeerId of an InputPeer', peers.getMarkedPeerId({ _: 'inputPeerChannel', channel_id: 456, access_hash: '1' }), -1000000000456)
+equals('getMarkedPeerId of a User', peers.getMarkedPeerId({ _: 'user', id: 42 }), 42)
+equals('getMarkedPeerId of a Chat', peers.getMarkedPeerId({ _: 'channelForbidden', id: 7, access_hash: '1', title: 'x' }), -1000000000007)
 // @ts-expect-error
-equals('toDialogId still reads an id written as a decimal string', peers.toDialogId({ _: 'peerUser', user_id: '777000' }), 777000)
+equals('getMarkedPeerId still reads an id written as a decimal string', peers.getMarkedPeerId({ _: 'peerUser', user_id: '777000' }), 777000)
 
-equals('parseDialogId of a user', peers.parseDialogId(777000), { type: 'user', id: 777000 })
-equals('parseDialogId of a chat', peers.parseDialogId(-456), { type: 'chat', id: 456 })
-equals('parseDialogId takes the string form', peers.parseDialogId('-456'), { type: 'chat', id: 456 })
+equals('parseMarkedPeerId of a user', peers.parseMarkedPeerId(777000), { type: 'user', id: 777000 })
+equals('parseMarkedPeerId of a chat', peers.parseMarkedPeerId(-456), { type: 'chat', id: 456 })
+equals('parseMarkedPeerId takes the string form', peers.parseMarkedPeerId('-456'), { type: 'chat', id: 456 })
 
 equals(
   'toInputPeer of a user',
@@ -104,37 +104,34 @@ equals(
   { _: 'inputPeerChannel', channel_id: 456, access_hash: '11' },
 )
 
-equals('toBotApiId offsets channels and only channels', [
-  peers.toBotApiId({ _: 'peerUser', user_id: 42 }),
-  peers.toBotApiId({ _: 'peerChat', chat_id: 123 }),
-  peers.toBotApiId({ _: 'peerChannel', channel_id: 456 }),
-], [42, -123, -1000000000456])
-equals('fromBotApiId undoes it', [
-  peers.fromBotApiId(42),
-  peers.fromBotApiId(-123),
-  peers.fromBotApiId(-1000000000456),
-], [42, -123, -456])
+equals('parseMarkedPeerId of a channel', peers.parseMarkedPeerId(-1000000000456), { type: 'channel', id: 456 })
+equals('toSimpleDialogId negates channels like basic groups', [
+  peers.toSimpleDialogId(42),
+  peers.toSimpleDialogId(-123),
+  peers.toSimpleDialogId(-1000000000456),
+  peers.toSimpleDialogId({ _: 'peerChannel', channel_id: 456 }),
+  peers.toSimpleDialogId({ _: 'chat', id: 123, title: 'x', photo: EMPTY_PHOTO, participants_count: 1, date: 0, version: 0 }),
+], [42, -123, -456, -456, -123])
 
-/** @type {tl.TypePeer[]} */
+/** @type {[tl.TypePeer, string, number][]} */
 const roundTrip = [
-  { _: 'peerUser', user_id: 42 },
-  { _: 'peerChat', chat_id: 123 },
-  { _: 'peerChannel', channel_id: 1234567890 },
+  [{ _: 'peerUser', user_id: 42 }, 'user', 42],
+  [{ _: 'peerChat', chat_id: 123 }, 'chat', 123],
+  [{ _: 'peerChannel', channel_id: 1234567890 }, 'channel', 1234567890],
 ]
-for (const peer of roundTrip) {
-  const trip = peers.fromBotApiId(peers.toBotApiId(peer))
-  check(`${peer._} survives the bot api round trip`, trip === peers.toDialogId(peer), `${trip} vs ${peers.toDialogId(peer)}`)
+for (const [peer, type, id] of roundTrip) {
+  equals(`${peer._} parses back to its own kind`, peers.parseMarkedPeerId(peers.getMarkedPeerId(peer)), { type, id })
 }
 
-expectThrow('toDialogId refuses inputPeerSelf, which names no id', 'invalid-argument', () => peers.toDialogId({ _: 'inputPeerSelf' }))
+expectThrow('getMarkedPeerId refuses inputPeerSelf, which names no id', 'invalid-argument', () => peers.getMarkedPeerId({ _: 'inputPeerSelf' }))
 // @ts-expect-error
-expectThrow('toDialogId refuses a plain number', 'invalid-argument', () => peers.toDialogId(42))
-expectThrow('parseDialogId refuses a username', 'invalid-argument', () => peers.parseDialogId('me'))
+expectThrow('getMarkedPeerId refuses a plain number', 'invalid-argument', () => peers.getMarkedPeerId(42))
+expectThrow('parseMarkedPeerId refuses a username', 'invalid-argument', () => peers.parseMarkedPeerId('me'))
 // @ts-expect-error
 expectThrow('toInputPeer refuses a Peer, which carries no access_hash', 'invalid-argument', () => peers.toInputPeer({ _: 'peerUser', user_id: 1 }))
 
 // @ts-expect-error
-expectThrow('a constructor named "constructor" is not a peer', 'invalid-argument', () => peers.toDialogId({ _: 'constructor' }))
+expectThrow('a constructor named "constructor" is not a peer', 'invalid-argument', () => peers.getMarkedPeerId({ _: 'constructor' }))
 
 /** @type {tl.TypeMessageEntity[]} */
 const BOLD_HI = [{ _: 'messageEntityBold', offset: 0, length: 2 }]

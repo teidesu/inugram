@@ -183,7 +183,7 @@ object PluginUi : SessionResource {
         val controller = PeerSpecs.controllerFor(accountId)
             ?: return PluginWire.encodePluginError("not-found", "openPage: account #$accountId is not logged in")
         val type = options.optString("type")
-        val dialogId = options.optLong("dialogId")
+        val dialogId = PeerSpecs.toSimpleDialogId(options.optLong("dialogId"))
         if ((type == "chat" || type == "profile") && DialogObject.isEncryptedDialog(dialogId)) {
             return PluginWire.encodePluginError("forbidden", "openPage: secret chats are not available to plugins")
         }
@@ -291,7 +291,7 @@ object PluginUi : SessionResource {
         val subtitleEntities: String = options.optJSONArray("subtitleEntities")?.toString() ?: ""
         val iconSpec: String = options.optString("icon")
         val avatars: List<Long> = options.optJSONArray("avatars")?.let { array ->
-            (0 until array.length()).map { array.getLong(it) }
+            (0 until array.length()).map { PeerSpecs.toSimpleDialogId(array.getLong(it)) }
         } ?: emptyList()
         val duration: Int = options.optInt("duration", Bulletin.DURATION_LONG)
         /** the avatars' account is not always the current one */
