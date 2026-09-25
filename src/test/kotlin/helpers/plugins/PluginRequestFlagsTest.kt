@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins
 
+import desu.inugram.helpers.plugins.telegram.PeerSpecs
 import desu.inugram.helpers.plugins.telegram.PluginWrites
 import desu.inugram.helpers.plugins.tl.TlFlags
 import desu.inugram.helpers.plugins.tl.TlReflect
@@ -65,22 +66,22 @@ class PluginRequestFlagsTest {
                 .put("entities", listOf(entity).toJsonArray())
                 .put("replyTo", "5")
                 .put("scheduleDate", "1700"),
-            PluginWrites.OP_SEND_MESSAGE to send("D-$channel").put("topicId", "12"),
+            PluginWrites.OP_SEND_MESSAGE to send("D${PeerSpecs.ZERO_CHANNEL_ID - channel}").put("topicId", "12"),
             PluginWrites.OP_EDIT_MESSAGE to JSONObject()
                 .put("peer", "D$alice").put("id", "7").put("text", "edited")
                 .put("entities", listOf(entity).toJsonArray()),
             PluginWrites.OP_DELETE_MESSAGES to JSONObject()
-                .put("peer", "D-$channel").put("ids", ids).put("revoke", true),
+                .put("peer", "D${PeerSpecs.ZERO_CHANNEL_ID - channel}").put("ids", ids).put("revoke", true),
             PluginWrites.OP_FORWARD_MESSAGES to JSONObject()
-                .put("peer", "D-$channel").put("toPeer", "D$alice").put("ids", ids)
+                .put("peer", "D${PeerSpecs.ZERO_CHANNEL_ID - channel}").put("toPeer", "D$alice").put("ids", ids)
                 .put("topicId", "4").put("scheduleDate", "1700"),
             PluginWrites.OP_SET_REACTION to JSONObject()
                 .put("peer", "D$alice").put("id", "7")
                 .put("reactions", listOf(reaction).toJsonArray()),
             PluginWrites.OP_SEND_TYPING to JSONObject()
-                .put("peer", "D-$channel").put("topicId", "4").put("action", "typing"),
+                .put("peer", "D${PeerSpecs.ZERO_CHANNEL_ID - channel}").put("topicId", "4").put("action", "typing"),
             PluginWrites.OP_READ_HISTORY to JSONObject()
-                .put("peer", "D-$channel").put("maxId", "9").put("topicId", "3"),
+                .put("peer", "D${PeerSpecs.ZERO_CHANNEL_ID - channel}").put("maxId", "9").put("topicId", "3"),
         )
 
         val problems = mutableListOf<String>()

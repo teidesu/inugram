@@ -1,5 +1,5 @@
 ((shared, PluginError, RpcError, DROP_CODE, DROP_TEXT) => {
-  const { baseName, toNumber, peerDialogId } = shared
+  const { baseName, toNumber, getMarkedPeerId } = shared
 
 
   // Request shapes handled by `OutgoingMessage` and its middleware. Read capabilities from the
@@ -132,13 +132,13 @@
       get peer() {
         const peer = raw.peer
         if (baseName(peer) === 'inputPeerSelf') return account.userId
-        const id = peerDialogId(peer)
+        const id = getMarkedPeerId(peer)
         if (id === null) throw new PluginError('invalid-argument', `peer: the request carries no readable peer`)
         return id
       },
       set peer(value) {
         const id = toNumber(value)
-        if (id === null || id === 0) throw new PluginError('invalid-argument', `peer: not a dialog id: ${value}`)
+        if (id === null || id === 0) throw new PluginError('invalid-argument', `peer: not a marked peer id: ${value}`)
         // retargeting is naming a peer this middleware was not handed, which is a read: it goes
         // through the account handle's own gate rather than around it
         const resolved = account.resolvePeerCached(id)

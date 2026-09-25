@@ -53,10 +53,10 @@ fn to_input_peer_defaults_a_missing_access_hash_to_zero() {
 fn a_peer_helper_refuses_what_it_cannot_answer_for() {
   let (_rt, ctx) = setup();
   for call in [
-    "inu.utils.peers.toDialogId({ _: 'inputPeerEmpty' })",
-    "inu.utils.peers.toDialogId(null)",
-    "inu.utils.peers.parseDialogId(0)",
-    "inu.utils.peers.toBotApiId({ _: 'message' })",
+    "inu.utils.peers.getMarkedPeerId({ _: 'inputPeerEmpty' })",
+    "inu.utils.peers.getMarkedPeerId(null)",
+    "inu.utils.peers.parseMarkedPeerId(0)",
+    "inu.utils.peers.toSimpleDialogId({ _: 'message' })",
     "inu.utils.peers.toInputPeer({ _: 'userEmpty', id: '1' })",
     "inu.utils.formatDuration(2147483648)",
   ] {
@@ -94,10 +94,10 @@ fn the_namespace_is_frozen() {
       };
       JSON.stringify([
         replace(inu.utils, 'toHex'),
-        replace(inu.utils.peers, 'toDialogId'),
+        replace(inu.utils.peers, 'getMarkedPeerId'),
         replace(inu.utils.md, 'unparse'),
         inu.utils.toHex(new Uint8Array([1])),
-        inu.utils.peers.toDialogId({ _: 'peerUser', user_id: '3' }),
+        inu.utils.peers.getMarkedPeerId({ _: 'peerUser', user_id: '3' }),
       ]);
     "#,
   );

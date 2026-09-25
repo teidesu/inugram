@@ -121,10 +121,13 @@
     return id === null ? null : { kind: entry[0], id }
   }
 
-  const peerDialogId = (peer) => {
+  const ZERO_CHANNEL_ID = -1000000000000
+
+  const getMarkedPeerId = (peer) => {
     const described = describePeer(peer)
     if (described === null) return null
-    return described.kind === 'user' ? described.id : -described.id
+    if (described.kind === 'user') return described.id
+    return described.kind === 'chat' ? -described.id : ZERO_CHANNEL_ID - described.id
   }
 
   const peerUserId = (peer) => {
@@ -148,7 +151,7 @@
 
   const toSpec = (peer) => {
     if (typeof peer === 'number') {
-      if (!Number.isInteger(peer)) throw new PluginError('invalid-argument', `not a dialog id: ${peer}`)
+      if (!Number.isInteger(peer)) throw new PluginError('invalid-argument', `not a marked peer id: ${peer}`)
       return `D${peer}`
     }
     if (typeof peer === 'string') {
@@ -164,7 +167,7 @@
       const name = baseName(peer)
       if (SELF.has(name)) return 'S'
       if (name === 'user' && peer.self === true) return 'S'
-      const id = peerDialogId(peer)
+      const id = getMarkedPeerId(peer)
       if (id !== null && id !== 0) return `D${id}`
     }
     throw new PluginError('invalid-argument', `not a peer: ${describe(peer)}`)
@@ -234,21 +237,19 @@
     return id
   }
 
-  // the bot api offsets channels and nothing else, which is the whole difference between the two
-  // schemes: -1000000000000 - channel_id
-  const BOT_API_CHANNEL_BASE = -1000000000000
-
   utils.peers = Object.freeze({
-    toDialogId(peer) {
-      const id = peerDialogId(peer)
-      if (id === null) throw new PluginError('invalid-argument', `toDialogId: not a peer: ${baseName(peer) || typeof peer}`)
+    getMarkedPeerId(peer) {
+      const id = getMarkedPeerId(peer)
+      if (id === null) throw new PluginError('invalid-argument', `getMarkedPeerId: not a peer: ${baseName(peer) || typeof peer}`)
       return id
     },
 
-    parseDialogId(id) {
+    parseMarkedPeerId(id) {
       const value = toNumber(id)
-      if (value === null || value === 0) throw new PluginError('invalid-argument', `parseDialogId: not a dialog id: ${id}`)
-      return { type: value > 0 ? 'user' : 'chat', id: Math.abs(value) }
+      if (value === null || value === 0) throw new PluginError('invalid-argument', `parseMarkedPeerId: not a marked peer id: ${id}`)
+      if (value > 0) return { type: 'user', id: value }
+      if (value < ZERO_CHANNEL_ID) return { type: 'channel', id: ZERO_CHANNEL_ID - value }
+      return { type: 'chat', id: -value }
     },
 
     toInputPeer(userOrChat) {
@@ -264,19 +265,12 @@
       return { _: 'inputPeerChannel', channel_id: id, access_hash: hash }
     },
 
-    toBotApiId(peer) {
-      const described = describePeer(peer)
-      if (described === null) throw new PluginError('invalid-argument', `toBotApiId: not a peer: ${baseName(peer) || typeof peer}`)
-      if (described.kind === 'user') return described.id
-      if (described.kind === 'chat') return -described.id
-      return BOT_API_CHANNEL_BASE - described.id
-    },
-
-    fromBotApiId(id) {
-      const value = toNumber(id)
-      if (value === null || value === 0) throw new PluginError('invalid-argument', `fromBotApiId: not a bot api id: ${id}`)
-      // a basic group is -id in both schemes, so only the offset branch has anything to undo
-      return value < BOT_API_CHANNEL_BASE ? value - BOT_API_CHANNEL_BASE : value
+    toSimpleDialogId(peer) {
+      const value = typeof peer === 'number' ? peer : getMarkedPeerId(peer)
+      if (value === null || !Number.isInteger(value) || value === 0) {
+        throw new PluginError('invalid-argument', `toSimpleDialogId: not a peer: ${baseName(peer) || peer}`)
+      }
+      return value < ZERO_CHANNEL_ID ? value - ZERO_CHANNEL_ID : value
     },
   })
 
@@ -285,7 +279,7 @@
   return {
     baseName,
     toNumber,
-    peerDialogId,
+    getMarkedPeerId,
     peerUserId,
     SEPARATOR,
     toSpec,

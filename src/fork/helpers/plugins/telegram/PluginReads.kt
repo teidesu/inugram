@@ -790,7 +790,7 @@ object PluginReads {
             pins.sortBy { folder.pinnedDialogs.get(it, Int.MAX_VALUE) }
             for (id in pins) {
                 if (DialogObject.isEncryptedDialog(id) || ParanoiaHelper.isHidden(accountId, id)) continue
-                pinned.put(id)
+                pinned.put(PeerSpecs.toMarkedPeerId(MessagesController.getInstance(accountId), id))
             }
             out.put(
                 JSONObject()

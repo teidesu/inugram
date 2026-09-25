@@ -91,7 +91,7 @@ inu.onUpdate(['updateDeleteMessages', 'updateDeleteChannelMessages'], (update, a
   const ids = readIds(update.messages)
   const key = `${account.id}:deleted:${ids.join(',')}`
   bump(rawSeen, key)
-  rawDeletes.set(key, update._ === 'updateDeleteChannelMessages' ? -Number(update.channel_id) : null)
+  rawDeletes.set(key, update._ === 'updateDeleteChannelMessages' ? -1000000000000 - Number(update.channel_id) : null)
 })
 
 inu.onNewMessage(messageEvent('a new message reaches both streams once', 'new'))

@@ -628,7 +628,7 @@ fn an_input_peer_like_is_normalized_before_it_crosses() {
   let seen: Vec<String> = host.reads.borrow().iter().map(|(_, _, arg)| arg.clone()).collect();
   assert_eq!(
     seen,
-    vec!["S", "S", "D222", "D222", "Ualice", "Ualice", "D-1001", "D-1001", "D222", "S", "D222", "S"],
+    vec!["S", "S", "D222", "D222", "Ualice", "Ualice", "D-1001", "D-1000000001001", "D222", "S", "D222", "S"],
   );
 }
 

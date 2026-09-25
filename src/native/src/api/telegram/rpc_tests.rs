@@ -1146,7 +1146,7 @@ fn the_send_view_reads_the_peer_and_the_reply_the_user_meant() {
     let (next, _) = run_send(&rt, &ctx, &state, &host, "messages.sendMessage", send);
     assert!(next.is_some(), "the user's message never reached the network: {send}");
   }
-  assert_eq!(eval_json(&ctx, "__seen"), "[[111,null,null],[-9,null,20],[-9,33,20]]");
+  assert_eq!(eval_json(&ctx, "__seen"), "[[111,null,null],[-1000000000009,null,20],[-1000000000009,33,20]]");
 }
 
 /// callback syntax does not predict whether a verdict arrives before the draw deadline, so it

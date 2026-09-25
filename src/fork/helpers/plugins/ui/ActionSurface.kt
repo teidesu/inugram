@@ -1,11 +1,13 @@
 package desu.inugram.helpers.plugins.ui
 
 import desu.inugram.core.plugins.PluginPermissions
+import desu.inugram.helpers.plugins.telegram.PeerSpecs
 import desu.inugram.helpers.plugins.tl.TlFilter
 import desu.inugram.helpers.plugins.tl.TlJson
 import org.json.JSONArray
 import org.json.JSONObject
 import org.telegram.messenger.DialogObject
+import org.telegram.messenger.MessagesController
 import org.telegram.tgnet.TLRPC
 
 enum class MessageActionSource(val wire: String, val placements: Int) {
@@ -82,7 +84,9 @@ class ActionSurface private constructor(
         }
 
         private fun chatJson(accountId: Int, dialogId: Long, topicId: Long?): JSONObject {
-            val out = JSONObject().put("accountId", accountId).put("dialogId", dialogId)
+            val out = JSONObject()
+                .put("accountId", accountId)
+                .put("dialogId", PeerSpecs.toMarkedPeerId(MessagesController.getInstance(accountId), dialogId))
             if (topicId != null && topicId != 0L) out.put("topicId", topicId)
             return out
         }

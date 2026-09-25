@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins
 
+import desu.inugram.helpers.plugins.telegram.PeerSpecs
 import desu.inugram.helpers.plugins.telegram.PluginWrites
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -181,7 +182,7 @@ class PluginWritesTest {
     @Test
     fun a_topic_post_with_no_reply_of_its_own_replies_to_the_topic_s_root() {
         val plugin = granted()
-        assertNull(write(plugin, PluginWrites.OP_SEND_MESSAGE, send("D-$channel").put("topicId", "12")))
+        assertNull(write(plugin, PluginWrites.OP_SEND_MESSAGE, send("D${PeerSpecs.ZERO_CHANNEL_ID - channel}").put("topicId", "12")))
         drain()
         val reply = (connections().lastSent()!!.request as TLRPC.TL_messages_sendMessage).reply_to
             as TLRPC.TL_inputReplyToMessage
@@ -194,7 +195,7 @@ class PluginWritesTest {
         val plugin = granted()
         val ids = listOf("3", "4").toJsonArray()
         assertNull(
-            write(plugin, PluginWrites.OP_DELETE_MESSAGES, send("D-$channel").put("ids", ids).put("revoke", true)),
+            write(plugin, PluginWrites.OP_DELETE_MESSAGES, send("D${PeerSpecs.ZERO_CHANNEL_ID - channel}").put("ids", ids).put("revoke", true)),
         )
         drain()
         val channels = connections().lastSent()!!.request as TLRPC.TL_channels_deleteMessages
@@ -229,7 +230,7 @@ class PluginWritesTest {
         )
 
         assertNull(
-            write(plugin, PluginWrites.OP_DELETE_MESSAGES, send("D-$min").put("ids", listOf("42").toJsonArray())),
+            write(plugin, PluginWrites.OP_DELETE_MESSAGES, send("D${PeerSpecs.ZERO_CHANNEL_ID - min}").put("ids", listOf("42").toJsonArray())),
         )
         drain()
         assertTrue(
@@ -237,7 +238,7 @@ class PluginWritesTest {
             "a min channel deleted through the peerless rpc, which deletes id 42 in another chat",
         )
 
-        assertNull(write(plugin, PluginWrites.OP_READ_HISTORY, send("D-$min").put("maxId", "9"), requestId = 2))
+        assertNull(write(plugin, PluginWrites.OP_READ_HISTORY, send("D${PeerSpecs.ZERO_CHANNEL_ID - min}").put("maxId", "9"), requestId = 2))
         drain()
         assertTrue(
             connections().lastSent()!!.request is TLRPC.TL_channels_readHistory,
@@ -249,14 +250,14 @@ class PluginWritesTest {
     fun marking_a_topic_read_is_the_thread_rpc_and_a_channel_its_own() {
         val plugin = granted()
         assertNull(
-            write(plugin, PluginWrites.OP_READ_HISTORY, send("D-$channel").put("maxId", "9").put("topicId", "3")),
+            write(plugin, PluginWrites.OP_READ_HISTORY, send("D${PeerSpecs.ZERO_CHANNEL_ID - channel}").put("maxId", "9").put("topicId", "3")),
         )
         drain()
         val discussion = connections().lastSent()!!.request as TLRPC.TL_messages_readDiscussion
         assertEquals(3, discussion.msg_id)
         assertEquals(9, discussion.read_max_id)
 
-        assertNull(write(plugin, PluginWrites.OP_READ_HISTORY, send("D-$channel").put("maxId", "9"), requestId = 2))
+        assertNull(write(plugin, PluginWrites.OP_READ_HISTORY, send("D${PeerSpecs.ZERO_CHANNEL_ID - channel}").put("maxId", "9"), requestId = 2))
         drain()
         assertEquals(9, (connections().lastSent()!!.request as TLRPC.TL_channels_readHistory).max_id)
 

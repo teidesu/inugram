@@ -120,8 +120,8 @@ fn read_log(ctx: &Context) -> String {
 }
 
 pub(crate) const CHAT_SURFACE: &str = r#"{"accountId":0,"dialogId":-100,"topicId":7}"#;
-pub(crate) const MESSAGE_SURFACE: &str = r#"{"accountId":0,"dialogId":-100,"source":"bubble","messages":[{"_":"message","id":11,"date":1,"message":"one","dialog_id":"-100","grouped_id":"77"},{"_":"message","id":12,"date":2,"message":"two","dialog_id":"-100","grouped_id":"77"}]}"#;
-pub(crate) const SELECTION_SURFACE: &str = r#"{"accountId":0,"dialogId":-100,"topicId":7,"source":"selection","messages":[{"_":"message","id":3,"date":1,"message":"three","dialog_id":"-200"},{"_":"message","id":14,"date":2,"message":"fourteen","dialog_id":"-100"}]}"#;
+pub(crate) const MESSAGE_SURFACE: &str = r#"{"accountId":0,"dialogId":-100,"source":"bubble","messages":[{"_":"message","id":11,"date":1,"message":"one","peer_id":{"_":"peerChat","chat_id":"100"},"dialog_id":"-100","grouped_id":"77"},{"_":"message","id":12,"date":2,"message":"two","peer_id":{"_":"peerChat","chat_id":"100"},"dialog_id":"-100","grouped_id":"77"}]}"#;
+pub(crate) const SELECTION_SURFACE: &str = r#"{"accountId":0,"dialogId":-100,"topicId":7,"source":"selection","messages":[{"_":"message","id":3,"date":1,"message":"three","peer_id":{"_":"peerChat","chat_id":"200"},"dialog_id":"-200"},{"_":"message","id":14,"date":2,"message":"fourteen","peer_id":{"_":"peerChat","chat_id":"100"},"dialog_id":"-100"}]}"#;
 
 pub(crate) fn row(token: u32, text: &str) -> String {
   format!(r#"{{"token":{token},"text":"{text}"}}"#)

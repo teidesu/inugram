@@ -2,6 +2,7 @@ package desu.inugram.helpers.plugins.telegram
 
 import desu.inugram.core.plugins.PluginRefusal
 import desu.inugram.core.plugins.PluginWire
+import org.telegram.messenger.ChatObject
 import org.telegram.messenger.DialogObject
 import org.telegram.messenger.MessagesController
 import org.telegram.messenger.UserConfig
@@ -21,6 +22,15 @@ object PeerSpecs {
     const val SPEC_DIALOG_ID = 'D'
     const val SPEC_USERNAME = 'U'
 
+    // a marked peer id is the bot api's scheme: a basic group is -id and a channel is -1000000000000 - id
+    const val ZERO_CHANNEL_ID = -1_000_000_000_000L
+
+    fun toSimpleDialogId(markedPeerId: Long): Long =
+        if (markedPeerId < ZERO_CHANNEL_ID) markedPeerId - ZERO_CHANNEL_ID else markedPeerId
+
+    fun toMarkedPeerId(controller: MessagesController, dialogId: Long): Long =
+        if (dialogId < 0 && ChatObject.isChannel(controller.getChat(-dialogId))) ZERO_CHANNEL_ID + dialogId else dialogId
+
     fun controllerFor(accountId: Int): MessagesController? {
         if (!UserConfig.isValidAccount(accountId)) return null
         return MessagesController.getInstance(accountId)
@@ -31,7 +41,7 @@ object PeerSpecs {
         val payload = spec.substring(1)
         val id = when (spec[0]) {
             SPEC_SELF -> UserConfig.getInstance(accountId).getClientUserId()
-            SPEC_DIALOG_ID -> payload.toLongOrNull()
+            SPEC_DIALOG_ID -> payload.toLongOrNull()?.let(::toSimpleDialogId)
             SPEC_USERNAME -> when (val found = controller.getUserOrChat(payload)) {
                 is TLRPC.User -> found.id
                 is TLRPC.Chat -> -found.id

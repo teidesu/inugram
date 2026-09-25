@@ -136,6 +136,8 @@ class PluginChatListTest {
     fun a_chat_folder_carries_its_title_pins_and_count() {
         val plugin = granted()
         seed(main = listOf(dialog(222, 30)))
+        TestApp.putChat(broadcast(5005L))
+        TestApp.putChat(basicGroup(6006L))
         seedFilter(
             MessagesController.DialogFilter().apply {
                 id = 7
@@ -145,6 +147,8 @@ class PluginChatListTest {
                 dialogs.add(dialog(222, 30))
                 pinnedDialogs.put(333, 1)
                 pinnedDialogs.put(222, 0)
+                pinnedDialogs.put(-5005, 2)
+                pinnedDialogs.put(-6006, 3)
             },
         )
         val folder = folders(plugin).getJSONObject(0)
@@ -154,7 +158,7 @@ class PluginChatListTest {
         assertEquals(4, folder.getInt("unreadCount"))
         assertEquals(1, folder.getInt("dialogCount"))
         assertFalse(folder.getBoolean("isDefault"))
-        assertEquals("[222,333]", folder.getJSONArray("pinned").toString())
+        assertEquals("[222,333,-1000000005005,-6006]", folder.getJSONArray("pinned").toString())
     }
 
     @Test

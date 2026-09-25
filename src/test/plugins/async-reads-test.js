@@ -111,7 +111,7 @@ const SERVICE_PEER = 777000
   if (forum === undefined || forum === null) {
     skip('getTopics answers with a page', 'no forum among the first 100 dialogs')
   } else {
-    const topics = await acc.getTopics(inu.utils.peers.toDialogId(forum), { limit: 5 })
+    const topics = await acc.getTopics(inu.utils.peers.getMarkedPeerId(forum), { limit: 5 })
     check('getTopics answers with a page', Array.isArray(topics), `${topics.length} topics`)
   }
 
