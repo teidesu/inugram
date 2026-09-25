@@ -71,14 +71,13 @@ inu.onUpdate([
     })
   }
 
-  // the generated tl typings lack `toJSON`
-  const copy = /** @type {any} */ (update).toJSON()
-  if (copy === null || typeof copy !== 'object') return fail('toJSON() detaches', `got ${copy}`)
-  if (copy._ !== type) return fail('toJSON() detaches', `copy._ = ${copy._}, want ${type}`)
+  const copy = /** @type {any} */ (structuredClone(update))
+  if (copy === null || typeof copy !== 'object') return fail('structuredClone detaches', `got ${copy}`)
+  if (copy._ !== type) return fail('structuredClone detaches', `copy._ = ${copy._}, want ${type}`)
   copy._ = 'mutated'
-  if (copy._ !== 'mutated') return fail('toJSON() copy is mutable', `read back ${copy._}`)
-  if (update._ !== type) return fail('toJSON() copy is detached', `view._ became ${update._}`)
-  pass('toJSON() is a plain mutable copy')
+  if (copy._ !== 'mutated') return fail('a structuredClone copy is mutable', `read back ${copy._}`)
+  if (update._ !== type) return fail('a structuredClone copy is detached', `view._ became ${update._}`)
+  pass('structuredClone is a plain mutable copy')
 
   // storing a read-only view into a writable one would launder it into a writable child
   const label = 'read-only view refused as a field value'

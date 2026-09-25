@@ -45,20 +45,26 @@ declare interface InterceptRpcOptions {
  */
 declare type Disposer = (() => void) & Disposable
 
-/**
- * Dialog ID:
- * - a user id as-is (e.g. `123456`)
- * - a chat or channel id, negated (e.g. `-123123`)
- *
- * Secret chats have no dialog id, as they are never exposed to the plugins
- */
-declare type DialogId = number
-
 declare type PeerLikeObject
   = | tl.TypePeer | tl.TypeInputPeer | tl.TypeInputUser | tl.TypeInputChannel
     | tl.TypeUser | tl.TypeChat
 
-declare type InputPeerLike = DialogId | PeerLikeObject | 'me' | 'self' | (string & {})
+/**
+ * A peer, represented by one of: 
+ * - marked peer id (like in Bot API/mtcute)
+ * - `'me'`/`'self'`
+ * - a username (optionally with `@`)
+ * - a TL object representing a peer.
+ *
+ * A marked peer id follows the Bot API's scheme:
+ * - a user id as-is (e.g. `123456`)
+ * - a basic group id, negated (e.g. `-123123`)
+ * - a channel or supergroup id, subtracted from `-1000000000000` (e.g. `-1000000123123`)
+ *
+ * Note that the Android app itself follows a simpler schema, 
+ * both chats and channels are simply negated. Use {@link toSimpleDialogId} to convert.
+ */
+declare type InputPeerLike = number | PeerLikeObject | 'me' | 'self' | (string & {})
 
 /** Formatted text representation */
 declare interface TextWithEntities {
@@ -198,7 +204,7 @@ declare namespace inu {
     get groupedId(): string | null
 
     /** ID of the dialog where the message was sent */
-    get dialogId(): DialogId | null
+    get dialogId(): number | null
     /** ID of the topic where the message belongs */
     get topicId(): number | null
     /** ID of the message sender */
@@ -263,7 +269,7 @@ declare namespace inu {
     /** A shared folder, added from an invite link. */
     isChatlist: boolean
     /** The folder's pinned dialogs, in the order they are pinned. */
-    pinned: DialogId[]
+    pinned: number[]
   }
 
   /**
@@ -936,19 +942,17 @@ declare namespace inu {
     function formatDuration(seconds: number): string
 
     namespace peers {
-      /** convert a peer object to a dialog id */
-      function toDialogId(peer: PeerLikeObject): DialogId
-      /** parse a dialog id */
-      function parseDialogId(id: DialogId | string): {
-        type: 'user' | 'chat'
+      /** get the marked peer id of a peer object */
+      function getMarkedPeerId(peer: PeerLikeObject): number
+      /** parse a marked peer id into its peer type and bare id */
+      function parseMarkedPeerId(id: number | string): {
+        type: 'user' | 'chat' | 'channel'
         id: number
       }
       /** convert a user or chat object to an input peer */
       function toInputPeer(userOrChat: tl.TypeUser | tl.TypeChat): tl.TypeInputPeer
-      /** convert a peer object to a bot api id */
-      function toBotApiId(peer: PeerLikeObject): number
-      /** convert a bot api id to a dialog id */
-      function fromBotApiId(id: DialogId | string): DialogId
+      /** convert a marked peer id or a peer object to the app's own Java dialog id, which negates channel ids like basic groups */
+      function toSimpleDialogId(peer: number | PeerLikeObject): number
     }
   }
 
@@ -1025,8 +1029,8 @@ declare namespace inu {
      * - `settings`: open the settings page
      */
     type PageTarget
-      = | { type: 'chat', dialogId: DialogId, topicId?: number, account?: number }
-        | { type: 'profile', dialogId: DialogId, account?: number }
+      = | { type: 'chat', dialogId: number, topicId?: number, account?: number }
+        | { type: 'profile', dialogId: number, account?: number }
         | { type: 'dialogs', account?: number }
         | { type: 'settings', account?: number }
 
@@ -1042,7 +1046,7 @@ declare namespace inu {
     interface BulletinAvatars {
       type: 'avatars'
       /** 1 to 3 peers */
-      avatars: DialogId[]
+      avatars: number[]
       /** which account they are looked up in; defaults to the active one */
       account?: number
     }
@@ -1119,7 +1123,7 @@ declare namespace inu {
     interface CurrentScreen {
       type: 'chat' | 'profile' | 'dialogs' | 'settings' | 'other'
       /** @needs-grant account.read(dialogs) */
-      dialogId?: DialogId
+      dialogId?: number
       /** @needs-grant account.read(dialogs) */
       topicId?: number
       account: Account
@@ -1396,7 +1400,7 @@ declare namespace inu {
    * @needs-grant onUpdate(delete_message)
    */
   function onMessageDeleted(
-    callback: (dialogId: DialogId | null, messageIds: number[], account: Account) => void,
+    callback: (dialogId: number | null, messageIds: number[], account: Account) => void,
   ): Disposer
 
   namespace notifications {
@@ -1445,7 +1449,7 @@ declare namespace inu {
     account: Account
   }
   interface ChatActionContext extends ActionContext {
-    dialogId: DialogId
+    dialogId: number
     topicId?: number
   }
   type MessageActionSource = 'bubble' | 'selection'
@@ -1494,8 +1498,8 @@ declare namespace inu {
 
   /** Info about an outgoing message, for {@link interceptSendMessage} */
   interface OutgoingMessage {
-    /** Dialog ID of the message */
-    peer: DialogId
+    /** Marked peer id of the message's chat */
+    peer: number
     /** Formatted text of the message */
     text: TextWithEntities
     /** If this message is a reply, ID of the replied-to message */

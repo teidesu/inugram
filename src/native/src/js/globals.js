@@ -154,7 +154,7 @@
     if (type === 'symbol') throw new DOMException('a symbol could not be cloned', 'DataCloneError')
     if (value === null || type !== 'object') return value
     if (seen.has(value)) return seen.get(value)
-    if (value[handleMarker] !== undefined) throw new DOMException('a TL view (toJSON() detaches one) could not be cloned', 'DataCloneError')
+    if (value[handleMarker] !== undefined) return remember(seen, value, value.toJSON())
 
     // a blob clones by reference, as on the web: the clone is a second handle over the same
     // content, so disposing either one is the parent/slice relation the type already explains

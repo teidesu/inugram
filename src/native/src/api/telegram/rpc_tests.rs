@@ -1650,7 +1650,7 @@ mod bundled_oracles {
 
   #[test]
   fn the_bundled_lazy_tl_test_plugin_passes() {
-    let (rt, ctx, host, state, _logs) = setup(&crate::testing::harness::manifest_grants(LAZY_TL_ORACLE), false);
+    let (rt, ctx, host, state, _logs) = setup(&crate::testing::harness::manifest_grants(LAZY_TL_ORACLE), true);
     let lines = crate::testing::harness::install_capturing_console(&ctx);
     eval(&ctx, LAZY_TL_ORACLE);
 
@@ -1698,7 +1698,7 @@ mod bundled_oracles {
   /// assignment all agreeing with what the host said about a field.
   #[test]
   fn the_bundled_api_filter_test_plugin_passes() {
-    let (rt, ctx, host, state, _logs) = setup(&crate::testing::harness::manifest_grants(API_FILTER_ORACLE), false);
+    let (rt, ctx, host, state, _logs) = setup(&crate::testing::harness::manifest_grants(API_FILTER_ORACLE), true);
     host.hidden.borrow_mut().insert("autologin_token".to_string());
     for field in ["from_id", "peer_id", "fwd_from", "out"] {
       host.sealed.borrow_mut().insert(field.to_string());
