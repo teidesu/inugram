@@ -33,8 +33,7 @@ inu.invokeRpc({ _: 'help.getConfig' }).then(
     if ('autologin_token' in config) return fail(label, '`in` says the field is there')
     if (Object.keys(config).includes('autologin_token')) return fail(label, 'Object.keys lists it')
     if (config.autologin_token !== null) return fail(label, `reads back ${config.autologin_token}`)
-    // the generated tl typings lack `toJSON`
-    if ('autologin_token' in /** @type {any} */ (config).toJSON()) return fail(label, 'the toJSON() snapshot carries it')
+    if ('autologin_token' in structuredClone(config)) return fail(label, 'a structuredClone copy carries it')
     // a server that sent no token passes the reads above; this tells stripped from never-there
     if (!refuses(() => { config.autologin_token = 'x' }, 'invalid-argument')) {
       return fail(label, 'assigning it was not refused, so nothing is filtering')

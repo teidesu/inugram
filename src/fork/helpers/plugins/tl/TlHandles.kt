@@ -631,7 +631,7 @@ class TlHandles(val policy: TlFilter.Policy) : TlListener {
         private const val TYPE_ENTRY = "\"_\":"
 
         // byte-identical to READ_ONLY_MESSAGE in src/native/src/api/tl/proxy.rs
-        const val READ_ONLY_MESSAGE = "this TL view is read-only; take a copy with toJSON() to edit it"
+        const val READ_ONLY_MESSAGE = "this TL view is read-only; take a copy with structuredClone() to edit it"
 
         // one chain spans several plugins' tables that all release the same scope id
         private val nextScopeId = AtomicLong(1)

@@ -209,12 +209,13 @@ impl HandleBox<'_> {
 
 const HANDLE_EXPIRED_MESSAGE: &str = "TL handle expired. Copy fields you need before returning";
 
-const READ_ONLY_MESSAGE: &str = "this TL view is read-only; take a copy with toJSON() to edit it";
+const READ_ONLY_MESSAGE: &str = "this TL view is read-only; take a copy with structuredClone() to edit it";
 
 const DESCRIPTOR_MESSAGE: &str =
   "a TL view only supports plain value assignment; defineProperty needs a data descriptor carrying a value, and cannot change a field's attributes";
 
-const NOT_EXTENSIBLE_MESSAGE: &str = "a TL view cannot be sealed or frozen; take a copy with toJSON() to freeze it";
+const NOT_EXTENSIBLE_MESSAGE: &str =
+  "a TL view cannot be sealed or frozen; take a copy with structuredClone() to freeze it";
 
 const HANDLE_MARKER_DESCRIPTION: &str = "inu.tl.handle";
 

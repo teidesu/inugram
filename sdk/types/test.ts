@@ -57,11 +57,11 @@ inu.interceptRpc('messages.getHistory', async ({ request: req }, next) => {
   if (history === null || history._ === 'messages.messagesNotModified') return history
   for (const raw of history.messages ?? []) {
     const message = new inu.Message(raw)
-    const dialogId: DialogId | null = message.dialogId
+    const dialogId: number | null = message.dialogId
     const peer = raw.peer_id
     const where = dialogId === null || peer === undefined
       ? 'a secret chat'
-      : `${inu.utils.peers.parseDialogId(dialogId).type} ${inu.utils.peers.toBotApiId(peer)}`
+      : `${inu.utils.peers.parseMarkedPeerId(dialogId).type} ${inu.utils.peers.getMarkedPeerId(peer)}`
     const what = message.mediaType === null
       ? JSON.stringify(message.text.slice(0, 20))
       : `[${message.mediaType}${message.duration === null ? '' : ` ${inu.utils.formatDuration(message.duration)}`}]`
@@ -82,7 +82,7 @@ inu.withCurrentAccount((account) => {
   const contacts: (tl.TypeUser | null)[] = account.getUsers(['me', '@durov', 777000])
   for (const contact of contacts) {
     if (contact === null || contact._ !== 'user') continue
-    const dialogId: DialogId = inu.utils.peers.toDialogId(contact)
+    const dialogId: number = inu.utils.peers.getMarkedPeerId(contact)
     console.log(`${dialogId}: ${contact.first_name ?? ''} ${account.getPeer(dialogId) === null ? '(gone)' : ''}`)
   }
 
@@ -171,14 +171,14 @@ inu.withCurrentAccount((account) => {
 
 const seen = inu.onNewMessage((message, account) => {
   if (!account.isCurrent()) return
-  const dialogId: DialogId | null = message.dialogId
+  const dialogId: number | null = message.dialogId
   console.log(`+ #${message.id} in ${dialogId ?? 'a secret chat'}: ${message.text}`)
 })
 inu.onMessageEdited((message) => {
   console.log(`~ #${message.id} at ${inu.utils.formatDate(message.editDate ?? message.date, 'time')}`)
 })
 inu.onMessageDeleted((dialogId, messageIds, account) => {
-  const where: string = dialogId === null ? 'an unknown dialog' : `${inu.utils.peers.parseDialogId(dialogId).type} ${dialogId}`
+  const where: string = dialogId === null ? 'an unknown dialog' : `${inu.utils.peers.parseMarkedPeerId(dialogId).type} ${dialogId}`
   console.log(`- ${messageIds.length} message(s) in ${where} on account ${account.id}`)
 })
 inu.onUnload(seen)

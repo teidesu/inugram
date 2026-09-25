@@ -111,19 +111,17 @@ inu.invokeRpc({ _: 'help.getConfig' }).then(
     if (config === null || config._ !== 'config') return fail('invokeRpc returned a view', `_ = ${config?._}`)
     pass('invokeRpc returned a view', `this_dc = ${config.this_dc}`)
 
-    expectDomException('structuredClone refuses a TL view', 'DataCloneError', () => structuredClone(config))
-    expectDomException('structuredClone refuses an object holding a view', 'DataCloneError', () => {
-      structuredClone({ inner: [config] })
-    })
-
-    // the generated tl typings lack `toJSON`
-    const detached = /** @type {tl.RawConfig} */ (/** @type {any} */ (config).toJSON())
-    const copy = structuredClone(detached)
+    const copy = structuredClone(config)
+    copy.this_dc = -1
     check(
-      'the snapshot toJSON() hands back clones fine',
-      copy._ === 'config' && copy !== detached && copy.this_dc === detached.this_dc,
-      copy._,
+      'structuredClone detaches a TL view into a mutable copy',
+      copy._ === 'config' && copy !== config && config.this_dc !== -1,
+      `${copy._} ${config.this_dc}`,
     )
+    const nested = structuredClone({ inner: [config] })
+    check('structuredClone copies a view held inside plain data', nested.inner[0]._ === 'config', nested.inner[0]._)
+    const pair = structuredClone([config, config])
+    check('a view named twice clones to one object', pair[0] === pair[1] && pair[0] !== config)
 
     console.log('globals test done')
   },
