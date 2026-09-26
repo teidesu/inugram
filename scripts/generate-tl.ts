@@ -1,6 +1,6 @@
 import type { JavaClass, JavaField, ParseWarning } from './tl-parser.js'
 import fs from 'node:fs/promises'
-import { basename, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { glob } from 'tinyglobby'
 import { rootDir, worktreeDir } from './config.js'
@@ -989,6 +989,7 @@ export async function generateTl(): Promise<boolean> {
 
 async function writeIfChanged(path: string, content: string) {
   if (await fs.readFile(path, 'utf8').catch(() => null) === content) return false
+  await fs.mkdir(dirname(path), { recursive: true })
   await fs.writeFile(path, content)
   return true
 }
