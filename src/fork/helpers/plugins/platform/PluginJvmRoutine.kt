@@ -343,7 +343,7 @@ internal class PluginJvmRoutine(
                     }
                     val value: Any? = when (op) {
                         Op.THIS -> if (hookMode) host.checkedOperand(requireNotNull(context).getThisObject()) else host.checkedOperand(methodSelf)
-                        Op.OWNER -> owner ?: throw IllegalStateException("routine: inu.jvm.superOf needs the routine to be a defineClass body")
+                        Op.OWNER -> owner ?: throw IllegalStateException("routine: inu.jvm.getSuper needs the routine to be a defineClass body")
                         Op.ARG -> {
                             val index = requireIndex(read(fieldA[pc], registers))
                             if (hookMode) {

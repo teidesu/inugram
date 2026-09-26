@@ -1125,16 +1125,16 @@ class RoutineCompiler {
       const [cls, receiver, name, ...args] = this.compileArguments(node.arguments, node)
       return this.emit('callSuper', cls, receiver, name, args)
     }
-    const superReceiver = this.getSuperOfReceiver(callee.object)
+    const superReceiver = this.getSuperReceiver(callee.object)
     if (superReceiver !== null) {
-      if (callee.optional) fail(callee, '`inu.jvm.superOf(this)` is never null')
+      if (callee.optional) fail(callee, '`inu.jvm.getSuper(this)` is never null')
       const owner = this.emit('owner')
       const receiver = this.compileExpression(superReceiver)
       const key = this.compileMemberKey(callee)
       return this.emit('callSuper', owner, receiver, key, this.compileArguments(node.arguments, node))
     }
-    if (this.isInuJvm(callee, 'superOf')) {
-      fail(node, '`inu.jvm.superOf(this)` is only called through, as `inu.jvm.superOf(this).method(...)`')
+    if (this.isInuJvm(callee, 'getSuper')) {
+      fail(node, '`inu.jvm.getSuper(this)` is only called through, as `inu.jvm.getSuper(this).method(...)`')
     }
     const target = this.compileChainOperand(callee.object, chain)
     if (callee.optional) {
@@ -1156,17 +1156,17 @@ class RoutineCompiler {
     return root.type === 'Identifier' && root.name === 'inu' && this.lookup('inu') === null
   }
 
-  /** the `this` of `inu.jvm.superOf(this)`, whose class is the one the host binds the routine to as a defineClass body */
-  private getSuperOfReceiver(node: MemberExpression['object']): Expression | null {
+  /** the `this` of `inu.jvm.getSuper(this)`, whose class is the one the host binds the routine to as a defineClass body */
+  private getSuperReceiver(node: MemberExpression['object']): Expression | null {
     const call = unwrap(node)
     if (call.type !== 'CallExpression') return null
     const callee = unwrap(call.callee)
-    if (callee.type !== 'MemberExpression' || !this.isInuJvm(callee, 'superOf')) return null
-    if (this.options.mode === 'hook') fail(call, '`inu.jvm.superOf` needs a defineClass body, which a hook routine is not')
-    if (call.optional) fail(call, '`inu.jvm.superOf` is never null')
+    if (callee.type !== 'MemberExpression' || !this.isInuJvm(callee, 'getSuper')) return null
+    if (this.options.mode === 'hook') fail(call, '`inu.jvm.getSuper` needs a defineClass body, which a hook routine is not')
+    if (call.optional) fail(call, '`inu.jvm.getSuper` is never null')
     const [receiver] = call.arguments
     if (call.arguments.length !== 1 || receiver.type === 'SpreadElement' || unwrap(receiver).type !== 'ThisExpression') {
-      fail(call, '`inu.jvm.superOf` takes `this`')
+      fail(call, '`inu.jvm.getSuper` takes `this`')
     }
     return receiver
   }

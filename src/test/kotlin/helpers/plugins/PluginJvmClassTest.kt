@@ -62,16 +62,16 @@ class PluginJvmClassTest {
         'ok';
     """)
 
-    @Test fun super_of_in_a_routine_body_calls_the_bound_classes_super() = runWithEngine("""
+    @Test fun get_super_in_a_routine_body_calls_the_bound_classes_super() = runWithEngine("""
         const base = inu.jvm.cls('desu.inugram.jvmfixture.JvmClassFixture');
-        const type = inu.jvm.defineClass('inu.test.DefinedSuperOf', {
+        const type = inu.jvm.defineClass('inu.test.DefinedGetSuper', {
             superclass: base,
             constructors: [{ params: ['int'], super: [{ arg: 0 }, { value: 'base' }] }],
             methods: { getText: { params: [], returns: 'java.lang.String', body: inu.jvm.routine({ v: 1, source: '', captures: [], slots: 0, tries: [], code: [['owner'], ['this'], ['callSuper', 0, 1, ['getText'], []], ['add', ['super said '], 2], ['return', 3]] }) } },
         });
         const instance = new type(1);
         if (instance.call('getNumber') !== 1) throw Error('super arguments');
-        if (base.getDeclaredMethod('getText()Ljava/lang/CharSequence;').invoke(instance) !== 'super said base') throw Error('superOf dispatch');
+        if (base.getDeclaredMethod('getText()Ljava/lang/CharSequence;').invoke(instance) !== 'super said base') throw Error('getSuper dispatch');
         const unbound = inu.jvm.routine({ v: 1, source: '', captures: [], slots: 0, tries: [], code: [['owner'], ['return', 0]] });
         let refused = false;
         try { unbound.call('run'); } catch (error) { refused = true; }

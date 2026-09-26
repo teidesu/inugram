@@ -172,7 +172,7 @@ declare namespace inu {
      *   - `/` does integer division if both args are integers
      *   - other math operators work as expected
      * - `===`/`!==` (coerced comparisons are NOT supported)
-     * - {@link inu.jvm.callSuper} and {@link inu.jvm.superOf}, the only `inu` members available
+     * - {@link inu.jvm.callSuper} and {@link inu.jvm.getSuper}, the only `inu` members available
      * - expressions on Java values.
      *
      * Unsupported syntax is a build error with a source location.
@@ -258,14 +258,14 @@ declare namespace inu {
 
     /**
      * `super` for a routine used as a {@link inu.jvm.defineClass} body, which cannot capture the
-     * class it is defining: `inu.jvm.superOf(this).method(...args)` is
+     * class it is defining: `inu.jvm.getSuper(this).method(...args)` is
      * {@link inu.jvm.callSuper} on the class the routine is bound to.
      *
      * Only available in {@link inu.jvm.routine} bodies, and only called through directly.
      * A routine run outside a defineClass body throws there.
      *
-     * @example `inu.jvm.routine(function (paint) { inu.jvm.superOf(this).updateDrawState(paint) })`
+     * @example `inu.jvm.routine(function (paint) { inu.jvm.getSuper(this).updateDrawState(paint) })`
      */
-    function superOf(self: JavaObject): any
+    function getSuper(self: JavaObject): any
   }
 }
