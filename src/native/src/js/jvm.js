@@ -259,8 +259,8 @@
       return type
     },
 
-    superOf() {
-      throw new PluginError('invalid-argument', 'inu.jvm.superOf only works inside an inu.jvm.routine body, as inu.jvm.superOf(this).method(...)')
+    getSuper() {
+      throw new PluginError('invalid-argument', 'inu.jvm.getSuper only works inside an inu.jvm.routine body, as inu.jvm.getSuper(this).method(...)')
     },
 
     callSuper(cls, self, method, ...args) {

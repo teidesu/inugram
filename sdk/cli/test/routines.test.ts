@@ -356,9 +356,9 @@ describe('the routine compiler', () => {
     })
   })
 
-  describe('inu.jvm.superOf', () => {
+  describe('inu.jvm.getSuper', () => {
     it('lowers to callSuper on the bound class, in argument order', () => {
-      const program = accepts('function (a) { return inu.jvm.superOf(this).draw(a, 1) }')
+      const program = accepts('function (a) { return inu.jvm.getSuper(this).draw(a, 1) }')
       expect(program.captures).toEqual([])
       const owner = program.code.findIndex(node => node[0] === 'owner')
       const call = program.code.find(node => node[0] === 'callSuper')!
@@ -368,21 +368,21 @@ describe('the routine compiler', () => {
     })
 
     it('takes a computed member', () => {
-      const program = accepts('function (name) { return inu.jvm.superOf(this)[name]() }')
+      const program = accepts('function (name) { return inu.jvm.getSuper(this)[name]() }')
       expect(program.code.some(node => node[0] === 'callSuper')).toBe(true)
     })
 
     it('refuses anything but a call through it on `this`', () => {
-      refuses('function () { return inu.jvm.superOf(this) }')
-      refuses('function () { const s = inu.jvm.superOf(this); return s.draw() }')
-      refuses('function (a) { return inu.jvm.superOf(a).draw() }')
-      refuses('function () { return inu.jvm.superOf().draw() }')
-      refuses('function () { return inu.jvm.superOf(this)?.draw() }')
-      refuses('() => inu.jvm.superOf(this).draw()')
+      refuses('function () { return inu.jvm.getSuper(this) }')
+      refuses('function () { const s = inu.jvm.getSuper(this); return s.draw() }')
+      refuses('function (a) { return inu.jvm.getSuper(a).draw() }')
+      refuses('function () { return inu.jvm.getSuper().draw() }')
+      refuses('function () { return inu.jvm.getSuper(this)?.draw() }')
+      refuses('() => inu.jvm.getSuper(this).draw()')
     })
 
     it('is refused in a hook routine, which no class is bound to', () => {
-      refuses('ctx => { ctx.setReturnValue(inu.jvm.superOf(ctx.thisObject).size()) }', 'hook')
+      refuses('ctx => { ctx.setReturnValue(inu.jvm.getSuper(ctx.thisObject).size()) }', 'hook')
     })
   })
 
