@@ -3,13 +3,14 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use rquickjs::object::Accessor;
-use rquickjs::{Array, Ctx, Exception, Function, Object, Persistent, Result as JsResult, Runtime, Value};
+use rquickjs::{Array, Ctx, Exception, Function, Object, Persistent, Result as JsResult, Value};
 
 use crate::api::error::{call_callback, describe_js_error, format_exception, PluginErrorCode};
 use crate::api::platform::jvm::JvmState;
 use crate::api::telegram::account::AccountState;
 use crate::api::tl::proxy::json_parse_tl;
 use crate::api::ui::icons::{icon_from_value, Icon};
+use crate::runtime::enter_js;
 use crate::runtime::pump_jobs;
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry};
@@ -450,14 +451,8 @@ impl ActionState {
 }
 
 impl ActionState {
-  pub fn render(
-    self: &Rc<Self>,
-    rt: &Runtime,
-    context: &rquickjs::Context,
-    kind: i32,
-    surface_json: &str,
-  ) -> Option<String> {
-    let out = context.with(|ctx| {
+  pub fn render(self: &Rc<Self>, context: &rquickjs::Context, kind: i32, surface_json: &str) -> Option<String> {
+    let out = enter_js(context, |ctx| {
       let Some(registry) = self.registry(kind) else {
         (self.log)(&format!("render: unknown action kind {kind}"));
         return None;
@@ -485,22 +480,15 @@ impl ActionState {
         }
       }
     });
-    pump_jobs(rt, context, self.log.as_ref());
+    pump_jobs(context, self.log.as_ref());
     out
   }
 
-  pub fn dispatch(
-    self: &Rc<Self>,
-    rt: &Runtime,
-    context: &rquickjs::Context,
-    kind: i32,
-    token: u32,
-    surface_json: &str,
-  ) {
+  pub fn dispatch(self: &Rc<Self>, context: &rquickjs::Context, kind: i32, token: u32, surface_json: &str) {
     if self.lifecycle.is_unloading() {
       return;
     }
-    context.with(|ctx| {
+    enter_js(context, |ctx| {
       let Some(registry) = self.registry(kind) else {
         return;
       };
@@ -522,13 +510,13 @@ impl ActionState {
       }
       call_callback(&ctx, &self.log, &format!("{} callback", kind_name(kind)), &callback, (context_obj,));
     });
-    pump_jobs(rt, context, self.log.as_ref());
+    pump_jobs(context, self.log.as_ref());
   }
 }
 
 impl Dispose for ActionState {
   fn dispose(&self, context: &rquickjs::Context) {
-    context.with(|_| {
+    enter_js(context, |_| {
       for registry in &self.kinds {
         drop(registry.remove_matching(|_| true));
       }

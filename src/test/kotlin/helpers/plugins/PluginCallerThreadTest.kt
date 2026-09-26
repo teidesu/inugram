@@ -32,12 +32,8 @@ class PluginCallerThreadTest {
                 runOnCaller(task, "caller-$index")
                 assertEquals("$index:caller-$index", JvmFixture.tag)
             }
-            engine.evaluate("""
-                let rejected = false;
-                try { fixture.callStatic('make').call('runNow', task); }
-                catch (e) { rejected = String(e).includes('re-entered'); }
-                if (!rejected) throw new Error('recursive JNI entry must be rejected');
-            """.trimIndent())
+            engine.evaluate("fixture.callStatic('make').call('runNow', task)")
+            assertEquals("4:${Thread.currentThread().name}", JvmFixture.tag)
             engine.evaluate("""
                 inu.xposed.hookMethod(fixture.getDeclaredMethod('sum(II)I'), {
                     before(ctx) {

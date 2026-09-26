@@ -4,7 +4,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use rquickjs::{Array, Ctx, Function, Object, Result as JsResult, Runtime, TypedArray, Value};
+use rquickjs::{Array, Ctx, Function, Object, Result as JsResult, TypedArray, Value};
 
 use crate::api::error::PluginErrorCode;
 use crate::api::io::blob::{self, BlobHandle};
@@ -12,7 +12,7 @@ use crate::api::io::staging::{SourceStager, StagedFile};
 use crate::api::telegram::account::AccountState;
 use crate::api::telegram::progress::ProgressReporter;
 use crate::api::tl::proxy::{js_value_to_wire, TlViews, ViewLife};
-use crate::runtime::{pump_jobs, Parked, PendingTable};
+use crate::runtime::{enter_js, pump_jobs, Parked, PendingTable};
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::utils::qjs::{qjs_load_prelude, qjs_read_typed_bytes};
 
@@ -350,10 +350,10 @@ pub(crate) fn install_writes_with_limit<'js>(
 }
 
 impl WritesState {
-  pub fn settle(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
+  pub fn settle(self: &Rc<Self>, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
     self
       .pending
-      .settle_and_pump(rt, context, &self.log, "write", request_id, result_wire, |ctx, pending, wire| {
+      .settle_and_pump(context, &self.log, "write", request_id, result_wire, |ctx, pending, wire| {
         if let Some(progress) = pending.progress.take() {
           let total = pending.last_total.get();
           if total > 0 {
@@ -366,15 +366,8 @@ impl WritesState {
       });
   }
 
-  pub fn report_progress(
-    self: &Rc<Self>,
-    rt: &Runtime,
-    context: &rquickjs::Context,
-    request_id: i64,
-    loaded: i64,
-    total: i64,
-  ) {
-    context.with(|ctx| {
+  pub fn report_progress(self: &Rc<Self>, context: &rquickjs::Context, request_id: i64, loaded: i64, total: i64) {
+    enter_js(context, |ctx| {
       let progress = self.pending.with_parked(request_id, |pending| {
         pending.last_total.set(total);
         pending.progress.clone()
@@ -383,13 +376,13 @@ impl WritesState {
         progress.report(&ctx, loaded, total);
       }
     });
-    pump_jobs(rt, context, self.log.as_ref());
+    pump_jobs(context, self.log.as_ref());
   }
 }
 
 impl Dispose for WritesState {
   fn dispose(&self, context: &rquickjs::Context) {
-    context.with(|ctx| self.pending.dispose(&ctx));
+    enter_js(context, |ctx| self.pending.dispose(&ctx));
   }
 }
 

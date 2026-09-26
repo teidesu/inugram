@@ -53,21 +53,20 @@ fn the_interrupt_survives_catch_and_finally() {
 
 #[test]
 fn a_spinning_microtask_is_interrupted() {
-  let (rt, ctx, logs) = setup();
+  let (_rt, ctx, logs) = setup();
   let armed = arm(50);
   let log = crate::testing::harness::log_sink(&logs);
 
   eval(&ctx, "Promise.resolve().then(() => { while (true) {} });").unwrap();
-  crate::runtime::pump_jobs(&rt, &ctx, log.as_ref());
+  crate::runtime::pump_jobs(&ctx, log.as_ref());
 
   assert!(armed.tripped());
 }
 
 #[test]
 fn honest_work_within_the_real_entry_budget_is_never_interrupted() {
-  let (rt, ctx, logs) = setup();
+  let (_rt, ctx, logs) = setup();
   let armed = arm(ENTRY_DEADLINE_MS);
-  let log: crate::Log = std::sync::Arc::new(|_| {});
 
   eval(
     &ctx,
@@ -83,7 +82,7 @@ fn honest_work_within_the_real_entry_budget_is_never_interrupted() {
     "#,
   )
   .unwrap();
-  crate::runtime::pump_jobs(&rt, &ctx, log.as_ref());
+  crate::runtime::pump_jobs(&ctx, &|_| {});
 
   assert!(!armed.tripped());
   assert!(logs.borrow().is_empty(), "got: {:?}", logs.borrow());
@@ -384,7 +383,7 @@ fn the_stack_limit_follows_the_thread_that_enters() {
       .stack_size(stack)
       .spawn(move || {
         let guard = ctx.lock().unwrap();
-        fit_stack_limit(&guard.0);
+        fit_stack_limit(&guard.1);
         eval(&guard.1, "function f() { return f() + 1 } f()").unwrap_err()
       })
       .unwrap()

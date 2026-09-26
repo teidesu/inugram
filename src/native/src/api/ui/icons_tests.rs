@@ -221,7 +221,7 @@ impl crate::api::ui::pages::UiHost for SilentUiHost {
 /// the whole point of the descriptor: what crosses to the host is the spec, inside the row
 #[test]
 fn a_row_carries_its_icon_spec_into_the_render() {
-  let (rt, ctx, _host) = setup(&[]);
+  let (_rt, ctx, _host) = setup(&[]);
   let ui_host: Rc<dyn crate::api::ui::pages::UiHost> = Rc::new(SilentUiHost);
   let log: crate::Log = std::sync::Arc::new(|_| {});
   let state = ctx.with(|ctx| {
@@ -259,7 +259,7 @@ fn a_row_carries_its_icon_spec_into_the_render() {
       )
       .unwrap() as i64
   });
-  let json = state.render(&rt, &ctx, page_id).expect("render failed");
+  let json = state.render(&ctx, page_id).expect("render failed");
   assert!(json.contains(r#""text":"Curated","icon":"rmsg_settings""#), "{json}");
   assert!(json.contains(r#""text":"Native","icon":"rmsg_fave""#), "{json}");
   assert!(json.contains(r#""icon":"s<svg><path d=\"M0 0\"/></svg>""#), "{json}");

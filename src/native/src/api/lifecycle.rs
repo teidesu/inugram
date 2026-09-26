@@ -2,9 +2,10 @@ use crate::runtime::Dispose;
 use std::cell::Cell;
 use std::rc::Rc;
 
-use rquickjs::{function::This, Ctx, Function, Result as JsResult, Runtime, Value};
+use rquickjs::{function::This, Ctx, Function, Result as JsResult, Value};
 
 use crate::api::error::{call_callback, format_exception, report_callback_error};
+use crate::runtime::enter_js;
 use crate::runtime::pump_jobs;
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{noop_disposer, CallbackRegistry, Lifecycle};
@@ -100,25 +101,25 @@ pub fn install_lifecycle<'js>(
 }
 
 impl LifecycleState {
-  pub fn app_visibility_changed(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, mode: AppMode) {
+  pub fn app_visibility_changed(self: &Rc<Self>, context: &rquickjs::Context, mode: AppMode) {
     if self.lifecycle.is_unloading() || self.mode.replace(mode) == mode {
       return;
     }
-    context.with(|ctx| {
+    enter_js(context, |ctx| {
       let name = mode.name();
       for f in self.visibility_fns.snapshot(&ctx) {
         call_callback(&ctx, &self.log, "onAppVisibilityChange callback", &f, (name,));
       }
     });
-    pump_jobs(rt, context, self.log.as_ref());
+    pump_jobs(context, self.log.as_ref());
   }
 
-  pub fn notify_unload(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context) {
+  pub fn notify_unload(self: &Rc<Self>, context: &rquickjs::Context) {
     if self.unload_started.replace(true) {
       return;
     }
     self.lifecycle.begin_cleanup();
-    context.with(|ctx| {
+    enter_js(context, |ctx| {
       for f in self.unload_fns.take_all(&ctx) {
         match f.call::<_, Value>(()) {
           Ok(value) => {
@@ -167,11 +168,11 @@ impl LifecycleState {
         }
       }
     });
-    pump_jobs(rt, context, self.log.as_ref());
+    pump_jobs(context, self.log.as_ref());
   }
 
-  pub fn poll_unload(&self, rt: &Runtime, context: &rquickjs::Context) -> bool {
-    pump_jobs(rt, context, self.log.as_ref());
+  pub fn poll_unload(&self, context: &rquickjs::Context) -> bool {
+    pump_jobs(context, self.log.as_ref());
     if self.pending_unloads.get() > 0 && self.lifecycle.is_cleaning_up() {
       return false;
     }
@@ -187,7 +188,7 @@ impl LifecycleState {
 impl Dispose for LifecycleState {
   fn dispose(&self, context: &rquickjs::Context) {
     self.lifecycle.finish_cleanup();
-    context.with(|ctx| {
+    enter_js(context, |ctx| {
       self.unload_fns.release_all(&ctx);
       self.visibility_fns.release_all(&ctx);
     });

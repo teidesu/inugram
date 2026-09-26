@@ -51,7 +51,7 @@ const SHELL_ORACLE: &str = crate::testing::test_plugin!("shell-test.js");
 /// the half a device reaches from a button is called and answered here, so the count covers both
 #[test]
 fn the_bundled_shell_test_plugin_passes() {
-  let (rt, ctx, host, _lifecycle, dialogs, _logs) = setup(&crate::testing::harness::manifest_grants(SHELL_ORACLE));
+  let (_rt, ctx, host, _lifecycle, dialogs, _logs) = setup(&crate::testing::harness::manifest_grants(SHELL_ORACLE));
   let lines = crate::testing::harness::install_capturing_console(&ctx);
   crate::testing::harness::eval_unit(&ctx, SHELL_ORACLE);
   ctx.with(|ctx| {
@@ -60,7 +60,7 @@ fn the_bundled_shell_test_plugin_passes() {
 
   for picked in ["J[2]", "J[0,2]", "N"] {
     let request_id = host.choosers.borrow().last().expect("a chooser was opened").0;
-    dialogs.settle(&rt, &ctx, request_id, picked);
+    dialogs.settle(&ctx, request_id, picked);
   }
 
   let lines = lines.borrow().clone();

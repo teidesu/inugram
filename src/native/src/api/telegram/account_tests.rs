@@ -1,6 +1,6 @@
 use super::*;
 use crate::sandbox::grants::CachedGrantHost;
-use rquickjs::Context;
+use rquickjs::{Context, Runtime};
 
 #[derive(Default)]
 pub(crate) struct TestAccountHost {
@@ -128,12 +128,12 @@ fn accounts_lists_every_slot_as_account_handles_without_a_grant() {
 
 #[test]
 fn is_premium_needs_the_self_grant_and_reads_the_latest_list() {
-  let (rt, ctx, host, state, _logs) = setup(&["account.read(self)"], TWO_ACCOUNTS);
+  let (_rt, ctx, host, state, _logs) = setup(&["account.read(self)"], TWO_ACCOUNTS);
   eval(&ctx, "globalThis.__a = inu.account(1);");
   assert_eq!(eval_json(&ctx, "[inu.account(0).isPremium(), __a.isPremium()]"), "[false,true]");
   *host.json.borrow_mut() =
     r#"[{"id":0,"userId":111,"isCurrent":true,"isPremium":false},{"id":1,"userId":222,"isCurrent":false,"isPremium":false}]"#.to_string();
-  state.accounts_changed(&rt, &ctx);
+  state.accounts_changed(&ctx);
   assert_eq!(eval_json(&ctx, "__a.isPremium()"), "false");
 
   let (_rt, denied, _host, _state, _logs) = setup(&[], TWO_ACCOUNTS);
@@ -155,10 +155,10 @@ fn id_and_user_id_cannot_be_reassigned() {
 /// a slot reused by another login is not the account an old handle was minted for
 #[test]
 fn a_handle_for_a_logged_out_account_is_neither_current_nor_premium() {
-  let (rt, ctx, host, state, _logs) = setup(&["account.read(self)"], TWO_ACCOUNTS);
+  let (_rt, ctx, host, state, _logs) = setup(&["account.read(self)"], TWO_ACCOUNTS);
   eval(&ctx, "globalThis.__a = inu.account(1);");
   *host.json.borrow_mut() = r#"[{"id":1,"userId":999,"isCurrent":true,"isPremium":true}]"#.to_string();
-  state.accounts_changed(&rt, &ctx);
+  state.accounts_changed(&ctx);
   assert_eq!(
     eval_json(&ctx, "[__a.isCurrent(), __a.isPremium(), inu.account(1).isCurrent()]"),
     "[false,false,true]"
@@ -167,7 +167,7 @@ fn a_handle_for_a_logged_out_account_is_neither_current_nor_premium() {
 
 #[test]
 fn on_accounts_changed_fires_with_the_new_list_and_its_disposer_stops_it() {
-  let (rt, ctx, host, state, _logs) = setup(&[], TWO_ACCOUNTS);
+  let (_rt, ctx, host, state, _logs) = setup(&[], TWO_ACCOUNTS);
   eval(
     &ctx,
     r#"
@@ -179,17 +179,17 @@ fn on_accounts_changed_fires_with_the_new_list_and_its_disposer_stops_it() {
   );
 
   *host.json.borrow_mut() = SWITCHED.to_string();
-  state.accounts_changed(&rt, &ctx);
+  state.accounts_changed(&ctx);
   assert_eq!(eval_json(&ctx, "__seen"), r#"["0:false,1:true"]"#);
 
   eval(&ctx, "__d(); __d();");
-  state.accounts_changed(&rt, &ctx);
+  state.accounts_changed(&ctx);
   assert_eq!(eval_json(&ctx, "__seen"), r#"["0:false,1:true"]"#);
 }
 
 #[test]
 fn a_change_that_leaves_the_account_alone_does_not_re_run_the_scope() {
-  let (rt, ctx, host, state, _logs) = setup(&[], TWO_ACCOUNTS);
+  let (_rt, ctx, host, state, _logs) = setup(&[], TWO_ACCOUNTS);
   eval(
     &ctx,
     r#"
@@ -199,14 +199,14 @@ fn a_change_that_leaves_the_account_alone_does_not_re_run_the_scope() {
   );
   *host.json.borrow_mut() =
     r#"[{"id":0,"userId":111,"isCurrent":true,"isPremium":false},{"id":1,"userId":222,"isCurrent":false,"isPremium":false}]"#.to_string();
-  state.accounts_changed(&rt, &ctx);
+  state.accounts_changed(&ctx);
   assert_eq!(eval_json(&ctx, "__runs"), "1");
 }
 
 /// the slot index is reused once its account logs out, so it alone cannot decide "same account"
 #[test]
 fn a_slot_re_used_by_another_login_re_runs_the_scope() {
-  let (rt, ctx, host, state, _logs) =
+  let (_rt, ctx, host, state, _logs) =
     setup(&["account.read(self)"], r#"[{"id":0,"userId":111,"isCurrent":true,"isPremium":false}]"#);
   eval(
     &ctx,
@@ -219,13 +219,13 @@ fn a_slot_re_used_by_another_login_re_runs_the_scope() {
     "#,
   );
   *host.json.borrow_mut() = r#"[{"id":0,"userId":999,"isCurrent":true,"isPremium":false}]"#.to_string();
-  state.accounts_changed(&rt, &ctx);
+  state.accounts_changed(&ctx);
   assert_eq!(eval_json(&ctx, "__log"), r#"["setup:111","teardown:111","setup:999"]"#);
 }
 
 #[test]
 fn with_no_account_logged_in_the_scope_waits_for_one() {
-  let (rt, ctx, host, state, _logs) = setup(&[], "[]");
+  let (_rt, ctx, host, state, _logs) = setup(&[], "[]");
   eval(
     &ctx,
     r#"
@@ -239,17 +239,17 @@ fn with_no_account_logged_in_the_scope_waits_for_one() {
   assert_eq!(eval_json(&ctx, "__log"), "[]");
 
   *host.json.borrow_mut() = TWO_ACCOUNTS.to_string();
-  state.accounts_changed(&rt, &ctx);
+  state.accounts_changed(&ctx);
   assert_eq!(eval_json(&ctx, "__log"), r#"["setup:0"]"#);
 
   *host.json.borrow_mut() = "[]".to_string();
-  state.accounts_changed(&rt, &ctx);
+  state.accounts_changed(&ctx);
   assert_eq!(eval_json(&ctx, "__log"), r#"["setup:0","teardown"]"#);
 }
 
 #[test]
 fn disposing_a_scope_tears_it_down_and_stops_re_runs() {
-  let (rt, ctx, host, state, _logs) = setup(&[], TWO_ACCOUNTS);
+  let (_rt, ctx, host, state, _logs) = setup(&[], TWO_ACCOUNTS);
   eval(
     &ctx,
     r#"
@@ -265,7 +265,7 @@ fn disposing_a_scope_tears_it_down_and_stops_re_runs() {
   assert_eq!(eval_json(&ctx, "__log"), r#"["setup","teardown"]"#, "a disposer called twice tears down once");
 
   *host.json.borrow_mut() = SWITCHED.to_string();
-  state.accounts_changed(&rt, &ctx);
+  state.accounts_changed(&ctx);
   assert_eq!(eval_json(&ctx, "__log"), r#"["setup","teardown"]"#);
   assert!(state.scopes.is_empty());
 }
@@ -275,7 +275,7 @@ fn disposing_a_scope_tears_it_down_and_stops_re_runs() {
 /// registry no longer held, so it never ran at all
 #[test]
 fn a_scope_disposed_mid_walk_is_not_re_entered() {
-  let (rt, ctx, host, state, _logs) = setup(&[], TWO_ACCOUNTS);
+  let (_rt, ctx, host, state, _logs) = setup(&[], TWO_ACCOUNTS);
   eval(
     &ctx,
     r#"
@@ -294,7 +294,7 @@ fn a_scope_disposed_mid_walk_is_not_re_entered() {
   assert_eq!(eval_json(&ctx, "__log"), r#"["A","B"]"#);
 
   *host.json.borrow_mut() = SWITCHED.to_string();
-  state.accounts_changed(&rt, &ctx);
+  state.accounts_changed(&ctx);
   assert_eq!(
     eval_json(&ctx, "__log"),
     r#"["A","B","A-teardown","A","B-teardown"]"#,
@@ -302,7 +302,7 @@ fn a_scope_disposed_mid_walk_is_not_re_entered() {
   );
   assert_eq!(state.scopes.len(), 1);
 
-  state.notify_unload(&rt, &ctx);
+  state.notify_unload(&ctx);
   assert_eq!(
     eval_json(&ctx, "__log"),
     r#"["A","B","A-teardown","A","B-teardown","A-teardown"]"#,
@@ -313,7 +313,7 @@ fn a_scope_disposed_mid_walk_is_not_re_entered() {
 /// a teardown may dispose its own scope, which ends it: the re-run must not happen either
 #[test]
 fn a_scope_its_own_teardown_disposes_is_not_re_entered() {
-  let (rt, ctx, host, state, _logs) = setup(&[], TWO_ACCOUNTS);
+  let (_rt, ctx, host, state, _logs) = setup(&[], TWO_ACCOUNTS);
   eval(
     &ctx,
     r#"
@@ -325,7 +325,7 @@ fn a_scope_its_own_teardown_disposes_is_not_re_entered() {
     "#,
   );
   *host.json.borrow_mut() = SWITCHED.to_string();
-  state.accounts_changed(&rt, &ctx);
+  state.accounts_changed(&ctx);
   assert_eq!(eval_json(&ctx, "__log"), r#"["setup","teardown"]"#);
   assert!(state.scopes.is_empty());
 }
@@ -335,7 +335,7 @@ fn a_scope_its_own_teardown_disposes_is_not_re_entered() {
 /// the teardown was stored on an entry the disposer had already removed.
 #[test]
 fn a_scope_that_disposes_itself_from_its_own_callback_still_tears_down() {
-  let (rt, ctx, host, state, _logs) = setup(&["account.read(self)"], TWO_ACCOUNTS);
+  let (_rt, ctx, host, state, _logs) = setup(&["account.read(self)"], TWO_ACCOUNTS);
   eval(
     &ctx,
     r#"
@@ -348,14 +348,14 @@ fn a_scope_that_disposes_itself_from_its_own_callback_still_tears_down() {
     "#,
   );
   *host.json.borrow_mut() = SWITCHED.to_string();
-  state.accounts_changed(&rt, &ctx);
+  state.accounts_changed(&ctx);
   assert_eq!(eval_json(&ctx, "__log"), r#"["setup:0","teardown:0","setup:1","teardown:1"]"#,);
   assert!(state.scopes.is_empty());
 }
 
 #[test]
 fn a_scope_can_hand_back_a_disposable_instead_of_a_function() {
-  let (rt, ctx, host, state, _logs) = setup(&["account.read(self)"], TWO_ACCOUNTS);
+  let (_rt, ctx, host, state, _logs) = setup(&["account.read(self)"], TWO_ACCOUNTS);
   eval(
     &ctx,
     r#"
@@ -368,15 +368,15 @@ fn a_scope_can_hand_back_a_disposable_instead_of_a_function() {
     "#,
   );
   *host.json.borrow_mut() = SWITCHED.to_string();
-  state.accounts_changed(&rt, &ctx);
-  state.notify_unload(&rt, &ctx);
+  state.accounts_changed(&ctx);
+  state.notify_unload(&ctx);
   assert_eq!(eval_json(&ctx, "__log"), r#"["teardown:0","teardown:1"]"#);
   assert!(state.scopes.is_empty());
 }
 
 #[test]
 fn unload_runs_every_teardown_once_more() {
-  let (rt, ctx, _host, state, _logs) = setup(&[], TWO_ACCOUNTS);
+  let (_rt, ctx, _host, state, _logs) = setup(&[], TWO_ACCOUNTS);
   eval(
     &ctx,
     r#"
@@ -385,14 +385,14 @@ fn unload_runs_every_teardown_once_more() {
       inu.withCurrentAccount(() => () => { __log.push('b'); });
     "#,
   );
-  state.notify_unload(&rt, &ctx);
+  state.notify_unload(&ctx);
   assert_eq!(eval_json(&ctx, "__log"), r#"["a","b"]"#);
   assert!(state.scopes.is_empty());
 }
 
 #[test]
 fn registering_after_unload_began_is_a_no_op_returning_a_no_op_disposer() {
-  let (rt, ctx, _host, state, _logs) = setup(&["account.read(self)"], TWO_ACCOUNTS);
+  let (_rt, ctx, _host, state, _logs) = setup(&["account.read(self)"], TWO_ACCOUNTS);
   state.lifecycle.begin_unload();
   eval(
     &ctx,
@@ -409,7 +409,7 @@ fn registering_after_unload_began_is_a_no_op_returning_a_no_op_disposer() {
   assert!(state.changed_fns.is_empty());
   assert!(state.scopes.is_empty());
 
-  state.accounts_changed(&rt, &ctx);
+  state.accounts_changed(&ctx);
   assert_eq!(eval_json(&ctx, "__ran"), "[]");
 }
 
@@ -441,7 +441,7 @@ fn assert_fault(logs: &std::sync::Arc<crate::testing::harness::Logs>, needle: &s
 /// `common.d.ts`: a throwing teardown is a fault like any other callback, on the unload path too
 #[test]
 fn every_throwing_account_callback_is_a_fault_including_a_teardown_on_unload() {
-  let (rt, ctx, host, state, logs) = setup(&["account.read(self)"], TWO_ACCOUNTS);
+  let (_rt, ctx, host, state, logs) = setup(&["account.read(self)"], TWO_ACCOUNTS);
   eval(
     &ctx,
     r#"
@@ -451,20 +451,20 @@ fn every_throwing_account_callback_is_a_fault_including_a_teardown_on_unload() {
   );
 
   *host.json.borrow_mut() = SWITCHED.to_string();
-  state.accounts_changed(&rt, &ctx);
+  state.accounts_changed(&ctx);
   assert_fault(&logs, "changed-boom");
   assert_fault(&logs, "teardown-boom");
 
   logs.borrow_mut().clear();
-  state.notify_unload(&rt, &ctx);
+  state.notify_unload(&ctx);
   assert_fault(&logs, "teardown-boom");
 }
 
 #[test]
 fn an_unreadable_host_snapshot_is_logged_and_leaves_the_cache_alone() {
-  let (rt, ctx, host, state, logs) = setup(&[], TWO_ACCOUNTS);
+  let (_rt, ctx, host, state, logs) = setup(&[], TWO_ACCOUNTS);
   *host.json.borrow_mut() = "not json".to_string();
-  state.accounts_changed(&rt, &ctx);
+  state.accounts_changed(&ctx);
   assert_eq!(eval_json(&ctx, "inu.account().id"), "0");
   assert!(
     logs.borrow().iter().any(|l| l.contains("unreadable host snapshot")),
@@ -477,7 +477,7 @@ fn an_unreadable_host_snapshot_is_logged_and_leaves_the_cache_alone() {
 /// logout: doing so tore down every live scope over a transient JNI failure
 #[test]
 fn a_host_that_cannot_be_read_is_not_an_empty_account_list() {
-  let (rt, ctx, host, state, logs) = setup(&["account.read(self)"], TWO_ACCOUNTS);
+  let (_rt, ctx, host, state, logs) = setup(&["account.read(self)"], TWO_ACCOUNTS);
   eval(
     &ctx,
     r#"
@@ -490,7 +490,7 @@ fn a_host_that_cannot_be_read_is_not_an_empty_account_list() {
     "#,
   );
   host.readable.set(false);
-  state.accounts_changed(&rt, &ctx);
+  state.accounts_changed(&ctx);
   assert_eq!(eval_json(&ctx, "__log"), r#"["setup:111"]"#);
   assert_eq!(eval_json(&ctx, "inu.accounts().length"), "2", "the cache is left alone");
   assert!(
@@ -501,6 +501,6 @@ fn a_host_that_cannot_be_read_is_not_an_empty_account_list() {
 
   host.readable.set(true);
   *host.json.borrow_mut() = SWITCHED.to_string();
-  state.accounts_changed(&rt, &ctx);
+  state.accounts_changed(&ctx);
   assert_eq!(eval_json(&ctx, "__log"), r#"["setup:111","changed:2","teardown","setup:222"]"#);
 }

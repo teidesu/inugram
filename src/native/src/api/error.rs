@@ -1,3 +1,4 @@
+use crate::runtime::enter_js;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -96,7 +97,7 @@ fn get_value_hash(value: &Value<'_>) -> u64 {
 }
 
 pub(crate) fn install_rejection_tracker(runtime: &Runtime, context: &Context, log: crate::Log) -> JsResult<()> {
-  context.with(|ctx| {
+  enter_js(context, |ctx| {
     ctx.store_userdata(Rejections {
       log,
       pending: RefCell::new(HashMap::new()),

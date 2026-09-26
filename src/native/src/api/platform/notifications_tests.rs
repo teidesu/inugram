@@ -1,7 +1,7 @@
 use super::*;
 use crate::api::platform::jvm::{install_jvm, JvmState};
 use crate::sandbox::grants::CachedGrantHost;
-use rquickjs::Context;
+use rquickjs::{Context, Runtime};
 
 /// the names the app's own `NotificationCenter` would answer to; a closed vocabulary is the
 /// point, so the fake has one too
@@ -104,19 +104,19 @@ fn the_delegate_is_refused_without_either_grant_and_nothing_reaches_the_host() {
 /// an event this delegate never named is not its business even if the host asks
 #[test]
 fn a_handler_is_called_with_the_account_and_then_the_events_own_arguments() {
-  let (rt, ctx, host, state, logs, _jvm) = setup(GRANTED);
+  let (_rt, ctx, host, state, logs, _jvm) = setup(GRANTED);
   arm(&ctx);
   let token = host.registered.borrow()[0].0;
-  state.dispatch(&rt, &ctx, token, "closeChats", 1, &["I-1001".to_string()]);
-  state.dispatch(&rt, &ctx, token, "dialogsNeedReload", -1, &["B1".to_string()]);
+  state.dispatch(&ctx, token, "closeChats", 1, &["I-1001".to_string()]);
+  state.dispatch(&ctx, token, "dialogsNeedReload", -1, &["B1".to_string()]);
   // a value the host could not encode is that one argument lost, and it still arrives in place
-  state.dispatch(&rt, &ctx, token, "closeChats", 0, &["N".to_string(), "Stext".to_string(), "D4.5".to_string()]);
-  state.dispatch(&rt, &ctx, token, "messagesDeleted", 0, &[]);
+  state.dispatch(&ctx, token, "closeChats", 0, &["N".to_string(), "Stext".to_string(), "D4.5".to_string()]);
+  state.dispatch(&ctx, token, "messagesDeleted", 0, &[]);
   assert_eq!(
     eval_json(&ctx, "globalThis.__seen"),
     r#"[["closeChats",[1,-1001]],["dialogsNeedReload",[-1,true]],["closeChats",[0,null,"text",4.5]]]"#,
   );
-  state.dispatch(&rt, &ctx, token, "closeChats", 3, &["I-1001".to_string(), "GO77".to_string()]);
+  state.dispatch(&ctx, token, "closeChats", 3, &["I-1001".to_string(), "GO77".to_string()]);
   assert_eq!(
     eval_json(&ctx, "(([, [a, id, m]]) => [a, id, typeof m.call, typeof m.getField])(__seen[3])"),
     r#"[3,-1001,"function","function"]"#,
@@ -137,12 +137,12 @@ fn the_names_the_plugin_asked_for_are_what_the_host_is_told_to_observe() {
 /// centre holding this engine for the life of the process
 #[test]
 fn disposing_unregisters_once_and_stops_the_dispatches() {
-  let (rt, ctx, host, state, _logs, _jvm) = setup(GRANTED);
+  let (_rt, ctx, host, state, _logs, _jvm) = setup(GRANTED);
   arm(&ctx);
   let token = host.registered.borrow()[0].0;
   ctx.with(|ctx| ctx.eval::<(), _>("__d(); __d();").unwrap());
   assert_eq!(*host.unregistered.borrow(), vec![token], "a disposer called twice unregisters once");
-  state.dispatch(&rt, &ctx, token, "closeChats", 0, &["I7".to_string()]);
+  state.dispatch(&ctx, token, "closeChats", 0, &["I7".to_string()]);
   assert_eq!(eval_json(&ctx, "globalThis.__seen"), "[]");
 }
 
@@ -150,7 +150,7 @@ fn disposing_unregisters_once_and_stops_the_dispatches() {
 /// unkeyed ones stack rather than replace
 #[test]
 fn delegates_stack_and_each_gets_its_own_token() {
-  let (rt, ctx, host, state, _logs, _jvm) = setup(GRANTED);
+  let (_rt, ctx, host, state, _logs, _jvm) = setup(GRANTED);
   ctx.with(|ctx| {
     ctx
       .eval::<(), _>(
@@ -166,21 +166,21 @@ fn delegates_stack_and_each_gets_its_own_token() {
   assert_eq!(tokens.len(), 2);
   assert_ne!(tokens[0], tokens[1]);
   for token in tokens {
-    state.dispatch(&rt, &ctx, token, "closeChats", 0, &[]);
+    state.dispatch(&ctx, token, "closeChats", 0, &[]);
   }
   assert_eq!(eval_json(&ctx, "globalThis.__ran"), r#"["first","second"]"#);
 }
 
 #[test]
 fn a_throwing_handler_is_a_fault() {
-  let (rt, ctx, host, state, logs, _jvm) = setup(GRANTED);
+  let (_rt, ctx, host, state, logs, _jvm) = setup(GRANTED);
   ctx.with(|ctx| {
     ctx
       .eval::<(), _>("inu.android.addNotificationCenterDelegate({ closeChats: () => { throw new Error('bus-boom') } })")
       .unwrap()
   });
   let token = host.registered.borrow()[0].0;
-  state.dispatch(&rt, &ctx, token, "closeChats", 0, &[]);
+  state.dispatch(&ctx, token, "closeChats", 0, &[]);
   let entry = logs.borrow().iter().find(|l| l.contains("bus-boom")).cloned();
   let entry = entry.expect("expected a diagnostic for the throwing handler");
   assert_eq!(
@@ -193,10 +193,10 @@ fn a_throwing_handler_is_a_fault() {
 /// Malformed host wires are host errors. Do not call or fault the plugin handler.
 #[test]
 fn a_payload_that_is_not_a_wire_is_an_ordinary_error() {
-  let (rt, ctx, host, state, logs, _jvm) = setup(GRANTED);
+  let (_rt, ctx, host, state, logs, _jvm) = setup(GRANTED);
   arm(&ctx);
   let token = host.registered.borrow()[0].0;
-  state.dispatch(&rt, &ctx, token, "closeChats", 0, &["I7".to_string(), "?nonsense".to_string()]);
+  state.dispatch(&ctx, token, "closeChats", 0, &["I7".to_string(), "?nonsense".to_string()]);
   assert_eq!(eval_json(&ctx, "globalThis.__seen"), "[]", "one bad wire drops the whole post");
   let entry = logs.borrow().first().cloned().expect("expected a diagnostic");
   assert_eq!(crate::classify_log(&entry).0, crate::LEVEL_ERROR);
@@ -238,7 +238,7 @@ fn a_delegate_that_is_not_an_object_of_functions_is_refused() {
 
 #[test]
 fn registering_after_unload_began_is_a_no_op() {
-  let (rt, ctx, host, state, _logs, _jvm) = setup(GRANTED);
+  let (_rt, ctx, host, state, _logs, _jvm) = setup(GRANTED);
   state.lifecycle.begin_unload();
   let shape: String = ctx.with(|ctx| {
     ctx
@@ -252,7 +252,7 @@ fn registering_after_unload_began_is_a_no_op() {
   });
   assert_eq!(shape, "function");
   assert!(host.registered.borrow().is_empty());
-  state.dispatch(&rt, &ctx, 1, "closeChats", 0, &[]);
+  state.dispatch(&ctx, 1, "closeChats", 0, &[]);
   assert_eq!(eval_json(&ctx, "globalThis.__ran"), "0");
 }
 
@@ -274,12 +274,12 @@ const ORACLE: &str = crate::testing::test_plugin!("notifications-test.js");
 /// is a function of what it was handed - so the posts it wants are synthesised here
 #[test]
 fn the_bundled_notifications_test_plugin_passes() {
-  let (rt, ctx, host, state, logs, _jvm) = setup(&crate::testing::harness::manifest_grants(ORACLE));
+  let (_rt, ctx, host, state, logs, _jvm) = setup(&crate::testing::harness::manifest_grants(ORACLE));
   let lines = crate::testing::harness::install_capturing_console(&ctx);
   crate::testing::harness::eval_unit(&ctx, ORACLE);
   let token = host.registered.borrow().last().expect("the oracle registered nothing").0;
-  state.dispatch(&rt, &ctx, token, "dialogsNeedReload", 0, &["B1".to_string()]);
-  state.dispatch(&rt, &ctx, token, "updateInterfaces", -1, &["I512".to_string(), "N".to_string()]);
+  state.dispatch(&ctx, token, "dialogsNeedReload", 0, &["B1".to_string()]);
+  state.dispatch(&ctx, token, "updateInterfaces", -1, &["I512".to_string(), "N".to_string()]);
   let lines = lines.borrow().clone();
   crate::testing::harness::assert_oracle_exact(&lines, "notifications test done", 12);
   assert!(logs.borrow().is_empty(), "unexpected logs: {:?}", logs.borrow());

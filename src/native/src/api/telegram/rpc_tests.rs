@@ -3,7 +3,7 @@ use crate::api::error::install_rejection_tracker;
 use crate::api::telegram::account::tests::{TestAccountHost, TWO_ACCOUNTS};
 use crate::api::tl::proxy::TlHost;
 use crate::sandbox::grants::CachedGrantHost;
-use rquickjs::Context;
+use rquickjs::{Context, Runtime};
 
 #[derive(Default)]
 pub(crate) struct TestHost {
@@ -218,12 +218,12 @@ fn a_middleware_decides_what_goes_out_and_what_settles() {
       r#"J{"_":"foo.bar","caught":[false,true,"forbidden",null,"blocked by policy"]}"#,
     ),
   ] {
-    let (rt, ctx, host, state, _logs) = setup(&["interceptRpc"]);
+    let (_rt, ctx, host, state, _logs) = setup(&["interceptRpc"]);
     eval(&ctx, &format!("inu.interceptRpc('foo.bar', {middleware});"));
-    state.dispatch(&rt, &ctx, 1, 100, "foo.bar", 0, REQUEST);
+    state.dispatch(&ctx, 1, 100, "foo.bar", 0, REQUEST);
     if let Some(answer) = answer {
       assert!(host.completes.borrow().is_empty(), "settled before next() answered: {middleware}");
-      state.complete_next(&rt, &ctx, 100, answer);
+      state.complete_next(&ctx, 100, answer);
     }
     let sent_wires: Vec<String> = host.next_calls.borrow().iter().map(|(_, wire)| wire.clone()).collect();
     assert_eq!(sent_wires, sent.map(str::to_string).into_iter().collect::<Vec<_>>(), "{middleware}");
@@ -237,27 +237,27 @@ fn a_stage_settling_after_it_was_abandoned_answers_nothing_and_logs_nothing() {
     "async (_, next) => { try { await next(); } catch (e) {} return { _: 'foo.bar', late: true }; }",
     "async (_, next) => await next()",
   ] {
-    let (rt, ctx, host, state, logs) = setup(&["interceptRpc"]);
+    let (_rt, ctx, host, state, logs) = setup(&["interceptRpc"]);
     eval(&ctx, &format!("inu.interceptRpc('foo.bar', {middleware});"));
-    state.dispatch(&rt, &ctx, 1, 951, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
-    state.abandon_dispatch(&rt, &ctx, 951, "R-1000:INTERCEPTOR_CANCELLED");
+    state.dispatch(&ctx, 1, 951, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
+    state.abandon_dispatch(&ctx, 951, "R-1000:INTERCEPTOR_CANCELLED");
     assert!(host.completes.borrow().is_empty(), "{middleware}");
     assert!(logs.borrow().is_empty(), "{middleware}: {:?}", logs.borrow());
   }
   // the batch moved on without this stage, so a late 'drop' must not retro-drop an applied update
   for settle in ["__settle('drop')", "__reject(new Error('gave up'))"] {
-    let (rt, ctx, host, state, logs) =
+    let (_rt, ctx, host, state, logs) =
       setup_engine::<TestHost>(&["interceptUpdate(updateNewMessage)"], true, Some(TestAccountHost::with(TWO_ACCOUNTS)));
     eval(
       &ctx,
       "inu.interceptUpdate('updateNewMessage', ({ signal }) => { globalThis.__signal = signal; return new Promise((resolve, reject) => { globalThis.__settle = resolve; globalThis.__reject = reject; }); });",
     );
-    dispatch_intercept(&rt, &ctx, &state, &host, 5, "updateNewMessage", NEW_MESSAGE);
+    dispatch_intercept(&ctx, &state, &host, 5, "updateNewMessage", NEW_MESSAGE);
     assert!(host.verdicts.borrow().is_empty());
-    state.abandon_update_dispatch(&rt, &ctx, 5, "R-1000:INTERCEPTOR_TIMEOUT");
+    state.abandon_update_dispatch(&ctx, 5, "R-1000:INTERCEPTOR_TIMEOUT");
     assert_eq!(eval_json(&ctx, "[__signal.aborted, __signal.reason.code]"), r#"[true,"timed-out"]"#);
     eval(&ctx, settle);
-    pump_jobs(&rt, &ctx, &|_| {});
+    pump_jobs(&ctx, &|_| {});
     assert!(host.verdicts.borrow().is_empty(), "{settle}");
     assert!(logs.borrow().is_empty(), "{settle}: {:?}", logs.borrow());
   }
@@ -278,15 +278,15 @@ fn next_after_abandon_throws_by_the_reason_it_was_abandoned_for() {
       r#"[true,"aborted",null,"next(): the interceptor chain was torn down and this stage was abandoned"]"#,
     ),
   ] {
-    let (rt, ctx, _host, state, _logs) =
+    let (_rt, ctx, _host, state, _logs) =
       setup_engine::<TestHost>(&["interceptRpc"], true, Some(TestAccountHost::with(TWO_ACCOUNTS)));
     eval(
       &ctx,
       "inu.interceptRpc('foo.bar', (context, next) => { globalThis.__context = context; globalThis.__next = next; return new Promise(() => {}); });",
     );
 
-    state.dispatch(&rt, &ctx, 1, 952, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
-    state.abandon_dispatch(&rt, &ctx, 952, reason);
+    state.dispatch(&ctx, 1, 952, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
+    state.abandon_dispatch(&ctx, 952, reason);
 
     assert_eq!(
       eval_json(
@@ -301,16 +301,16 @@ fn next_after_abandon_throws_by_the_reason_it_was_abandoned_for() {
 
 #[test]
 fn a_stage_that_already_settled_neither_aborts_nor_forwards() {
-  let (rt, ctx, host, state, _logs) =
+  let (_rt, ctx, host, state, _logs) =
     setup_engine::<TestHost>(&["interceptRpc"], true, Some(TestAccountHost::with(TWO_ACCOUNTS)));
   eval(
     &ctx,
     "inu.interceptRpc('foo.bar', ({ signal }, next) => { globalThis.__signal = signal; globalThis.__next = next; return { _: 'foo.bar' }; });",
   );
 
-  state.dispatch(&rt, &ctx, 1, 962, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
+  state.dispatch(&ctx, 1, 962, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
   assert_eq!(host.completes.borrow().len(), 1);
-  state.abandon_dispatch(&rt, &ctx, 962, "R-1000:INTERCEPTOR_ABANDONED");
+  state.abandon_dispatch(&ctx, 962, "R-1000:INTERCEPTOR_ABANDONED");
 
   assert_eq!(eval_json(&ctx, "__signal.aborted"), "false");
   assert_eq!(
@@ -322,7 +322,7 @@ fn a_stage_that_already_settled_neither_aborts_nor_forwards() {
 
 #[test]
 fn abandoning_a_stage_aborts_its_signal_before_rejecting_next() {
-  let (rt, ctx, _host, state, _logs) =
+  let (_rt, ctx, _host, state, _logs) =
     setup_engine::<TestHost>(&["interceptRpc"], true, Some(TestAccountHost::with(TWO_ACCOUNTS)));
   eval(
     &ctx,
@@ -337,8 +337,8 @@ fn abandoning_a_stage_aborts_its_signal_before_rejecting_next() {
     "#,
   );
 
-  state.dispatch(&rt, &ctx, 1, 960, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
-  state.abandon_dispatch(&rt, &ctx, 960, "R-1000:INTERCEPTOR_CANCELLED");
+  state.dispatch(&ctx, 1, 960, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
+  state.abandon_dispatch(&ctx, 960, "R-1000:INTERCEPTOR_CANCELLED");
 
   assert_eq!(
     eval_json(&ctx, "__order"),
@@ -348,7 +348,7 @@ fn abandoning_a_stage_aborts_its_signal_before_rejecting_next() {
 
 #[test]
 fn an_invoke_settles_by_the_wire_the_host_answers_with() {
-  let (rt, ctx, host, state, _logs) = setup(&["invokeRpc"]);
+  let (_rt, ctx, host, state, _logs) = setup(&["invokeRpc"]);
   eval(
     &ctx,
     r#"
@@ -370,7 +370,7 @@ fn an_invoke_settles_by_the_wire_the_host_answers_with() {
     "Pquota-exceeded\n\n64\n32\ntoo big",
   ];
   for (id, wire) in ids.into_iter().zip(wires) {
-    state.settle(&rt, &ctx, id, wire);
+    state.settle(&ctx, id, wire);
   }
   assert_eq!(
     eval_json(&ctx, "__seen"),
@@ -483,7 +483,7 @@ fn a_refused_registration_or_call_never_reaches_the_host() {
 
 #[test]
 fn a_handler_is_handed_the_account_its_update_or_request_arrived_on() {
-  let (rt, ctx, host, state, _logs) = setup(&["onUpdate", "interceptRpc", "account.read(self)"]);
+  let (_rt, ctx, host, state, _logs) = setup(&["onUpdate", "interceptRpc", "account.read(self)"]);
   eval(
     &ctx,
     r#"
@@ -493,10 +493,10 @@ fn a_handler_is_handed_the_account_its_update_or_request_arrived_on() {
       inu.interceptRpc('foo.bar', ({ request, account }, next) => { __record(account); return next(request); });
     "#,
   );
-  state.dispatch_update(&rt, &ctx, UPDATE_TYPE, 1, UPDATE_WIRE);
-  state.dispatch_update(&rt, &ctx, UPDATE_TYPE, 0, UPDATE_WIRE);
+  state.dispatch_update(&ctx, UPDATE_TYPE, 1, UPDATE_WIRE);
+  state.dispatch_update(&ctx, UPDATE_TYPE, 0, UPDATE_WIRE);
   let callback_id = host.registered.borrow()[0].1;
-  state.dispatch(&rt, &ctx, callback_id, 990, "foo.bar", 1, r#"J{"_":"foo.bar"}"#);
+  state.dispatch(&ctx, callback_id, 990, "foo.bar", 1, r#"J{"_":"foo.bar"}"#);
   assert_eq!(eval_json(&ctx, "__seen"), "[[1,222,false],[0,111,true],[1,222,false]]");
   assert_eq!(host.next_calls.borrow().len(), 1);
 }
@@ -509,12 +509,12 @@ fn seed_tl_object(host: &Rc<TestHost>, type_name: &str) {
 
 #[test]
 fn invoke_result_handle_resolves_to_a_writable_plugin_lifetime_view() {
-  let (rt, ctx, host, state, _logs) = setup(&["invokeRpc"]);
+  let (_rt, ctx, host, state, _logs) = setup(&["invokeRpc"]);
   seed_tl_object(&host, "foo.bar");
   eval(&ctx, r#"inu.invokeRpc({_:'foo.bar'}).then(r => { globalThis.__got = r; });"#);
 
   let invoke_id = host.invoke_calls.borrow()[0].0;
-  state.settle(&rt, &ctx, invoke_id, &format!("HOW{TEST_HANDLE}"));
+  state.settle(&ctx, invoke_id, &format!("HOW{TEST_HANDLE}"));
 
   ctx.with(|ctx| {
     assert_eq!(ctx.eval::<String, _>("globalThis.__got._").unwrap(), "foo.bar");
@@ -529,9 +529,9 @@ fn invoke_result_handle_resolves_to_a_writable_plugin_lifetime_view() {
 
 #[test]
 fn update_payload_handle_resolves_to_a_read_only_view() {
-  let (rt, ctx, host, state, _logs) = setup(&["onUpdate"]);
+  let (_rt, ctx, host, state, _logs) = setup(&["onUpdate"]);
   seed_tl_object(&host, "updateFoo");
-  state.dispatch_update(&rt, &ctx, "updateFoo", 0, &format!("HOR{TEST_HANDLE}"));
+  state.dispatch_update(&ctx, "updateFoo", 0, &format!("HOR{TEST_HANDLE}"));
   assert_eq!(
     *host.tl_released.borrow(),
     vec![TEST_HANDLE],
@@ -539,7 +539,7 @@ fn update_payload_handle_resolves_to_a_read_only_view() {
   );
 
   eval(&ctx, "inu.onUpdate('updateFoo', (u) => { globalThis.__seen = u; });");
-  state.dispatch_update(&rt, &ctx, "updateFoo", 0, &format!("HOR{TEST_HANDLE}"));
+  state.dispatch_update(&ctx, "updateFoo", 0, &format!("HOR{TEST_HANDLE}"));
 
   ctx.with(|ctx| {
     assert_eq!(ctx.eval::<String, _>("globalThis.__seen._").unwrap(), "updateFoo");
@@ -579,7 +579,7 @@ fn an_intercept_registration_reaches_the_host_and_drops_its_callback_when_refuse
 
 #[test]
 fn an_update_only_reaches_the_registrations_that_named_its_type() {
-  let (rt, ctx, host, state, _logs) = setup(&["onUpdate"]);
+  let (_rt, ctx, host, state, _logs) = setup(&["onUpdate"]);
   eval(
     &ctx,
     r#"
@@ -595,10 +595,10 @@ fn an_update_only_reaches_the_registrations_that_named_its_type() {
     "the host is told the list so it can filter before minting a handle",
   );
 
-  state.dispatch_update(&rt, &ctx, UPDATE_TYPE, 0, UPDATE_WIRE);
+  state.dispatch_update(&ctx, UPDATE_TYPE, 0, UPDATE_WIRE);
   assert_eq!(eval_json(&ctx, "__ran"), r#"["new","both:updateNewMessage"]"#);
 
-  state.dispatch_update(&rt, &ctx, "updateUserTyping", 0, "J{\"_\":\"updateUserTyping\"}");
+  state.dispatch_update(&ctx, "updateUserTyping", 0, "J{\"_\":\"updateUserTyping\"}");
   assert_eq!(eval_json(&ctx, "__ran"), r#"["new","both:updateNewMessage","both:updateUserTyping","typing"]"#,);
 
   assert!(state.update_fns.len() == 3);
@@ -608,7 +608,7 @@ fn an_update_only_reaches_the_registrations_that_named_its_type() {
 /// and a dispatch that cannot name its account still has to run rather than fail the app's call
 #[test]
 fn without_the_account_api_a_dispatch_hands_over_undefined() {
-  let (rt, ctx, host, state, _logs) = setup_engine::<TestHost>(&["onUpdate", "interceptRpc"], false, None);
+  let (_rt, ctx, host, state, _logs) = setup_engine::<TestHost>(&["onUpdate", "interceptRpc"], false, None);
 
   eval(
     &ctx,
@@ -618,8 +618,8 @@ fn without_the_account_api_a_dispatch_hands_over_undefined() {
       inu.interceptRpc('foo.bar', ({ request: req, account }, next) => { __seen.push(typeof account); return next(req); });
     "#,
   );
-  state.dispatch_update(&rt, &ctx, UPDATE_TYPE, 0, UPDATE_WIRE);
-  state.dispatch(&rt, &ctx, 1, 991, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
+  state.dispatch_update(&ctx, UPDATE_TYPE, 0, UPDATE_WIRE);
+  state.dispatch(&ctx, 1, 991, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
   assert_eq!(eval_json(&ctx, "__seen"), r#"["undefined","undefined"]"#);
   assert_eq!(host.next_calls.borrow().len(), 1);
 }
@@ -653,10 +653,10 @@ fn a_plugin_throw_faults_where_a_host_failure_does_not() {
   );
   let ids: Vec<u32> = host.registered.borrow().iter().map(|(_, id, _, _, _)| *id).collect();
 
-  state.dispatch(&rt, &ctx, ids[0], 700, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
-  state.dispatch(&rt, &ctx, ids[1], 701, "foo.baz", 0, r#"J{"_":"foo.baz"}"#);
-  state.dispatch_update(&rt, &ctx, "updateFoo", 0, r#"J{"_":"updateFoo"}"#);
-  state.dispatch_update(&rt, &ctx, "updateBar", 0, r#"J{"_":"updateBar"}"#);
+  state.dispatch(&ctx, ids[0], 700, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
+  state.dispatch(&ctx, ids[1], 701, "foo.baz", 0, r#"J{"_":"foo.baz"}"#);
+  state.dispatch_update(&ctx, "updateFoo", 0, r#"J{"_":"updateFoo"}"#);
+  state.dispatch_update(&ctx, "updateBar", 0, r#"J{"_":"updateBar"}"#);
 
   let completes = host.completes.borrow().clone();
   assert_eq!(completes.iter().map(|(id, _)| *id).collect::<Vec<_>>(), vec![700, 701]);
@@ -682,16 +682,16 @@ fn a_plugin_throw_faults_where_a_host_failure_does_not() {
 
   // a wire the bridge cannot decode is the engine's problem: the plugin never ran
   logs.borrow_mut().clear();
-  state.dispatch_update(&rt, &ctx, "updateFoo", 0, "Qnope");
+  state.dispatch_update(&ctx, "updateFoo", 0, "Qnope");
   assert_eq!(levels(&logs).first().map(|(level, _)| *level), Some(crate::LEVEL_ERROR), "got: {:?}", levels(&logs),);
 }
 
 #[test]
 fn an_rpc_error_out_of_a_stage_is_control_flow_not_a_fault() {
-  let (rt, ctx, host, state, logs) = setup(&["interceptRpc"]);
+  let (_rt, ctx, host, state, logs) = setup(&["interceptRpc"]);
   eval(&ctx, "inu.interceptRpc('foo.bar', () => { throw new inu.RpcError(420, 'FLOOD_WAIT_3'); });");
 
-  state.dispatch(&rt, &ctx, 1, 800, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
+  state.dispatch(&ctx, 1, 800, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
   assert_eq!(host.completes.borrow().as_slice(), [(800, "R420:FLOOD_WAIT_3".to_string())]);
 
   for (level, message) in levels(&logs) {
@@ -713,7 +713,7 @@ fn a_spinning_middleware_is_interrupted_and_the_request_is_still_answered() {
 
   {
     let _deadline = crate::sandbox::limits::arm(50);
-    state.dispatch(&rt, &ctx, 1, 980, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
+    state.dispatch(&ctx, 1, 980, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
   }
 
   let completes = host.completes.borrow();
@@ -733,7 +733,7 @@ fn a_spinning_middleware_is_interrupted_and_the_request_is_still_answered() {
 /// unwind path the engine's still-rooted `Persistent`s reach `JS_FreeRuntime` and abort
 #[test]
 fn a_panicking_test_body_still_releases_its_roots() {
-  let (rt, ctx, _host, state, _logs) = setup(&["interceptRpc", "invokeRpc"]);
+  let (_rt, ctx, _host, state, _logs) = setup(&["interceptRpc", "invokeRpc"]);
   let engine = Rc::clone(&state);
   eval(
     &ctx,
@@ -742,7 +742,7 @@ fn a_panicking_test_body_still_releases_its_roots() {
       inu.invokeRpc({ _: 'foo.baz' });
     "#,
   );
-  state.dispatch(&rt, &ctx, 1, 970, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
+  state.dispatch(&ctx, 1, 970, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
   assert_eq!(engine.intercept_fns.len(), 1);
   assert_eq!(engine.invokes.len(), 1);
   assert_eq!(engine.dispatches.borrow().len(), 1);
@@ -763,7 +763,7 @@ const UPDATE_WIRE: &str = "J{\"_\":\"updateNewMessage\"}";
 
 #[test]
 fn unkeyed_on_update_registrations_stack_and_dispose_individually() {
-  let (rt, ctx, host, state, _logs) = setup(&["onUpdate"]);
+  let (_rt, ctx, host, state, _logs) = setup(&["onUpdate"]);
   eval(
     &ctx,
     r#"
@@ -774,7 +774,7 @@ fn unkeyed_on_update_registrations_stack_and_dispose_individually() {
   );
   assert_eq!(state.update_fns.len(), 2, "unkeyed registrations stack");
 
-  state.dispatch_update(&rt, &ctx, UPDATE_TYPE, 0, UPDATE_WIRE);
+  state.dispatch_update(&ctx, UPDATE_TYPE, 0, UPDATE_WIRE);
   assert_eq!(eval_json(&ctx, "__ran"), "[1,2]");
 
   let ids: Vec<u32> = host.update_registered.borrow().iter().map(|(id, _, _)| *id).collect();
@@ -785,7 +785,7 @@ fn unkeyed_on_update_registrations_stack_and_dispose_individually() {
     "a disposer called twice reaches the host once, naming its own registration",
   );
 
-  state.dispatch_update(&rt, &ctx, UPDATE_TYPE, 0, UPDATE_WIRE);
+  state.dispatch_update(&ctx, UPDATE_TYPE, 0, UPDATE_WIRE);
   assert_eq!(eval_json(&ctx, "__ran"), "[1,2,2]");
 
   eval(&ctx, "__d2(); __d2();");
@@ -794,7 +794,7 @@ fn unkeyed_on_update_registrations_stack_and_dispose_individually() {
 
 #[test]
 fn a_dispatch_walks_the_handlers_it_started_with() {
-  let (rt, ctx, host, state, _logs) = setup(&["onUpdate"]);
+  let (_rt, ctx, host, state, _logs) = setup(&["onUpdate"]);
   eval(
     &ctx,
     r#"
@@ -810,18 +810,18 @@ fn a_dispatch_walks_the_handlers_it_started_with() {
     "#,
   );
 
-  state.dispatch_update(&rt, &ctx, UPDATE_TYPE, 0, UPDATE_WIRE);
+  state.dispatch_update(&ctx, UPDATE_TYPE, 0, UPDATE_WIRE);
   assert_eq!(eval_json(&ctx, "__ran"), r#"["first","second"]"#);
   assert_eq!(host.update_unregistered.borrow().len(), 2);
   assert_eq!(state.update_fns.len(), 1);
 
-  state.dispatch_update(&rt, &ctx, UPDATE_TYPE, 0, UPDATE_WIRE);
+  state.dispatch_update(&ctx, UPDATE_TYPE, 0, UPDATE_WIRE);
   assert_eq!(eval_json(&ctx, "__ran"), r#"["first","second","added"]"#);
 }
 
 #[test]
 fn registering_after_unload_began_is_a_no_op_returning_a_no_op_disposer() {
-  let (rt, ctx, host, state, _logs) =
+  let (_rt, ctx, host, state, _logs) =
     setup(&["onUpdate", "interceptRpc", "interceptUpdate(updateNewMessage)", "interceptSendMessage"]);
   state.lifecycle.begin_unload();
   eval(
@@ -845,7 +845,7 @@ fn registering_after_unload_began_is_a_no_op_returning_a_no_op_disposer() {
   assert!(state.update_fns.is_empty());
   assert!(state.intercept_fns.is_empty());
 
-  state.dispatch_update(&rt, &ctx, UPDATE_TYPE, 0, UPDATE_WIRE);
+  state.dispatch_update(&ctx, UPDATE_TYPE, 0, UPDATE_WIRE);
   assert_eq!(eval_json(&ctx, "__ran"), "[]");
 }
 
@@ -891,7 +891,7 @@ fn a_demuxed_registration_names_its_own_constructors_and_its_own_grant_scope() {
 
 #[test]
 fn a_new_message_arrives_as_a_message_wrapper_over_the_update_s_own_message() {
-  let (rt, ctx, _host, state, _logs) = setup(&["onUpdate(new_message)"]);
+  let (_rt, ctx, _host, state, _logs) = setup(&["onUpdate(new_message)"]);
   eval(
     &ctx,
     r#"
@@ -904,7 +904,7 @@ fn a_new_message_arrives_as_a_message_wrapper_over_the_update_s_own_message() {
     "#,
   );
 
-  state.dispatch_update(&rt, &ctx, "updateNewMessage", 1, NEW_MESSAGE);
+  state.dispatch_update(&ctx, "updateNewMessage", 1, NEW_MESSAGE);
 
   assert_eq!(eval_json(&ctx, "__seen"), r#"[[true,42,"hi",7,1,"message"]]"#);
 }
@@ -914,7 +914,7 @@ fn a_new_message_arrives_as_a_message_wrapper_over_the_update_s_own_message() {
 #[test]
 fn the_bundled_events_test_plugin_passes() {
   const ORACLE: &str = crate::testing::test_plugin!("events-test.js");
-  let (rt, ctx, _host, state, _logs) = setup(&crate::testing::harness::manifest_grants(ORACLE));
+  let (_rt, ctx, _host, state, _logs) = setup(&crate::testing::harness::manifest_grants(ORACLE));
   let lines = crate::testing::harness::install_capturing_console(&ctx);
   eval(&ctx, ORACLE);
 
@@ -934,7 +934,7 @@ fn the_bundled_events_test_plugin_passes() {
     ),
     ("updateDeleteMessages", r#"J{"_":"updateDeleteMessages","messages":[42]}"#),
   ] {
-    state.dispatch_update(&rt, &ctx, type_name, 0, wire);
+    state.dispatch_update(&ctx, type_name, 0, wire);
   }
 
   let lines = lines.borrow();
@@ -953,7 +953,7 @@ fn the_bundled_accounts_test_plugin_passes() {
   const SWITCHED: &str = r#"[{"id":0,"userId":111,"isCurrent":false,"isPremium":false},{"id":1,"userId":222,"isCurrent":true,"isPremium":true}]"#;
 
   let accounts_host = TestAccountHost::with(TWO_ACCOUNTS);
-  let (rt, ctx, _host, state, _logs) =
+  let (_rt, ctx, _host, state, _logs) =
     setup_engine::<TestHost>(&crate::testing::harness::manifest_grants(ORACLE), false, Some(accounts_host.clone()));
   let accounts = state.accounts.clone().unwrap();
 
@@ -961,9 +961,8 @@ fn the_bundled_accounts_test_plugin_passes() {
   eval(&ctx, ORACLE);
 
   *accounts_host.json.borrow_mut() = SWITCHED.to_string();
-  accounts.accounts_changed(&rt, &ctx);
+  accounts.accounts_changed(&ctx);
   state.dispatch_update(
-    &rt,
     &ctx,
     "updateUserStatus",
     1,
@@ -976,7 +975,7 @@ fn the_bundled_accounts_test_plugin_passes() {
 
 #[test]
 fn intercept_disposer_unregisters_once_and_a_later_dispatch_passes_through() {
-  let (rt, ctx, host, state, logs) = setup(&["interceptRpc"]);
+  let (_rt, ctx, host, state, logs) = setup(&["interceptRpc"]);
   eval(
     &ctx,
     r#"
@@ -992,12 +991,12 @@ fn intercept_disposer_unregisters_once_and_a_later_dispatch_passes_through() {
 
   // the host picked its chain before it saw the disposal: the stage goes transparent rather
   // than failing the app's request
-  state.dispatch(&rt, &ctx, callback_id, 980, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
+  state.dispatch(&ctx, callback_id, 980, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
   assert_eq!(eval_json(&ctx, "__ran"), "0");
   assert_eq!(host.next_calls.borrow().len(), 1);
   assert!(host.completes.borrow().is_empty());
 
-  state.complete_next(&rt, &ctx, 980, r#"J{"_":"foo.bar","ok":true}"#);
+  state.complete_next(&ctx, 980, r#"J{"_":"foo.bar","ok":true}"#);
   assert_eq!(host.completes.borrow().as_slice(), [(980, r#"J{"_":"foo.bar","ok":true}"#.to_string())]);
   assert!(
     logs.borrow().iter().any(|l| l.contains("disposed interceptor")),
@@ -1007,13 +1006,13 @@ fn intercept_disposer_unregisters_once_and_a_later_dispatch_passes_through() {
 
   // a structured wire the host refuses the passthrough with is not re-tagged
   *host.next_err.borrow_mut() = Some("R420:FLOOD_WAIT_5".to_string());
-  state.dispatch(&rt, &ctx, callback_id, 981, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
+  state.dispatch(&ctx, callback_id, 981, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
   assert_eq!(host.completes.borrow().last(), Some(&(981, "R420:FLOOD_WAIT_5".to_string())));
 }
 
 #[test]
 fn an_interceptor_disposing_itself_mid_dispatch_still_finishes_that_dispatch() {
-  let (rt, ctx, host, state, _logs) = setup(&["interceptRpc"]);
+  let (_rt, ctx, host, state, _logs) = setup(&["interceptRpc"]);
   eval(
     &ctx,
     r#"
@@ -1025,11 +1024,11 @@ fn an_interceptor_disposing_itself_mid_dispatch_still_finishes_that_dispatch() {
     "#,
   );
 
-  state.dispatch(&rt, &ctx, 1, 982, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
+  state.dispatch(&ctx, 1, 982, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
   assert_eq!(host.next_calls.borrow().len(), 1, "the in-flight run keeps going after its own disposal");
   assert!(state.intercept_fns.is_empty());
 
-  state.complete_next(&rt, &ctx, 982, r#"J{"_":"foo.bar"}"#);
+  state.complete_next(&ctx, 982, r#"J{"_":"foo.bar"}"#);
   let completes = host.completes.borrow();
   assert_eq!(completes.len(), 1);
   assert_eq!(completes[0], (982, r#"J{"_":"foo.bar","finished":true}"#.to_string()));
@@ -1062,7 +1061,6 @@ fn send_callback_id(host: &Rc<TestHost>) -> u32 {
 }
 
 fn run_send(
-  rt: &Runtime,
   ctx: &Context,
   state: &Rc<RpcState>,
   host: &Rc<TestHost>,
@@ -1075,7 +1073,7 @@ fn run_send(
   // every send ends in exactly one of the two, so this is a fresh id per call - and it has to
   // be, since a dispatch that parked in `next()` still holds its resolvers until dispose
   let dispatch_id = (before_next + before_complete + 1) as i64;
-  state.dispatch(rt, ctx, callback_id, dispatch_id, method, 0, &format!("J{json}"));
+  state.dispatch(ctx, callback_id, dispatch_id, method, 0, &format!("J{json}"));
   let next = host.next_calls.borrow().get(before_next).map(|(_, wire)| wire.clone());
   let complete = host.completes.borrow().get(before_complete).map(|(_, wire)| wire.clone());
   (next, complete)
@@ -1083,7 +1081,7 @@ fn run_send(
 
 #[test]
 fn a_rewrite_reaches_the_request_that_actually_goes_out() {
-  let (rt, ctx, host, state, _logs) = setup(&["interceptSendMessage"]);
+  let (_rt, ctx, host, state, _logs) = setup(&["interceptSendMessage"]);
   eval(
     &ctx,
     r#"
@@ -1097,7 +1095,7 @@ fn a_rewrite_reaches_the_request_that_actually_goes_out() {
       });
     "#,
   );
-  let (next, complete) = run_send(&rt, &ctx, &state, &host, "messages.sendMessage", SEND_TEXT);
+  let (next, complete) = run_send(&ctx, &state, &host, "messages.sendMessage", SEND_TEXT);
   assert_eq!(complete, None, "a 'send' verdict settles from next(), not from the stage");
   let next = next.expect("the send never went out");
   assert!(next.contains(r#""message":"rewritten""#), "{next}");
@@ -1115,9 +1113,9 @@ fn a_send_goes_out_only_on_a_send_verdict() {
     ("() => { throw new Error('boom') }", "E", "boom", true),
     ("() => {}", "E", "expected 'send' or 'drop'", true),
   ] {
-    let (rt, ctx, host, state, logs) = setup(&["interceptSendMessage"]);
+    let (_rt, ctx, host, state, logs) = setup(&["interceptSendMessage"]);
     eval(&ctx, &format!("inu.interceptSendMessage({middleware});"));
-    let (next, complete) = run_send(&rt, &ctx, &state, &host, "messages.sendMessage", SEND_TEXT);
+    let (next, complete) = run_send(&ctx, &state, &host, "messages.sendMessage", SEND_TEXT);
     assert_eq!(next, None, "{middleware}");
     let complete = complete.unwrap_or_default();
     assert!(complete.starts_with(prefix) && complete.contains(text), "{middleware}: {complete}");
@@ -1131,7 +1129,7 @@ fn a_send_goes_out_only_on_a_send_verdict() {
 /// anyone wrote
 #[test]
 fn the_send_view_reads_the_peer_and_the_reply_the_user_meant() {
-  let (rt, ctx, host, state, _logs) = setup(&["interceptSendMessage"]);
+  let (_rt, ctx, host, state, _logs) = setup(&["interceptSendMessage"]);
   eval(
     &ctx,
     r#"
@@ -1143,7 +1141,7 @@ fn the_send_view_reads_the_peer_and_the_reply_the_user_meant() {
   let in_topic = r#"{"_":"messages.sendMessage","peer":{"_":"inputPeerChannel","channel_id":"9","access_hash":"3"},"message":"hi","random_id":"1","reply_to":{"_":"inputReplyToMessage","reply_to_msg_id":20,"top_msg_id":20}}"#;
   let replying = r#"{"_":"messages.sendMessage","peer":{"_":"inputPeerChannel","channel_id":"9","access_hash":"3"},"message":"hi","random_id":"1","reply_to":{"_":"inputReplyToMessage","reply_to_msg_id":33,"top_msg_id":20}}"#;
   for send in [to_self, in_topic, replying] {
-    let (next, _) = run_send(&rt, &ctx, &state, &host, "messages.sendMessage", send);
+    let (next, _) = run_send(&ctx, &state, &host, "messages.sendMessage", send);
     assert!(next.is_some(), "the user's message never reached the network: {send}");
   }
   assert_eq!(eval_json(&ctx, "__seen"), "[[111,null,null],[-1000000000009,null,20],[-1000000000009,33,20]]");
@@ -1172,7 +1170,7 @@ fn interceptsendmessage_serializes_its_filter_whatever_the_callback_syntax() {
 /// length change is refused where it is decidable rather than at the bridge
 #[test]
 fn media_may_be_replaced_but_not_added_or_removed() {
-  let (rt, ctx, host, state, _logs) = setup(&["interceptSendMessage"]);
+  let (_rt, ctx, host, state, _logs) = setup(&["interceptSendMessage"]);
   eval(
     &ctx,
     r#"
@@ -1183,18 +1181,18 @@ fn media_may_be_replaced_but_not_added_or_removed() {
       });
     "#,
   );
-  run_send(&rt, &ctx, &state, &host, "messages.sendMessage", SEND_TEXT);
-  run_send(&rt, &ctx, &state, &host, "messages.sendMultiMedia", SEND_ALBUM);
+  run_send(&ctx, &state, &host, "messages.sendMessage", SEND_TEXT);
+  run_send(&ctx, &state, &host, "messages.sendMultiMedia", SEND_ALBUM);
   assert_eq!(eval_json(&ctx, "__errors"), r#"[["unsupported",false],["unsupported",false]]"#);
 
-  let (next, _) = run_send(&rt, &ctx, &state, &host, "messages.sendMedia", SEND_MEDIA);
+  let (next, _) = run_send(&ctx, &state, &host, "messages.sendMedia", SEND_MEDIA);
   assert!(next.unwrap().contains(r#""media":{"_":"inputMediaEmpty"}"#), "one-for-one is allowed");
 }
 
 #[test]
 fn the_bundled_send_intercept_test_plugin_passes() {
   const ORACLE: &str = crate::testing::test_plugin!("send-intercept-test.js");
-  let (rt, ctx, host, state, _logs) = setup(&crate::testing::harness::manifest_grants(ORACLE));
+  let (_rt, ctx, host, state, _logs) = setup(&crate::testing::harness::manifest_grants(ORACLE));
   let lines = crate::testing::harness::install_capturing_console(&ctx);
   eval(&ctx, ORACLE);
   for (method, json) in [
@@ -1207,7 +1205,7 @@ fn the_bundled_send_intercept_test_plugin_passes() {
       r#"{"_":"messages.sendMessage","peer":{"_":"inputPeerUser","user_id":"7","access_hash":"3"},"message":"drop me","random_id":"2"}"#,
     ),
   ] {
-    run_send(&rt, &ctx, &state, &host, method, json);
+    run_send(&ctx, &state, &host, method, json);
   }
   let sent: Vec<String> = host
     .next_calls
@@ -1230,7 +1228,6 @@ fn update_callback_id(host: &Rc<TestHost>) -> u32 {
 }
 
 fn dispatch_intercept(
-  rt: &Runtime,
   ctx: &Context,
   state: &Rc<RpcState>,
   host: &Rc<TestHost>,
@@ -1239,19 +1236,19 @@ fn dispatch_intercept(
   wire: &str,
 ) {
   let callback_id = update_callback_id(host);
-  state.dispatch_update_intercept(rt, ctx, callback_id, dispatch_id, type_name, 0, wire);
+  state.dispatch_update_intercept(ctx, callback_id, dispatch_id, type_name, 0, wire);
 }
 
 #[test]
 fn an_update_interceptor_writes_through_to_the_app_s_object_and_answers_a_verdict() {
-  let (rt, ctx, host, state, _logs) = setup(&["interceptUpdate(updateNewMessage)"]);
+  let (_rt, ctx, host, state, _logs) = setup(&["interceptUpdate(updateNewMessage)"]);
   seed_tl_object(&host, "updateNewMessage");
   eval(
     &ctx,
     "globalThis.__seen = []; inu.interceptUpdate('updateNewMessage', ({ update: u }) => { __seen.push(u._); u.x = 12; return 'deliver' });",
   );
   assert_eq!(host.intercept_update_registered.borrow()[0].1, vec!["updateNewMessage".to_string()]);
-  dispatch_intercept(&rt, &ctx, &state, &host, 5, "updateNewMessage", &format!("HOW{TEST_HANDLE}"));
+  dispatch_intercept(&ctx, &state, &host, 5, "updateNewMessage", &format!("HOW{TEST_HANDLE}"));
   assert_eq!(eval_json(&ctx, "__seen"), r#"["updateNewMessage"]"#);
   assert_eq!(host.tl_fields.borrow().get("x").map(String::as_str), Some("J12"));
   assert_eq!(host.verdicts.borrow().as_slice(), [(5, true)]);
@@ -1261,9 +1258,9 @@ fn an_update_interceptor_writes_through_to_the_app_s_object_and_answers_a_verdic
 #[test]
 fn a_failing_update_middleware_delivers_and_is_the_plugins_fault() {
   for middleware in ["() => { throw new Error('boom') }", "async () => { throw new Error('boom') }", "() => {}"] {
-    let (rt, ctx, host, state, logs) = setup(&["interceptUpdate(updateNewMessage)"]);
+    let (_rt, ctx, host, state, logs) = setup(&["interceptUpdate(updateNewMessage)"]);
     eval(&ctx, &format!("inu.interceptUpdate('updateNewMessage', {middleware});"));
-    dispatch_intercept(&rt, &ctx, &state, &host, 5, "updateNewMessage", NEW_MESSAGE);
+    dispatch_intercept(&ctx, &state, &host, 5, "updateNewMessage", NEW_MESSAGE);
     assert_eq!(host.verdicts.borrow().as_slice(), [(5, true)], "{middleware}");
     assert_eq!(levels(&logs).first().map(|(level, _)| *level), Some(crate::LEVEL_FAULT), "{middleware}");
   }
@@ -1271,7 +1268,7 @@ fn a_failing_update_middleware_delivers_and_is_the_plugins_fault() {
 
 #[test]
 fn a_dispatch_naming_a_disposed_update_interceptor_delivers() {
-  let (rt, ctx, host, state, _logs) = setup(&["interceptUpdate(updateNewMessage)"]);
+  let (_rt, ctx, host, state, _logs) = setup(&["interceptUpdate(updateNewMessage)"]);
   eval(
     &ctx,
     "globalThis.__ran = 0; globalThis.__d = inu.interceptUpdate('updateNewMessage', () => { __ran++; return 'drop' });",
@@ -1279,7 +1276,7 @@ fn a_dispatch_naming_a_disposed_update_interceptor_delivers() {
   let callback_id = update_callback_id(&host);
   eval(&ctx, "__d(); __d();");
   assert_eq!(host.intercept_update_unregistered.borrow().as_slice(), [callback_id]);
-  state.dispatch_update_intercept(&rt, &ctx, callback_id, 5, "updateNewMessage", 0, NEW_MESSAGE);
+  state.dispatch_update_intercept(&ctx, callback_id, 5, "updateNewMessage", 0, NEW_MESSAGE);
   assert_eq!(eval_json(&ctx, "__ran"), "0");
   assert_eq!(host.verdicts.borrow().as_slice(), [(5, true)]);
 }
@@ -1287,7 +1284,7 @@ fn a_dispatch_naming_a_disposed_update_interceptor_delivers() {
 #[test]
 fn the_bundled_update_intercept_test_plugin_passes() {
   const ORACLE: &str = crate::testing::test_plugin!("update-intercept-test.js");
-  let (rt, ctx, host, state, _logs) = setup(&crate::testing::harness::manifest_grants(ORACLE));
+  let (_rt, ctx, host, state, _logs) = setup(&crate::testing::harness::manifest_grants(ORACLE));
   let lines = crate::testing::harness::install_capturing_console(&ctx);
   eval(&ctx, ORACLE);
   for (id, type_name, wire) in [
@@ -1303,7 +1300,7 @@ fn the_bundled_update_intercept_test_plugin_passes() {
       r#"J{"_":"updateEditMessage","message":{"_":"message","id":42,"message":"edited","peer_id":{"_":"peerUser","user_id":"7"}},"pts":11}"#,
     ),
   ] {
-    dispatch_intercept(&rt, &ctx, &state, &host, id, type_name, wire);
+    dispatch_intercept(&ctx, &state, &host, id, type_name, wire);
   }
   eval(&ctx, &format!("__report({})", serde_verdicts(&host)));
   let lines = lines.borrow();
@@ -1636,13 +1633,13 @@ mod bundled_oracles {
 
   #[test]
   fn the_bundled_globals_test_plugin_passes() {
-    let (rt, ctx, host, state, _logs) = setup(&crate::testing::harness::manifest_grants(GLOBALS_ORACLE), true);
+    let (_rt, ctx, host, state, _logs) = setup(&crate::testing::harness::manifest_grants(GLOBALS_ORACLE), true);
     let lines = crate::testing::harness::install_capturing_console(&ctx);
     eval(&ctx, GLOBALS_ORACLE);
 
     let (invoke_id, _, _) = host.invokes.borrow()[0].clone();
     let view = host.mint(&config_node(), false);
-    state.settle(&rt, &ctx, invoke_id, &view);
+    state.settle(&ctx, invoke_id, &view);
 
     let lines = lines.borrow();
     crate::testing::harness::assert_oracle_exact(&lines, "globals test done", 38);
@@ -1650,7 +1647,7 @@ mod bundled_oracles {
 
   #[test]
   fn the_bundled_lazy_tl_test_plugin_passes() {
-    let (rt, ctx, host, state, _logs) = setup(&crate::testing::harness::manifest_grants(LAZY_TL_ORACLE), true);
+    let (_rt, ctx, host, state, _logs) = setup(&crate::testing::harness::manifest_grants(LAZY_TL_ORACLE), true);
     let lines = crate::testing::harness::install_capturing_console(&ctx);
     eval(&ctx, LAZY_TL_ORACLE);
 
@@ -1658,14 +1655,14 @@ mod bundled_oracles {
     // refused as a *writable* view's field value, and it needs one to try it on
     let (invoke_id, _, _) = host.invokes.borrow()[0].clone();
     let config = host.mint(&config_node(), false);
-    state.settle(&rt, &ctx, invoke_id, &config);
+    state.settle(&ctx, invoke_id, &config);
 
     let update = object(
       "updateNewMessage",
       &[("pts", wire("I7")), ("message", node(&object("message", &[("id", wire("I42"))])))],
     );
     let update_wire = host.mint(&update, true);
-    state.dispatch_update(&rt, &ctx, "updateNewMessage", 0, &update_wire);
+    state.dispatch_update(&ctx, "updateNewMessage", 0, &update_wire);
 
     let lines = lines.borrow();
     crate::testing::harness::assert_oracle_exact(&lines, "lazy tl test done", 10);
@@ -1675,20 +1672,20 @@ mod bundled_oracles {
   /// channels (`on_invoke`, `on_register`, `on_next`) reaching the plugin as an `inu.PluginError`.
   #[test]
   fn the_bundled_takeover_test_plugin_passes() {
-    let (rt, ctx, host, state, _logs) = setup(&crate::testing::harness::manifest_grants(TAKEOVER_ORACLE), false);
+    let (_rt, ctx, host, state, _logs) = setup(&crate::testing::harness::manifest_grants(TAKEOVER_ORACLE), false);
     for method in ["auth.exportLoginToken", "auth.signIn", "account.getAuthorizations", "account.deleteAccount"] {
       host.refused.borrow_mut().insert(method.to_string());
     }
     *host.chain_method.borrow_mut() = "help.getConfig".to_string();
     let lines = crate::testing::harness::install_capturing_console(&ctx);
     eval(&ctx, TAKEOVER_ORACLE);
-    pump_jobs(&rt, &ctx, state.log.as_ref());
+    pump_jobs(&ctx, &|_| {});
 
     let callback_id = host.registered.borrow()[0].1;
     let request = host.mint(&object("help.getConfig", &[]), false);
-    state.dispatch(&rt, &ctx, callback_id, 500, "help.getConfig", 0, &request);
+    state.dispatch(&ctx, callback_id, 500, "help.getConfig", 0, &request);
     let response = host.mint(&config_node(), false);
-    state.complete_next(&rt, &ctx, 500, &response);
+    state.complete_next(&ctx, 500, &response);
 
     let lines = lines.borrow();
     crate::testing::harness::assert_oracle_exact(&lines, "takeover test done", 6);
@@ -1698,7 +1695,7 @@ mod bundled_oracles {
   /// assignment all agreeing with what the host said about a field.
   #[test]
   fn the_bundled_api_filter_test_plugin_passes() {
-    let (rt, ctx, host, state, _logs) = setup(&crate::testing::harness::manifest_grants(API_FILTER_ORACLE), true);
+    let (_rt, ctx, host, state, _logs) = setup(&crate::testing::harness::manifest_grants(API_FILTER_ORACLE), true);
     host.hidden.borrow_mut().insert("autologin_token".to_string());
     for field in ["from_id", "peer_id", "fwd_from", "out"] {
       host.sealed.borrow_mut().insert(field.to_string());
@@ -1712,12 +1709,12 @@ mod bundled_oracles {
         "messages.getHistory" => host.mint(&history_node(), false),
         other => panic!("the oracle asked for {other}"),
       };
-      state.settle(&rt, &ctx, invoke_id, &answer);
+      state.settle(&ctx, invoke_id, &answer);
     }
 
     let update = object("updateNewMessage", &[("message", node(&service_message_node()))]);
     let update_wire = host.mint(&update, true);
-    state.dispatch_update(&rt, &ctx, "updateNewMessage", 0, &update_wire);
+    state.dispatch_update(&ctx, "updateNewMessage", 0, &update_wire);
 
     let lines = lines.borrow();
     crate::testing::harness::assert_oracle_exact(&lines, "api filter test done", 3);
@@ -1759,7 +1756,7 @@ mod bundled_oracles {
 /// `Account` form carries the slot its handle is pinned to
 #[test]
 fn an_invoke_carries_the_account_it_was_called_through_and_raw_bytes_cross_as_bytes() {
-  let (rt, ctx, host, state, _logs) = setup(&["invokeRpc", "unsafe.invokeRaw", "account.read(self)"]);
+  let (_rt, ctx, host, state, _logs) = setup(&["invokeRpc", "unsafe.invokeRaw", "account.read(self)"]);
   eval(
     &ctx,
     r#"
@@ -1777,13 +1774,13 @@ fn an_invoke_carries_the_account_it_was_called_through_and_raw_bytes_cross_as_by
   assert_eq!(calls[0].2, vec![0x2e, 0xfd, 0xa9, 0xac, 1]);
   assert_eq!(calls[1].2, vec![1, 2, 3, 4]);
 
-  state.settle_bytes(&rt, &ctx, calls[0].0, &[5, 6, 7, 8]);
+  state.settle_bytes(&ctx, calls[0].0, &[5, 6, 7, 8]);
   assert_eq!(eval_json(&ctx, "[Array.from(__raw), __raw instanceof Uint8Array]"), "[[5,6,7,8],true]");
 }
 
 #[test]
 fn a_takeout_session_carries_its_id_into_every_op() {
-  let (rt, ctx, host, state, _logs) = setup(&["takeout", "invokeRpc(messages.getHistory)", "account.read(self)"]);
+  let (_rt, ctx, host, state, _logs) = setup(&["takeout", "invokeRpc(messages.getHistory)", "account.read(self)"]);
   eval(
     &ctx,
     r#"
@@ -1800,7 +1797,7 @@ fn a_takeout_session_carries_its_id_into_every_op() {
     r#"{"contacts":false,"messageUsers":true,"messageChats":false,"messageMegagroups":false,"messageChannels":false,"fileMaxSize":1500000}"#,
   );
 
-  state.settle(&rt, &ctx, init.0, "S8123456789");
+  state.settle(&ctx, init.0, "S8123456789");
   assert_eq!(eval_json(&ctx, "globalThis.__session.id"), r#""8123456789""#);
 
   eval(&ctx, "globalThis.__session.invokeRpc({ _: 'messages.getHistory' }); globalThis.__session.finish()");
@@ -1817,10 +1814,10 @@ fn a_takeout_session_carries_its_id_into_every_op() {
 
 #[test]
 fn a_wrapped_call_still_needs_its_method_grant() {
-  let (rt, ctx, host, state, _logs) = setup(&["takeout", "invokeRpc(users.getUsers)", "account.read(self)"]);
+  let (_rt, ctx, host, state, _logs) = setup(&["takeout", "invokeRpc(users.getUsers)", "account.read(self)"]);
   eval(&ctx, "inu.account(1).initTakeoutSession().then(s => { globalThis.__s = s; })");
   let init_id = host.takeout_calls.borrow()[0].0;
-  state.settle(&rt, &ctx, init_id, "S77");
+  state.settle(&ctx, init_id, "S77");
 
   assert_eq!(
     catch_json(&ctx, "globalThis.__s.invokeRpc({ _: 'messages.getHistory' })"),

@@ -1,13 +1,13 @@
 use std::rc::Rc;
 
 use crate::runtime::Dispose;
-use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, Runtime, Value};
+use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, Value};
 
 use crate::api::error::PluginErrorCode;
 use crate::api::platform::jvm::JvmState;
 use crate::api::tl::proxy::plain_wire_to_js;
 use crate::api::ui::icons;
-use crate::runtime::{Parked, PendingTable};
+use crate::runtime::{enter_js, Parked, PendingTable};
 use crate::utils::arguments::{self, opt_bool, opt_str, read_index, req_str, stringify_json};
 
 pub trait DialogHost {
@@ -329,10 +329,10 @@ pub fn install_dialogs<'js>(
 impl DialogState {
   /// every modal answers a plain wire: a dialog the button's name, a prompt the text or `N`, and a
   /// chooser `N` or the picked indices - of which a single-choice chooser resolves the first
-  pub fn settle(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
+  pub fn settle(self: &Rc<Self>, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
     self
       .pending
-      .settle_and_pump(rt, context, &self.log, "modal", request_id, result_wire, |ctx, modal, wire| {
+      .settle_and_pump(context, &self.log, "modal", request_id, result_wire, |ctx, modal, wire| {
         let value = plain_wire_to_js(ctx, wire)?;
         match (modal, value.as_array()) {
           (Modal::Chooser { multiple: false }, Some(picked)) => {
@@ -347,7 +347,7 @@ impl DialogState {
 
 impl Dispose for DialogState {
   fn dispose(&self, context: &rquickjs::Context) {
-    context.with(|ctx| self.pending.dispose(&ctx));
+    enter_js(context, |ctx| self.pending.dispose(&ctx));
   }
 }
 

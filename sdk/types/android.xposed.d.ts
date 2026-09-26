@@ -69,20 +69,21 @@ declare namespace inu {
     function routine(body: (ctx: RoutineContext) => void): XposedRoutineRunnable
 
     /**
-     * JS callbacks are best-effort: they run on the hooked thread, but a call may skip them.
-     * Don't rely on a JS hook for anything that must apply to every call.
+     * JS callbacks run on the hooked thread, which waits for this plugin's engine. The plugin thread
+     * hands the engine over while it is inside a Java call, so the wait is at most one JS turn of it.
+     * The 250 ms phase budget starts once the hook has the engine; Java calls the hook makes count toward it.
      *
      * A call skips this plugin's JS callbacks when:
-     * - another thread is running this plugin's JS for longer than the phase's 250 ms budget.
-     *   The hooked thread waits for it, and the wait counts against that budget;
-     * - the hooked thread is already running this plugin's JS, e.g. plugin code called a hooked
-     *   method through {@link inu.jvm};
+     * - another app thread holds this plugin's engine for over 2 s, e.g. its own callback is stuck
+     *   in a slow Java call;
+     * - the hooked thread is inside one of this plugin's callbacks already, e.g. a runnable called a
+     *   hooked method (a call made from the plugin thread through {@link inu.jvm} runs the hook);
      * - the call happened inside one of this plugin's hook phases, e.g. a `before` called a method
-     *   this plugin hooks. This applies to routine hooks too.
+     *   this plugin hooks. This applies to routine hooks too;
+     * - the plugin is stopping.
      *
-     * `before` and `after` are entered separately, so `after` can be skipped even though `before` ran.
-     * Keep other synchronous plugin work short to make skips rare. A routine hook
-     * ({@link inu.xposed.routine}) or a `filter` does not take the engine, so only the last case skips it.
+     * A routine hook ({@link inu.xposed.routine}) or a `filter` does not take the engine, so only the
+     * recursion case skips it.
      *
      * Promise continuations run later on the plugin thread.
      * APIs requiring the plugin thread are unavailable in these callbacks.

@@ -1,6 +1,6 @@
 use super::*;
 use crate::api::tl::proxy;
-use rquickjs::Context;
+use rquickjs::{Context, Runtime};
 use std::cell::Cell;
 use std::rc::Rc;
 
@@ -10,8 +10,8 @@ fn setup() -> (Runtime, Context) {
   (rt, ctx)
 }
 
-fn pump_and_read_out(rt: &Runtime, ctx: &Context) -> String {
-  pump_jobs(rt, ctx, &|_| {});
+fn pump_and_read_out(ctx: &Context) -> String {
+  pump_jobs(ctx, &|_| {});
   ctx.with(|ctx| ctx.eval::<String, _>("String(globalThis.out)").unwrap())
 }
 
@@ -42,7 +42,7 @@ impl Parked for Probe {
 
 #[test]
 fn a_refusal_rejects_the_same_promise_and_leaves_nothing_parked() {
-  let (rt, ctx) = setup();
+  let (_rt, ctx) = setup();
   let table = PendingTable::<Probe>::default();
   let probe = Probe::default();
   let rejected = probe.rejected.clone();
@@ -50,14 +50,14 @@ fn a_refusal_rejects_the_same_promise_and_leaves_nothing_parked() {
     let promise = table.park(&ctx, probe, |_| Some("Pforbidden\n\n\n\nno".to_string())).unwrap();
     watch(&ctx, promise);
   });
-  assert_eq!(pump_and_read_out(&rt, &ctx), "err:forbidden");
+  assert_eq!(pump_and_read_out(&ctx), "err:forbidden");
   assert!(table.is_empty());
   assert_eq!(rejected.get(), 1);
 }
 
 #[test]
 fn an_answer_settles_once_and_a_second_one_is_dropped() {
-  let (rt, ctx) = setup();
+  let (_rt, ctx) = setup();
   let table = PendingTable::<()>::default();
   let mut id = 0;
   ctx.with(|ctx| {
@@ -71,13 +71,13 @@ fn an_answer_settles_once_and_a_second_one_is_dropped() {
     table.settle(&ctx, id, "S1", false, |ctx, _, wire| proxy::plain_wire_to_js(ctx, wire)).unwrap();
     table.settle(&ctx, id, "S2", false, |ctx, _, wire| proxy::plain_wire_to_js(ctx, wire)).unwrap();
   });
-  assert_eq!(pump_and_read_out(&rt, &ctx), "ok:1");
+  assert_eq!(pump_and_read_out(&ctx), "ok:1");
   assert!(table.is_empty());
 }
 
 #[test]
 fn an_error_wire_or_an_unreadable_answer_rejects_rather_than_hanging() {
-  let (rt, ctx) = setup();
+  let (_rt, ctx) = setup();
   let table = PendingTable::<Probe>::default();
   let probe = Probe::default();
   let rejected = probe.rejected.clone();
@@ -92,7 +92,7 @@ fn an_error_wire_or_an_unreadable_answer_rejects_rather_than_hanging() {
     watch(&ctx, promise);
     table.settle(&ctx, id, "Pnot-found\n\n\n\ngone", false, |_, _, _| unreachable!()).unwrap();
   });
-  assert_eq!(pump_and_read_out(&rt, &ctx), "err:not-found");
+  assert_eq!(pump_and_read_out(&ctx), "err:not-found");
   assert_eq!(rejected.get(), 1);
 
   ctx.with(|ctx| {
@@ -105,7 +105,7 @@ fn an_error_wire_or_an_unreadable_answer_rejects_rather_than_hanging() {
     watch(&ctx, promise);
     table.settle(&ctx, id, "Q?", false, |ctx, _, wire| proxy::plain_wire_to_js(ctx, wire)).unwrap();
   });
-  assert!(pump_and_read_out(&rt, &ctx).starts_with("err:wire:"));
+  assert!(pump_and_read_out(&ctx).starts_with("err:wire:"));
   assert!(table.is_empty());
 }
 
@@ -113,7 +113,7 @@ fn an_error_wire_or_an_unreadable_answer_rejects_rather_than_hanging() {
 /// lets it go without settling anything twice
 #[test]
 fn a_kept_request_is_released_by_the_answer_after_it() {
-  let (rt, ctx) = setup();
+  let (_rt, ctx) = setup();
   let table = PendingTable::<Probe>::default();
   let probe = Probe::default();
   let (rejected, released) = (probe.rejected.clone(), probe.released.clone());
@@ -128,7 +128,7 @@ fn a_kept_request_is_released_by_the_answer_after_it() {
     watch(&ctx, promise);
     table.settle(&ctx, id, "N", true, |ctx, _, wire| proxy::plain_wire_to_js(ctx, wire)).unwrap();
   });
-  assert_eq!(pump_and_read_out(&rt, &ctx), "ok:null");
+  assert_eq!(pump_and_read_out(&ctx), "ok:null");
   assert_eq!(table.len(), 1);
   ctx.with(|ctx| table.settle(&ctx, id, "N", true, |_, _, _| unreachable!()).unwrap());
   assert_eq!(table.len(), 1, "a repeated first half keeps it too");

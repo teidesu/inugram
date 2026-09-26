@@ -11,9 +11,7 @@ use kurbo::{Affine, PathEl, Point, Vec2};
 use rquickjs::class::Trace;
 use rquickjs::function::{Opt, Rest, This};
 use rquickjs::object::Property;
-use rquickjs::{
-  Class, Coerced, Ctx, Exception, FromJs, Function, JsLifetime, Object, Result as JsResult, Runtime, Value,
-};
+use rquickjs::{Class, Coerced, Ctx, Exception, FromJs, Function, JsLifetime, Object, Result as JsResult, Value};
 
 use crate::api::canvas::css::{parse_color, parse_font, Font};
 use crate::api::canvas::geometry::{finite, invert, normalize_round_rect, ArcError, Path};
@@ -22,7 +20,7 @@ use crate::api::io::blob::{mint_app_file_at, BUILD_LIMIT_BYTES};
 use crate::api::io::fs::FsState;
 use crate::api::io::staging::StagedFile;
 use crate::api::io::staging::{SourceStager, StagedSource};
-use crate::runtime::{pump_jobs, Parked, PendingTable};
+use crate::runtime::{enter_js, pump_jobs, Parked, PendingTable};
 use crate::sandbox::limits::{ExternalCharge, ExternalMemory};
 use crate::sandbox::registry::RequestIds;
 use crate::utils::shape::alias_dispose;
@@ -1436,8 +1434,8 @@ impl CanvasState {
 
   /// Encoder frames receive two responses: an `A`-prefixed queue-admission response settles the
   /// promise; the later ordinary response releases the consumed pixels.
-  pub fn settle(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
-    context.with(|ctx| {
+  pub fn settle(self: &Rc<Self>, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
+    enter_js(context, |ctx| {
       let early = result_wire.starts_with('A')
         && self
           .pending
@@ -1451,13 +1449,13 @@ impl CanvasState {
         (self.log)(&format!("canvas({request_id}) settle failed: {why}"));
       }
     });
-    pump_jobs(rt, context, self.log.as_ref());
+    pump_jobs(context, self.log.as_ref());
   }
 }
 
 impl Dispose for CanvasState {
   fn dispose(&self, context: &rquickjs::Context) {
-    context.with(|ctx| self.pending.dispose(&ctx));
+    enter_js(context, |ctx| self.pending.dispose(&ctx));
   }
 }
 

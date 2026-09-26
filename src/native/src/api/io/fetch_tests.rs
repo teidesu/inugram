@@ -1,7 +1,7 @@
 use super::*;
 use crate::runtime::pump_jobs;
 use crate::testing::harness::{install_sandbox_globals, TestDir};
-use rquickjs::Context;
+use rquickjs::{Context, Runtime};
 use std::cell::Cell;
 use std::cell::RefCell;
 
@@ -98,7 +98,7 @@ impl crate::api::timers::TimerHost for TestClock {
 }
 
 struct Fixture {
-  rt: Runtime,
+  _rt: Runtime,
   ctx: Context,
   host: Rc<TestFetchHost>,
   dir: TestDir,
@@ -110,7 +110,7 @@ struct Fixture {
 impl Fixture {
   fn advance(&self, millis: u64) {
     self.clock.advance(millis);
-    self.timers.run_due(&self.rt, &self.ctx);
+    self.timers.run_due(&self.ctx);
   }
 }
 
@@ -134,7 +134,15 @@ fn setup(grant: Option<&str>) -> Fixture {
   });
   let timers = DisposingTimers::new(&ctx, timers, |ctx, state| state.dispose(ctx));
   let state = Disposing::new(&ctx, state, |ctx, state| state.dispose(ctx));
-  Fixture { rt, ctx, host, dir, clock, timers, state }
+  Fixture {
+    _rt: rt,
+    ctx,
+    host,
+    dir,
+    clock,
+    timers,
+    state,
+  }
 }
 
 fn eval(f: &Fixture, code: &str) -> String {
@@ -143,7 +151,7 @@ fn eval(f: &Fixture, code: &str) -> String {
 
 fn run(f: &Fixture, code: &str) {
   crate::testing::harness::eval_unit(&f.ctx, code);
-  pump_jobs(&f.rt, &f.ctx, &|_| {});
+  pump_jobs(&f.ctx, &|_| {});
 }
 
 fn start(f: &Fixture, call: &str) {
@@ -173,7 +181,7 @@ fn answer(f: &Fixture, request_id: i64, status: i32, headers: &str, body: &str) 
     r#"J{{"status":{status},"statusText":"OK","url":"https://api.example.com/x","headers":{headers},"body":{{"path":{:?},"type":"text/plain"}}}}"#,
     path.to_string_lossy(),
   );
-  f.state.settle(&f.rt, &f.ctx, request_id, &wire);
+  f.state.settle(&f.ctx, request_id, &wire);
 }
 
 #[test]
@@ -575,7 +583,7 @@ mod bundled_oracle {
 
   #[test]
   fn the_bundled_fetch_test_plugin_passes() {
-    let (rt, ctx) = crate::testing::harness::new_engine();
+    let (_rt, ctx) = crate::testing::harness::new_engine();
     let dir = TestDir::new("fetch-oracle");
     let host = Rc::new(OracleHost {
       dir: dir.path().to_path_buf(),
@@ -603,13 +611,13 @@ mod bundled_oracle {
     // whatever the fake accepted since the last pass, then move the clock so a `timeout` the
     // oracle is parked on can come due
     for _ in 0..64 {
-      pump_jobs(&rt, &ctx, &|_| {});
+      pump_jobs(&ctx, &|_| {});
       let due: Vec<i64> = host.answers.borrow_mut().drain(..).collect();
       for request_id in due {
-        answer_ok(&rt, &ctx, &state, &host.dir, request_id);
+        answer_ok(&ctx, &state, &host.dir, request_id);
       }
       clock.advance(1000);
-      timers.run_due(&rt, &ctx);
+      timers.run_due(&ctx);
       if lines.borrow().iter().any(|l| l == "fetch test done") {
         break;
       }
@@ -623,13 +631,13 @@ mod bundled_oracle {
 
   /// the one answer the fake ever gives, with a real file behind the body so the oracle's `blob()`
   /// assertions run against the same app-file backing a device would hand them
-  fn answer_ok(rt: &Runtime, ctx: &rquickjs::Context, state: &Rc<FetchState>, dir: &std::path::Path, request_id: i64) {
+  fn answer_ok(ctx: &rquickjs::Context, state: &Rc<FetchState>, dir: &std::path::Path, request_id: i64) {
     let path = dir.join(format!("body-{request_id}"));
     std::fs::write(&path, r#"{"hello":"world"}"#).unwrap();
     let wire = format!(
       r#"J{{"status":200,"statusText":"OK","url":"https://example.com/final","headers":{{"content-type":["application/json"],"set-cookie":["a=1","b=2"]}},"body":{{"path":{:?},"type":"application/json"}}}}"#,
       path.to_string_lossy(),
     );
-    state.settle(rt, ctx, request_id, &wire);
+    state.settle(ctx, request_id, &wire);
   }
 }

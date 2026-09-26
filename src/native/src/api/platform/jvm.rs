@@ -7,11 +7,12 @@ use std::sync::Arc;
 use rquickjs::function::Rest;
 use rquickjs::{
   object::Filter, Array, Class, Context, Ctx, FromJs, Function, IntoJs, Object, Persistent, Result as JsResult,
-  Runtime, TypedArray, Value,
+  TypedArray, Value,
 };
 
 use crate::api::error::{format_exception, report_callback_error, throw_wire_error, PluginErrorCode};
 use crate::api::tl::proxy::{encode_bytes_wire, TlViews, ViewLife};
+use crate::runtime::enter_js;
 use crate::runtime::pump_jobs;
 use crate::sandbox::grants::{GrantHost, MATCH_NAMESPACE};
 use crate::sandbox::registry::{CallbackRegistry, Lifecycle};
@@ -504,7 +505,7 @@ pub fn install_jvm<'js>(
       }
       let prepared = state.ask(&ctx, OP_PREPARE_CLASS, 0, &definition, &wires)?;
       let json = String::from_js(&ctx, prepared)?;
-      let metadata = Object::from_js(&ctx, (&ctx).json_parse(json)?)?;
+      let metadata = Object::from_js(&ctx, ctx.json_parse(json)?)?;
       let ticket: String = metadata.get("ticket")?;
       let ticket = ticket.parse::<i64>().map_err(|_| rquickjs::Error::Unknown)?;
       let result = (|| {
@@ -757,8 +758,8 @@ impl JvmState {
     self.lifecycle.is_cleaning_up() && self.cleanup_callbacks.borrow().contains(&callback_id)
   }
 
-  pub fn dispatch_callback(self: &Rc<Self>, rt: &Runtime, context: &Context, callback_id: u32) {
-    context.with(|ctx| {
+  pub fn dispatch_callback(self: &Rc<Self>, context: &Context, callback_id: u32) {
+    enter_js(context, |ctx| {
       let Some(callback) = self.callbacks.restore(&ctx, callback_id) else {
         return;
       };
@@ -766,7 +767,7 @@ impl JvmState {
         report_callback_error(&self.log, &ctx, "jvm.runnable callback", error);
       }
     });
-    pump_jobs(rt, context, self.log.as_ref());
+    pump_jobs(context, self.log.as_ref());
   }
 
   pub(crate) fn refs(&self) -> &Arc<RefTable> {
@@ -776,7 +777,7 @@ impl JvmState {
 
 impl Dispose for JvmState {
   fn dispose(&self, context: &rquickjs::Context) {
-    context.with(|ctx| {
+    enter_js(context, |ctx| {
       self.callbacks.release_all(&ctx);
       let prelude = self.prelude.borrow_mut().take();
       drop(prelude);

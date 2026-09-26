@@ -1,7 +1,7 @@
 use super::*;
 use std::cell::{Cell, RefCell};
 
-use rquickjs::Context;
+use rquickjs::{Context, Runtime};
 
 /// mirrors Kotlin `ActionRegistry` rather than flagging refusals, because the two rules only
 /// interact: rows are keyed by id per kind and the cap is consulted only for an id the host does
@@ -133,7 +133,7 @@ pub(crate) fn rows(entries: &[String]) -> String {
 
 #[test]
 fn a_static_row_renders_without_running_plugin_code() {
-  let (rt, ctx, host, state, _logs) = setup();
+  let (_rt, ctx, host, state, _logs) = setup();
   eval(
     &ctx,
     r#"
@@ -143,13 +143,13 @@ fn a_static_row_renders_without_running_plugin_code() {
   );
   assert_eq!(host.registered.borrow().len(), 1);
   assert_eq!(host.registered.borrow()[0], (KIND_CHAT, 1, "a".to_string(), Some("Alpha".to_string()), None, 0),);
-  let json = state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
+  let json = state.render(&ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
   assert_eq!(json, rows(&[row(1, "Alpha")]));
 }
 
 #[test]
 fn a_dynamic_label_and_visible_see_the_surface() {
-  let (rt, ctx, host, state, _logs) = setup();
+  let (_rt, ctx, host, state, _logs) = setup();
   eval(
     &ctx,
     r#"
@@ -168,13 +168,13 @@ fn a_dynamic_label_and_visible_see_the_surface() {
   assert_eq!(host.registered.borrow()[0].5, DYNAMIC_TEXT | DYNAMIC_VISIBLE);
   assert_eq!(host.registered.borrow()[1].3.as_deref(), Some("never"));
   assert_eq!(host.registered.borrow()[1].5, DYNAMIC_VISIBLE);
-  let json = state.render(&rt, &ctx, KIND_MESSAGE, MESSAGE_SURFACE).unwrap();
+  let json = state.render(&ctx, KIND_MESSAGE, MESSAGE_SURFACE).unwrap();
   assert_eq!(json, rows(&[row(1, "bubble 11+12 in -100")]));
 }
 
 #[test]
 fn message_placements_filter_each_surface_and_settings_include_every_placement() {
-  let (rt, ctx, _host, state, _logs) = setup();
+  let (_rt, ctx, _host, state, _logs) = setup();
   eval(
     &ctx,
     r#"
@@ -185,15 +185,15 @@ fn message_placements_filter_each_surface_and_settings_include_every_placement()
   );
 
   assert_eq!(
-    state.render(&rt, &ctx, KIND_MESSAGE, MESSAGE_SURFACE).unwrap(),
+    state.render(&ctx, KIND_MESSAGE, MESSAGE_SURFACE).unwrap(),
     rows(&[row(1, "bubble"), row(3, "both")])
   );
   assert_eq!(
-    state.render(&rt, &ctx, KIND_MESSAGE, SELECTION_SURFACE).unwrap(),
+    state.render(&ctx, KIND_MESSAGE, SELECTION_SURFACE).unwrap(),
     rows(&[row(2, "selection"), row(3, "both")]),
   );
   assert_eq!(
-    state.render(&rt, &ctx, KIND_MESSAGE, "null").unwrap(),
+    state.render(&ctx, KIND_MESSAGE, "null").unwrap(),
     rows(&[row(1, "bubble"), row(2, "selection"), row(3, "both")]),
   );
 }
@@ -213,7 +213,7 @@ fn message_placements_reject_empty_unknown_and_non_array_values() {
 
 #[test]
 fn re_registering_an_id_replaces_the_row_in_place_and_retires_its_token() {
-  let (rt, ctx, host, state, _logs) = setup();
+  let (_rt, ctx, host, state, _logs) = setup();
   eval(
     &ctx,
     r#"
@@ -223,7 +223,7 @@ fn re_registering_an_id_replaces_the_row_in_place_and_retires_its_token() {
       inu.registerChatAction({ id: 'a', text: 'A2', callback: () => {} })
     "#,
   );
-  let json = state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
+  let json = state.render(&ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
   assert_eq!(json, rows(&[row(3, "A2"), row(2, "B")]), "the replacement keeps its predecessor's position");
   assert_eq!(
     *host.unregistered.borrow(),
@@ -234,7 +234,7 @@ fn re_registering_an_id_replaces_the_row_in_place_and_retires_its_token() {
 
 #[test]
 fn a_disposer_removes_the_row_and_tells_the_host_once() {
-  let (rt, ctx, host, state, _logs) = setup();
+  let (_rt, ctx, host, state, _logs) = setup();
   eval(
     &ctx,
     r#"
@@ -243,7 +243,7 @@ fn a_disposer_removes_the_row_and_tells_the_host_once() {
       __d(); __d()
     "#,
   );
-  let json = state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
+  let json = state.render(&ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
   assert_eq!(json, rows(&[row(2, "B")]));
   assert_eq!(*host.unregistered.borrow(), vec![(KIND_CHAT, 1)]);
 }
@@ -252,7 +252,7 @@ fn a_disposer_removes_the_row_and_tells_the_host_once() {
 fn registering_after_unload_began_registers_nothing() {
   let lifecycle = Lifecycle::new();
   lifecycle.begin_unload();
-  let (rt, ctx, host, state, _logs) = setup_with(lifecycle, &["account.read(draft)"]);
+  let (_rt, ctx, host, state, _logs) = setup_with(lifecycle, &["account.read(draft)"]);
   eval(
     &ctx,
     r#"
@@ -261,7 +261,7 @@ fn registering_after_unload_began_registers_nothing() {
     "#,
   );
   assert!(host.registered.borrow().is_empty());
-  let json = state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
+  let json = state.render(&ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
   assert_eq!(json, "[]");
 }
 
@@ -276,7 +276,7 @@ fn a_malformed_registration_throws_even_while_unloading() {
 
 #[test]
 fn static_and_dynamic_icons_are_rendered() {
-  let (rt, ctx, host, state, _logs) = setup();
+  let (_rt, ctx, host, state, _logs) = setup();
   eval(
     &ctx,
     r#"
@@ -292,13 +292,13 @@ fn static_and_dynamic_icons_are_rendered() {
   assert_eq!(host.registered.borrow()[0].5, 0);
   assert_eq!(host.registered.borrow()[1].4.as_deref(), None);
   assert_eq!(host.registered.borrow()[1].5, DYNAMIC_ICON);
-  let json = state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
+  let json = state.render(&ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
   assert_eq!(json, r#"[{"token":1,"text":"A","icon":"rmsg_settings"},{"token":2,"text":"B","icon":"rmsg_pin"}]"#,);
 }
 
 #[test]
 fn chat_and_message_getters_receive_null_in_settings() {
-  let (rt, ctx, _host, state, _logs) = setup();
+  let (_rt, ctx, _host, state, _logs) = setup();
   eval(
     &ctx,
     r#"
@@ -310,14 +310,14 @@ fn chat_and_message_getters_receive_null_in_settings() {
       })
     "#,
   );
-  assert_eq!(state.render(&rt, &ctx, KIND_CHAT, "null").unwrap(), rows(&[row(1, "chat settings")]));
-  assert_eq!(state.render(&rt, &ctx, KIND_MESSAGE, "null").unwrap(), rows(&[row(1, "message settings")]));
+  assert_eq!(state.render(&ctx, KIND_CHAT, "null").unwrap(), rows(&[row(1, "chat settings")]));
+  assert_eq!(state.render(&ctx, KIND_MESSAGE, "null").unwrap(), rows(&[row(1, "message settings")]));
 }
 
 /// a JNI failure is the bridge's, so the plugin is told `internal` rather than to shed rows
 #[test]
 fn a_host_that_refuses_a_registration_throws_internal_and_leaves_nothing_behind() {
-  let (rt, ctx, host, state, _logs) = setup();
+  let (_rt, ctx, host, state, _logs) = setup();
   *host.refuse_register.borrow_mut() = Some("registerAction: JNI env unavailable".to_string());
   let caught = crate::testing::harness::catch_json(
     &ctx,
@@ -327,17 +327,17 @@ fn a_host_that_refuses_a_registration_throws_internal_and_leaves_nothing_behind(
     caught.starts_with(r#"[true,"internal",null,"#) && caught.contains("JNI env unavailable"),
     "{caught}"
   );
-  assert_eq!(state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap(), "[]");
+  assert_eq!(state.render(&ctx, KIND_CHAT, CHAT_SURFACE).unwrap(), "[]");
 }
 
 #[test]
 fn a_callback_that_throws_is_the_plugins_fault() {
-  let (rt, ctx, _host, state, logs) = setup();
+  let (_rt, ctx, _host, state, logs) = setup();
   eval(
     &ctx,
     r#"inu.registerChatAction({ id: 'a', text: 'A', callback: () => { throw new Error('nope') } })"#,
   );
-  state.dispatch(&rt, &ctx, KIND_CHAT, 1, CHAT_SURFACE);
+  state.dispatch(&ctx, KIND_CHAT, 1, CHAT_SURFACE);
   let logs = logs.borrow();
   assert!(logs.iter().any(|l| l.starts_with(crate::FAULT_PREFIX) && l.contains("nope")), "{logs:#?}");
 }
@@ -346,7 +346,7 @@ fn a_callback_that_throws_is_the_plugins_fault() {
 /// that replaced it, which is what makes a menu left open across a reload safe
 #[test]
 fn a_dispatch_for_a_disposed_or_replaced_row_does_nothing() {
-  let (rt, ctx, _host, state, logs) = setup();
+  let (_rt, ctx, _host, state, logs) = setup();
   eval(
     &ctx,
     r#"
@@ -355,19 +355,19 @@ fn a_dispatch_for_a_disposed_or_replaced_row_does_nothing() {
       globalThis.__d = inu.registerChatAction({ id: 'a', text: 'A2', callback: () => { __log.push('second') } })
     "#,
   );
-  state.dispatch(&rt, &ctx, KIND_CHAT, 1, CHAT_SURFACE);
+  state.dispatch(&ctx, KIND_CHAT, 1, CHAT_SURFACE);
   assert_eq!(read_log(&ctx), "[]");
-  state.dispatch(&rt, &ctx, KIND_CHAT, 2, CHAT_SURFACE);
+  state.dispatch(&ctx, KIND_CHAT, 2, CHAT_SURFACE);
   assert_eq!(read_log(&ctx), r#"["second"]"#);
   eval(&ctx, "__d()");
-  state.dispatch(&rt, &ctx, KIND_CHAT, 2, CHAT_SURFACE);
+  state.dispatch(&ctx, KIND_CHAT, 2, CHAT_SURFACE);
   assert_eq!(read_log(&ctx), r#"["second"]"#, "the stale row is inert");
   assert!(logs.borrow().is_empty());
 }
 
 #[test]
 fn a_row_disposed_by_an_earlier_rows_visible_is_not_drawn() {
-  let (rt, ctx, _host, state, _logs) = setup();
+  let (_rt, ctx, _host, state, _logs) = setup();
   eval(
     &ctx,
     r#"
@@ -376,13 +376,13 @@ fn a_row_disposed_by_an_earlier_rows_visible_is_not_drawn() {
       globalThis.__d = inu.registerChatAction({ id: 'b', text: 'B', callback: () => {} })
     "#,
   );
-  let json = state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
+  let json = state.render(&ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
   assert_eq!(json, rows(&[row(1, "A")]));
 }
 
 #[test]
 fn a_row_registered_mid_render_joins_the_next_one() {
-  let (rt, ctx, _host, state, _logs) = setup();
+  let (_rt, ctx, _host, state, _logs) = setup();
   eval(
     &ctx,
     r#"
@@ -399,15 +399,15 @@ fn a_row_registered_mid_render_joins_the_next_one() {
       })
     "#,
   );
-  let json = state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
+  let json = state.render(&ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
   assert_eq!(json, rows(&[row(1, "A")]));
-  let json = state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
+  let json = state.render(&ctx, KIND_CHAT, CHAT_SURFACE).unwrap();
   assert_eq!(json, rows(&[row(1, "A"), row(2, "B")]));
 }
 
 #[test]
 fn kinds_are_separate_registries() {
-  let (rt, ctx, _host, state, _logs) = setup();
+  let (_rt, ctx, _host, state, _logs) = setup();
   eval(
     &ctx,
     r#"
@@ -415,8 +415,8 @@ fn kinds_are_separate_registries() {
       inu.registerMessageAction({ id: 'a', text: 'message', callback: () => {} })
     "#,
   );
-  assert_eq!(state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap(), rows(&[row(1, "chat")]));
-  assert_eq!(state.render(&rt, &ctx, KIND_MESSAGE, MESSAGE_SURFACE).unwrap(), rows(&[row(1, "message")]));
+  assert_eq!(state.render(&ctx, KIND_CHAT, CHAT_SURFACE).unwrap(), rows(&[row(1, "chat")]));
+  assert_eq!(state.render(&ctx, KIND_MESSAGE, MESSAGE_SURFACE).unwrap(), rows(&[row(1, "message")]));
 }
 
 /// the composer's text is app state, and `getDraft` charges `account.read(draft)` for the very
@@ -424,7 +424,7 @@ fn kinds_are_separate_registries() {
 /// the refusal would take the whole api away from a row that never reads anything.
 #[test]
 fn reading_the_draft_needs_the_same_grant_get_draft_does() {
-  let (rt, ctx, host, state, _logs) = setup_with(Lifecycle::new(), &[]);
+  let (_rt, ctx, host, state, _logs) = setup_with(Lifecycle::new(), &[]);
   eval(
     &ctx,
     r#"
@@ -443,7 +443,7 @@ fn reading_the_draft_needs_the_same_grant_get_draft_does() {
     "#,
   );
   let surface = r#"{"accountId":0,"dialogId":5,"surface":42,"draft":{"text":"hi there"}}"#;
-  state.dispatch(&rt, &ctx, KIND_EDITOR, 1, surface);
+  state.dispatch(&ctx, KIND_EDITOR, 1, surface);
   let log = read_log(&ctx);
   assert!(log.contains("not-granted"), "{log}");
   assert!(log.contains("account.read(draft)"), "{log}");
@@ -452,7 +452,7 @@ fn reading_the_draft_needs_the_same_grant_get_draft_does() {
 
 #[test]
 fn a_bad_editor_argument_is_an_invalid_argument_error() {
-  let (rt, ctx, host, state, _logs) = setup();
+  let (_rt, ctx, host, state, _logs) = setup();
   eval(
     &ctx,
     r#"
@@ -466,14 +466,14 @@ fn a_bad_editor_argument_is_an_invalid_argument_error() {
       })
     "#,
   );
-  state.dispatch(&rt, &ctx, KIND_EDITOR, 1, r#"{"accountId":0,"dialogId":5,"surface":1,"draft":{"text":""}}"#);
+  state.dispatch(&ctx, KIND_EDITOR, 1, r#"{"accountId":0,"dialogId":5,"surface":1,"draft":{"text":""}}"#);
   assert_eq!(read_log(&ctx), r#"["PluginError:invalid-argument","PluginError:invalid-argument"]"#);
   assert!(host.editor.borrow().is_empty());
 }
 
 #[test]
 fn a_host_that_refuses_an_editor_op_throws_into_the_callback() {
-  let (rt, ctx, host, state, _logs) = setup();
+  let (_rt, ctx, host, state, _logs) = setup();
   *host.refuse_editor.borrow_mut() = Some("the composer is gone".to_string());
   eval(
     &ctx,
@@ -485,7 +485,7 @@ fn a_host_that_refuses_an_editor_op_throws_into_the_callback() {
       })
     "#,
   );
-  state.dispatch(&rt, &ctx, KIND_EDITOR, 1, r#"{"accountId":0,"dialogId":5,"surface":1,"draft":{"text":""}}"#);
+  state.dispatch(&ctx, KIND_EDITOR, 1, r#"{"accountId":0,"dialogId":5,"surface":1,"draft":{"text":""}}"#);
   assert_eq!(read_log(&ctx), r#"["the composer is gone"]"#);
 }
 
@@ -497,14 +497,14 @@ fn the_bundled_actions_test_plugin_passes() {
   let lines = crate::testing::harness::install_capturing_console(&ctx);
   eval(&ctx, crate::testing::test_plugin!("actions-test.js"));
 
-  assert_eq!(state.render(&rt, &ctx, KIND_CHAT, CHAT_SURFACE).unwrap(), rows(&[row(2, "Chat row")]));
-  assert_eq!(state.render(&rt, &ctx, KIND_MESSAGE, MESSAGE_SURFACE).unwrap(), rows(&[row(1, "Message row")]));
-  state.dispatch(&rt, &ctx, KIND_MESSAGE, 1, MESSAGE_SURFACE);
-  state.dispatch(&rt, &ctx, KIND_MESSAGE, 1, SELECTION_SURFACE);
-  state.dispatch(&rt, &ctx, KIND_PROFILE, 1, CHAT_SURFACE);
-  state.dispatch(&rt, &ctx, KIND_GLOBAL, 1, r#"{"accountId":0}"#);
+  assert_eq!(state.render(&ctx, KIND_CHAT, CHAT_SURFACE).unwrap(), rows(&[row(2, "Chat row")]));
+  assert_eq!(state.render(&ctx, KIND_MESSAGE, MESSAGE_SURFACE).unwrap(), rows(&[row(1, "Message row")]));
+  state.dispatch(&ctx, KIND_MESSAGE, 1, MESSAGE_SURFACE);
+  state.dispatch(&ctx, KIND_MESSAGE, 1, SELECTION_SURFACE);
+  state.dispatch(&ctx, KIND_PROFILE, 1, CHAT_SURFACE);
+  state.dispatch(&ctx, KIND_GLOBAL, 1, r#"{"accountId":0}"#);
   let editor_surface = r#"{"accountId":0,"dialogId":-100,"surface":42,"draft":{"text":"hello"}}"#;
-  state.dispatch(&rt, &ctx, KIND_EDITOR, 1, editor_surface);
+  state.dispatch(&ctx, KIND_EDITOR, 1, editor_surface);
 
   while rt.is_job_pending() {
     rt.execute_pending_job().ok();

@@ -1,7 +1,7 @@
 use super::*;
 use crate::api::telegram::account::tests::TestAccountHost;
 use crate::sandbox::grants::CachedGrantHost;
-use rquickjs::Context;
+use rquickjs::{Context, Runtime};
 use std::cell::RefCell;
 
 // the kinds `reads.js` sends and Kotlin `PluginReads.KIND_*` receives; only the fake host has a
@@ -485,14 +485,14 @@ fn settle(rt: &Runtime, ctx: &Context, state: &Rc<ReadsState>, host: &Rc<TestRea
     }
     if let Some((request_id, spec, kind)) = host.take_resolve() {
       let wire = host.answer_resolve(&spec, kind);
-      state.settle(rt, ctx, request_id, &wire);
+      state.settle(ctx, request_id, &wire);
       continue;
     }
     let Some((request_id, op, arg)) = host.take_fetch() else {
       return;
     };
     let wire = host.answer_fetch(op, &arg);
-    state.settle(rt, ctx, request_id, &wire);
+    state.settle(ctx, request_id, &wire);
   }
   panic!("the host queue never drained");
 }

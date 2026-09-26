@@ -3,12 +3,12 @@ use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
 use std::rc::Rc;
 
-use rquickjs::{Ctx, IntoJs, Object, Result as JsResult, Runtime, Value};
+use rquickjs::{Ctx, IntoJs, Object, Result as JsResult, Value};
 
 use crate::api::error::{throw_wire_error, PluginErrorCode};
 use crate::api::telegram::account::AccountState;
 use crate::api::tl::proxy::{TlViews, ViewLife};
-use crate::runtime::{Parked, PendingTable};
+use crate::runtime::{enter_js, Parked, PendingTable};
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::utils::qjs::qjs_load_prelude;
 
@@ -224,7 +224,7 @@ pub fn install_reads<'js>(
     state.check_read_grant(&ctx, op, &peer)?;
     let shape = get_op_shape(op);
     let payload = match shape {
-      Shape::Page(list) if !(&cursor).is_empty() => match state
+      Shape::Page(list) if !cursor.is_empty() => match state
         .cursors
         .entries
         .borrow()
@@ -304,22 +304,18 @@ impl ReadsState {
 }
 
 impl ReadsState {
-  pub fn settle(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
-    self.pending.settle_and_pump(
-      rt,
-      context,
-      &self.log,
-      "account read",
-      request_id,
-      result_wire,
-      |ctx, shape, wire| self.decode_result(ctx, *shape, wire),
-    );
+  pub fn settle(self: &Rc<Self>, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
+    self
+      .pending
+      .settle_and_pump(context, &self.log, "account read", request_id, result_wire, |ctx, shape, wire| {
+        self.decode_result(ctx, *shape, wire)
+      });
   }
 }
 
 impl Dispose for ReadsState {
   fn dispose(&self, context: &rquickjs::Context) {
-    context.with(|ctx| self.pending.dispose(&ctx));
+    enter_js(context, |ctx| self.pending.dispose(&ctx));
   }
 }
 

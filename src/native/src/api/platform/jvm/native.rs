@@ -1249,26 +1249,27 @@ impl Native {
     // SAFETY: `fits` checked every argument against its parameter and `prepare` converted it to that
     // parameter's type, the id was resolved for this owner, and a receiver is checked against the owner
     // before it reaches here
-    let called = unsafe {
-      match &candidate.id {
-        MethodId::Constructor(id) => env.new_object_unchecked(&candidate.owner, *id, &values).map(JValueOwned::Object),
-        MethodId::Static(id) => env.call_static_method_unchecked(&candidate.owner, *id, candidate.ret, &values),
-        MethodId::Instance(id) => {
-          let Some(receiver) = receiver else {
-            return PluginErrorCode::InvalidArgument
-              .throw(ctx, "jvm: an instance method needs a receiver")
-              .map_err(OpError::Js);
-          };
-          match dispatch {
-            Dispatch::Virtual => env.call_method_unchecked(receiver, *id, candidate.ret, &values),
-            Dispatch::Nonvirtual => {
-              let owner: &JClass = &candidate.owner;
-              env.call_nonvirtual_method_unchecked(receiver, owner, *id, candidate.ret, &values)
-            }
-          }
+    if matches!(candidate.id, MethodId::Instance(_)) && receiver.is_none() {
+      return PluginErrorCode::InvalidArgument
+        .throw(ctx, "jvm: an instance method needs a receiver")
+        .map_err(OpError::Js);
+    }
+    let called = crate::jni::lend_engine(|| unsafe {
+      match (&candidate.id, receiver) {
+        (MethodId::Constructor(id), _) => {
+          env.new_object_unchecked(&candidate.owner, *id, &values).map(JValueOwned::Object)
         }
+        (MethodId::Static(id), _) => env.call_static_method_unchecked(&candidate.owner, *id, candidate.ret, &values),
+        (MethodId::Instance(_), None) => unreachable!(),
+        (MethodId::Instance(id), Some(receiver)) => match dispatch {
+          Dispatch::Virtual => env.call_method_unchecked(receiver, *id, candidate.ret, &values),
+          Dispatch::Nonvirtual => {
+            let owner: &JClass = &candidate.owner;
+            env.call_nonvirtual_method_unchecked(receiver, owner, *id, candidate.ret, &values)
+          }
+        },
       }
-    };
+    });
     drop(prepared);
     match called {
       Ok(value) => Ok(value),
@@ -1293,8 +1294,9 @@ impl Native {
     let loader = call_object(env, owner, known.class_get_class_loader)?;
     let args = [JValue::Object(&name).as_jni(), JValue::Bool(true).as_jni(), JValue::Object(&loader).as_jni()];
     // SAFETY: `Class.forName(String, boolean, ClassLoader)`, handed exactly those
-    let loaded =
-      unsafe { env.call_static_method_unchecked(&known.class, known.class_for_name, JavaType::Object, &args) };
+    let loaded = crate::jni::lend_engine(|| unsafe {
+      env.call_static_method_unchecked(&known.class, known.class_for_name, JavaType::Object, &args)
+    });
     match loaded {
       Ok(_) => {
         initialized.set(true);

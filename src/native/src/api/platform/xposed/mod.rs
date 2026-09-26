@@ -2,6 +2,7 @@ mod context;
 pub(crate) mod elf;
 pub(crate) mod lsplant;
 
+use crate::runtime::enter_js;
 use crate::runtime::Dispose;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -10,7 +11,7 @@ use std::rc::Rc;
 use jni::objects::{JObject, JObjectArray};
 use jni::sys::jobjectArray;
 use rquickjs::function::Opt;
-use rquickjs::{Class, Context, Ctx, Function, Object, Persistent, Result as JsResult, Runtime, Value};
+use rquickjs::{Class, Context, Ctx, Function, Object, Persistent, Result as JsResult, Value};
 
 use crate::api::error::PluginErrorCode;
 use crate::api::platform::jvm::JvmState;
@@ -350,7 +351,8 @@ impl XposedState {
     for arg in args {
       wires.push(self.jvm.arg_to_wire(ctx, &arg)?);
     }
-    self.ask(ctx, OP_CALL_ORIGINAL, method, "", &wires)
+    let wire = crate::jni::lend_engine(|| self.host.xposed(OP_CALL_ORIGINAL, method, "", &wires));
+    self.jvm.wire_to_value(ctx, &wire)
   }
 
   fn js_allocate<'js>(&self, ctx: &Ctx<'js>, class: Value<'js>) -> JsResult<Value<'js>> {
@@ -584,13 +586,12 @@ impl XposedState {
 impl XposedState {
   pub fn dispatch_before(
     self: &Rc<Self>,
-    rt: &Runtime,
     context: &Context,
     dispatch_id: i64,
     site: i64,
     call: &Invocation,
   ) -> Vec<String> {
-    let answer = context.with(|ctx| -> JsResult<Vec<String>> {
+    let answer = enter_js(context, |ctx| -> JsResult<Vec<String>> {
       let hooks = self.snapshot(&ctx, site);
       if hooks.is_empty() {
         return Ok(Vec::new());
@@ -602,7 +603,7 @@ impl XposedState {
       answer
     });
 
-    pump_jobs(rt, context, self.log.as_ref());
+    pump_jobs(context, self.log.as_ref());
     answer.unwrap_or_default()
   }
 
@@ -646,13 +647,12 @@ impl XposedState {
 
   pub fn dispatch_after(
     self: &Rc<Self>,
-    rt: &Runtime,
     context: &Context,
     dispatch_id: i64,
     call: &Invocation,
     returned: &Returned,
   ) -> Answer {
-    let answer = context.with(|ctx| -> JsResult<Answer> {
+    let answer = enter_js(context, |ctx| -> JsResult<Answer> {
       let Some(pending) = self.pending.borrow_mut().remove(&dispatch_id) else {
         return Ok(Answer::NotDispatched);
       };
@@ -666,19 +666,18 @@ impl XposedState {
       hook_context.borrow().expire();
       answer
     });
-    pump_jobs(rt, context, self.log.as_ref());
+    pump_jobs(context, self.log.as_ref());
     answer.unwrap_or(Answer::Keep)
   }
 
   pub fn dispatch_after_only(
     self: &Rc<Self>,
-    rt: &Runtime,
     context: &Context,
     site: i64,
     call: &Invocation,
     returned: &Returned,
   ) -> Answer {
-    let answer = context.with(|ctx| -> JsResult<Answer> {
+    let answer = enter_js(context, |ctx| -> JsResult<Answer> {
       let afters = self.snapshot_afters(&ctx, site);
       if afters.is_empty() {
         return Ok(Answer::NotDispatched);
@@ -688,7 +687,7 @@ impl XposedState {
       hook_context.borrow().expire();
       answer
     });
-    pump_jobs(rt, context, self.log.as_ref());
+    pump_jobs(context, self.log.as_ref());
     answer.unwrap_or(Answer::Keep)
   }
 
@@ -696,13 +695,13 @@ impl XposedState {
     let Some(pending) = self.pending.borrow_mut().remove(&dispatch_id) else {
       return;
     };
-    context.with(|_| drop(pending));
+    enter_js(context, |_| drop(pending));
   }
 }
 
 impl Dispose for XposedState {
   fn dispose(&self, context: &rquickjs::Context) {
-    context.with(|ctx| {
+    enter_js(context, |ctx| {
       let installed: Vec<(i64, u32)> = self
         .sites
         .borrow()

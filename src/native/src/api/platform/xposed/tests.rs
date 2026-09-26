@@ -1,6 +1,7 @@
 use super::*;
 use crate::api::error::format_exception;
 use crate::api::platform::jvm::tests::TestJvmHost;
+use rquickjs::Runtime;
 use std::cell::{Cell, RefCell};
 
 struct WireValues {
@@ -64,7 +65,6 @@ fn encode_answer_wire(answer: Answer) -> String {
 /// has no `before`, the original and then one phase with both halves. Mirrors
 /// `PluginXposed.Session.dispatch`, which is the only caller of these in the app.
 fn run_dispatch(
-  rt: &Runtime,
   context: &Context,
   state: &Rc<XposedState>,
   site: i64,
@@ -74,7 +74,6 @@ fn run_dispatch(
 ) -> (String, Option<Vec<String>>) {
   if befores == 0 {
     let answer = encode_answer_wire(state.dispatch_after_only(
-      rt,
       context,
       site,
       &invocation(state, args),
@@ -83,7 +82,7 @@ fn run_dispatch(
     let result = if answer == KEEP_ORIGINAL || answer == NOT_DISPATCHED { original.to_string() } else { answer };
     return (result, Some(args.to_vec()));
   }
-  let answer = state.dispatch_before(rt, context, 1, site, &invocation(state, args));
+  let answer = state.dispatch_before(context, 1, site, &invocation(state, args));
   if answer.is_empty() {
     return (original.to_string(), Some(args.to_vec()));
   }
@@ -97,7 +96,7 @@ fn run_dispatch(
     .collect();
   let result = if answer[0] == "P1" {
     let after =
-      encode_answer_wire(state.dispatch_after(rt, context, 1, &invocation(state, args), &returned(state, original)));
+      encode_answer_wire(state.dispatch_after(context, 1, &invocation(state, args), &returned(state, original)));
     if after == KEEP_ORIGINAL {
       original.to_string()
     } else {
@@ -174,7 +173,7 @@ impl XposedHost for TestXposedHost {
 struct Fixture {
   _xposed: crate::testing::harness::DisposeOnDrop<XposedState>,
   _jvm: crate::testing::harness::DisposeOnDrop<crate::api::platform::jvm::JvmState>,
-  rt: Runtime,
+  _rt: Runtime,
   ctx: Context,
   host: Rc<TestXposedHost>,
   /// what the last [`Fixture::dispatch`] called the original with, `None` when it did not
@@ -223,7 +222,7 @@ fn setup(grants: &[&str]) -> Fixture {
   Fixture {
     _xposed: crate::testing::harness::DisposeOnDrop::new(&ctx, state.clone(), |ctx, state| state.dispose(ctx)),
     _jvm: crate::testing::harness::DisposeOnDrop::new(&ctx, jvm, |ctx, state| state.dispose(ctx)),
-    rt,
+    _rt: rt,
     ctx,
     host,
     originals: RefCell::new(None),
@@ -235,12 +234,11 @@ fn setup(grants: &[&str]) -> Fixture {
 
 impl Fixture {
   fn before(&self, args: &[String]) -> Vec<String> {
-    self.state.dispatch_before(&self.rt, &self.ctx, 1, 100, &invocation(&self.state, args))
+    self.state.dispatch_before(&self.ctx, 1, 100, &invocation(&self.state, args))
   }
 
   fn after(&self, args: &[String], original: &str) -> String {
     encode_answer_wire(self.state.dispatch_after(
-      &self.rt,
       &self.ctx,
       1,
       &invocation(&self.state, args),
@@ -250,7 +248,6 @@ impl Fixture {
 
   fn after_only(&self, args: &[String], original: &str) -> String {
     encode_answer_wire(self.state.dispatch_after_only(
-      &self.rt,
       &self.ctx,
       100,
       &invocation(&self.state, args),
@@ -273,7 +270,7 @@ impl Fixture {
     let args: Vec<String> = args.iter().map(|a| a.to_string()).collect();
     let original = self.host.original.borrow().clone();
     let befores = self.host.befores(site);
-    let (answer, called_with) = run_dispatch(&self.rt, &self.ctx, &self.state, site, befores, &args, &original);
+    let (answer, called_with) = run_dispatch(&self.ctx, &self.state, site, befores, &args, &original);
     *self.originals.borrow_mut() = called_with;
     answer
   }
@@ -744,13 +741,7 @@ fn unchanged_after_replies_use_a_verdict_not_the_inbound_value_wire() {
     assert_eq!(before[0], "P1");
     let result = returned(&fixture.state, original);
     assert_eq!(
-      encode_answer_wire(fixture.state.dispatch_after(
-        &fixture.rt,
-        &fixture.ctx,
-        1,
-        &invocation(&fixture.state, &[]),
-        &result
-      )),
+      encode_answer_wire(fixture.state.dispatch_after(&fixture.ctx, 1, &invocation(&fixture.state, &[]), &result)),
       KEEP_ORIGINAL
     );
     assert!(fixture.state.pending.borrow().is_empty());
@@ -765,24 +756,12 @@ fn explicit_after_override_is_kept_even_when_its_wire_matches_the_original() {
   fixture.before(&[]);
   let result = returned(&fixture.state, "I42");
   assert_eq!(
-    encode_answer_wire(fixture.state.dispatch_after(
-      &fixture.rt,
-      &fixture.ctx,
-      1,
-      &invocation(&fixture.state, &[]),
-      &result
-    )),
+    encode_answer_wire(fixture.state.dispatch_after(&fixture.ctx, 1, &invocation(&fixture.state, &[]), &result)),
     "I42"
   );
   let result = returned(&fixture.state, "GO9");
   assert_eq!(
-    encode_answer_wire(fixture.state.dispatch_after(
-      &fixture.rt,
-      &fixture.ctx,
-      999,
-      &invocation(&fixture.state, &[]),
-      &result
-    )),
+    encode_answer_wire(fixture.state.dispatch_after(&fixture.ctx, 999, &invocation(&fixture.state, &[]), &result)),
     NOT_DISPATCHED
   );
 }
@@ -841,7 +820,6 @@ fn a_hook_that_reads_nothing_converts_nothing() {
   fixture.eval("const m = stringLength; inu.xposed.hookMethod(m, { after() {} })");
   let reads = Rc::new(Cell::new(0));
   let answer = fixture.state.dispatch_after_only(
-    &fixture.rt,
     &fixture.ctx,
     100,
     &invocation_counting(&fixture.state, &["I1".to_string(), "GO9".to_string()], &reads),
@@ -866,7 +844,6 @@ fn each_value_is_converted_once_however_often_it_is_read() {
   );
   let reads = Rc::new(Cell::new(0));
   fixture.state.dispatch_after_only(
-    &fixture.rt,
     &fixture.ctx,
     100,
     &invocation_counting(&fixture.state, &["I1".to_string(), "I2".to_string()], &reads),
@@ -894,13 +871,9 @@ fn a_before_that_never_reads_the_arguments_keeps_them_all() {
   fixture.eval("const m = stringLength; inu.xposed.hookMethod(m, { before() {} })");
   let reads = Rc::new(Cell::new(0));
   let args = ["GO9".to_string(), "I1".to_string()];
-  let answer = fixture.state.dispatch_before(
-    &fixture.rt,
-    &fixture.ctx,
-    1,
-    100,
-    &invocation_counting(&fixture.state, &args, &reads),
-  );
+  let answer = fixture
+    .state
+    .dispatch_before(&fixture.ctx, 1, 100, &invocation_counting(&fixture.state, &args, &reads));
   assert_eq!(answer, vec!["P0", KEEP_ARGUMENT, KEEP_ARGUMENT]);
   assert_eq!(reads.get(), 0);
 }
