@@ -211,7 +211,7 @@ if (noStgit) {
   const repo = cd(worktreeDir)
   for (const entry of seriesEntries) {
     step(`Applying ${entry}`)
-    await repo`git apply ${join(patchesDir, entry)}`
+    await repo`git apply --index ${join(patchesDir, entry)}`
   }
   if (!noSubmodules) {
     await syncSubmodules(worktreeDir)

@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: alina sireneva <alina@tei.su>
-Date: Tue, 21 Apr 2026 07:47:50 +0300
+From: alina sireneva <alina@tei.pet>
+Date: Sat, 26 Sep 2026 21:53:56 +0400
 Subject: build support stuff for fork-specific code: - added kotlin - bumped min sdk to 26, removed desugaring - versioning
 
 ---
@@ -16,12 +16,14 @@ Subject: build support stuff for fork-specific code: - added kotlin - bumped min
  TMessagesProj_App/build.gradle                | 224 ++++++++++--------
  TMessagesProj_App/google-services.json        |  76 +-----
  TMessagesProj_App/jni/CMakeLists.txt          |  10 +
+ TMessagesProj_App/jni/lsplant                 |   1 +
  TMessagesProj_AppTests/build.gradle           |   5 +-
  build.gradle                                  |  14 +-
  gradle.properties                             |   2 +-
  settings.gradle                               |  40 +++-
- 16 files changed, 298 insertions(+), 358 deletions(-)
+ 17 files changed, 299 insertions(+), 358 deletions(-)
  create mode 100644 TMessagesProj_App/jni/CMakeLists.txt
+ create mode 160000 TMessagesProj_App/jni/lsplant
 
 diff --git a/.gitmodules b/.gitmodules
 index 0000000..0000000 100644
@@ -1018,6 +1020,13 @@ index 0000000..0000000
 +
 +set(LSPLANT_BUILD_SHARED ON CACHE BOOL "" FORCE)
 +add_subdirectory(lsplant/lsplant/src/main/jni)
+diff --git a/TMessagesProj_App/jni/lsplant b/TMessagesProj_App/jni/lsplant
+new file mode 160000
+index 0000000..0000000
+--- /dev/null
++++ b/TMessagesProj_App/jni/lsplant
+@@ -0,0 +1 @@
++Subproject commit 61e10e51eb99dca00dd873f48c28a674dd2b4c4c
 diff --git a/TMessagesProj_AppTests/build.gradle b/TMessagesProj_AppTests/build.gradle
 index 0000000..0000000 100644
 --- a/TMessagesProj_AppTests/build.gradle
