@@ -1,7 +1,7 @@
 use super::*;
 use crate::api::telegram::account::tests::TestAccountHost;
 use crate::sandbox::grants::CachedGrantHost;
-use rquickjs::Context;
+use rquickjs::{Context, Runtime};
 
 const TWO_ACCOUNTS: &str = r#"[{"id":0,"userId":111,"isCurrent":true,"isPremium":false},{"id":1,"userId":222,"isCurrent":false,"isPremium":true}]"#;
 
@@ -136,24 +136,19 @@ fn arm(ctx: &Context) {
 
 #[test]
 fn popping_the_last_screen_hands_over_a_null_screen() {
-  let (rt, ctx, _host, state, _accounts, logs) = setup(&["account.read(dialogs)"]);
+  let (_rt, ctx, _host, state, _accounts, logs) = setup(&["account.read(dialogs)"]);
   arm(&ctx);
-  state.dispatch_change(&rt, &ctx, r#"{"action":"pop","screen":null,"previous":{"type":"dialogs","account":0}}"#, "[]");
+  state.dispatch_change(&ctx, r#"{"action":"pop","screen":null,"previous":{"type":"dialogs","account":0}}"#, "[]");
   assert_eq!(eval_json(&ctx, "globalThis.__seen"), r#"[["pop",null,"dialogs"]]"#);
   assert!(logs.borrow().is_empty(), "unexpected logs: {:?}", logs.borrow());
 }
 
 #[test]
 fn a_plugin_that_never_touches_the_stack_never_materializes_it() {
-  let (rt, ctx, _host, state, _accounts, logs) = setup(&[]);
+  let (_rt, ctx, _host, state, _accounts, logs) = setup(&[]);
   arm(&ctx);
   // a stack json nothing could parse: reaching it at all is the failure this pins
-  state.dispatch_change(
-    &rt,
-    &ctx,
-    &format!(r#"{{"action":"push","screen":{DIALOGS},"previous":null}}"#),
-    "not json at all",
-  );
+  state.dispatch_change(&ctx, &format!(r#"{{"action":"push","screen":{DIALOGS},"previous":null}}"#), "not json at all");
   assert_eq!(eval_json(&ctx, "globalThis.__seen"), r#"[["push","dialogs",null]]"#);
   assert!(logs.borrow().is_empty(), "unexpected logs: {:?}", logs.borrow());
   let threw: String = ctx.with(|ctx| {
@@ -166,14 +161,14 @@ fn a_plugin_that_never_touches_the_stack_never_materializes_it() {
 
 #[test]
 fn nothing_is_dispatched_and_nothing_parsed_without_a_registration() {
-  let (rt, ctx, _host, state, _accounts, logs) = setup(&[]);
-  state.dispatch_change(&rt, &ctx, "not json at all", "not json either");
+  let (_rt, ctx, _host, state, _accounts, logs) = setup(&[]);
+  state.dispatch_change(&ctx, "not json at all", "not json either");
   assert!(logs.borrow().is_empty(), "unexpected logs: {:?}", logs.borrow());
 }
 
 #[test]
 fn registrations_stack_dispose_once_and_a_throw_faults() {
-  let (rt, ctx, _host, state, _accounts, logs) = setup(&[]);
+  let (_rt, ctx, _host, state, _accounts, logs) = setup(&[]);
   ctx.with(|ctx| {
     ctx
       .eval::<(), _>(
@@ -187,7 +182,7 @@ fn registrations_stack_dispose_once_and_a_throw_faults() {
       .unwrap();
   });
   let change = format!(r#"{{"action":"push","screen":{DIALOGS},"previous":null}}"#);
-  state.dispatch_change(&rt, &ctx, &change, "[]");
+  state.dispatch_change(&ctx, &change, "[]");
   assert_eq!(eval_json(&ctx, "globalThis.__ran"), r#"["second","third"]"#);
   let entry = logs.borrow().iter().find(|l| l.contains("nav-boom")).cloned();
   let entry = entry.expect("expected a diagnostic for the throwing callback");
@@ -198,7 +193,7 @@ fn registrations_stack_dispose_once_and_a_throw_faults() {
   );
 
   ctx.with(|ctx| ctx.eval::<(), _>("__d(); __d();").unwrap());
-  state.dispatch_change(&rt, &ctx, &change, "[]");
+  state.dispatch_change(&ctx, &change, "[]");
   assert_eq!(
     eval_json(&ctx, "globalThis.__ran"),
     r#"["second","third","third"]"#,
@@ -208,7 +203,7 @@ fn registrations_stack_dispose_once_and_a_throw_faults() {
 
 #[test]
 fn registering_after_unload_began_is_a_no_op() {
-  let (rt, ctx, _host, state, _accounts, _logs) = setup(&[]);
+  let (_rt, ctx, _host, state, _accounts, _logs) = setup(&[]);
   state.lifecycle.begin_unload();
   let shape: String = ctx.with(|ctx| {
     ctx
@@ -222,7 +217,7 @@ fn registering_after_unload_began_is_a_no_op() {
   });
   assert_eq!(shape, "function");
   assert!(state.changed_fns.is_empty());
-  state.dispatch_change(&rt, &ctx, &format!(r#"{{"action":"push","screen":{DIALOGS},"previous":null}}"#), "[]");
+  state.dispatch_change(&ctx, &format!(r#"{{"action":"push","screen":{DIALOGS},"previous":null}}"#), "[]");
   assert_eq!(eval_json(&ctx, "globalThis.__ran"), "0");
 }
 
@@ -232,7 +227,7 @@ const ORACLE: &str = crate::testing::test_plugin!("nav-test.js");
 /// member reads as a refusal in a suite of `expectThrow`s
 #[test]
 fn the_bundled_nav_test_plugin_passes() {
-  let (rt, ctx, host, state, _accounts, logs) = setup(&crate::testing::harness::manifest_grants(ORACLE));
+  let (_rt, ctx, host, state, _accounts, logs) = setup(&crate::testing::harness::manifest_grants(ORACLE));
   *host.screen.borrow_mut() = format!("J{DIALOGS}");
   let lines = crate::testing::harness::install_capturing_console(&ctx);
   crate::testing::harness::eval_unit(&ctx, ORACLE);
@@ -261,7 +256,7 @@ fn the_bundled_nav_test_plugin_passes() {
     ),
   ] {
     *host.screen.borrow_mut() = format!("J{top}");
-    state.dispatch_change(&rt, &ctx, &change, &stack);
+    state.dispatch_change(&ctx, &change, &stack);
   }
 
   let lines = lines.borrow().clone();

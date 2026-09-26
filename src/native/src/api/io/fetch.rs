@@ -1,10 +1,11 @@
 use crate::api::url;
+use crate::runtime::enter_js;
 use crate::runtime::Dispose;
 use std::path::PathBuf;
 use std::rc::Rc;
 
 use rquickjs::convert::Coerced;
-use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, Runtime, TypedArray, Value};
+use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, TypedArray, Value};
 
 use crate::api::error::PluginErrorCode;
 use crate::api::io::blob::{self, mint_app_file_at, BlobHandle, BUILD_LIMIT_BYTES};
@@ -238,32 +239,30 @@ fn mint_body<'js>(ctx: &Ctx<'js>, body: &Object<'js>) -> JsResult<Value<'js>> {
 }
 
 impl FetchState {
-  pub fn settle(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
-    self
-      .pending
-      .settle_and_pump(rt, context, &self.log, "fetch", request_id, result_wire, |ctx, _, wire| {
-        let json = wire
-          .strip_prefix('J')
-          .ok_or_else(|| rquickjs::Exception::throw_message(ctx, "fetch: malformed host response"))?;
-        let value = ctx.json_parse(json)?;
-        let object = value
-          .as_object()
-          .cloned()
-          .ok_or_else(|| rquickjs::Exception::throw_message(ctx, "fetch: malformed host response"))?;
-        let body: Option<Object> = object.get("body")?;
-        let blob = match body {
-          Some(body) => mint_body(ctx, &body)?,
-          None => Value::new_null(ctx.clone()),
-        };
-        object.set("body", blob)?;
-        Ok(object.into_value())
-      });
+  pub fn settle(self: &Rc<Self>, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
+    self.pending.settle_and_pump(context, &self.log, "fetch", request_id, result_wire, |ctx, _, wire| {
+      let json = wire
+        .strip_prefix('J')
+        .ok_or_else(|| rquickjs::Exception::throw_message(ctx, "fetch: malformed host response"))?;
+      let value = ctx.json_parse(json)?;
+      let object = value
+        .as_object()
+        .cloned()
+        .ok_or_else(|| rquickjs::Exception::throw_message(ctx, "fetch: malformed host response"))?;
+      let body: Option<Object> = object.get("body")?;
+      let blob = match body {
+        Some(body) => mint_body(ctx, &body)?,
+        None => Value::new_null(ctx.clone()),
+      };
+      object.set("body", blob)?;
+      Ok(object.into_value())
+    });
   }
 }
 
 impl Dispose for FetchState {
   fn dispose(&self, context: &rquickjs::Context) {
-    context.with(|ctx| self.pending.dispose(&ctx));
+    enter_js(context, |ctx| self.pending.dispose(&ctx));
   }
 }
 

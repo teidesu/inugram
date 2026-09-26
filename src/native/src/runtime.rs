@@ -1,10 +1,11 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use rquickjs::{Ctx, Function, Persistent, Result as JsResult, Runtime, Value};
+use rquickjs::{qjs, Context, Ctx, Function, Persistent, Result as JsResult, Value};
 
 use crate::api::error;
 use crate::jni::is_caller_entry;
+use crate::sandbox::limits::fit_stack_limit;
 use crate::sandbox::registry::RequestIds;
 
 /// Selects the host response table; keep in sync with `QuickJs.SETTLE_*`.
@@ -64,21 +65,42 @@ impl PendingSettle {
   }
 }
 
-pub fn pump_jobs(rt: &Runtime, context: &rquickjs::Context, log: &dyn Fn(&str)) {
+/// Enters JS without rquickjs's runtime lock. The engine lease is the only exclusion, so the engine
+/// thread can lend its lease to a caller thread while it is parked in a call into Java; with the
+/// rquickjs lock held across that call, the borrower would deadlock on its first `with`.
+pub(crate) fn enter_js<R>(context: &Context, f: impl for<'js> FnOnce(Ctx<'js>) -> R) -> R {
+  fit_stack_limit(context);
+  // SAFETY: every caller holds the engine lease, and no code under it takes rquickjs's lock
+  let ctx = unsafe { Ctx::from_raw(context.as_raw()) };
+  f(ctx)
+}
+
+pub(crate) fn is_job_pending(context: &Context) -> bool {
+  // SAFETY: only reads the runtime's job list head, under the engine lease
+  unsafe { qjs::JS_IsJobPending(qjs::JS_GetRuntime(context.as_raw().as_ptr())) }
+}
+
+pub fn pump_jobs(context: &Context, log: &dyn Fn(&str)) {
   if is_caller_entry() {
     return;
   }
-  loop {
-    match rt.execute_pending_job() {
-      Ok(true) => continue,
-      Ok(false) => break,
-      Err(e) => {
-        log(&format!("unhandled error running microtask: {e:?}"));
+  enter_js(context, |ctx| {
+    loop {
+      let mut ran_in = std::mem::MaybeUninit::<*mut qjs::JSContext>::uninit();
+      // SAFETY: under the engine lease; `ran_in` is written whenever a job ran
+      let ran = unsafe { qjs::JS_ExecutePendingJob(qjs::JS_GetRuntime(ctx.as_raw().as_ptr()), ran_in.as_mut_ptr()) };
+      if ran == 0 {
+        break;
+      }
+      if ran < 0 {
+        // the job's exception stays pending on the context it ran in until taken
+        let thrown = ctx.catch();
+        log(&format!("unhandled error running microtask: {}", error::format_thrown(&ctx, &thrown)));
         break;
       }
     }
-  }
-  context.with(|ctx| error::report_rejections(&ctx));
+    error::report_rejections(&ctx);
+  })
 }
 
 /// State released by `nativeDestroy` before the runtime is destroyed.
@@ -159,7 +181,6 @@ impl<T: Parked> PendingTable<T> {
   #[allow(clippy::too_many_arguments)]
   pub(crate) fn settle_and_pump(
     &self,
-    rt: &Runtime,
     context: &rquickjs::Context,
     log: &crate::Log,
     what: &str,
@@ -167,12 +188,12 @@ impl<T: Parked> PendingTable<T> {
     wire: &str,
     decode: impl for<'js> FnOnce(&Ctx<'js>, &mut T, &str) -> JsResult<Value<'js>>,
   ) {
-    context.with(|ctx| {
+    enter_js(context, |ctx| {
       if let Err(why) = self.settle(&ctx, id, wire, false, decode) {
         log(&format!("{what}({id}) settle failed: {why}"));
       }
     });
-    pump_jobs(rt, context, log.as_ref());
+    pump_jobs(context, log.as_ref());
   }
 
   /// With `keep`, settles the promise but retains resources until a second response with the same

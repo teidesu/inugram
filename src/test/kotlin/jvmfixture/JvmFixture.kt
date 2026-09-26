@@ -121,6 +121,8 @@ class JvmFixture : JvmContract {
 
         @JvmStatic fun sum(a: Int, b: Int): Int = a + b
 
+        @JvmStatic fun runTask() = task!!.run()
+
         @JvmField val sharedHookCalls = java.util.concurrent.atomic.AtomicInteger()
 
         @JvmStatic fun computeHookSum(a: Int, b: Int): Int {

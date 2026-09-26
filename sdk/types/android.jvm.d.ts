@@ -188,10 +188,12 @@ declare namespace inu {
      * Wraps a JS function in a `java.lang.Runnable`, preserving its closure.
      * Runs synchronously on the calling thread; promise continuations run later on the plugin thread.
      *
-     * Recursive entry throws IllegalStateException. Busy or closed engines skip the callback.
+     * A call from the plugin thread through {@link inu.jvm} runs the callback nested. Entry from inside
+     * another of this plugin's callbacks on the same thread throws IllegalStateException. A stopped
+     * plugin, or another app thread holding the engine for over 2 s, skips the callback.
      * Do not wait synchronously for another thread that may call into the same plugin.
      *
-     * **Limits: 250 ms to acquire the engine.**
+     * **Limits: 2 s to acquire the engine.**
      */
     function runnable(callback: () => void): JavaObject
 

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use rquickjs::function::Opt;
-use rquickjs::{Array, Ctx, Exception, Function, Object, Result as JsResult, Runtime, Value};
+use rquickjs::{Array, Ctx, Exception, Function, Object, Result as JsResult, Value};
 
 use crate::api::error::PluginErrorCode;
 use crate::api::io::blob::{mint_owned_file, BlobState, BUILD_LIMIT_BYTES};
@@ -12,7 +12,7 @@ use crate::api::io::fs::FsState;
 use crate::api::io::staging::{SourceStager, StagedFile, StagedSource};
 use crate::api::tl::proxy::plain_wire_to_js;
 use crate::api::ui::{OP_PICK_FILE, OP_SAVE_FILE};
-use crate::runtime::{Parked, PendingTable};
+use crate::runtime::{enter_js, Parked, PendingTable};
 use crate::utils::arguments::{opt_bool, stringify_json};
 
 const MAX_ACCEPT_TYPES: usize = 32;
@@ -142,26 +142,18 @@ impl FilesState {
 
   /// A pick answers `J` and the copies it made, a save `B1` or `B0` for whether it happened, and
   /// either may answer an error wire instead.
-  pub fn settle(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
+  pub fn settle(self: &Rc<Self>, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
     self
       .pending
-      .settle_and_pump(
-        rt,
-        context,
-        &self.log,
-        "ui: files",
-        request_id,
-        result_wire,
-        |ctx, request, wire| match request {
-          FileRequest::Pick { multiple } => {
-            let json = wire
-              .strip_prefix('J')
-              .ok_or_else(|| Exception::throw_message(ctx, "pickFile: malformed host answer"))?;
-            self.picked(ctx, json, *multiple)
-          }
-          FileRequest::Save { .. } => plain_wire_to_js(ctx, wire),
-        },
-      );
+      .settle_and_pump(context, &self.log, "ui: files", request_id, result_wire, |ctx, request, wire| match request {
+        FileRequest::Pick { multiple } => {
+          let json = wire
+            .strip_prefix('J')
+            .ok_or_else(|| Exception::throw_message(ctx, "pickFile: malformed host answer"))?;
+          self.picked(ctx, json, *multiple)
+        }
+        FileRequest::Save { .. } => plain_wire_to_js(ctx, wire),
+      });
   }
 
   fn picked<'js>(&self, ctx: &Ctx<'js>, answer: &str, multiple: bool) -> JsResult<Value<'js>> {
@@ -198,7 +190,7 @@ impl FilesState {
 
 impl Dispose for FilesState {
   fn dispose(&self, context: &rquickjs::Context) {
-    context.with(|ctx| self.pending.dispose(&ctx));
+    enter_js(context, |ctx| self.pending.dispose(&ctx));
   }
 }
 

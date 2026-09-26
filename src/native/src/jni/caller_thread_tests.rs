@@ -39,3 +39,44 @@ fn closures_and_host_calls_follow_the_caller_thread() {
     });
   }
 }
+
+#[test]
+fn a_caller_thread_runs_js_while_the_engine_thread_is_parked_in_a_lent_call() {
+  let runtime = Runtime::new().unwrap();
+  let engine = Serialized::new(Context::full(&runtime).unwrap());
+  let lease = engine.enter(None).unwrap();
+  let context = &*lease as *const Context;
+  let slot = engine.clone();
+  let depth = "globalThis.depth = n => n === 0 ? 0 : 1 + depth(n - 1)";
+  crate::runtime::enter_js(&lease, |ctx| {
+    ctx.eval::<(), _>(depth).unwrap();
+    ctx
+      .globals()
+      .set(
+        "callJava",
+        Function::new(ctx.clone(), move || {
+          let (answer, _) = unsafe {
+            slot.lend(context, || {
+              thread::scope(|scope| {
+                scope
+                  .spawn(|| {
+                    let borrowed = slot.enter(Some(Duration::from_secs(5))).unwrap();
+                    crate::runtime::enter_js(&borrowed, |ctx| {
+                      ctx.eval::<i32, _>("globalThis.fromCaller = depth(50); fromCaller").unwrap()
+                    })
+                  })
+                  .join()
+                  .unwrap()
+              })
+            })
+          };
+          crate::sandbox::limits::fit_stack_limit(unsafe { &*context });
+          answer
+        })
+        .unwrap(),
+      )
+      .unwrap();
+    let got: Vec<i32> = ctx.eval("[callJava(), fromCaller, depth(50)]").unwrap();
+    assert_eq!(got, [50, 50, 50]);
+  });
+}

@@ -3,10 +3,11 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use rquickjs::{Array, Ctx, Exception, Function, Object, Persistent, Result as JsResult, Runtime, Value};
+use rquickjs::{Array, Ctx, Exception, Function, Object, Persistent, Result as JsResult, Value};
 
 use crate::api::error::{call_callback, format_exception, host_error_to_js, report_callback_error, PluginErrorCode};
 use crate::api::ui::icons::{opt_icon, Icon, RETAINED_VALUE_TAG};
+use crate::runtime::enter_js;
 use crate::runtime::pump_jobs;
 use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry, RequestIds};
 use crate::utils::arguments::{
@@ -712,12 +713,12 @@ impl UiState {
 }
 
 impl UiState {
-  pub fn render(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, page_id: i64) -> Option<String> {
+  pub fn render(self: &Rc<Self>, context: &rquickjs::Context, page_id: i64) -> Option<String> {
     if !self.pages.borrow().contains_key(&page_id) {
       (self.log)(&format!("ui: render({page_id}): no such page (already disposed?)"));
       return None;
     }
-    let out = context.with(|ctx| match self.try_render(&ctx, page_id) {
+    let out = enter_js(context, |ctx| match self.try_render(&ctx, page_id) {
       Ok(json) => Some(json),
       Err(rquickjs::Error::Exception) => {
         (self.log)(&crate::fault(format_args!("ui: render failed: {}", format_exception(&ctx))));
@@ -728,22 +729,15 @@ impl UiState {
         None
       }
     });
-    pump_jobs(rt, context, self.log.as_ref());
+    pump_jobs(context, self.log.as_ref());
     out
   }
 
-  pub fn dispatch_event(
-    self: &Rc<Self>,
-    rt: &Runtime,
-    context: &rquickjs::Context,
-    page_id: i64,
-    slot: u32,
-    arg_json: &str,
-  ) {
+  pub fn dispatch_event(self: &Rc<Self>, context: &rquickjs::Context, page_id: i64, slot: u32, arg_json: &str) {
     if self.lifecycle.is_unloading() {
       return;
     }
-    context.with(|ctx| {
+    enter_js(context, |ctx| {
       let found = {
         let pages = self.pages.borrow();
         pages
@@ -780,11 +774,11 @@ impl UiState {
         report_callback_error(&self.log, &ctx, "ui callback", e);
       }
     });
-    pump_jobs(rt, context, self.log.as_ref());
+    pump_jobs(context, self.log.as_ref());
   }
 
-  pub fn dispatch_menu_click(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, menu_id: i64, slot: i32) {
-    context.with(|ctx| {
+  pub fn dispatch_menu_click(self: &Rc<Self>, context: &rquickjs::Context, menu_id: i64, slot: i32) {
+    enter_js(context, |ctx| {
       let Some(callbacks) = self.menus.borrow_mut().remove(&menu_id) else {
         (self.log)(&format!("menuClick({menu_id}, {slot}): no such menu (already settled?)"));
         return;
@@ -799,11 +793,11 @@ impl UiState {
         }
       }
     });
-    pump_jobs(rt, context, self.log.as_ref());
+    pump_jobs(context, self.log.as_ref());
   }
 
-  pub fn close_page(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, page_id: i64) {
-    context.with(|ctx| {
+  pub fn close_page(self: &Rc<Self>, context: &rquickjs::Context, page_id: i64) {
+    enter_js(context, |ctx| {
       let (on_close, transient) = {
         let pages = self.pages.borrow();
         let Some(def) = pages.get(&page_id) else {
@@ -826,13 +820,13 @@ impl UiState {
         self.dispose_page(&ctx, page_id);
       }
     });
-    pump_jobs(rt, context, self.log.as_ref());
+    pump_jobs(context, self.log.as_ref());
   }
 }
 
 impl Dispose for UiState {
   fn dispose(&self, context: &rquickjs::Context) {
-    context.with(|_| {
+    enter_js(context, |_| {
       let pages = std::mem::take(&mut *self.pages.borrow_mut());
       drop(pages);
       let menus = std::mem::take(&mut *self.menus.borrow_mut());

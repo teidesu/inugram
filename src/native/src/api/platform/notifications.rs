@@ -1,11 +1,12 @@
 use crate::api::telegram::account::{account_slot, AccountState};
+use crate::runtime::enter_js;
 use crate::runtime::Dispose;
 use crate::utils::qjs::qjs_object_freeze;
 use std::cell::RefCell;
 use std::rc::Rc;
 
 use rquickjs::function::Args;
-use rquickjs::{Ctx, Function, Persistent, Result as JsResult, Runtime, Value};
+use rquickjs::{Ctx, Function, Persistent, Result as JsResult, Value};
 
 use crate::api::error::format_exception;
 use crate::api::error::{host_error_to_js, report_callback_error, PluginErrorCode};
@@ -191,7 +192,6 @@ impl NotificationState {
 impl NotificationState {
   pub fn dispatch(
     self: &Rc<Self>,
-    rt: &Runtime,
     context: &rquickjs::Context,
     callback_id: u32,
     name: &str,
@@ -201,7 +201,7 @@ impl NotificationState {
     if self.lifecycle.is_unloading() {
       return;
     }
-    context.with(|ctx| {
+    enter_js(context, |ctx| {
       let Some(delegate) = self.delegates.get(callback_id) else {
         return;
       };
@@ -232,13 +232,13 @@ impl NotificationState {
         report_callback_error(&self.log, &ctx, &format!("notification handler for '{name}'"), error);
       }
     });
-    pump_jobs(rt, context, self.log.as_ref());
+    pump_jobs(context, self.log.as_ref());
   }
 }
 
 impl Dispose for NotificationState {
   fn dispose(&self, context: &rquickjs::Context) {
-    context.with(|ctx| {
+    enter_js(context, |ctx| {
       for delegate in self.delegates.remove_matching(|_| true) {
         delegate.release(&ctx);
       }

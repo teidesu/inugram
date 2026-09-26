@@ -4,7 +4,7 @@ use crate::testing::harness::{catch_json, eval_json, eval_unit as eval};
 
 #[test]
 fn unload_callbacks_run_in_order_and_survive_throws() {
-  let (rt, ctx, _host, state, _dialogs, logs) = setup(&[]);
+  let (_rt, ctx, _host, state, _dialogs, logs) = setup(&[]);
   eval(
     &ctx,
     r#"
@@ -15,7 +15,7 @@ fn unload_callbacks_run_in_order_and_survive_throws() {
     "#,
   );
 
-  state.notify_unload(&rt, &ctx);
+  state.notify_unload(&ctx);
   assert_eq!(eval_json(&ctx, "__ran"), "[1,3]");
   let entry = logs.borrow().iter().find(|l| l.contains("bye-boom")).cloned().expect("no diagnostic for the throw");
   assert_eq!(crate::classify_log(&entry).0, crate::LEVEL_FAULT, "a throwing onUnload must disable the plugin");
@@ -23,7 +23,7 @@ fn unload_callbacks_run_in_order_and_survive_throws() {
 
 #[test]
 fn unload_registrations_stack_and_a_disposer_drops_one() {
-  let (rt, ctx, _host, state, _dialogs, _logs) = setup(&[]);
+  let (_rt, ctx, _host, state, _dialogs, _logs) = setup(&[]);
   eval(
     &ctx,
     r#"
@@ -37,13 +37,13 @@ fn unload_registrations_stack_and_a_disposer_drops_one() {
   );
   assert_eq!(state.unload_fns.len(), 2);
 
-  state.notify_unload(&rt, &ctx);
+  state.notify_unload(&ctx);
   assert_eq!(eval_json(&ctx, "__ran"), "[1,3]");
 }
 
 #[test]
 fn an_unload_callback_disposed_mid_notify_still_runs_and_a_new_one_never_does() {
-  let (rt, ctx, _host, state, _dialogs, _logs) = setup(&[]);
+  let (_rt, ctx, _host, state, _dialogs, _logs) = setup(&[]);
   eval(
     &ctx,
     r#"
@@ -57,7 +57,7 @@ fn an_unload_callback_disposed_mid_notify_still_runs_and_a_new_one_never_does() 
     "#,
   );
 
-  state.notify_unload(&rt, &ctx);
+  state.notify_unload(&ctx);
   assert_eq!(eval_json(&ctx, "__ran"), r#"["first","second"]"#);
   assert_eq!(
     eval_json(&ctx, "__late"),
@@ -71,7 +71,7 @@ fn an_unload_callback_disposed_mid_notify_still_runs_and_a_new_one_never_does() 
 /// stretch of being backgrounded arrive in the order the activities did them
 #[test]
 fn visibility_fires_on_transitions_only_for_both_pairs() {
-  let (rt, ctx, _host, state, _dialogs, _logs) = setup(&["onAppVisibilityChange"]);
+  let (_rt, ctx, _host, state, _dialogs, _logs) = setup(&["onAppVisibilityChange"]);
   eval(&ctx, "globalThis.__modes = []; inu.onAppVisibilityChange(mode => { __modes.push(mode); });");
 
   for mode in [
@@ -84,25 +84,25 @@ fn visibility_fires_on_transitions_only_for_both_pairs() {
     AppMode::Resumed,
     AppMode::Resumed,
   ] {
-    state.app_visibility_changed(&rt, &ctx, mode);
+    state.app_visibility_changed(&ctx, mode);
   }
   assert_eq!(eval_json(&ctx, "__modes"), r#"["paused","background","foreground","resumed"]"#);
 }
 
 #[test]
 fn visibility_without_the_grant_throws_and_registers_nothing() {
-  let (rt, ctx, _host, state, _dialogs, _logs) = setup(&[]);
+  let (_rt, ctx, _host, state, _dialogs, _logs) = setup(&[]);
   assert_eq!(
     catch_json(&ctx, "inu.onAppVisibilityChange(() => {})"),
     r#"[true,"not-granted","onAppVisibilityChange","missing grant: onAppVisibilityChange"]"#
   );
   assert!(state.visibility_fns.is_empty());
-  state.app_visibility_changed(&rt, &ctx, AppMode::Background);
+  state.app_visibility_changed(&ctx, AppMode::Background);
 }
 
 #[test]
 fn a_throwing_visibility_callback_is_logged_and_the_rest_still_run() {
-  let (rt, ctx, _host, state, _dialogs, logs) = setup(&["onAppVisibilityChange"]);
+  let (_rt, ctx, _host, state, _dialogs, logs) = setup(&["onAppVisibilityChange"]);
   eval(
     &ctx,
     r#"
@@ -112,7 +112,7 @@ fn a_throwing_visibility_callback_is_logged_and_the_rest_still_run() {
     "#,
   );
 
-  state.app_visibility_changed(&rt, &ctx, AppMode::Background);
+  state.app_visibility_changed(&ctx, AppMode::Background);
   assert_eq!(eval_json(&ctx, "__ran"), r#"["second"]"#);
   let entry = logs.borrow().iter().find(|l| l.contains("vis-boom")).cloned().expect("no diagnostic for the throw");
   assert_eq!(
@@ -122,30 +122,30 @@ fn a_throwing_visibility_callback_is_logged_and_the_rest_still_run() {
   );
 
   eval(&ctx, "__d(); __d();");
-  state.app_visibility_changed(&rt, &ctx, AppMode::Foreground);
+  state.app_visibility_changed(&ctx, AppMode::Foreground);
   assert_eq!(eval_json(&ctx, "__ran"), r#"["second"]"#, "a disposed registration hears nothing more");
 }
 
 #[test]
 fn unload_waits_for_returned_promises_without_holding_the_engine() {
-  let (rt, ctx, _host, state, _dialogs, _logs) = setup(&[]);
+  let (_rt, ctx, _host, state, _dialogs, _logs) = setup(&[]);
   eval(&ctx, "inu.onUnload(() => new Promise(resolve => globalThis.finishUnload = resolve));");
-  state.notify_unload(&rt, &ctx);
-  assert!(!state.poll_unload(&rt, &ctx));
+  state.notify_unload(&ctx);
+  assert!(!state.poll_unload(&ctx));
   eval(&ctx, "finishUnload()");
-  assert!(state.poll_unload(&rt, &ctx));
+  assert!(state.poll_unload(&ctx));
   assert!(!state.lifecycle.is_cleaning_up());
 }
 
 #[test]
 fn unload_rejections_are_reported_and_do_not_skip_other_handlers() {
-  let (rt, ctx, _host, state, _dialogs, logs) = setup(&[]);
+  let (_rt, ctx, _host, state, _dialogs, logs) = setup(&[]);
   eval(
     &ctx,
     "globalThis.ran = false; inu.onUnload(async () => { throw Error('async cleanup failed') }); inu.onUnload(async () => { ran = true });",
   );
-  state.notify_unload(&rt, &ctx);
-  assert!(state.poll_unload(&rt, &ctx));
+  state.notify_unload(&ctx);
+  assert!(state.poll_unload(&ctx));
   assert_eq!(eval_json(&ctx, "ran"), "true");
   assert!(logs
     .borrow()
@@ -155,26 +155,26 @@ fn unload_rejections_are_reported_and_do_not_skip_other_handlers() {
 
 #[test]
 fn unload_notification_is_idempotent_and_timeout_ends_cleanup() {
-  let (rt, ctx, _host, state, _dialogs, logs) = setup(&[]);
+  let (_rt, ctx, _host, state, _dialogs, logs) = setup(&[]);
   eval(&ctx, "globalThis.count = 0; inu.onUnload(() => { count++; return new Promise(() => {}) });");
-  state.notify_unload(&rt, &ctx);
-  state.notify_unload(&rt, &ctx);
-  assert!(!state.poll_unload(&rt, &ctx));
+  state.notify_unload(&ctx);
+  state.notify_unload(&ctx);
+  assert!(!state.poll_unload(&ctx));
   std::thread::sleep(std::time::Duration::from_millis(2010));
-  assert!(state.poll_unload(&rt, &ctx));
-  assert!(state.poll_unload(&rt, &ctx));
+  assert!(state.poll_unload(&ctx));
+  assert!(state.poll_unload(&ctx));
   assert_eq!(eval_json(&ctx, "count"), "1");
   assert_eq!(logs.borrow().iter().filter(|message| message.contains("cleanup timed out")).count(), 1);
 }
 
 #[test]
 fn visibility_events_do_not_reenter_a_plugin_during_cleanup() {
-  let (rt, ctx, _host, state, _dialogs, _logs) = setup(&["onAppVisibilityChange"]);
+  let (_rt, ctx, _host, state, _dialogs, _logs) = setup(&["onAppVisibilityChange"]);
   eval(
     &ctx,
     "globalThis.calls = 0; inu.onAppVisibilityChange(() => calls++); inu.onUnload(() => new Promise(() => {}));",
   );
-  state.notify_unload(&rt, &ctx);
-  state.app_visibility_changed(&rt, &ctx, AppMode::Background);
+  state.notify_unload(&ctx);
+  state.app_visibility_changed(&ctx, AppMode::Background);
   assert_eq!(eval_json(&ctx, "calls"), "0");
 }

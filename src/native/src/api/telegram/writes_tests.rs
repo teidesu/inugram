@@ -329,11 +329,11 @@ fn settle(rt: &Runtime, ctx: &Context, state: &Rc<WritesState>, host: &Rc<TestWr
       // terminal [11,11] can only have come from `finish` and an `abandon` in its place
       // leaves the plugin on the 8/11 the window was withholding
       for chunk in 1..=4 {
-        state.report_progress(rt, ctx, request_id, chunk * total / 5, total);
+        state.report_progress(ctx, request_id, chunk * total / 5, total);
       }
     }
     let wire = host.answer(op, &arg, &values);
-    state.settle(rt, ctx, request_id, &wire);
+    state.settle(ctx, request_id, &wire);
   }
   panic!("the host queue never drained");
 }
@@ -640,13 +640,13 @@ fn setup_send(grants: &[&str]) -> SendFixture {
 const A_SEND: &str = r#"{"_":"messages.sendMessage","peer":{"_":"inputPeerUser","user_id":"7","access_hash":"3"},"message":"hi","random_id":"1"}"#;
 
 fn run_one_send(fixture: &SendFixture, middleware: &str) -> Option<String> {
-  let (rt, ctx, host, rpc, _reads, _accounts) = fixture;
+  let (_rt, ctx, host, rpc, _reads, _accounts) = fixture;
   ctx.with(|ctx| {
     ctx.globals().set("__out", rquickjs::Array::new(ctx.clone()).unwrap()).unwrap();
     ctx.eval::<(), _>(format!("inu.interceptSendMessage({middleware})")).unwrap();
   });
   let callback_id = host.registered.borrow().last().expect("the middleware never registered").1;
-  rpc.dispatch(rt, ctx, callback_id, 1, "messages.sendMessage", 0, &format!("J{A_SEND}"));
+  rpc.dispatch(ctx, callback_id, 1, "messages.sendMessage", 0, &format!("J{A_SEND}"));
   host.next_calls.borrow().first().map(|(_, wire)| wire.clone())
 }
 

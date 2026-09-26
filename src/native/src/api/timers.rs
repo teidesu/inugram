@@ -5,9 +5,10 @@ use std::sync::OnceLock;
 use std::time::Instant;
 
 use rquickjs::function::Opt;
-use rquickjs::{Coerced, Ctx, Exception, Function, Persistent, Result as JsResult, Runtime, Value};
+use rquickjs::{Coerced, Ctx, Exception, Function, Persistent, Result as JsResult, Value};
 
 use crate::api::error::{call_callback, PluginErrorCode};
+use crate::runtime::enter_js;
 use crate::runtime::pump_jobs;
 use crate::sandbox::registry::{Lifecycle, Registry};
 
@@ -222,9 +223,9 @@ impl TimerState {
     self.sync_wake();
   }
 
-  pub fn run_due(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context) {
+  pub fn run_due(self: &Rc<Self>, context: &rquickjs::Context) {
     self.armed.set(None);
-    context.with(|ctx| {
+    enter_js(context, |ctx| {
       if self.lifecycle.is_unloading() {
         self.release_all(&ctx);
         return;
@@ -256,13 +257,13 @@ impl TimerState {
       }
     });
     self.sync_wake();
-    pump_jobs(rt, context, self.log.as_ref());
+    pump_jobs(context, self.log.as_ref());
   }
 }
 
 impl Dispose for TimerState {
   fn dispose(&self, context: &rquickjs::Context) {
-    context.with(|ctx| self.release_all(&ctx));
+    enter_js(context, |ctx| self.release_all(&ctx));
     self.sync_wake();
   }
 }

@@ -2,10 +2,11 @@ use crate::runtime::Dispose;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use rquickjs::{Array, Ctx, Function, Object, Persistent, Result as JsResult, Runtime, Value};
+use rquickjs::{Array, Ctx, Function, Object, Persistent, Result as JsResult, Value};
 
 use crate::api::error::{call_callback, describe_js_error};
 use crate::api::telegram::account::{self, AccountState};
+use crate::runtime::enter_js;
 use crate::runtime::pump_jobs;
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{CallbackRegistry, Lifecycle};
@@ -141,20 +142,14 @@ impl ScreenState {
 }
 
 impl ScreenState {
-  pub fn dispatch_change(
-    self: &Rc<Self>,
-    rt: &Runtime,
-    context: &rquickjs::Context,
-    change_json: &str,
-    stack_json: &str,
-  ) {
+  pub fn dispatch_change(self: &Rc<Self>, context: &rquickjs::Context, change_json: &str, stack_json: &str) {
     if self.lifecycle.is_unloading() {
       return;
     }
     if self.changed_fns.is_empty() {
       return;
     }
-    context.with(|ctx| {
+    enter_js(context, |ctx| {
       let event = match self.build_event(&ctx, change_json, stack_json) {
         Ok(event) => event,
         Err(e) => {
@@ -166,13 +161,13 @@ impl ScreenState {
         call_callback(&ctx, &self.log, "onScreenChanged callback", &f, (event.clone(),));
       }
     });
-    pump_jobs(rt, context, self.log.as_ref());
+    pump_jobs(context, self.log.as_ref());
   }
 }
 
 impl Dispose for ScreenState {
   fn dispose(&self, context: &rquickjs::Context) {
-    context.with(|ctx| {
+    enter_js(context, |ctx| {
       self.changed_fns.release_all(&ctx);
       if let Some(factory) = self.event_factory.borrow_mut().take() {
         let _ = factory.restore(&ctx);

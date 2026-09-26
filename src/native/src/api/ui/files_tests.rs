@@ -3,7 +3,7 @@ use crate::{
   testing::harness::DisposeOnDrop,
   testing::harness::{install_sandbox_globals, TestDir},
 };
-use rquickjs::Context;
+use rquickjs::{Context, Runtime};
 use std::cell::RefCell;
 
 #[derive(Default)]
@@ -87,7 +87,7 @@ fn asked(f: &Fixture) -> (i32, i64, String) {
 }
 
 fn answer(f: &Fixture, request_id: i64, wire: &str) {
-  f._state.settle(&f._rt, &f.ctx, request_id, wire);
+  f._state.settle(&f.ctx, request_id, wire);
 }
 
 fn settled(f: &Fixture) -> String {

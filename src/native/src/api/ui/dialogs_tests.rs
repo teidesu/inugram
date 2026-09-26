@@ -135,7 +135,7 @@ fn dialog_input_text_crosses_as_text_plus_entities() {
 
 #[test]
 fn dialog_resolves_with_user_action() {
-  let (rt, ctx, host, _lifecycle, state, _logs) = setup(&[]);
+  let (_rt, ctx, host, _lifecycle, state, _logs) = setup(&[]);
   ctx.with(|ctx| {
     ctx
       .eval::<(), _>(
@@ -152,7 +152,7 @@ fn dialog_resolves_with_user_action() {
   let request_id = dialogs[0].0;
   drop(dialogs);
 
-  state.settle(&rt, &ctx, request_id, "Spositive");
+  state.settle(&ctx, request_id, "Spositive");
   let result: String = ctx.with(|ctx| ctx.eval("globalThis.__result").unwrap());
   assert_eq!(result, "positive");
 }
@@ -185,7 +185,7 @@ fn dialog_body_is_refused_rather_than_silently_dropped() {
 
 #[test]
 fn a_host_that_cannot_show_a_modal_rejects_it() {
-  let (rt, ctx, host, _lifecycle, state, _logs) = setup(&[]);
+  let (_rt, ctx, host, _lifecycle, state, _logs) = setup(&[]);
   *host.fail_dialog.borrow_mut() = Some("no dialog".to_string());
   *host.fail_chooser.borrow_mut() = Some("no chooser".to_string());
   ctx.with(|ctx| {
@@ -199,7 +199,7 @@ fn a_host_that_cannot_show_a_modal_rejects_it() {
       )
       .unwrap();
   });
-  pump_jobs(&rt, &ctx, &|_| {});
+  pump_jobs(&ctx, &|_| {});
   let errs: String = crate::testing::harness::eval_json(&ctx, "globalThis.__errs");
   assert_eq!(errs, r#"["no dialog","no chooser"]"#);
   assert!(state.pending.is_empty());
@@ -239,7 +239,7 @@ fn chooser_serializes_one_shape_for_both_modes() {
 
 #[test]
 fn chooser_resolves_an_index_a_list_or_null_by_mode() {
-  let (rt, ctx, host, _lifecycle, state, _logs) = setup(&[]);
+  let (_rt, ctx, host, _lifecycle, state, _logs) = setup(&[]);
   ctx.with(|ctx| {
     ctx
       .eval::<(), _>(
@@ -257,16 +257,16 @@ fn chooser_resolves_an_index_a_list_or_null_by_mode() {
   let ids: Vec<i64> = host.choosers.borrow().iter().map(|(id, _)| *id).collect();
   assert_eq!(ids.len(), 4);
 
-  state.settle(&rt, &ctx, ids[0], "J[2]");
-  state.settle(&rt, &ctx, ids[1], "J[0,2]");
-  state.settle(&rt, &ctx, ids[2], "N");
-  state.settle(&rt, &ctx, ids[3], "J[]");
+  state.settle(&ctx, ids[0], "J[2]");
+  state.settle(&ctx, ids[1], "J[0,2]");
+  state.settle(&ctx, ids[2], "N");
+  state.settle(&ctx, ids[3], "J[]");
 
   let results: String = crate::testing::harness::eval_json(&ctx, "globalThis.__results");
   assert_eq!(results, r#"[["single",2],["multi",[0,2]],["dismissed",null],["none",[]]]"#);
   assert!(state.pending.is_empty());
 
-  state.settle(&rt, &ctx, ids[0], "J[1]");
+  state.settle(&ctx, ids[0], "J[1]");
   let unchanged: String = crate::testing::harness::eval_json(&ctx, "globalThis.__results.length");
   assert_eq!(unchanged, "4");
 }
@@ -302,7 +302,7 @@ fn chooser_validates_its_options_eagerly() {
 
 #[test]
 fn prompt_resolves_with_text_and_null() {
-  let (rt, ctx, host, _lifecycle, state, _logs) = setup(&[]);
+  let (_rt, ctx, host, _lifecycle, state, _logs) = setup(&[]);
   ctx.with(|ctx| {
     ctx
       .eval::<(), _>(
@@ -319,8 +319,8 @@ fn prompt_resolves_with_text_and_null() {
   assert_eq!(prompts.len(), 2);
   assert_eq!(prompts[0].1, r#"{"title":"Name?","hint":"h","value":"v","selectAll":true}"#);
 
-  state.settle(&rt, &ctx, prompts[0].0, "Salice");
-  state.settle(&rt, &ctx, prompts[1].0, "N");
+  state.settle(&ctx, prompts[0].0, "Salice");
+  state.settle(&ctx, prompts[1].0, "N");
   let results: String = crate::testing::harness::eval_json(&ctx, "globalThis.__results");
   assert_eq!(results, r#"["alice",null]"#);
   assert!(state.pending.is_empty());
@@ -330,7 +330,7 @@ fn prompt_resolves_with_text_and_null() {
 /// promise, and malformed responses must reject instead of leaving it pending.
 #[test]
 fn a_modal_answer_that_is_an_error_or_unreadable_rejects() {
-  let (rt, ctx, host, _lifecycle, state, _logs) = setup(&[]);
+  let (_rt, ctx, host, _lifecycle, state, _logs) = setup(&[]);
   ctx.with(|ctx| {
     ctx
       .eval::<(), _>(
@@ -345,9 +345,9 @@ fn a_modal_answer_that_is_an_error_or_unreadable_rejects() {
       .unwrap();
   });
   let (dialog, prompt, chooser) = (host.dialogs.borrow()[0].0, host.prompts.borrow()[0].0, host.choosers.borrow()[0].0);
-  state.settle(&rt, &ctx, dialog, "Punsupported\n\n\n\nno screen");
-  state.settle(&rt, &ctx, prompt, "Zgarbage");
-  state.settle(&rt, &ctx, chooser, "J[not json");
+  state.settle(&ctx, dialog, "Punsupported\n\n\n\nno screen");
+  state.settle(&ctx, prompt, "Zgarbage");
+  state.settle(&ctx, chooser, "J[not json");
   let results: String = crate::testing::harness::eval_json(&ctx, "globalThis.__results");
   assert_eq!(results, r#"[["dialog","unsupported"],["prompt","Error"],["chooser","SyntaxError"]]"#);
   assert!(state.pending.is_empty());

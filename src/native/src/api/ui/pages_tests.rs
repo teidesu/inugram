@@ -1,6 +1,6 @@
 use super::*;
 use crate::testing::harness::{eval_json, eval_unit as eval};
-use rquickjs::Context;
+use rquickjs::{Context, Runtime};
 
 #[derive(Default)]
 struct TestUiHost {
@@ -105,9 +105,9 @@ fn build_full_page(ctx: &Context, host: &Rc<TestUiHost>) -> i64 {
 
 #[test]
 fn full_page_render_serializes_every_element() {
-  let (rt, ctx, host, state, logs) = setup();
+  let (_rt, ctx, host, state, logs) = setup();
   let page_id = build_full_page(&ctx, &host);
-  let json = state.render(&rt, &ctx, page_id).expect("render failed");
+  let json = state.render(&ctx, page_id).expect("render failed");
   assert_eq!(
     json,
     r#"{"title":"Test page","items":[{"type":"header","key":"t:header:General#1","text":"General"},{"type":"check","key":"t:check:Toggle#1","text":"Toggle","subtitle":"sub","checked":false,"onChange":1},{"type":"button","key":"t:button:Do it#1","text":"Do it","value":"now","danger":true,"onClick":2,"onSecondaryClick":3},{"type":"select","key":"t:select:Mode#1","text":"Mode","items":[{"text":"a"},{"text":"b","subtitle":"bee"}],"selected":0,"dialog":true,"onChange":4},{"type":"slider","key":"t:slider:Speed#1","text":"Speed","min":0,"max":2,"step":1,"value":1,"default":1,"labels":["0x","1x","2x"],"onChange":5},{"type":"separator","key":"t:separator:the end#1","text":"the end"}],"bottomButton":{"key":"b","text":"Save","onClick":6}}"#,
@@ -117,7 +117,7 @@ fn full_page_render_serializes_every_element() {
 
 #[test]
 fn input_text_renders_entities_beside_the_plain_text() {
-  let (rt, ctx, host, state, _logs) = setup();
+  let (_rt, ctx, host, state, _logs) = setup();
   ctx.with(|ctx| {
     ctx
       .eval::<(), _>(
@@ -139,7 +139,7 @@ fn input_text_renders_entities_beside_the_plain_text() {
       .unwrap();
   });
   let page_id = *host.registered.borrow().last().unwrap();
-  let json = state.render(&rt, &ctx, page_id).expect("render failed");
+  let json = state.render(&ctx, page_id).expect("render failed");
   assert_eq!(
     json,
     r#"{"title":"Test page","items":[{"type":"button","key":"t:button:Do it#1","text":"Do it","subtitle":"sub","value":"now","textEntities":[{"_":"messageEntityBold","offset":0,"length":2}],"subtitleEntities":[{"_":"messageEntityBold","offset":1,"length":1}],"danger":false,"onClick":1},{"type":"select","key":"t:select:Mode#1","text":"Mode","textEntities":[{"_":"messageEntityBold","offset":0,"length":4}],"items":[{"text":"a"}],"selected":0,"dialog":false,"onChange":2},{"type":"separator","key":"t:separator:the end#1","text":"the end","textEntities":[{"_":"messageEntityBold","offset":4,"length":3}]}]}"#,
@@ -171,31 +171,31 @@ fn check_refuses_input_text() {
 
 #[test]
 fn events_update_state_and_rerender_uses_fresh_slots() {
-  let (rt, ctx, host, state, _logs) = setup();
+  let (_rt, ctx, host, state, _logs) = setup();
   let page_id = build_full_page(&ctx, &host);
-  state.render(&rt, &ctx, page_id).unwrap();
+  state.render(&ctx, page_id).unwrap();
 
-  state.dispatch_event(&rt, &ctx, page_id, 1, "true");
-  state.dispatch_event(&rt, &ctx, page_id, 4, "1");
-  state.dispatch_event(&rt, &ctx, page_id, 2, "");
-  state.dispatch_event(&rt, &ctx, page_id, 6, "");
+  state.dispatch_event(&ctx, page_id, 1, "true");
+  state.dispatch_event(&ctx, page_id, 4, "1");
+  state.dispatch_event(&ctx, page_id, 2, "");
+  state.dispatch_event(&ctx, page_id, 6, "");
 
   let snapshot: String = eval_json(&ctx, "[__state.on, __state.sel, __state.log]");
   assert_eq!(snapshot, r#"[true,1,["click","save"]]"#);
 
-  let json = state.render(&rt, &ctx, page_id).unwrap();
+  let json = state.render(&ctx, page_id).unwrap();
   assert!(json.contains(r#""checked":true"#));
   assert!(json.contains(r#""selected":1"#));
   assert!(json.contains(r#""onChange":7"#), "slots must not restart: {json}");
 
-  state.dispatch_event(&rt, &ctx, page_id, 1, "false");
+  state.dispatch_event(&ctx, page_id, 1, "false");
   let unchanged: bool = ctx.with(|ctx| ctx.eval("__state.on === true").unwrap());
   assert!(unchanged);
 }
 
 #[test]
 fn the_anchor_opens_a_menu_over_its_own_row_and_a_click_dispatches() {
-  let (rt, ctx, host, state, _logs) = setup();
+  let (_rt, ctx, host, state, _logs) = setup();
   eval(
     &ctx,
     r#"
@@ -216,8 +216,8 @@ fn the_anchor_opens_a_menu_over_its_own_row_and_a_click_dispatches() {
   );
 
   let page_id = *host.registered.borrow().last().unwrap();
-  state.render(&rt, &ctx, page_id).unwrap();
-  state.dispatch_event(&rt, &ctx, page_id, 2, "");
+  state.render(&ctx, page_id).unwrap();
+  state.dispatch_event(&ctx, page_id, 2, "");
   let (menu_id, anchor, items) = {
     let menus = host.menus.borrow();
     assert_eq!(menus[0].page_id, page_id);
@@ -226,12 +226,12 @@ fn the_anchor_opens_a_menu_over_its_own_row_and_a_click_dispatches() {
   assert_eq!(anchor, "i:menu-row#1", "the menu must name the row it was opened from");
   assert_eq!(items, r#"[{"text":"one","danger":false},{"text":"two","checked":true,"danger":true}]"#);
 
-  state.dispatch_menu_click(&rt, &ctx, menu_id, -1);
+  state.dispatch_menu_click(&ctx, menu_id, -1);
   assert!(state.menus.borrow().is_empty(), "a dismissed menu must release its callbacks");
 
-  state.dispatch_event(&rt, &ctx, page_id, 2, "");
+  state.dispatch_event(&ctx, page_id, 2, "");
   let menu_id = host.menus.borrow().last().unwrap().id;
-  state.dispatch_menu_click(&rt, &ctx, menu_id, 1);
+  state.dispatch_menu_click(&ctx, menu_id, 1);
   assert_eq!(eval_json(&ctx, "__picked"), "[0]", "a menu item's callback gets no anchor");
   assert!(state.menus.borrow().is_empty());
 }
@@ -240,7 +240,7 @@ fn the_anchor_opens_a_menu_over_its_own_row_and_a_click_dispatches() {
 /// before an awaited continuation resumes.
 #[test]
 fn an_anchor_outlives_the_render_that_minted_it() {
-  let (rt, ctx, host, state, logs) = setup();
+  let (_rt, ctx, host, state, logs) = setup();
   ctx.with(|ctx| {
     ctx
       .eval::<(), _>(
@@ -259,9 +259,9 @@ fn an_anchor_outlives_the_render_that_minted_it() {
       .unwrap();
   });
   let page_id = *host.registered.borrow().last().unwrap();
-  state.render(&rt, &ctx, page_id).unwrap();
-  state.dispatch_event(&rt, &ctx, page_id, 1, "true");
-  let json = state.render(&rt, &ctx, page_id).unwrap();
+  state.render(&ctx, page_id).unwrap();
+  state.dispatch_event(&ctx, page_id, 1, "true");
+  let json = state.render(&ctx, page_id).unwrap();
   assert!(json.contains(r#""onChange":2"#), "the re-render must reallocate slots: {json}");
 
   ctx.with(|ctx| {
@@ -275,7 +275,7 @@ fn an_anchor_outlives_the_render_that_minted_it() {
 
 #[test]
 fn an_anchor_whose_page_was_disposed_is_handle_expired() {
-  let (rt, ctx, host, state, _logs) = setup();
+  let (_rt, ctx, host, state, _logs) = setup();
   ctx.with(|ctx| {
     ctx
       .eval::<(), _>(
@@ -291,8 +291,8 @@ fn an_anchor_whose_page_was_disposed_is_handle_expired() {
       .unwrap();
   });
   let page_id = *host.registered.borrow().last().unwrap();
-  state.render(&rt, &ctx, page_id).unwrap();
-  state.dispatch_event(&rt, &ctx, page_id, 1, "");
+  state.render(&ctx, page_id).unwrap();
+  state.dispatch_event(&ctx, page_id, 1, "");
   assert_eq!(host.menus.borrow().len(), 0);
 
   let outcome: String = ctx.with(|ctx| {
@@ -316,7 +316,7 @@ fn an_anchor_whose_page_was_disposed_is_handle_expired() {
 /// every callback position the contract declares an anchor for gets one, at the right index
 #[test]
 fn every_item_callback_is_handed_an_anchor() {
-  let (rt, ctx, host, state, _logs) = setup();
+  let (_rt, ctx, host, state, _logs) = setup();
   ctx.with(|ctx| {
     ctx
       .eval::<(), _>(
@@ -341,9 +341,9 @@ fn every_item_callback_is_handed_an_anchor() {
       .unwrap();
   });
   let page_id = *host.registered.borrow().last().unwrap();
-  state.render(&rt, &ctx, page_id).unwrap();
+  state.render(&ctx, page_id).unwrap();
   for (slot, arg) in [(1, "true"), (2, ""), (3, ""), (4, ""), (5, "1"), (6, ""), (7, "1"), (8, "")] {
-    state.dispatch_event(&rt, &ctx, page_id, slot, arg);
+    state.dispatch_event(&ctx, page_id, slot, arg);
   }
   let seen: String = eval_json(&ctx, "globalThis.__seen");
   assert_eq!(
@@ -354,7 +354,7 @@ fn every_item_callback_is_handed_an_anchor() {
 
 #[test]
 fn a_row_key_is_stable_across_renders_and_unique_within_one() {
-  let (rt, ctx, host, state, _logs) = setup();
+  let (_rt, ctx, host, state, _logs) = setup();
   ctx.with(|ctx| {
     ctx
       .eval::<(), _>(
@@ -374,7 +374,7 @@ fn a_row_key_is_stable_across_renders_and_unique_within_one() {
       .unwrap();
   });
   let page_id = *host.registered.borrow().last().unwrap();
-  let first = state.render(&rt, &ctx, page_id).unwrap();
+  let first = state.render(&ctx, page_id).unwrap();
   assert!(first.contains(r#""key":"t:separator:#1""#), "{first}");
   assert!(first.contains(r#""key":"t:separator:#2""#), "two textless separators must not collide: {first}");
   assert!(first.contains(r#""key":"i:act#1""#), "{first}");
@@ -383,22 +383,22 @@ fn a_row_key_is_stable_across_renders_and_unique_within_one() {
   ctx.with(|ctx| {
     ctx.eval::<(), _>("globalThis.__extra = true;").unwrap();
   });
-  let second = state.render(&rt, &ctx, page_id).unwrap();
+  let second = state.render(&ctx, page_id).unwrap();
   assert!(second.contains(r#""key":"i:act#1""#), "an explicit id is the row's identity: {second}");
   assert!(second.contains(r#""key":"t:header:Extra#1""#), "{second}");
 }
 
 #[test]
 fn rendering_a_page_the_engine_no_longer_has_is_an_error_not_a_fault() {
-  let (rt, ctx, host, state, logs) = setup();
+  let (_rt, ctx, host, state, logs) = setup();
   let page_id = build_full_page(&ctx, &host);
-  state.render(&rt, &ctx, page_id).unwrap();
+  state.render(&ctx, page_id).unwrap();
   ctx.with(|ctx| ctx.eval::<(), _>("globalThis.__page.dispose();").unwrap());
   logs.borrow_mut().clear();
 
   // the host still has the page on screen and asks for one more render: that is the app
   // naming a page the engine dropped, not the plugin throwing
-  assert!(state.render(&rt, &ctx, page_id).is_none());
+  assert!(state.render(&ctx, page_id).is_none());
   let entry = logs.borrow().first().cloned().expect("expected a logged diagnostic");
   assert_eq!(
     crate::classify_log(&entry).0,
@@ -457,7 +457,7 @@ fn open_screen_validates_and_reaches_host() {
 /// grant check used when it was minted.
 #[test]
 fn a_java_object_reaches_open_page_native_view_and_drawable_icon() {
-  let (rt, ctx) = crate::testing::harness::new_engine();
+  let (_rt, ctx) = crate::testing::harness::new_engine();
   let host = Rc::new(TestUiHost::default());
   let host_dyn: Rc<dyn UiHost> = host.clone();
   let log = crate::testing::harness::log_sink(&crate::testing::harness::Logs::new());
@@ -517,7 +517,7 @@ fn a_java_object_reaches_open_page_native_view_and_drawable_icon() {
       )
       .unwrap()
   });
-  let rendered = state.render(&rt, &ctx, page_id).unwrap();
+  let rendered = state.render(&ctx, page_id).unwrap();
   assert!(rendered.contains(r#""icon":"j"#), "{rendered}");
   assert_eq!(state.pages.borrow()[&page_id].retained_icon_values.borrow().len(), 1);
 
@@ -536,20 +536,20 @@ fn a_java_object_reaches_open_page_native_view_and_drawable_icon() {
 
 #[test]
 fn page_closed_fires_on_close_and_page_stays_reopenable() {
-  let (rt, ctx, host, state, _logs) = setup();
+  let (_rt, ctx, host, state, _logs) = setup();
   let page_id = build_full_page(&ctx, &host);
-  state.render(&rt, &ctx, page_id).unwrap();
+  state.render(&ctx, page_id).unwrap();
 
-  state.close_page(&rt, &ctx, page_id);
+  state.close_page(&ctx, page_id);
   let closed: bool = ctx.with(|ctx| ctx.eval("__state.log.includes('close')").unwrap());
   assert!(closed);
 
-  assert!(state.render(&rt, &ctx, page_id).is_some());
+  assert!(state.render(&ctx, page_id).is_some());
 }
 
 #[test]
 fn transient_page_auto_disposes_on_close_after_on_close_fires() {
-  let (rt, ctx, host, state, _logs) = setup();
+  let (_rt, ctx, host, state, _logs) = setup();
   ctx.with(|ctx| {
     ctx
       .eval::<(), _>(
@@ -567,14 +567,14 @@ fn transient_page_auto_disposes_on_close_after_on_close_fires() {
       .unwrap();
   });
   let page_id = *host.registered.borrow().last().unwrap();
-  state.render(&rt, &ctx, page_id).unwrap();
+  state.render(&ctx, page_id).unwrap();
 
-  state.close_page(&rt, &ctx, page_id);
+  state.close_page(&ctx, page_id);
   let closed: i32 = ctx.with(|ctx| ctx.eval("globalThis.__closed").unwrap());
   assert_eq!(closed, 1);
   assert!(state.pages.borrow().is_empty());
 
-  state.close_page(&rt, &ctx, page_id);
+  state.close_page(&ctx, page_id);
   let closed: i32 = ctx.with(|ctx| ctx.eval("globalThis.__closed").unwrap());
   assert_eq!(closed, 1);
 
@@ -596,7 +596,7 @@ fn transient_page_auto_disposes_on_close_after_on_close_fires() {
 
 #[test]
 fn throwing_items_fn_logs_and_returns_none() {
-  let (rt, ctx, host, state, logs) = setup();
+  let (_rt, ctx, host, state, logs) = setup();
   ctx.with(|ctx| {
     ctx
       .eval::<(), _>(
@@ -610,7 +610,7 @@ fn throwing_items_fn_logs_and_returns_none() {
       .unwrap();
   });
   let page_id = *host.registered.borrow().last().unwrap();
-  assert!(state.render(&rt, &ctx, page_id).is_none());
+  assert!(state.render(&ctx, page_id).is_none());
   let entry = logs.borrow().first().cloned().expect("expected a logged diagnostic");
   let (level, message) = crate::classify_log(&entry);
   assert_eq!(level, crate::LEVEL_FAULT, "a page whose render throws must disable the plugin");
@@ -619,7 +619,7 @@ fn throwing_items_fn_logs_and_returns_none() {
 
 #[test]
 fn a_throwing_page_callback_faults_where_a_stale_host_id_does_not() {
-  let (rt, ctx, host, state, logs) = setup();
+  let (_rt, ctx, host, state, logs) = setup();
   ctx.with(|ctx| {
     ctx
       .eval::<(), _>(
@@ -634,10 +634,10 @@ fn a_throwing_page_callback_faults_where_a_stale_host_id_does_not() {
       .unwrap();
   });
   let page_id = *host.registered.borrow().last().unwrap();
-  state.render(&rt, &ctx, page_id).expect("render failed");
+  state.render(&ctx, page_id).expect("render failed");
 
-  state.dispatch_event(&rt, &ctx, page_id, 1, "");
-  state.close_page(&rt, &ctx, page_id);
+  state.dispatch_event(&ctx, page_id, 1, "");
+  state.close_page(&ctx, page_id);
 
   let seen: Vec<(i32, String)> = logs
     .borrow()
@@ -656,7 +656,7 @@ fn a_throwing_page_callback_faults_where_a_stale_host_id_does_not() {
 
   // the host naming a menu the engine has already settled is a host bug; no plugin code ran
   logs.borrow_mut().clear();
-  state.dispatch_menu_click(&rt, &ctx, 4242, 0);
+  state.dispatch_menu_click(&ctx, 4242, 0);
   let entry = logs.borrow().first().cloned().expect("expected a logged diagnostic");
   assert_eq!(crate::classify_log(&entry).0, crate::LEVEL_ERROR, "got: {entry:?}");
 }
@@ -684,7 +684,7 @@ fn select_defaults_to_a_dialog_when_an_item_has_a_subtitle() {
 
 #[test]
 fn slider_label_cap_is_enforced_where_minted_and_where_rendered() {
-  let (rt, ctx, host, state, _logs) = setup();
+  let (_rt, ctx, host, state, _logs) = setup();
   let out: String = ctx.with(|ctx| {
     ctx
       .eval(format!(
@@ -719,7 +719,7 @@ fn slider_label_cap_is_enforced_where_minted_and_where_rendered() {
       .unwrap();
   });
   let page_id = *host.registered.borrow().last().unwrap();
-  assert!(state.render(&rt, &ctx, page_id).is_none(), "a forged element is refused too");
+  assert!(state.render(&ctx, page_id).is_none(), "a forged element is refused too");
 }
 
 #[test]
@@ -776,9 +776,9 @@ fn the_bundled_ui_test_plugin_passes() {
 
 #[test]
 fn dispose_with_open_everything_releases_roots() {
-  let (rt, ctx, host, state, _logs) = setup();
+  let (_rt, ctx, host, state, _logs) = setup();
   let page_id = build_full_page(&ctx, &host);
-  state.render(&rt, &ctx, page_id).unwrap();
+  state.render(&ctx, page_id).unwrap();
   ctx.with(|ctx| {
     ctx
       .eval::<(), _>(
@@ -792,8 +792,8 @@ fn dispose_with_open_everything_releases_roots() {
       .unwrap();
   });
   let page2 = *host.registered.borrow().last().unwrap();
-  state.render(&rt, &ctx, page2).unwrap();
-  state.dispatch_event(&rt, &ctx, page2, 1, "");
+  state.render(&ctx, page2).unwrap();
+  state.dispatch_event(&ctx, page2, 1, "");
   assert_eq!(state.menus.borrow().len(), 1);
 
   state.dispose(&ctx);

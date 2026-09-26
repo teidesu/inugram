@@ -532,7 +532,7 @@ fn pump(f: &Fixture) {
 /// answers the asynchronous op the host is holding, the way `nativeCanvasResult` does
 fn answer(f: &Fixture, wire: &str) {
   let request = f.host.pending.borrow_mut().pop().expect("nothing pending");
-  f.state.settle(&f._rt, &f.ctx, request, wire);
+  f.state.settle(&f.ctx, request, wire);
 }
 
 fn last_call(f: &Fixture, op: i32) -> String {
@@ -1386,7 +1386,7 @@ mod bundled_oracle {
             }
           }
         };
-        f.state.settle(&f._rt, &f.ctx, request, &wire);
+        f.state.settle(&f.ctx, request, &wire);
       }
     }
     panic!("the oracle never stopped waiting");
@@ -1694,12 +1694,12 @@ fn queued_encoder_frames_are_charged_until_consumed_after_an_early_ack() {
   run(&f, "globalThis.q = e.addFrame(c)");
   let request = *f.host.pending.borrow().last().unwrap();
   assert_eq!(f.state.external.charged_bytes(), baseline + 4 * 1024 * 1024);
-  f.state.settle(&f._rt, &f.ctx, request, "A");
+  f.state.settle(&f.ctx, request, "A");
   assert_eq!(settle(&f, "q"), "ok:undefined");
   assert_eq!(f.state.external.charged_bytes(), baseline + 4 * 1024 * 1024);
   answer(&f, "");
   assert_eq!(f.state.external.charged_bytes(), baseline);
-  f.state.settle(&f._rt, &f.ctx, request, "A");
+  f.state.settle(&f.ctx, request, "A");
   assert_eq!(f.state.external.charged_bytes(), baseline, "a late ack revived the frame");
 }
 
@@ -1741,7 +1741,7 @@ fn disposing_an_encoder_keeps_queued_pixels_charged_until_the_host_releases_them
   run(&f, "e.dispose()");
   assert_eq!(f.state.external.charged_bytes(), charged);
   let request = *f.host.pending.borrow().last().unwrap();
-  f.state.settle(&f._rt, &f.ctx, request, "APinternal\n\n\n\nclosed");
+  f.state.settle(&f.ctx, request, "APinternal\n\n\n\nclosed");
   assert_eq!(settle(&f, "q"), "internal:closed");
   assert_eq!(f.state.external.charged_bytes(), charged);
   answer(&f, "Pinternal\n\n\n\nclosed");
@@ -1778,7 +1778,7 @@ fn stopping_releases_early_acknowledged_frames() {
   open_encoder(&f, "{ width: 320, height: 240 }");
   run(&f, "globalThis.c = inu.canvas.create(320, 240); e.addFrame(c)");
   let request = *f.host.pending.borrow().last().unwrap();
-  f.state.settle(&f._rt, &f.ctx, request, "A");
+  f.state.settle(&f.ctx, request, "A");
   run(&f, "globalThis.e = null; globalThis.p = null; c.dispose()");
   f.state.dispose(&f.ctx);
   assert!(f.state.pending.is_empty());

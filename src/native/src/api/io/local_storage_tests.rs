@@ -397,7 +397,7 @@ const API_ORACLE: &str = crate::testing::test_plugin!("api-test.js");
 /// are driven here, so the count covers the whole file.
 #[test]
 fn the_bundled_api_test_plugin_passes() {
-  let (rt, ctx, host, lifecycle, dialogs, _logs) =
+  let (_rt, ctx, host, lifecycle, dialogs, _logs) =
     crate::testing::harness::setup_apis(&crate::testing::harness::manifest_grants(API_ORACLE));
   // `inu.ui` is one object two modules install into, and the oracle asserts on what the
   // *dialog* does with an element the other one builds
@@ -421,8 +421,8 @@ fn the_bundled_api_test_plugin_passes() {
   crate::testing::harness::eval_unit(&ctx, API_ORACLE);
 
   let request_id = host.dialogs.borrow().last().expect("a dialog was opened").0;
-  dialogs.settle(&rt, &ctx, request_id, "Spositive");
-  lifecycle.notify_unload(&rt, &ctx);
+  dialogs.settle(&ctx, request_id, "Spositive");
+  lifecycle.notify_unload(&ctx);
 
   let lines = lines.borrow().clone();
   crate::testing::harness::assert_oracle_exact(&lines, "api test done", 13);

@@ -1,6 +1,7 @@
 use super::*;
 use crate::sandbox::grants::CachedGrantHost;
 use crate::testing::harness::DisposeOnDrop;
+use rquickjs::Runtime;
 use std::cell::Cell;
 
 /// Deliberately dumb: which class, overload or scope is Kotlin's decision, pinned in `PluginJvmTest`.
@@ -351,10 +352,10 @@ fn a_runnable_fires_its_callback_when_the_host_says_java_ran_it() {
   let f = setup(&["unsafe.jvm"]);
   f.ctx
     .with(|ctx| ctx.eval::<(), _>("globalThis.ran = 0; inu.jvm.runnable(() => { globalThis.ran++ })").unwrap());
-  f.state.dispatch_callback(&f._rt, &f.ctx, 1);
-  f.state.dispatch_callback(&f._rt, &f.ctx, 1);
+  f.state.dispatch_callback(&f.ctx, 1);
+  f.state.dispatch_callback(&f.ctx, 1);
   assert_eq!(eval(&f, "ran"), "2");
-  f.state.dispatch_callback(&f._rt, &f.ctx, 99);
+  f.state.dispatch_callback(&f.ctx, 99);
   assert_eq!(eval(&f, "ran"), "2");
 }
 
@@ -364,7 +365,7 @@ fn a_runnable_made_during_unload_never_fires() {
   f.ctx.with(|ctx| ctx.eval::<(), _>("globalThis.ran = 0").unwrap());
   f.state.lifecycle.begin_unload();
   f.ctx.with(|ctx| ctx.eval::<(), _>("inu.jvm.runnable(() => { globalThis.ran++ })").unwrap());
-  f.state.dispatch_callback(&f._rt, &f.ctx, 1);
+  f.state.dispatch_callback(&f.ctx, 1);
   assert_eq!(eval(&f, "ran"), "0");
 }
 
@@ -372,7 +373,7 @@ fn a_runnable_made_during_unload_never_fires() {
 fn a_throwing_callback_is_the_plugins_fault() {
   let f = setup(&["unsafe.jvm"]);
   eval(&f, "inu.jvm.runnable(() => { throw new Error('boom') })");
-  f.state.dispatch_callback(&f._rt, &f.ctx, 1);
+  f.state.dispatch_callback(&f.ctx, 1);
   let logged = f.logs.borrow().clone();
   assert_eq!(logged.len(), 1, "{logged:?}");
   assert!(logged[0].starts_with('\u{1}'), "a plugin's own throw must reach the host as a fault: {logged:?}");

@@ -5,14 +5,14 @@ use std::rc::Rc;
 
 use rquickjs::function::{Constructor, Opt, This};
 use rquickjs::object::{Accessor, Property};
-use rquickjs::{Ctx, Exception, Function, Object, Persistent, Result as JsResult, Runtime, TypedArray, Value};
+use rquickjs::{Ctx, Exception, Function, Object, Persistent, Result as JsResult, TypedArray, Value};
 
 use crate::api::error::{
   self, call_callback, describe_js_error, error_value_to_string, format_thrown, PluginErrorCode,
 };
 use crate::api::telegram::account::{account_slot, dispatch_account, AccountState};
 use crate::api::tl::proxy::{self, TlViews, ViewLife};
-use crate::runtime::{pump_jobs, PendingSettle, PendingTable};
+use crate::runtime::{enter_js, pump_jobs, PendingSettle, PendingTable};
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle, Registry};
 use crate::utils::arguments::{opt_bool, stringify_json};
@@ -1077,33 +1077,30 @@ impl RpcState {
 }
 
 impl RpcState {
-  pub fn settle(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, invoke_id: i64, result_wire: &str) {
-    self
-      .invokes
-      .settle_and_pump(rt, context, &self.log, "invoke", invoke_id, result_wire, |ctx, _, wire| {
-        self.tl.wire_to_js_value(ctx, wire, ViewLife::Plugin)
-      });
+  pub fn settle(self: &Rc<Self>, context: &rquickjs::Context, invoke_id: i64, result_wire: &str) {
+    self.invokes.settle_and_pump(context, &self.log, "invoke", invoke_id, result_wire, |ctx, _, wire| {
+      self.tl.wire_to_js_value(ctx, wire, ViewLife::Plugin)
+    });
   }
 
-  pub fn settle_bytes(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context, invoke_id: i64, response: &[u8]) {
-    context.with(|ctx| {
+  pub fn settle_bytes(self: &Rc<Self>, context: &rquickjs::Context, invoke_id: i64, response: &[u8]) {
+    enter_js(context, |ctx| {
       let settled = self.invokes.settle_with(&ctx, invoke_id, false, |ctx, _| proxy::make_bytes_value(ctx, response));
       if let Err(why) = settled {
         (self.log)(&format!("invokeRaw({invoke_id}) settle failed: {why}"));
       }
     });
-    pump_jobs(rt, context, self.log.as_ref());
+    pump_jobs(context, self.log.as_ref());
   }
 
   pub fn dispatch_update(
     self: &Rc<Self>,
-    rt: &Runtime,
     context: &rquickjs::Context,
     type_name: &str,
     account_id: i32,
     update_wire: &str,
   ) {
-    context.with(|ctx| {
+    enter_js(context, |ctx| {
       let value = match self.tl.wire_to_js_value(&ctx, update_wire, ViewLife::Plugin) {
         Ok(v) => v,
         Err(e) => {
@@ -1134,13 +1131,12 @@ impl RpcState {
         call_callback(&ctx, &self.log, "onUpdate callback", &f, (value.clone(), account.clone()));
       }
     });
-    pump_jobs(rt, context, self.log.as_ref());
+    pump_jobs(context, self.log.as_ref());
   }
 
   #[allow(clippy::too_many_arguments)]
   pub fn dispatch_update_intercept(
     self: &Rc<Self>,
-    rt: &Runtime,
     context: &rquickjs::Context,
     callback_id: u32,
     dispatch_id: i64,
@@ -1148,7 +1144,7 @@ impl RpcState {
     account_id: i32,
     update_wire: &str,
   ) {
-    context.with(|ctx| {
+    enter_js(context, |ctx| {
       if let Err(e) =
         self.try_dispatch_update_intercept(&ctx, callback_id, dispatch_id, type_name, account_id, update_wire)
       {
@@ -1161,17 +1157,11 @@ impl RpcState {
         }
       }
     });
-    pump_jobs(rt, context, self.log.as_ref());
+    pump_jobs(context, self.log.as_ref());
   }
 
-  pub fn abandon_update_dispatch(
-    self: &Rc<Self>,
-    rt: &Runtime,
-    context: &rquickjs::Context,
-    dispatch_id: i64,
-    reason_wire: &str,
-  ) {
-    context.with(|ctx| {
+  pub fn abandon_update_dispatch(self: &Rc<Self>, context: &rquickjs::Context, dispatch_id: i64, reason_wire: &str) {
+    enter_js(context, |ctx| {
       if let Some(ustate) = self.remove_update_dispatch(dispatch_id) {
         ustate.settled.set(true);
         if let Err(e) = ustate.signal.abandon(&ctx, Abandon::from_wire(reason_wire)) {
@@ -1179,13 +1169,12 @@ impl RpcState {
         }
       }
     });
-    pump_jobs(rt, context, self.log.as_ref());
+    pump_jobs(context, self.log.as_ref());
   }
 
   #[allow(clippy::too_many_arguments)]
   pub fn dispatch(
     self: &Rc<Self>,
-    rt: &Runtime,
     context: &rquickjs::Context,
     callback_id: u32,
     dispatch_id: i64,
@@ -1193,7 +1182,7 @@ impl RpcState {
     account_id: i32,
     request_wire: &str,
   ) {
-    context.with(|ctx| {
+    enter_js(context, |ctx| {
       if let Err(e) = self.try_dispatch_rpc(&ctx, callback_id, dispatch_id, method, account_id, request_wire) {
         let msg = describe_js_error(&ctx, e);
         (self.log)(&format!("interceptRpc({method}) dispatch failed: {msg}"));
@@ -1205,17 +1194,11 @@ impl RpcState {
         }
       }
     });
-    pump_jobs(rt, context, self.log.as_ref());
+    pump_jobs(context, self.log.as_ref());
   }
 
-  pub fn complete_next(
-    self: &Rc<Self>,
-    rt: &Runtime,
-    context: &rquickjs::Context,
-    dispatch_id: i64,
-    result_wire: &str,
-  ) {
-    context.with(|ctx| {
+  pub fn complete_next(self: &Rc<Self>, context: &rquickjs::Context, dispatch_id: i64, result_wire: &str) {
+    enter_js(context, |ctx| {
       let dstate = match self.dispatches.borrow().get(&dispatch_id).cloned() {
         Some(d) => d,
         None => return,
@@ -1232,17 +1215,11 @@ impl RpcState {
         self.complete_dispatch(&ctx, &dstate, dispatch_id, result_wire);
       }
     });
-    pump_jobs(rt, context, self.log.as_ref());
+    pump_jobs(context, self.log.as_ref());
   }
 
-  pub fn abandon_dispatch(
-    self: &Rc<Self>,
-    rt: &Runtime,
-    context: &rquickjs::Context,
-    dispatch_id: i64,
-    reason_wire: &str,
-  ) {
-    context.with(|ctx| {
+  pub fn abandon_dispatch(self: &Rc<Self>, context: &rquickjs::Context, dispatch_id: i64, reason_wire: &str) {
+    enter_js(context, |ctx| {
       let removed = self.remove_dispatch(dispatch_id);
       let Some(dstate) = removed else { return };
       dstate.settled.set(true);
@@ -1258,13 +1235,13 @@ impl RpcState {
       }
       dstate.release(&ctx);
     });
-    pump_jobs(rt, context, self.log.as_ref());
+    pump_jobs(context, self.log.as_ref());
   }
 }
 
 impl Dispose for RpcState {
   fn dispose(&self, context: &rquickjs::Context) {
-    context.with(|ctx| {
+    enter_js(context, |ctx| {
       self.intercept_fns.release_all(&ctx);
       drop(self.update_fns.remove_matching(|_| true));
       drop(self.intercept_update_fns.remove_matching(|_| true));

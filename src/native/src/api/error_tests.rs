@@ -102,9 +102,9 @@ fn a_bare_host_message_keeps_its_leading_tag_letter() {
 
 #[test]
 fn a_reason_that_raises_while_being_formatted_leaves_nothing_pending() {
-  let (rt, ctx, logs, log) = setup_rejection_tracker();
+  let (_rt, ctx, logs, log) = setup_rejection_tracker();
   crate::testing::harness::eval_unit(&ctx, "Promise.reject(new Error('caught')).catch(() => {});");
-  crate::runtime::pump_jobs(&rt, &ctx, log.as_ref());
+  crate::runtime::pump_jobs(&ctx, log.as_ref());
   assert!(logs.borrow().is_empty(), "a caught rejection must not log, got: {:?}", logs.borrow());
 
   crate::testing::harness::eval_unit(
@@ -116,7 +116,7 @@ fn a_reason_that_raises_while_being_formatted_leaves_nothing_pending() {
       });
     "#,
   );
-  crate::runtime::pump_jobs(&rt, &ctx, log.as_ref());
+  crate::runtime::pump_jobs(&ctx, log.as_ref());
 
   assert!(!logs.borrow().is_empty(), "the rejection still has to be reported");
   // the tracker returns straight into quickjs, so a raise left pending here would surface at
@@ -141,11 +141,11 @@ fn setup_rejection_tracker() -> (Runtime, Context, std::sync::Arc<crate::testing
 
 #[test]
 fn a_rejection_made_on_another_thread_is_reported_by_the_next_pump() {
-  let (rt, ctx, logs, log) = setup_rejection_tracker();
+  let (_rt, ctx, logs, log) = setup_rejection_tracker();
   let caller = ctx.clone();
   std::thread::spawn(move || caller.with(|ctx| ctx.eval::<(), _>("Promise.reject(new Error('elsewhere'))").unwrap()))
     .join()
     .unwrap();
-  crate::runtime::pump_jobs(&rt, &ctx, log.as_ref());
+  crate::runtime::pump_jobs(&ctx, log.as_ref());
   assert!(logs.borrow().iter().any(|line| line.contains("elsewhere")), "got: {:?}", logs.borrow());
 }

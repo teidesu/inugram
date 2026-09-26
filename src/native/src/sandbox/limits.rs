@@ -2,7 +2,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use rquickjs::{Ctx, Result as JsResult, Runtime, Value};
+use rquickjs::{qjs, Context, Ctx, Result as JsResult, Runtime, Value};
 
 use crate::api::error::PluginErrorCode;
 
@@ -121,18 +121,35 @@ fn query_stack_low() -> Option<usize> {
   }
 }
 
-/// Fits quickjs's stack limit to the thread about to enter the runtime. quickjs measures from where
-/// the entry starts and defaults to 1 MB, which is more than an app thread entered part-way down
-/// its own 1 MB stack has left, so deep recursion would fault instead of throwing `RangeError`.
-/// Call before `Context::with`, which takes the lock this does.
-pub fn fit_stack_limit(rt: &Runtime) {
+/// Fits quickjs's stack limit to the calling thread. quickjs measures from the stack top it last
+/// recorded and defaults to 1 MB, which is more than an app thread entered part-way down its own
+/// 1 MB stack has left, so deep recursion would fault instead of throwing `RangeError`. The limit
+/// this sets is `low + margin` whatever the depth, so refitting on the same thread is idempotent.
+pub fn fit_stack_limit(context: &Context) {
+  // SAFETY: the context's runtime lives as long as the context; both calls only store numbers
+  let rt = unsafe { qjs::JS_GetRuntime(context.as_raw().as_ptr()) };
+  unsafe { qjs::JS_UpdateStackTop(rt) };
   let Some(low) = stack_low() else {
     return;
   };
   let here = 0u8;
   let left = (&here as *const u8 as usize).saturating_sub(low);
   // 0 would lift the limit altogether
-  rt.set_max_stack_size(left.saturating_sub(STACK_MARGIN_BYTES).max(1));
+  unsafe { qjs::JS_SetMaxStackSize(rt, left.saturating_sub(STACK_MARGIN_BYTES).max(1) as _) };
+}
+
+/// Runs `f` with no deadline armed on this thread, then restores the previous one pushed back by the
+/// extension `f` answers.
+pub(crate) fn suspend_deadline<R>(f: impl FnOnce() -> (R, Duration)) -> R {
+  let armed = ARMED.with(|a| a.take());
+  let (result, extension) = f();
+  ARMED.with(|a| {
+    a.set(armed.map(|mut armed| {
+      armed.deadline += extension;
+      armed
+    }))
+  });
+  result
 }
 
 pub const HEAP_LIMIT_BYTES: usize = 32 * 1024 * 1024;

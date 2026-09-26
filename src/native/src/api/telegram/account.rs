@@ -4,9 +4,10 @@ use std::rc::Rc;
 
 use rquickjs::function::Opt;
 use rquickjs::object::Property;
-use rquickjs::{Array, Ctx, Function, Object, Persistent, Result as JsResult, Runtime, Value};
+use rquickjs::{Array, Ctx, Function, Object, Persistent, Result as JsResult, Value};
 
 use crate::api::error::{call_callback, describe_js_error, PluginErrorCode};
+use crate::runtime::enter_js;
 use crate::runtime::pump_jobs;
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, resolve_disposer, CallbackRegistry, Lifecycle, Registry};
@@ -201,23 +202,23 @@ impl AccountState {
     }
   }
 
-  pub(crate) fn notify_unload(&self, rt: &Runtime, context: &rquickjs::Context) {
+  pub(crate) fn notify_unload(&self, context: &rquickjs::Context) {
     self.lifecycle.begin_unload();
-    context.with(|ctx| {
+    enter_js(context, |ctx| {
       for scope in self.scopes.remove_matching(|_| true) {
         self.leave_scope(&ctx, &scope);
         scope.release_callback(&ctx);
       }
     });
-    pump_jobs(rt, context, self.log.as_ref());
+    pump_jobs(context, self.log.as_ref());
   }
 
   fn js_on_accounts_changed<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, cb: Function<'js>) -> JsResult<Function<'js>> {
     CallbackRegistry::subscribe(ctx, self, &self.lifecycle, |s| &s.changed_fns, cb)
   }
 
-  pub(crate) fn accounts_changed(self: &Rc<Self>, rt: &Runtime, context: &rquickjs::Context) {
-    context.with(|ctx| {
+  pub(crate) fn accounts_changed(self: &Rc<Self>, context: &rquickjs::Context) {
+    enter_js(context, |ctx| {
       if !self.refresh(&ctx) {
         return;
       }
@@ -243,7 +244,7 @@ impl AccountState {
         self.enter_scope(&ctx, &scope);
       }
     });
-    pump_jobs(rt, context, self.log.as_ref());
+    pump_jobs(context, self.log.as_ref());
   }
 
   fn find(&self, id: i32) -> Option<AccountInfo> {
@@ -266,7 +267,7 @@ impl AccountState {
 
 impl Dispose for AccountState {
   fn dispose(&self, context: &rquickjs::Context) {
-    context.with(|ctx| {
+    enter_js(context, |ctx| {
       if let Some(prototype) = self.prototype.borrow_mut().take() {
         let _ = prototype.restore(&ctx);
       }
