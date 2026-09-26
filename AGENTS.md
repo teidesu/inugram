@@ -1,294 +1,196 @@
-# Inugram Agent Guide
+# Inugram agent guide
 
-Inugram is a **patchset**, not a fork. `worktree/` is a stock Telegram checkout with
-stgit patches applied on top. Fork code lives in `src/kotlin`/`src/res` (symlinked
-into the worktree). `patches/` and `series` are export targets, not source of truth.
+## Repository
 
-`FEATURES.md` is the user-facing list of fork features/bugfixes. Keep it in sync —
-when adding, removing or meaningfully changing a patch, update `FEATURES.md` in
-the same change.
+Inugram is a **patchset**, not a fork. `worktree/` is stock Telegram with stgit
+patches applied. Fork sources are symlinked into it; `patches/` and `series` are
+exports, never the source of truth.
 
-## Golden rules (never violate)
+`src/` is organized by role:
 
-1. **Edit `worktree/` directly.** Never hand-edit `patches/*.patch` or `series` — they regenerate from stgit.
-2. **Do not run `stg` or `git` yourself** unless explicitly asked. Read-only `stg top` / `stg show` is fine. NEVER run `stg export`.
-3. **Stock patches stay tiny.** Only wiring/hooks/guards. Real logic goes in `src/kotlin`. A patch touching only `src/**` is usually wrong.
-4. **Default off = stock-identical.** Every behavior change gated behind an `InuConfig.*.getValue()` check. Verify every call site is gated.
-5. **Check if stock already does it** before implementing a toggle (e.g. Lite Mode often has it). Tell the user, don't silently re-implement.
-6. **Confirm bug repro in unpatched worktree** before treating a visual/behavior issue as a patch regression.
-7. **No renames in stock. No removing stock imports** (except `desu.inugram.*`).
-8. **Prefer data-layer patches over UI-layer** — one hook in a controller beats fifteen hooks in views.
-9. **Never touch `TLRPC.java`** — auto-generated, rebasing changes there is hell.
-10. **Never touch stock DB schema or `LAST_DB_VERSION`** — fork state goes in `inu_*` tables / `inu_kv` via `InuDatabaseHelper`.
-11. **No LSP.** To verify compilation, run `pnpm run build-debug` (outside the sandbox, slow, use sparingly).
-12. **Never install/launch the app yourself.** No `adb install`, `adb shell am start`, `adb uninstall`. Building is fine, read-only operations are fine too; deploying and testing is the user's call.
-13. **Debug logs use `android.util.Log.d`**, not `FileLog`.
-14. **Prefer non-`_solar` icons** when an alternative exists.
-
-> you are allowed to violate them if the user explicitly asks for this
-
-## Patch groups & naming
-
-Format: `group__name` → `patches/<group>/<name>.patch`. Commit subject = plain human sentence (`Allow editing by double tapping a message`).
-
-| group | when |
+| Directory | Purpose |
 | --- | --- |
-| `bugfix` | fixes an upstream bug |
-| `feature` | adds user-facing capability (qol, ui tweak, customization) |
-| `debloat` | hides/disables stock behavior behind a toggle |
-| `hooks` | thin stock hooks for fork code to attach to; no user-visible change alone |
-| `misc` | build, branding, infra |
+| `fork/`, `fork-app/` | Main Kotlin code and app-module code |
+| `core/` | JVM-testable code |
+| `native/` | Rust plugin engine |
+| `test/` | Device tests, assets, and shared JS test plugins |
+| `res/`, `profile/` | Resources and ART baseline profile |
+| `vendor/` | Copied third-party code |
 
-`debloat` vs `feature`: only *removes/toggles off* stock → `debloat`. Adds new capability → `feature`. `visual__`, `ui__`, etc. are **not** valid groups.
+`sdk/` is the published half: `sdk/types` is `@inugram/plugin-types` (the api
+typings and the grant catalogue) and `sdk/cli` is `@inugram/cli` (the bundler,
+manifest generator and dev server plugin authors use). Neither is patched into
+the worktree.
 
-Propose a patch name (and comment) for every newly made patch — don't touch stgit yourself.
+Mappings live in `scripts/config.ts` → `forkSyncFiles`. Update `FEATURES.md` when
+adding, removing, or meaningfully changing a feature or patch.
 
-## Writing a stock patch
+## Rules
 
-### Minimal wiring pattern
+Explicit user instructions override these defaults.
 
-```java
-public void doSomething() {
-    if (desu.inugram.InuConfig.MY_TOGGLE.getValue()) {
-        MyHelper.handle(this);
-        return;
-    }
-    // ...stock code unchanged...
-}
-```
+- Edit stock files in `worktree/`; fork logic belongs in `src/fork`. Never hand-edit
+  `patches/*.patch` or `series`.
+- Do not run `git` or `stg` unless explicitly asked. Read-only `stg top` and
+  `stg show` are allowed. Never run `stg export`; the user exports with
+  `pnpm run export`. Authorized stock-history queries run inside `worktree/`.
+- No LSP. Verify Android compilation with `pnpm run build-debug`, sparingly.
+- Never install, launch, or uninstall the app. Builds and read-only device
+  operations are allowed; deployment and device testing are the user's call.
+- Gate behavior changes with `InuConfig`: default off must behave like stock.
+  Check every call site.
+- Check whether stock already provides a requested toggle, including Lite Mode.
+  Verify an issue in an unpatched worktree before calling it a patch regression.
+- No stock renames or removal of stock imports, except `desu.inugram.*` imports.
+- Never edit `TLRPC.java`, stock database schema, or `LAST_DB_VERSION`.
+- Debug logs use `android.util.Log.d`, not `FileLog`. Prefer non-`_solar` icons.
+- Use `rg` to locate symbols; read small ranges in stock files over 2k lines.
 
-- Guard goes **before** stock, early-returns when fork takes over.
-- For mode-dependent behavior, prefer an `if`/`else` wrapper with **no re-indentation** of the stock branch — keeps rebases trivial.
-- When extending behavior rather than replacing it, **run fork logic after** the stock block. Don't rewrite stock.
-- When figuring out stock code history/regressions, make sure to run git **inside** the `worktree/` dir. Root dir is just the fork code, it DOES NOT track stock code.
+## Stock patches and helpers
 
-### Exposing stock internals
+Patch names: `group__name` → `patches/<group>/<name>.patch`. Propose a name and
+plain-language commit subject for a new patch; do not operate stgit yourself.
 
-- `private` field/method needed from fork? Change to `public`. That is the whole patch.
-- Adding a new field/method/overload to a stock class? Prefix `inu_` (Java fields too: `inu_addTab`, `inu_internalType`, etc.).
-- Prefer exposing over adding. Adding to a base class is especially rebase-fragile — look for an existing extension point first.
-
-### Helper boundary
-
-- <~5–7 lines of logic → **inline** in the patch.
-- Bigger → extract to a Kotlin helper.
-- Helper reads `InuConfig` itself; don't pass config values as parameters.
-- Helper references stock constants directly (make them `public` if needed).
-- One helper per feature area (e.g. `FolderHelper` owns icons + DB + layout + drawing).
-
-### Where logic must live
-
-- Bugfix in a specific stock class → write the fix **inline in that Java class**. `EditTextBoldCursor` bugs get fixed in `EditTextBoldCursor.java`. Don't detour through a Kotlin helper just to keep the patch "clean".
-- Non-trivial feature logic → Kotlin helper.
-- Pure config toggle with no Java wiring → don't write a stock patch at all.
-
-## Commonly touched stock files
-
-Paths under `worktree/TMessagesProj/src/main/java/`. Line counts approximate.
-**Files >2k lines: never Read top-to-bottom.** `rg` for the exact symbol, then Read with `offset` + small `limit`.
-
-| file | ~lines | owns |
-| --- | ---: | --- |
-| `org/telegram/ui/ChatActivity.java` | 46k | chat screen |
-| `org/telegram/ui/Cells/ChatMessageCell.java` | 29k | message bubble |
-| `org/telegram/ui/PhotoViewer.java` | 24k | photo/video viewer + preview for ChatAttachAlert |
-| `org/telegram/messenger/MessagesController.java` | 24k | messages domain state |
-| `org/telegram/ui/ProfileActivity.java` | 17k | profile screen |
-| `org/telegram/ui/Components/ChatActivityEnterView.java` | 15k | message input — voice, attach, text |
-| `org/telegram/ui/DialogsActivity.java` | 14k | main page / dialogs list |
-| `org/telegram/ui/Components/SharedMediaLayout.java` | 13k | profile shared-media player |
-| `org/telegram/messenger/MediaDataController.java` | 10k | stickers, reactions, recent data |
-| `org/telegram/ui/LoginActivity.java` | 10k | login flow |
-| `org/telegram/ui/LaunchActivity.java` | 9k | root activity |
-| `org/telegram/ui/Components/ChatAttachAlert.java` | 7k | attachments panel |
-| `org/telegram/ui/Cells/DialogCell.java` | 6k | single dialog row |
-| `org/telegram/ui/Components/ChatAttachAlertPhotoLayout.java` | 5k | attach panel photo grid |
-| `org/telegram/messenger/LocaleController.java` | 4.5k | i18n |
-| `org/telegram/ui/Components/ReactionsContainerLayout.java` | 2.6k | reactions bar in message menu |
-| `org/telegram/ui/Components/FilterTabsView.java` | 2k | folder tabs strip in DialogsActivity |
-| `org/telegram/messenger/SharedConfig.java` | 2k | stock prefs |
-| `org/telegram/ui/Components/Reactions/ReactionsLayoutInBubble.java` | 1.9k | inline reaction chips on messages |
-| `org/telegram/ui/Components/EditTextBoldCursor.java` | 1.3k | text input base (used by ~every input) |
-| `org/telegram/ui/MainTabsActivity.java` | 1k | main bottom tabs |
-| `org/telegram/ui/Components/glass/GlassTabView.java` | 0.6k | liquid-glass tab rendering |
-| `org/telegram/messenger/LiteMode.java` | 0.4k | perf flag presets |
-
-When adding to a hotspot, check `patches/hooks/` first — it likely already exposes the surface you need.
-
-## `patches/hooks/` — shared extension points
-
-Standalone hook patches expose surfaces (menu builders, callbacks, `public` field promotions, `inu_*` helpers) that multiple features consume. Intentionally **no user-visible effect on their own**.
-
-| patch | what it exposes |
+| Group | Use |
 | --- | --- |
-| `admin-logs.patch` | hooks inside admin logs activity |
-| `app-loader.patch` | custom `ApplicationLoaderImpl` instead of stock |
-| `chat-activity.patch` | various ChatActivity hooks — message menu (`ChatHelper.addMenuItems`/`processMenuOption`), `undoView`, `replyingMessageObject` etc. |
-| `icon-replacement.patch` | custom resource loader for icon replacement |
-| `internal-web-app.patch` | `WebViewRequestProps.inu_internalType` + `WebAppHelper.getInternalBotName` for internal bot web sheets |
-| `loginactivity.patch` | hooks inside LoginActivity |
-| `messagescontroller.patch` | access `MessagesController` instances as they're created |
-| `notifications-controller.patch` | hooks inside NotificationsController |
-| `photo-viewer-menu.patch` | `PhotoViewerHelper.{addMenuItems,updateMenuItems,resetMenuItems,handleMenuClick}` + `inu_getCurrentPhotoFile`; exposes `containerView`, `menuItem`, `showDownloadAlert` |
-| `popup-swipeback.patch` | foreground translation + unified touch coords on swipeback popup |
-| `profile-menu.patch` | `ProfileHelper.addMenuItems` + `ProfileHelper.handleMenuClick` |
-| `universal-recycler.patch` | extra features in `UniversalRecyclerView` used by settings pages |
+| `bugfix` | Upstream bug fix |
+| `feature` | Added capability or customization |
+| `debloat` | Hide or disable stock behavior |
+| `hooks` | Shared extension point, no effect without consumers |
+| `misc` | Build, branding, infrastructure |
 
-**When to add a `hooks/` patch vs a normal patch:**
+These are the only groups; `visual__` and `ui__` are invalid.
 
-- New stock surface that **>1 future patch will wire into** → `hooks/`.
-- One-off wiring for a single feature → keep inside the `feature/`/`debloat/` patch.
-- **Rule of 3**: if 3+ existing patches touch roughly the same stock surface, consolidate.
-- A `hooks/` patch must be functionally a no-op with its consumers stubbed out.
+- Prefer one controller/data-layer hook over many view hooks. Check
+  `patches/hooks/` and existing helpers before adding either.
+- Keep stock changes small: wiring, guards, or short inline logic. Extract feature
+  logic beyond roughly 5–7 lines into the existing feature's Kotlin helper.
+  A patch touching only `src/**` is usually unnecessary.
+- Fix a bug specific to a stock class in that class; do not route it through a
+  helper just to shrink the patch.
+- When replacing behavior, put the guarded fork branch before stock and return.
+  When extending behavior, run fork logic after stock. Avoid re-indenting stock
+  inside an `if`/`else` wrapper.
+- Expose an existing private field/method as `public` before adding a new API.
+  Prefix new stock fields, methods, and overloads with `inu_`. Avoid base-class
+  changes where an extension point exists.
+- Helpers read their own config and reference stock constants directly. Keep one
+  helper per feature area under `src/fork/helpers/`; reuse its subpackage.
+- `*Helper` coordinates features; `*Config` models configuration;
+  `*Utils`/`*Parser`/`*Drawable`/`*Resources` describe concrete roles. No mass renames.
+- A one-feature hook stays in that feature's patch. Shared hooks go in `hooks/`,
+  call a helper, and must be no-ops with consumers stubbed out. Consolidate when
+  three or more patches touch the same extension point.
+- `src/fork/InuHooks.kt` dispatches lifecycle events only; feature logic stays in
+  helpers. New Java-facing hooks use `@JvmStatic` and a small stock call site.
 
-Conventions: expose the minimum, promote `private` → `public` over duplicating data, `inu_` prefix on new fields, entry point is always a call to `desu.inugram.helpers.XxxHelper.*` — never inline logic.
+Common owners: `ChatHelper`, `ProfileHelper`, `PhotoViewerHelper`, `FolderHelper`,
+`MainTabsHelper`, `MonetHelper`, `NonIslandHelper`, `InuDatabaseHelper`, `InuUtils`.
+Shared menu/lifecycle surfaces are indexed by their filenames in `patches/hooks/`.
 
-## Helpers
+When explicitly asked to manage patches, use `stg new`, `stg refresh -p <patch>`,
+or `stg float <patch>` then `stg refresh`. `--index` refreshes staged changes only.
+Stock paths inside exported patches omit `worktree/`.
 
-Live in `src/kotlin/helpers/`. Sub-packages by feature area: `chat/`, `dialogs/`, `menu/`, `translate/`, `search/`, `media/`, `font/`, `update/`, `cloud/`, `security/`, `theme/`, `profile/`, `icons/`, `maps/`, `notifications/`. Cross-cutting / standalone ones stay flat.
+Always run `stg` commands from the `worktree/` directory.
 
-Naming (don't mass-rename):
-- `*Helper` = feature-coordinator singleton
-- `*Config` = `InuConfig.Item` subclass / data model
-- `*Utils`/`*Parser`/`*Drawable`/`*Resources` = concrete type or algorithm
-
-Common entry-point helpers: `ChatHelper` (chat features), `ProfileHelper` (profile menu), `PhotoViewerHelper` (photo viewer), `FolderHelper` (folder tabs), `MainTabsHelper` (bottom tabs), `MonetHelper` (theming), `NonIslandHelper` (non-island UI gating), `InuDatabaseHelper` (fork DB), `InuUtils` (id generation etc.).
-
-Before creating a new helper, check whether an existing one owns the area.
-
-## `InuHooks` — central lifecycle bus
-
-`src/kotlin/InuHooks.kt`. Generic lifecycle dispatch only — feature-specific code goes on its own helper.
-
-Currently exposed (update this table when adding):
-
-| method | called from | purpose |
-| --- | --- | --- |
-| `init(Context)` | `ApplicationLoader.onCreate` | bootstrap `InuConfig`, fonts, crash reporter, etc. |
-| `onResume(LaunchActivity)` | `LaunchActivity.onResume` | monet refresh, crash sheet |
-| `onUpdate(TLObject?, Int)` | update dispatch | fork `LoginHelper` hook |
-| `onDeepLink(LaunchActivity, Intent?)` | deeplink handling | passcode + settings deeplinks |
-| `onAuthSuccess(Int)` | login flow | clear per-account passcode |
-| `onMessagesControllerCreated(MessagesController, Int)` | `MessagesController.<init>` | per-account setup (maps provider; registers the `didReceiveNewMessages` → `onNewMessage` observer) |
-| `onNewMessage(TLRPC.Message, Int)` | `didReceiveNewMessages` observer | generic new-message dispatch (all arrival paths incl. difference catch-up); fans out to `UpdateHelper` etc. |
-| `syncDoubleTapDelay()` | fork + `init` | propagate `DOUBLE_TAP_DELAY` into stock gesture detectors |
-| `syncAnimationSpeed()` | fork + `init` | propagate `ANIMATION_SPEED` into stock animators |
-| `syncChatInputRowHeight()` | fork + `init` | propagate classic-ui input row height/padding into `ChatActivityEnterView` statics |
-| `getCurrentAppIconLicense()` | About page | current launcher icon's license string |
-
-New hook → `@JvmStatic fun` on `InuHooks`, one-line call site in the patch, **update this table**.
-
-## `InuConfig` pattern
+## Config, database, and settings
 
 ```kotlin
 @JvmField val HIDE_STORIES = BoolItem("hide_stories", false)
 ```
 
-- Always `@JvmField` so Java sees a field, not `getHIDE_STORIES()`.
-- Types: `BoolItem`, `IntItem`, `FloatItem`, `StringItem`. Subclass `Item<T>` for anything else (enums — see `FoldersDisplayModeItem`, `FormattingPopupConfig`).
-- `BoolItem` has `.toggle()`.
-- From Java: `InuConfig.HIDE_STORIES.getValue()` — **never `.value`** (`@JvmField` exposes the wrapper, not its inner value).
-- Pref key = snake_case of the field name; default is the second arg. SharedPreferences name: `inugram`. Loaded once from `InuHooks.init`.
+- Config keys are snake_case. Use `BoolItem`, `IntItem`, `FloatItem`, `StringItem`,
+  or subclass `Item<T>` for other types. `BoolItem.toggle()` is available.
+  Preferences are `inugram`, loaded by `InuHooks.init`.
+- Java reads `.getValue()`, not Kotlin's `.value`. Use `@JvmField` for config
+  wrappers and `@JvmStatic` for methods actually called from Java; otherwise a
+  Kotlin `object` is accessed through `.INSTANCE`.
+- Fork tables use `inu_*`; versions live in `inu_kv`. Migrate through
+  `InuDatabaseHelper`. Hook stock load/save operations instead of changing stock SQL.
+- Settings pages extend `SettingsPageActivity` and register in `InuSettingsActivity`.
+  Prefer existing pages: Appearance, Chats, Messages, Dialogs, or Behavior.
+  Use Annoyances only when the user explicitly asks.
+- If a setting really requires restart, call `showRestartBulletin()` from its
+  click handler. Reuse existing custom cells and dialog builders.
+- Searchable pages declare `@JvmField val PAGE = SearchRegistry.Page(...)` and
+  register in `SearchRegistry.pages`. Entry IDs reuse each row's
+  `InuUtils.generateId()` constant. Slugs must be globally unique and stable:
+  they identify search recents and `tg://settings/inu/<slug>` links.
+  Highlight rows with `SettingsPageActivity.withHighlight(itemId)`.
+- `LayoutHelper.createLinear`/`createFrame` margins are dp. Use float arguments
+  for float-only overloads, including six-argument `createLinear`.
 
-## Database
+## Plugin engine
 
-- Stock schema and `LAST_DB_VERSION` are off-limits.
-- Fork versioning lives in `inu_kv`, managed by `InuDatabaseHelper`.
-- Fork tables: `inu_*` prefix, created/migrated in `InuDatabaseHelper.migrate()`.
-- Populate fork fields by **hooking** stock load/save calls (see `patches/feature/folders-display-mode.patch`) — don't edit stock SQL.
+`sdk/types/common.d.ts` is the contract; fix code or contract when they disagree. The Rust
+engine is `src/native` (`api`, `jni`, grants/limits in `sandbox`, promise machinery in
+`runtime.rs`), the host is `src/fork/helpers/plugins`, and `sdk/cli` is the bundler and routine
+compiler. Opcodes, wire formats and JNI signatures are handwritten on both sides: change Rust and
+Kotlin together, never add a codegen layer. The routine instruction set lives in
+`sdk/cli/src/routines/ops.ts`, `PluginJvmRoutine` and `private/routines-spec.md`, kept in step;
+refresh `src/test/assets/routines.json` with `pnpm --filter @inugram/cli test --update`. Grants are
+added only in `sdk/types/grants.json` (`pnpm run generate-grants`); TL tables and typings come
+from `pnpm run generate-tl`, rerun after every rebase and never hand-edited.
 
-## Settings UI
+Engine work runs on `EngineDispatch.scheduler`; caller-thread JVM/Xposed callbacks take the
+serialized engine lease, and no engine `Rc`/`Persistent` state may escape it (keep rquickjs
+`parallel`). Grant checks fail closed. Runtime work carries its `PluginSession`, never an
+engine looked up through the plugin. Install ids key all per-plugin storage, and uninstall wipes
+it. TL handles are per-session: reject forged, expired and read-only writes, and a response
+crossing queues needs `disableFree` plus exactly one later free. Plugin-originated sends bypass
+interceptors; interception runs after local send side effects, so a drop must unwind all of them.
+Host code logs through `PluginLog`, never `Log`.
 
-- Extend `desu.inugram.ui.settings.SettingsPageActivity` (wraps `UniversalFragment` with edge-to-edge + insets + `showRestartBulletin()`). Register pages in `InuSettingsActivity`.
-- Prefer adding to an existing page:
-  - `AppearanceSettingsActivity` — general appearance
-  - `ChatsSettingsActivity` — chat-related appearance (bubbles, menus)
-  - `MessagesSettingsActivity` — message bubble / inline reactions / sticker size
-  - `DialogsSettingsActivity` — dialogs list (main page) appearance
-  - `AnnoyancesSettingsActivity` — removes annoying stock stuff (only when user explicitly asks)
-  - `BehaviorSettingsActivity` — general behavior
-- Any toggle needing a restart → call `showRestartBulletin()` in the click handler (verify restart is actually needed).
-- Custom cells: `SliderCell`, `ExpandableBoolGroup`, `RadioDialogBuilder`, `StickerSizePreviewMessagesCell`.
+## Checks
 
-### Settings search & deeplinks
+Run checks relevant to the change; no build for documentation-only edits.
 
-- `desu.inugram.SearchRegistry` wires fork pages into stock settings search (`ProfileActivity.SearchAdapter`) and routes `tg://settings/inu/<slug>` deeplinks.
-- Each searchable `*SettingsActivity` declares a `@JvmField val PAGE = SearchRegistry.Page(...)` in its companion: page `slug`, title res, icon res, factory, list of `SearchRegistry.Entry(slug, titleRes, itemId)` — one per searchable `UItem`. `itemId` reuses the page's `InuUtils.generateId()` constant (also used as the `UItem.id`).
-- Register in `SearchRegistry.pages`. Slugs are persistent identity (deeplinks + recents), globally unique — uniqueness asserted at first access. Renaming a slug is a breaking change.
-- Row highlight on open: `SettingsPageActivity.withHighlight(itemId)` + existing `onTransitionAnimationEnd` hook. No extra wiring per page.
+| Change | Command |
+| --- | --- |
+| Android code | `pnpm run build-debug` |
+| Plugin contract/bridge | `pnpm run typecheck-plugins` |
+| Rust engine | `cd src/native && cargo check` / `cargo test` |
+| JVM core | `cd worktree && ./gradlew :InuCore:test` |
+| Device tests, user-run | `cd worktree && ./gradlew :TMessagesProj:connectedDebugAndroidTest` |
+| Plugin SDK | `pnpm run typecheck-sdk` / `pnpm run build-sdk` |
+| Routine compiler | `pnpm run test-sdk` |
 
-## Strings
+- Rust tests live in adjacent `*_tests.rs`, included with `#[path]`; no inline modules.
+- `build.rs` compiles JS preludes to little-endian bytecode using the exact bundled
+  QuickJS version. Do not use `include_str!` for preludes.
+- A test asserts behavior only. Never read another source file - kotlin, rust, js,
+  `.d.ts` or markdown - to check what it declares, spells or documents, and never
+  assert the contents of something this repo generates (`GrantCatalog`,
+  `GrantPresentations`, `TlTables`, `TlNames`, `TlFlags`, `TlInt53`): drift there is
+  one more place to edit, not a bug anything can catch. Test the code that reads a
+  generated table, not the table. Do not cover a 5-10 line helper at all. A test owns
+  its fixtures - inline them, a table is not worth a file - and running a JS oracle
+  is fine.
+- Keep the shared JS test plugins. A fake must not supply the fact a test asserts.
+  Both loaders prepend `src/test/plugins/test-prelude.js`; keep `test-prelude.d.ts` in step.
+- Every kotlin test method is named in snake_case, a sentence rather than a label. A
+  name already in snake_case keeps a symbol it embeds spelled as the symbol is
+  (`a_server_error_reaches_the_plugin_as_an_RpcError`).
+- Device tests use fresh install IDs and the queue recorders `resetBridge` installs.
+  Wipe fixed-name stores. JNI failures can abort the process:
+  clear exceptions, take networking offline, and initialize native callback inputs.
 
-- `src/res/values/strings_inu.xml`. All keys prefixed `Inu` (`InuHideStories`).
-- Subtitle/info strings: same key + `Info` suffix (`InuHideStoriesInfo`).
-- Access: `LocaleController.getString(R.string.InuXxx)`.
+## Resources and themes
 
-## Drawables / assets
+- Fork strings: `src/res/values/strings_inu.xml`, keys prefixed `Inu`; explanatory
+  strings use the `Info` suffix. Read with `LocaleController.getString(R.string.InuXxx)`.
+- Assets live in `src/res/drawable`, `drawable-xxhdpi`, and `assets`. Register new
+  directories in `forkSyncFiles`. Tabler selection lives in `ICON_SELECTION`;
+  `pnpm run setup` generates `inu_tabler_*`. Removing a selection does not remove
+  its generated file; delete that file explicitly.
+- Reuse stock eye icons: `msg_message` and `menu_hide_gift` (slashed).
+- Monet assets are `src/res/assets/monet_{light,dark,amoled}.attheme`, resolved by
+  `MonetHelper.getColor`. Values accept palette tones, semantic/custom names, or ints.
+  Modifiers: `a` alpha %, `s` blend to white %, `l` blend to black %, `t` HCT tone,
+  `c` relative chroma % (0–400); combine as `(t=90,c=75)`.
+- Debug theme reload: `pnpm run push-theme [light|dark|amoled] [--watch] [--clear]
+  [-s <serial>]`. Requires a running debug app; sends `desu.inugram.RELOAD_THEME`.
 
-- `src/res/drawable/` (density-independent), `src/res/drawable-xxhdpi/` (bitmaps), `src/res/assets/`.
-- New asset dir → add path to `scripts/config.ts` → `forkSyncFiles`.
-- Icons: lucide pre-bundled; selection list in `scripts/config.ts` → `ICON_SELECTION`. Tabler pack preferred for visual consistency.
-
-## Monet themes
-
-`src/res/assets/monet_{light,dark,amoled}.attheme` — stock attheme format, values resolved by
-`MonetHelper.getColor` (hooked into `Theme.getThemeFileValues` by `feature/monet-theme.patch`).
-
-- Values are palette tones (`a1_600`, `n1_50`), M3 semantic tokens (`monet_surface_container_light`), custom names (`monetGreen`), or raw ints.
-- Modifiers: `(a=)` alpha %, `(s=)` blend→white %, `(l=)` blend→black %, `(t=)` absolute HCT tone, `(c=)` HCT chroma multiplier % (0–400, relative so monochrome palettes stay gray). Comma-separated: `monet_secondary_container_light(t=90,c=75)`.
-- Debug hot reload: `pnpm run push-theme [light|dark|amoled] [--watch] [--clear] [-s <serial>]` — adb-pushes the asset to the app's external files dir and broadcasts `desu.inugram.RELOAD_THEME`. Debug builds only (`getThemeOverrideFile` is a no-op otherwise); the app must be running.
-
-## Java ↔ Kotlin gotchas
-
-- `.value` (Kotlin) → `.getValue()` from Java.
-- Kotlin `object` → `InuXxx.INSTANCE.method()` from Java unless `@JvmStatic`.
-- For hooks called from stock Java, default to `@JvmStatic fun foo(...)` on a Kotlin `object` — cleanest call site.
-- Inside stgit patches, the `worktree/` prefix is omitted from paths.
-- `LayoutHelper.createLinear` / `createFrame` margin args are dp either way (both int and float overloads pass through `AndroidUtilities.dp(...)`). But Kotlin won't auto-promote `Int → Float`, and several overloads exist **only in the Float variant** — notably the 6-arg `createLinear(w, h, l, t, r, b)`. Write `12f` not `12` for margins or you'll hit "actual type is Int, but Float was expected".
-
-Don't overuse `@JvmStatic`, only add it if the method/field is actually accessed from Java.
-
-## Common pitfalls (from prior sessions)
-
-1. **Running `stg`/`git`.** Don't. Read-only `stg top` / `stg show` only.
-2. **Hand-editing `patches/*.patch`.** They're exports. Edit `worktree/`; user re-exports.
-3. **Oversized stock patches.** Logic beyond a guard + helper call → move to Kotlin.
-4. **Helper for 2–5 lines.** Inline it. Only extract when >5–7 lines or genuinely reused.
-5. **Replacing stock behavior instead of running after it.** Stock stays intact; fork logic runs before (early return) or after, gated by config.
-6. **Routing a trivial set through a helper method.** If the patch just assigns a field based on config, assign in-place at the stock call site.
-7. **Modifying stock base classes.** Look for an existing extension hook first (stock often has setup hooks for themed things). Base-class edits rebase poorly.
-8. **Writing Kotlin helpers for what must be a Java fix.** Bug in `EditTextCaption` → fix it **in** `EditTextCaption.java`. Don't detour.
-9. **Ungated fork behavior.** Default-off must equal stock. Verify every call site.
-10. **Java using `.value`.** It's `.getValue()`. Kotlin `.value` is a property; `@JvmField` only exposes the wrapper.
-11. **Forgetting `inu_` prefix** when adding fields/methods/overloads to stock classes. Including Java fields.
-12. **Re-indenting stock** to wrap it in an `if`. Kills rebases. Use early returns, add-after-stock, or keep indentation the same.
-
-## stgit workflow (user-initiated only)
-
-You never run these unless explicitly asked — documented so you can answer questions / suggest commands.
-
-```bash
-# create a new patch
-stg new feature__my-patch -m 'Allow editing by double tapping a message'
-# ...edit worktree/...
-stg refresh
-pnpm run export
-
-# modify existing patch in-place
-# ...edit worktree/...
-stg refresh -p feature__my-patch  # --index for staged-only
-
-# modify existing patch, floating to top (preferred for non-trivial changes)
-stg float feature__my-patch
-# ...edit...
-stg refresh
-pnpm run export
-```
-
-`pnpm run export` rewrites `patches/` + `series` from the stack. User runs it.
-
-If user asks "which patch am I on" → `stg top`.
-
-## Self-maintenance
-
-When adding a new `InuHooks` method, settings page, or shared `hooks/` patch — update this file. Tribal knowledge rots.
+Keep this guide to durable rules, ownership boundaries, and commands. Update it
+when those change; keep implementation walkthroughs and benchmark history out.

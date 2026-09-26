@@ -9,7 +9,7 @@ class UrlCleanerTest {
         UrlCleaner.fromAdGuardFilter(lines.joinToString("\n"))
 
     @Test
-    fun stripsGlobalUtm() {
+    fun strips_global_utm() {
         val c = cleaner("\$removeparam=/^utm_/")
         assertEquals(
             "https://example.com/x?keep=1",
@@ -18,7 +18,7 @@ class UrlCleanerTest {
     }
 
     @Test
-    fun stripsLiteralGlobal() {
+    fun strips_literal_global() {
         val c = cleaner("\$removeparam=fbclid")
         assertEquals(
             "https://example.com/?a=1",
@@ -27,20 +27,20 @@ class UrlCleanerTest {
     }
 
     @Test
-    fun untouchedWhenNoMatch() {
+    fun untouched_when_no_match() {
         val c = cleaner("\$removeparam=fbclid")
         val url = "https://example.com/?a=1&b=2"
         assertEquals(url, c.clean(url))
     }
 
     @Test
-    fun untouchedWhenNoQuery() {
+    fun untouched_when_no_query() {
         val c = cleaner("\$removeparam=/^utm_/")
         assertEquals("https://example.com/path", c.clean("https://example.com/path"))
     }
 
     @Test
-    fun preservesFragment() {
+    fun preserves_fragment() {
         val c = cleaner("\$removeparam=utm_source")
         assertEquals(
             "https://example.com/#section",
@@ -49,7 +49,7 @@ class UrlCleanerTest {
     }
 
     @Test
-    fun preservesOrder() {
+    fun preserves_order() {
         val c = cleaner("\$removeparam=drop")
         assertEquals(
             "https://example.com/?a=1&b=2&c=3",
@@ -58,7 +58,7 @@ class UrlCleanerTest {
     }
 
     @Test
-    fun domainScopedAppliesOnSubdomain() {
+    fun domain_scoped_applies_on_subdomain() {
         val c = cleaner("||example.com^\$removeparam=sid")
         assertEquals(
             "https://www.example.com/?a=1",
@@ -67,14 +67,14 @@ class UrlCleanerTest {
     }
 
     @Test
-    fun domainScopedDoesNotApplyElsewhere() {
+    fun domain_scoped_does_not_apply_elsewhere() {
         val c = cleaner("||example.com^\$removeparam=sid")
         val url = "https://other.com/?sid=x&a=1"
         assertEquals(url, c.clean(url))
     }
 
     @Test
-    fun domainModifierSyntax() {
+    fun domain_modifier_syntax() {
         val c = cleaner("\$removeparam=promo,domain=vjav.com|vjav.tube")
         assertEquals(
             "https://vjav.com/?a=1",
@@ -85,7 +85,7 @@ class UrlCleanerTest {
     }
 
     @Test
-    fun negativeDomainModifier() {
+    fun negative_domain_modifier() {
         val c = cleaner("\$removeparam=/^__s=/,domain=~safe.com")
         assertEquals(
             "https://other.com/?a=1",
@@ -96,7 +96,7 @@ class UrlCleanerTest {
     }
 
     @Test
-    fun denyallowModifier() {
+    fun denyallow_modifier() {
         val c = cleaner("\$denyallow=video-shoper.ru|glavnoe.life,removeparam=utm_source")
         assertEquals(
             "https://open.spotify.com/album/1?si=x",
@@ -107,14 +107,14 @@ class UrlCleanerTest {
     }
 
     @Test
-    fun denyallowAppliesToSubdomains() {
+    fun denyallow_applies_to_subdomains() {
         val c = cleaner("\$denyallow=glavnoe.life,removeparam=utm_source")
         val denied = "https://www.glavnoe.life/news?utm_source=keep"
         assertEquals(denied, c.clean(denied))
     }
 
     @Test
-    fun denyallowCombinesWithDomainModifier() {
+    fun denyallow_combines_with_domain_modifier() {
         val c = cleaner("\$removeparam=utm_source,domain=example.com,denyallow=safe.example.com")
         assertEquals("https://example.com/?a=1", c.clean("https://example.com/?utm_source=x&a=1"))
         val denied = "https://safe.example.com/?utm_source=keep"
@@ -122,7 +122,7 @@ class UrlCleanerTest {
     }
 
     @Test
-    fun perParamException() {
+    fun per_param_exception() {
         // global utm_* removal, but allow utm_term on example.com
         val c = cleaner(
             "\$removeparam=/^utm_/",
@@ -140,7 +140,7 @@ class UrlCleanerTest {
     }
 
     @Test
-    fun fullExceptionBypassesAll() {
+    fun full_exception_bypasses_all() {
         val c = cleaner(
             "\$removeparam=fbclid",
             "@@||trusted.com^\$removeparam",
@@ -150,7 +150,7 @@ class UrlCleanerTest {
     }
 
     @Test
-    fun regexCaseInsensitiveFlag() {
+    fun regex_case_insensitive_flag() {
         val c = cleaner("\$removeparam=/^MC_/i")
         assertEquals(
             "https://example.com/?keep=1",
@@ -159,7 +159,7 @@ class UrlCleanerTest {
     }
 
     @Test
-    fun pathPatternConstraint() {
+    fun path_pattern_constraint() {
         val c = cleaner("||ad.example.com/clk\$removeparam=/^x_/")
         assertEquals(
             "https://ad.example.com/clk?a=1",
@@ -171,7 +171,7 @@ class UrlCleanerTest {
     }
 
     @Test
-    fun ignoresCommentsAndBlankLines() {
+    fun ignores_comments_and_blank_lines() {
         val c = cleaner("", "! a comment", "[Adblock Plus]", "\$removeparam=fbclid")
         assertEquals(
             "https://example.com/?a=1",
@@ -180,7 +180,7 @@ class UrlCleanerTest {
     }
 
     @Test
-    fun ignoresUnsupportedModifiers() {
+    fun ignores_unsupported_modifiers() {
         // resource-type constraints can't be evaluated for plain link clicks → drop the rule
         val c = cleaner("||example.com^\$xmlhttprequest,removeparam=foo")
         val url = "https://example.com/?foo=1"
@@ -188,7 +188,7 @@ class UrlCleanerTest {
     }
 
     @Test
-    fun invertedRemoveparamKeepsOnlyMatching() {
+    fun inverted_removeparam_keeps_only_matching() {
         val c = cleaner("||example.com^\$removeparam=~keep")
         assertEquals(
             "https://example.com/?keep=2",
@@ -197,7 +197,7 @@ class UrlCleanerTest {
     }
 
     @Test
-    fun invertedRemoveparamRegex() {
+    fun inverted_removeparam_regex() {
         val c = cleaner("||example.com^\$removeparam=~/^session/")
         assertEquals(
             "https://example.com/?session_id=abc&session_token=def",
@@ -206,7 +206,7 @@ class UrlCleanerTest {
     }
 
     @Test
-    fun tldWildcardMatchesAllAmazonDomains() {
+    fun tld_wildcard_matches_all_amazon_domains() {
         val c = cleaner("||amazon.*^\$removeparam=ref_")
         assertEquals(
             "https://amazon.com/dp/X",
@@ -223,14 +223,14 @@ class UrlCleanerTest {
     }
 
     @Test
-    fun tldWildcardDoesNotMatchUnrelatedHost() {
+    fun tld_wildcard_does_not_match_unrelated_host() {
         val c = cleaner("||amazon.*^\$removeparam=ref_")
         val url = "https://example.com/?ref_=a"
         assertEquals(url, c.clean(url))
     }
 
     @Test
-    fun preservesUserinfoAndPort() {
+    fun preserves_userinfo_and_port() {
         val c = cleaner("\$removeparam=t")
         assertEquals(
             "https://u:p@example.com:8080/x?a=1",
@@ -239,7 +239,7 @@ class UrlCleanerTest {
     }
 
     @Test
-    fun valuelessParamsHandled() {
+    fun valueless_params_handled() {
         val c = cleaner("\$removeparam=flag")
         assertEquals(
             "https://example.com/?a=1",
@@ -248,13 +248,13 @@ class UrlCleanerTest {
     }
 
     @Test
-    fun rejectsNonHttpGarbage() {
+    fun rejects_non_http_garbage() {
         val c = cleaner("\$removeparam=utm_source")
         assertEquals("not a url", c.clean("not a url"))
     }
 
     @Test
-    fun acceptsDocumentResourceType() {
+    fun accepts_document_resource_type() {
         val c = cleaner("||example.com^\$document,removeparam=track")
         assertEquals(
             "https://example.com/?a=1",
@@ -263,7 +263,7 @@ class UrlCleanerTest {
     }
 
     @Test
-    fun acceptsThirdPartyModifier() {
+    fun accepts_third_party_modifier() {
         val c = cleaner("||example.com^\$third-party,removeparam=track")
         assertEquals(
             "https://example.com/?a=1",
@@ -272,7 +272,7 @@ class UrlCleanerTest {
     }
 
     @Test
-    fun acceptsImportantModifier() {
+    fun accepts_important_modifier() {
         val c = cleaner("||example.com^\$important,removeparam=track")
         assertEquals(
             "https://example.com/?a=1",
@@ -281,7 +281,7 @@ class UrlCleanerTest {
     }
 
     @Test
-    fun acceptsNegatedResourceType() {
+    fun accepts_negated_resource_type() {
         // ~image: "everything except images" — a top-level link click qualifies
         val c = cleaner("||example.com^\$~image,removeparam=track")
         assertEquals(
@@ -291,28 +291,28 @@ class UrlCleanerTest {
     }
 
     @Test
-    fun rejectsAppModifier() {
+    fun rejects_app_modifier() {
         val c = cleaner("||example.com^\$app=msedgewebview2.exe,removeparam=track")
         val url = "https://example.com/?track=x&a=1"
         assertEquals(url, c.clean(url))
     }
 
     @Test
-    fun rejectsFirstPartyModifier() {
+    fun rejects_first_party_modifier() {
         val c = cleaner("||example.com^\$first-party,removeparam=track")
         val url = "https://example.com/?track=x&a=1"
         assertEquals(url, c.clean(url))
     }
 
     @Test
-    fun rejectsReplaceModifier() {
+    fun rejects_replace_modifier() {
         val c = cleaner("||example.com^\$replace=/foo/bar/,removeparam=track")
         val url = "https://example.com/?track=x&a=1"
         assertEquals(url, c.clean(url))
     }
 
     @Test
-    fun fullUrlRegexPattern() {
+    fun full_url_regex_pattern() {
         val c = cleaner("/^https?:\\/\\/ads\\.example\\.com\\/clk/\$removeparam=/^x_/")
         assertEquals(
             "https://ads.example.com/clk?a=1",
@@ -326,7 +326,7 @@ class UrlCleanerTest {
     // The user's real-world allowlist examples: globalRules strip utm_*, but specific
     // sites need certain params preserved.
     @Test
-    fun allowlistGlavnoeLifeUtmCampaign() {
+    fun allowlist_glavnoe_life_utm_campaign() {
         val c = cleaner(
             "\$removeparam=/^utm_/",
             "@@||glavnoe.life^\$removeparam=utm_campaign",
@@ -338,7 +338,7 @@ class UrlCleanerTest {
     }
 
     @Test
-    fun allowlistLifehackerEridParam() {
+    fun allowlist_lifehacker_erid_param() {
         val c = cleaner(
             "\$removeparam=erid",
             "@@||lifehacker.ru^\$removeparam=erid",
@@ -356,7 +356,7 @@ class UrlCleanerTest {
     }
 
     @Test
-    fun allowlistSubdomainScoped() {
+    fun allowlist_subdomain_scoped() {
         // exception applies on any subdomain of lifehacker.ru
         val c = cleaner(
             "\$removeparam=erid",

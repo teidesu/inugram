@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": [
+      "ES2022",
+      "ESNext.Disposable"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "types": [
+      "@inugram/plugin-types"
+    ],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": false
+  }
+}

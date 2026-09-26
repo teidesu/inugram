@@ -1,0 +1,40 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Sat, 19 Sep 2026 18:15:04 +0400
+Subject: fix placement for bulletins in SettingsActivity
+
+---
+ .../main/java/org/telegram/ui/SettingsActivity.java | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
+@@ -104,6 +104,7 @@ import org.telegram.ui.Components.AlertsCreator;
+ import org.telegram.ui.Components.AnimatedEmojiDrawable;
+ import org.telegram.ui.Components.AvatarDrawable;
+ import org.telegram.ui.Components.BackupImageView;
++import org.telegram.ui.Components.Bulletin;
+ import org.telegram.ui.Components.BulletinFactory;
+ import org.telegram.ui.Components.CubicBezierInterpolator;
+ import org.telegram.ui.Components.FloatingDebug.FloatingDebugController;
+@@ -503,6 +504,18 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+         updateColors();
+         checkUi_menuItems();
+ 
++        Bulletin.addDelegate(this, new Bulletin.Delegate() {
++            @Override
++            public int getTopOffset(int tag) {
++                return AndroidUtilities.statusBarHeight + ActionBar.getCurrentActionBarHeight();
++            }
++
++            @Override
++            public int getBottomOffset(int tag) {
++                return navigationBarHeight + additionNavigationBarHeight;
++            }
++        });
++
+         ViewCompat.setOnApplyWindowInsetsListener(contentView, this::onApplyWindowInsets);
+         return fragmentView = contentView;
+     }

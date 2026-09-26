@@ -1,7 +1,10 @@
 import fs from 'node:fs/promises'
 import { join } from 'node:path'
 import { ICON_SELECTION, patchesDir, rootDir, worktreeDir } from './config.js'
+import { generateGrants } from './generate-grants.js'
+import { generateTl } from './generate-tl.js'
 import {
+  applySubmodulePatches,
   cd,
   cloneUpstream,
   ensureDir,
@@ -208,12 +211,17 @@ if (noStgit) {
   const repo = cd(worktreeDir)
   for (const entry of seriesEntries) {
     step(`Applying ${entry}`)
-    await repo`git apply ${join(patchesDir, entry)}`
+    await repo`git apply --index ${join(patchesDir, entry)}`
   }
-  if (!noSubmodules) await syncSubmodules(worktreeDir)
+  if (!noSubmodules) {
+    await syncSubmodules(worktreeDir)
+    await applySubmodulePatches(worktreeDir)
+  }
   await ensureAdGuardFilter()
   await linkForkSource(worktreeDir)
   await generateIconDrawables(worktreeDir)
+  await generateTl()
+  await generateGrants()
   success('Flat setup complete')
 } else {
   const expectedPatches = seriesEntries.map(patchNameFromSeriesEntry)
@@ -226,9 +234,14 @@ if (noStgit) {
     await ensurePatches(expectedPatches, seriesEntries)
   }
   const syncedSubmodules = noSubmodules ? false : await syncSubmodules(worktreeDir)
+  const patchedSubmodules = noSubmodules ? false : await applySubmodulePatches(worktreeDir)
   await ensureAdGuardFilter()
   await ensureGitExclude(worktreeDir, '.kotlin')
+  await ensureGitExclude(worktreeDir, '.cxx')
+  await cd(worktreeDir)`git config submodule.TMessagesProj_App/jni/lsplant.ignore all`
   const linkedAny = await linkForkSource(worktreeDir)
   const generatedAny = await generateIconDrawables(worktreeDir)
-  success(linkedAny || generatedAny || syncedSubmodules ? 'Setup complete' : 'Up to date')
+  const generatedTl = await generateTl()
+  const generatedGrants = await generateGrants()
+  success(linkedAny || generatedAny || generatedTl || generatedGrants || syncedSubmodules || patchedSubmodules ? 'Setup complete' : 'Up to date')
 }

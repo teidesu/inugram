@@ -1,0 +1,1264 @@
+use crate::runtime::Dispose;
+use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
+use std::rc::Rc;
+
+use rquickjs::function::{Constructor, Opt, This};
+use rquickjs::object::{Accessor, Property};
+use rquickjs::{Ctx, Exception, Function, Object, Persistent, Result as JsResult, TypedArray, Value};
+
+use crate::api::error::{
+  self, call_callback, describe_js_error, error_value_to_string, format_thrown, PluginErrorCode,
+};
+use crate::api::telegram::account::{account_slot, dispatch_account, AccountState};
+use crate::api::tl::proxy::{self, TlViews, ViewLife};
+use crate::runtime::{enter_js, pump_jobs, PendingSettle, PendingTable};
+use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
+use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle, Registry};
+use crate::utils::arguments::{opt_bool, stringify_json};
+use crate::utils::qjs::{qjs_is_regexp, qjs_load_prelude, qjs_object_freeze, qjs_promise_then, qjs_read_typed_bytes};
+use crate::Log;
+
+pub trait RpcHost {
+  fn on_register(
+    &self,
+    methods: &[String],
+    callback_id: u32,
+    scope: &str,
+    strict: bool,
+    filter_json: &str,
+  ) -> Option<String>;
+  fn on_unregister(&self, callback_id: u32);
+  fn on_invoke(&self, invoke_id: i64, slot: i32, request_wire: &str) -> Option<String>;
+  fn on_invoke_raw(&self, invoke_id: i64, slot: i32, method: &[u8]) -> Option<String>;
+  fn on_takeout(&self, invoke_id: i64, slot: i32, op: i32, takeout_id: &str, arg: &str) -> Option<String>;
+  fn on_next(&self, dispatch_id: i64, request_wire: &str) -> Option<String>;
+  fn on_complete(&self, dispatch_id: i64, result_wire: &str);
+  fn on_update_register(&self, callback_id: u32, types: &[String], scope: &str) -> Option<String>;
+  fn on_update_unregister(&self, callback_id: u32);
+  fn on_intercept_update_register(&self, callback_id: u32, types: &[String]) -> Option<String>;
+  fn on_intercept_update_unregister(&self, callback_id: u32);
+  fn on_update_verdict(&self, dispatch_id: i64, deliver: bool);
+}
+
+const CHAIN_TIMEOUT_TEXT: &str = "INTERCEPTOR_TIMEOUT";
+const CHAIN_CANCELLED_TEXT: &str = "INTERCEPTOR_CANCELLED";
+
+#[derive(Clone, Copy)]
+enum Abandon {
+  Cancelled,
+  TimedOut,
+  TornDown,
+}
+
+impl Abandon {
+  fn from_wire(reason_wire: &str) -> Self {
+    match proxy::wire_rpc_error(reason_wire) {
+      Some((_, CHAIN_TIMEOUT_TEXT)) => Self::TimedOut,
+      Some((_, CHAIN_CANCELLED_TEXT)) => Self::Cancelled,
+      _ => Self::TornDown,
+    }
+  }
+
+  fn code(self) -> PluginErrorCode<'static> {
+    match self {
+      Self::TimedOut => PluginErrorCode::TimedOut,
+      Self::Cancelled | Self::TornDown => PluginErrorCode::Aborted,
+    }
+  }
+
+  fn message(self) -> &'static str {
+    match self {
+      Self::Cancelled => "the app cancelled the request and this stage was abandoned",
+      Self::TimedOut => "the interceptor chain's budget expired and this stage was abandoned",
+      Self::TornDown => "the interceptor chain was torn down and this stage was abandoned",
+    }
+  }
+}
+
+#[derive(Default)]
+struct DispatchSignal {
+  controller: RefCell<Option<Persistent<Object<'static>>>>,
+  abandoned: Cell<Option<Abandon>>,
+  finished: Cell<bool>,
+}
+
+impl DispatchSignal {
+  fn read<'js>(&self, ctx: &Ctx<'js>, ctor: &Constructor<'js>) -> JsResult<Value<'js>> {
+    let stored = self.controller.borrow().clone();
+    if let Some(controller) = stored {
+      return controller.restore(ctx)?.get("signal");
+    }
+    let controller: Object = ctor.construct(())?;
+    if let Some(abandon) = self.abandoned.get() {
+      abort_controller(ctx, &controller, abandon)?;
+    } else if !self.finished.get() {
+      *self.controller.borrow_mut() = Some(Persistent::save(ctx, controller.clone()));
+    }
+    controller.get("signal")
+  }
+
+  fn abandon(&self, ctx: &Ctx<'_>, abandon: Abandon) -> JsResult<()> {
+    self.abandoned.set(Some(abandon));
+    self.finished.set(true);
+    let controller = self.controller.borrow_mut().take();
+    match controller {
+      Some(controller) => abort_controller(ctx, &controller.restore(ctx)?, abandon),
+      None => Ok(()),
+    }
+  }
+
+  fn finish(&self, ctx: &Ctx<'_>) {
+    self.finished.set(true);
+    let controller = self.controller.borrow_mut().take();
+    if let Some(controller) = controller {
+      let _ = controller.restore(ctx);
+    }
+  }
+}
+
+fn abort_controller<'js>(ctx: &Ctx<'js>, controller: &Object<'js>, abandon: Abandon) -> JsResult<()> {
+  let abort: Function = controller.get("abort")?;
+  let error = error::make_plugin_error(ctx, abandon.code().name(), abandon.message(), None, None, None)?;
+  abort.call((This(controller.clone()), error))
+}
+
+#[derive(Default)]
+struct DispatchState {
+  called: Cell<bool>,
+  settled: Cell<bool>,
+  signal: Rc<DispatchSignal>,
+  want_passthrough: Cell<bool>,
+  next_response: RefCell<Option<String>>,
+  next_resolvers: RefCell<Option<PendingSettle>>,
+  request: RefCell<Option<Persistent<Value<'static>>>>,
+}
+
+impl DispatchState {
+  fn release(&self, ctx: &Ctx<'_>) {
+    if let Some(pending) = self.next_resolvers.borrow_mut().take() {
+      pending.release(ctx);
+    }
+    if let Some(request) = self.request.borrow_mut().take() {
+      let _ = request.restore(ctx);
+    }
+    self.signal.finish(ctx);
+  }
+}
+
+#[derive(Clone)]
+struct UpdateReg {
+  callback: Persistent<Function<'static>>,
+  types: Rc<[String]>,
+}
+
+const DEMUX_EVENTS: [(&str, &str, &[&str]); 3] = [
+  ("onNewMessage", "new_message", &["updateNewMessage", "updateNewChannelMessage"]),
+  ("onMessageEdited", "edit_message", &["updateEditMessage", "updateEditChannelMessage"]),
+  ("onMessageDeleted", "delete_message", &["updateDeleteMessages", "updateDeleteChannelMessages"]),
+];
+
+pub const ANY_ACCOUNT: i32 = -1;
+
+/// keep in step with `RpcListener` in src/fork/helpers/plugins/PluginListener.kt
+pub const OP_TAKEOUT_INIT: i32 = 0;
+pub const OP_TAKEOUT_FINISH: i32 = 1;
+pub const OP_TAKEOUT_INVOKE: i32 = 2;
+
+const RAW_GRANT: &str = "unsafe.invokeRaw";
+const TAKEOUT_GRANT: &str = "takeout";
+
+const EVENTS_PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/events.qbc"));
+const SEND_PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/send_message.qbc"));
+
+/// keep in step with `SYNTHETIC_CODE`/`DROPPED_TEXT` in src/fork/helpers/plugins/telegram/PluginRpc.kt
+pub(crate) const DROP_CODE: i32 = -1000;
+pub(crate) const DROP_TEXT: &str = "MESSAGE_DROPPED_BY_PLUGIN";
+
+const SEND_SCOPE: &str = "interceptSendMessage";
+
+#[derive(Default)]
+struct UpdateDispatchState {
+  settled: Cell<bool>,
+  signal: Rc<DispatchSignal>,
+}
+
+pub struct RpcState {
+  host: Rc<dyn RpcHost>,
+  tl: Rc<TlViews>,
+  grants: Rc<dyn GrantHost>,
+  lifecycle: Rc<Lifecycle>,
+  accounts: Option<Rc<AccountState>>,
+  pub(crate) log: Log,
+  intercept_fns: CallbackRegistry,
+  update_fns: Registry<UpdateReg>,
+  intercept_update_fns: Registry<UpdateReg>,
+  demux: RefCell<Option<Persistent<Function<'static>>>>,
+  send_wrap: RefCell<Option<Persistent<Function<'static>>>>,
+  send_methods: RefCell<Vec<String>>,
+  abort_controller: RefCell<Option<Persistent<Constructor<'static>>>>,
+  dispatches: RefCell<HashMap<i64, Rc<DispatchState>>>,
+  update_dispatches: RefCell<HashMap<i64, Rc<UpdateDispatchState>>>,
+  invokes: PendingTable<()>,
+}
+
+impl RpcState {
+  fn insert_dispatch(&self, dispatch_id: i64, dstate: Rc<DispatchState>) {
+    self.dispatches.borrow_mut().insert(dispatch_id, dstate);
+    self.sync_blocking();
+  }
+
+  fn remove_dispatch(&self, dispatch_id: i64) -> Option<Rc<DispatchState>> {
+    let removed = self.dispatches.borrow_mut().remove(&dispatch_id);
+    self.sync_blocking();
+    removed
+  }
+
+  fn drain_dispatches(&self) -> Vec<(i64, Rc<DispatchState>)> {
+    let drained: Vec<_> = self.dispatches.borrow_mut().drain().collect();
+    self.sync_blocking();
+    drained
+  }
+
+  fn insert_update_dispatch(&self, dispatch_id: i64, ustate: Rc<UpdateDispatchState>) {
+    self.update_dispatches.borrow_mut().insert(dispatch_id, ustate);
+    self.sync_blocking();
+  }
+
+  fn remove_update_dispatch(&self, dispatch_id: i64) -> Option<Rc<UpdateDispatchState>> {
+    let removed = self.update_dispatches.borrow_mut().remove(&dispatch_id);
+    self.sync_blocking();
+    removed
+  }
+
+  fn drain_update_dispatches(&self, ctx: &Ctx<'_>) {
+    let drained: Vec<_> = self.update_dispatches.borrow_mut().drain().collect();
+    self.sync_blocking();
+    for (_, ustate) in drained {
+      ustate.signal.finish(ctx);
+    }
+  }
+
+  fn define_signal<'js>(self: &Rc<Self>, context: &Object<'js>, signal: &Rc<DispatchSignal>) -> JsResult<()> {
+    let state = self.clone();
+    let signal = signal.clone();
+    let get = move |ctx: Ctx<'js>, this: This<Object<'js>>| -> JsResult<Value<'js>> {
+      let Some(ctor) = state.abort_controller.borrow().clone() else {
+        return PluginErrorCode::Unsupported.throw(&ctx, "signal: AbortController is not installed");
+      };
+      let value = signal.read(&ctx, &ctor.restore(&ctx)?)?;
+      this.0.prop("signal", Property::from(value.clone()).enumerable())?;
+      Ok(value)
+    };
+    context.prop("signal", Accessor::new_get(get).enumerable().configurable())
+  }
+
+  fn sync_blocking(&self) {
+    let count = self.dispatches.borrow().len() + self.update_dispatches.borrow().len();
+    self.lifecycle.set_blocking_dispatches(count);
+  }
+}
+
+fn rpc_error_to_wire<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> Option<String> {
+  let obj = value.as_object()?;
+  let ctor = crate::api::Globals::get(ctx).ok()?.get_rpc_error(ctx).ok()?;
+  if !obj.is_instance_of(ctor.into_value()) {
+    return None;
+  }
+  let code = obj.get::<_, i32>("code").ok()?;
+  let text = obj.get::<_, String>("text").ok()?;
+  Some(proxy::encode_rpc_error(code, &text))
+}
+
+fn thrown_to_result_wire<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> String {
+  rpc_error_to_wire(ctx, value).unwrap_or_else(|| proxy::encode_error(&error_value_to_string(ctx, value)))
+}
+
+fn describe_stage_failure<'js>(ctx: &Ctx<'js>, what: std::fmt::Arguments, value: &Value<'js>) -> String {
+  let detail = format_thrown(ctx, value);
+  if rpc_error_to_wire(ctx, value).is_some() {
+    format!("{what}: {detail}")
+  } else {
+    crate::fault(format_args!("{what}: {detail}"))
+  }
+}
+
+impl PendingSettle {
+  fn settle_from_wire<'js>(self, ctx: &Ctx<'js>, tl: &Rc<TlViews>, wire: &str, life: ViewLife) -> JsResult<()> {
+    let built = match error::wire_error_to_js(ctx, wire) {
+      Some(value) => value.map(|v| (v, true)),
+      None => tl.wire_to_js_value(ctx, wire, life).map(|v| (v, false)),
+    };
+    match built {
+      Ok((value, is_error)) => {
+        if is_error {
+          self.reject_with_value(ctx, value)
+        } else {
+          self.resolve_with(ctx, value)
+        }
+      }
+      Err(e) => {
+        self.release(ctx);
+        Err(e)
+      }
+    }
+  }
+}
+
+fn resolve_and_then<'js>(ctx: &Ctx<'js>, result: Value<'js>, ok: Function<'js>, err: Function<'js>) -> JsResult<()> {
+  let (promise, resolve, _) = ctx.promise()?;
+  resolve.call::<_, ()>((result,))?;
+  qjs_promise_then(&promise, &ok, &err)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn install_rpc<'js>(
+  ctx: &Ctx<'js>,
+  host: Rc<dyn RpcHost>,
+  tl: Rc<TlViews>,
+  grants: Rc<dyn GrantHost>,
+  lifecycle: Rc<Lifecycle>,
+  accounts: Option<Rc<AccountState>>,
+  shared: Object<'js>,
+  log: Log,
+  globals: &crate::api::Globals<'js>,
+) -> JsResult<Rc<RpcState>> {
+  let state = Rc::new(RpcState {
+    host,
+    tl,
+    grants,
+    lifecycle,
+    accounts,
+    log,
+    intercept_fns: CallbackRegistry::default(),
+    update_fns: Registry::default(),
+    intercept_update_fns: Registry::default(),
+    demux: RefCell::new(None),
+    send_wrap: RefCell::new(None),
+    send_methods: RefCell::new(Vec::new()),
+    abort_controller: RefCell::new(
+      ctx
+        .globals()
+        .get::<_, Option<Constructor>>("AbortController")?
+        .map(|ctor| Persistent::save(ctx, ctor)),
+    ),
+    dispatches: RefCell::new(HashMap::new()),
+    update_dispatches: RefCell::new(HashMap::new()),
+    invokes: PendingTable::default(),
+  });
+
+  globals.set_rpc_error(ctx.eval(
+    r"(class RpcError extends Error {
+        constructor(code, text) {
+          super(code + ': ' + text);
+          this.name = 'RpcError';
+          this.code = code | 0;
+          this.text = String(text ?? '');
+        }
+    })",
+  )?)?;
+
+  let state2 = state.clone();
+  globals.inu.set(
+    "interceptRpc",
+    Function::new(
+      ctx.clone(),
+      move |ctx: Ctx<'js>, methods: Value<'js>, cb: Function<'js>, options: Opt<Value<'js>>| {
+        let ctx: &Ctx<'js> = &ctx;
+        if state2.lifecycle.is_unloading() {
+          return noop_disposer(ctx);
+        }
+        let list = read_name_list(ctx, "interceptRpc", methods, "method")?;
+        for method in &list {
+          state2.grants.check_grant(ctx, "interceptRpc", Some(method), MATCH_EXACT)?;
+        }
+        let strict = match options.0 {
+          None => false,
+          Some(options) => {
+            let Some(options) = options.as_object() else {
+              return Err(Exception::throw_type(ctx, "interceptRpc: options must be an object"));
+            };
+            opt_bool(ctx, options, "interceptRpc", "strict")?.unwrap_or_default()
+          }
+        };
+        state2.register_intercept(ctx, list, "", strict, "", cb)
+      },
+    )?,
+  )?;
+
+  let state2 = state.clone();
+  globals.inu.set(
+    "invokeRpc",
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>, obj: Value<'js>| state2.js_invoke_rpc(&ctx, ANY_ACCOUNT, obj))?,
+  )?;
+
+  let state2 = state.clone();
+  globals.inu.set(
+    "invokeRaw",
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>, bytes: Value<'js>| state2.js_invoke_raw(&ctx, ANY_ACCOUNT, bytes))?,
+  )?;
+
+  let state2 = state.clone();
+  globals.inu.set(
+    "onUpdate",
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>, types: Value<'js>, cb: Function<'js>| {
+      state2.js_on_update(&ctx, types, cb)
+    })?,
+  )?;
+
+  let state2 = state.clone();
+  globals.inu.set(
+    "interceptUpdate",
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>, types: Value<'js>, cb: Function<'js>| {
+      state2.js_intercept_update(&ctx, types, cb)
+    })?,
+  )?;
+
+  state.install_demuxed_events(ctx, globals)?;
+  state.install_send_message(ctx, globals, shared)?;
+  state.install_account_invoke(ctx)?;
+  Ok(state)
+}
+
+impl RpcState {
+  fn install_account_invoke<'js>(self: &Rc<Self>, ctx: &Ctx<'js>) -> JsResult<()> {
+    let Some(accounts) = self.accounts.clone() else {
+      return Ok(());
+    };
+    let prototype = Object::new(ctx.clone())?;
+    let state2 = self.clone();
+    prototype.set(
+      "invokeRpc",
+      Function::new(
+        ctx.clone(),
+        move |ctx: Ctx<'js>, this: This<Value<'js>>, obj: Value<'js>| -> JsResult<Value<'js>> {
+          let slot = account_slot(&ctx, &this, "invokeRpc")?;
+          state2.js_invoke_rpc(&ctx, slot, obj)
+        },
+      )?,
+    )?;
+    let state2 = self.clone();
+    prototype.set(
+      "invokeRaw",
+      Function::new(
+        ctx.clone(),
+        move |ctx: Ctx<'js>, this: This<Value<'js>>, bytes: Value<'js>| -> JsResult<Value<'js>> {
+          let slot = account_slot(&ctx, &this, "invokeRaw")?;
+          state2.js_invoke_raw(&ctx, slot, bytes)
+        },
+      )?,
+    )?;
+    let state2 = self.clone();
+    prototype.set(
+      "initTakeoutSession",
+      Function::new(
+        ctx.clone(),
+        move |ctx: Ctx<'js>, this: This<Value<'js>>, options: Opt<Value<'js>>| -> JsResult<Value<'js>> {
+          let slot = account_slot(&ctx, &this, "initTakeoutSession")?;
+          state2.js_init_takeout(&ctx, slot, options.0)
+        },
+      )?,
+    )?;
+    if let Some(inner) = accounts.take_prototype(ctx) {
+      prototype.set_prototype(Some(&inner))?;
+    }
+    qjs_object_freeze(&prototype)?;
+    accounts.set_prototype(ctx, &prototype);
+    Ok(())
+  }
+
+  fn install_send_message<'js>(
+    self: &Rc<Self>,
+    ctx: &Ctx<'js>,
+    globals: &crate::api::Globals<'js>,
+    shared: Object<'js>,
+  ) -> JsResult<()> {
+    let factory = qjs_load_prelude(ctx, SEND_PRELUDE)?;
+    let plugin_error = globals.plugin_error.clone();
+    let rpc_error = globals.get_rpc_error(ctx)?;
+    let built: Object = factory.call((shared, plugin_error, rpc_error, DROP_CODE, DROP_TEXT))?;
+    let build: Function = built.get("wrap")?;
+    *self.send_methods.borrow_mut() = built.get("methods")?;
+    *self.send_wrap.borrow_mut() = Some(Persistent::save(ctx, build));
+
+    let state = self.clone();
+    globals.inu.set(
+      "interceptSendMessage",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, first: Value<'js>, second: Opt<Value<'js>>| {
+        let ctx: &Ctx<'js> = &ctx;
+        if state.lifecycle.is_unloading() {
+          return noop_disposer(ctx);
+        }
+        state.grants.check_grant(ctx, SEND_SCOPE, None, MATCH_EXACT)?;
+        let (filter_json, cb) = match second.0 {
+          Some(callback) => {
+            let Some(callback) = callback.into_function() else {
+              return Err(Exception::throw_type(ctx, "interceptSendMessage: middleware must be a function"));
+            };
+            let Some(filter) = first.as_object() else {
+              return Err(Exception::throw_type(ctx, "interceptSendMessage: filter must be an object"));
+            };
+            let encoded = Object::new(ctx.clone())?;
+            if let Some(is_edit) = opt_bool(ctx, filter, "interceptSendMessage filter", "isEdit")? {
+              encoded.set("isEdit", is_edit)?;
+            }
+            let text: Value = filter.get("text")?;
+            if !text.is_undefined() {
+              let Some(text) = text.as_object() else {
+                return Err(Exception::throw_type(ctx, "interceptSendMessage: filter.text must be a RegExp"));
+              };
+              if !qjs_is_regexp(text) {
+                return Err(Exception::throw_type(ctx, "interceptSendMessage: filter.text must be a RegExp"));
+              }
+              let source: String = text
+                .get("source")
+                .map_err(|_| Exception::throw_type(ctx, "interceptSendMessage: filter.text must be a RegExp"))?;
+              let flags: String = text
+                .get("flags")
+                .map_err(|_| Exception::throw_type(ctx, "interceptSendMessage: filter.text must be a RegExp"))?;
+              let regex = Object::new(ctx.clone())?;
+              regex.set("source", source)?;
+              regex.set("flags", flags)?;
+              encoded.set("text", regex)?;
+            }
+            let json = stringify_json(ctx, encoded.into_value(), "interceptSendMessage: the filter did not serialize")?;
+            (json, callback)
+          }
+          None => {
+            let Some(callback) = first.into_function() else {
+              return Err(Exception::throw_type(ctx, "interceptSendMessage: middleware must be a function"));
+            };
+            (String::new(), callback)
+          }
+        };
+        let build = match state.send_wrap.borrow().as_ref() {
+          Some(build) => build.clone().restore(ctx)?,
+          None => return Err(Exception::throw_type(ctx, "interceptSendMessage is not installed")),
+        };
+        let middleware: Function = build.call((cb,))?;
+        let list = state.send_methods.borrow().clone();
+        state.register_intercept(ctx, list, SEND_SCOPE, true, &filter_json, middleware)
+      })?,
+    )?;
+    Ok(())
+  }
+
+  fn install_demuxed_events<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, globals: &crate::api::Globals<'js>) -> JsResult<()> {
+    let factory = qjs_load_prelude(ctx, EVENTS_PRELUDE)?;
+    let message = globals.get_message(ctx)?;
+    if !message.is_function() {
+      return Err(Exception::throw_type(ctx, "the demuxed events need the inu.Message installApi installs"));
+    }
+    let build: Function = factory.call((message,))?;
+    *self.demux.borrow_mut() = Some(Persistent::save(ctx, build));
+
+    for (name, kind, types) in DEMUX_EVENTS {
+      let state = self.clone();
+      globals.inu.set(
+        name,
+        Function::new(ctx.clone(), move |ctx: Ctx<'js>, cb: Function<'js>| state.js_on_demuxed(&ctx, kind, types, cb))?,
+      )?;
+    }
+    Ok(())
+  }
+}
+
+fn read_name_list<'js>(ctx: &Ctx<'js>, what: &str, names: Value<'js>, noun: &str) -> JsResult<Vec<String>> {
+  let list: Vec<String> = if let Some(s) = names.as_string() {
+    vec![s.to_string()?]
+  } else if let Some(arr) = names.as_array() {
+    let mut out = Vec::new();
+    for item in crate::utils::arguments::array_values(ctx, arr, what)? {
+      let s = item
+        .as_string()
+        .ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: {noun} list must contain only strings")))?
+        .to_string()?;
+      out.push(s);
+    }
+    out
+  } else {
+    return Err(Exception::throw_type(ctx, &format!("{what}: {noun} must be a string or an array of strings")));
+  };
+  if list.is_empty() {
+    return Err(Exception::throw_type(ctx, &format!("{what}: {noun} list must not be empty")));
+  }
+  Ok(list)
+}
+
+impl RpcState {
+  fn register_intercept<'js>(
+    self: &Rc<Self>,
+    ctx: &Ctx<'js>,
+    methods: Vec<String>,
+    scope: &str,
+    strict: bool,
+    filter_json: &str,
+    middleware: Function<'js>,
+  ) -> JsResult<Function<'js>> {
+    let callback_id = self.intercept_fns.alloc();
+    if let Some(err) = self.host.on_register(&methods, callback_id, scope, strict, filter_json) {
+      return Err(ctx.throw(error::host_error_to_js(ctx, &err)?));
+    }
+    self.intercept_fns.register(ctx, callback_id, middleware);
+
+    let state = self.clone();
+    make_disposer(ctx, move |ctx| {
+      if state.intercept_fns.dispose(ctx, callback_id) {
+        state.host.on_unregister(callback_id);
+      }
+    })
+  }
+}
+
+fn read_method_name<'js>(ctx: &Ctx<'js>, obj: &Value<'js>) -> JsResult<String> {
+  let name = match obj.as_object() {
+    Some(obj) => obj.get::<_, Value>("_")?,
+    None => Value::new_undefined(ctx.clone()),
+  };
+  match name.as_string().and_then(|s| s.to_string().ok()) {
+    Some(name) => Ok(name),
+    None => PluginErrorCode::InvalidArgument.throw(ctx, "invokeRpc: the request must carry its method name in '_'"),
+  }
+}
+
+fn takeout_options_json<'js>(ctx: &Ctx<'js>, options: Option<Value<'js>>) -> JsResult<String> {
+  let Some(options) = options.and_then(|value| value.into_object()) else {
+    return Ok("{}".to_string());
+  };
+  let flag = |name: &str| -> JsResult<bool> { Ok(options.get::<_, Option<bool>>(name)?.unwrap_or(false)) };
+  let file_max_size: i64 = match options.get::<_, Value>("fileMaxSize") {
+    Ok(value) if !value.is_undefined() && !value.is_null() => match value.as_number() {
+      Some(size) if size.fract() == 0.0 && size > 0.0 => size as i64,
+      _ => {
+        return PluginErrorCode::InvalidArgument
+          .throw(ctx, "initTakeoutSession: fileMaxSize must be a positive integer")
+      }
+    },
+    _ => 0,
+  };
+  let out = Object::new(ctx.clone())?;
+  for name in ["contacts", "messageUsers", "messageChats", "messageMegagroups", "messageChannels"] {
+    out.set(name, flag(name)?)?;
+  }
+  out.set("fileMaxSize", file_max_size as f64)?;
+  stringify_json(ctx, out.into_value(), "initTakeoutSession: serialization failed")
+}
+
+impl RpcState {
+  fn js_invoke_rpc<'js>(&self, ctx: &Ctx<'js>, slot: i32, obj: Value<'js>) -> JsResult<Value<'js>> {
+    let method = read_method_name(ctx, &obj)?;
+    self.grants.check_grant(ctx, "invokeRpc", Some(&method), MATCH_EXACT)?;
+
+    let wire = proxy::js_value_to_wire(ctx, obj)?;
+    Ok(self.invokes.park(ctx, (), |invoke_id| self.host.on_invoke(invoke_id, slot, &wire))?.into_value())
+  }
+
+  /// the one api whose payload is bytes and nothing else, in both directions: it crosses as a
+  /// java `byte[]` and comes back through [`Self::settle_bytes`], never as base64 in a wire string.
+  fn js_invoke_raw<'js>(&self, ctx: &Ctx<'js>, slot: i32, bytes: Value<'js>) -> JsResult<Value<'js>> {
+    self.grants.check_grant(ctx, RAW_GRANT, None, MATCH_EXACT)?;
+    let Some(method) = TypedArray::<u8>::from_value(bytes)
+      .ok()
+      .and_then(|array| qjs_read_typed_bytes(&array, <[u8]>::to_vec))
+    else {
+      return PluginErrorCode::InvalidArgument.throw(ctx, "invokeRaw: expected the serialized method as a Uint8Array");
+    };
+    Ok(
+      self
+        .invokes
+        .park(ctx, (), |invoke_id| self.host.on_invoke_raw(invoke_id, slot, &method))?
+        .into_value(),
+    )
+  }
+
+  fn js_init_takeout<'js>(
+    self: &Rc<Self>,
+    ctx: &Ctx<'js>,
+    slot: i32,
+    options: Option<Value<'js>>,
+  ) -> JsResult<Value<'js>> {
+    self.grants.check_grant(ctx, TAKEOUT_GRANT, None, MATCH_EXACT)?;
+    let options = takeout_options_json(ctx, options)?;
+    let promise = self
+      .invokes
+      .park(ctx, (), |invoke_id| self.host.on_takeout(invoke_id, slot, OP_TAKEOUT_INIT, "", &options))?;
+
+    let state = self.clone();
+    let build = Function::new(ctx.clone(), move |ctx: Ctx<'js>, id: Option<String>| -> JsResult<Value<'js>> {
+      // the host answers null when the server sent back something that was not a session at all
+      let Some(id) = id else {
+        return PluginErrorCode::Unsupported.throw(&ctx, "initTakeoutSession: the server answered no session");
+      };
+      state.build_takeout_session(&ctx, slot, id)
+    })?;
+    let then: Function = promise.get("then")?;
+    then.call((This(promise.clone()), build))
+  }
+
+  fn build_takeout_session<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, slot: i32, id: String) -> JsResult<Value<'js>> {
+    let session = Object::new(ctx.clone())?;
+    session.set("id", id.clone())?;
+
+    let state = self.clone();
+    let owned = id.clone();
+    session.set(
+      "invokeRpc",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, obj: Value<'js>| -> JsResult<Value<'js>> {
+        state.js_takeout_invoke(&ctx, slot, &owned, obj)
+      })?,
+    )?;
+
+    let state = self.clone();
+    let owned = id;
+    session.set(
+      "finish",
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, success: Opt<bool>| -> JsResult<Value<'js>> {
+        state.js_takeout_finish(&ctx, slot, &owned, success.0.unwrap_or(true))
+      })?,
+    )?;
+
+    qjs_object_freeze(&session)?;
+    Ok(session.into_value())
+  }
+
+  /// a wrapped call is the same call: it is checked against the same `invokeRpc` scopes, here and
+  /// again in the host
+  fn js_takeout_invoke<'js>(&self, ctx: &Ctx<'js>, slot: i32, id: &str, obj: Value<'js>) -> JsResult<Value<'js>> {
+    self.grants.check_grant(ctx, TAKEOUT_GRANT, None, MATCH_EXACT)?;
+    let method = read_method_name(ctx, &obj)?;
+    self.grants.check_grant(ctx, "invokeRpc", Some(&method), MATCH_EXACT)?;
+
+    let wire = proxy::js_value_to_wire(ctx, obj)?;
+    let promise = self
+      .invokes
+      .park(ctx, (), |invoke_id| self.host.on_takeout(invoke_id, slot, OP_TAKEOUT_INVOKE, id, &wire))?;
+    Ok(promise.into_value())
+  }
+
+  fn js_takeout_finish<'js>(&self, ctx: &Ctx<'js>, slot: i32, id: &str, success: bool) -> JsResult<Value<'js>> {
+    self.grants.check_grant(ctx, TAKEOUT_GRANT, None, MATCH_EXACT)?;
+    let arg = if success { "1" } else { "0" };
+    let promise = self
+      .invokes
+      .park(ctx, (), |invoke_id| self.host.on_takeout(invoke_id, slot, OP_TAKEOUT_FINISH, id, arg))?;
+    Ok(promise.into_value())
+  }
+
+  fn read_granted_types<'js>(&self, ctx: &Ctx<'js>, grant: &str, types: Value<'js>) -> JsResult<Vec<String>> {
+    let list = read_name_list(ctx, grant, types, "type")?;
+    for name in &list {
+      self.grants.check_grant(ctx, grant, Some(name), MATCH_EXACT)?;
+    }
+    Ok(list)
+  }
+
+  fn js_on_update<'js>(
+    self: &Rc<Self>,
+    ctx: &Ctx<'js>,
+    types: Value<'js>,
+    cb: Function<'js>,
+  ) -> JsResult<Function<'js>> {
+    if self.lifecycle.is_unloading() {
+      return noop_disposer(ctx);
+    }
+    let list = self.read_granted_types(ctx, "onUpdate", types)?;
+    self.register_update_listener(ctx, list, "", cb)
+  }
+
+  fn js_intercept_update<'js>(
+    self: &Rc<Self>,
+    ctx: &Ctx<'js>,
+    types: Value<'js>,
+    cb: Function<'js>,
+  ) -> JsResult<Function<'js>> {
+    if self.lifecycle.is_unloading() {
+      return noop_disposer(ctx);
+    }
+    let list = self.read_granted_types(ctx, "interceptUpdate", types)?;
+    self.register_update_reg(
+      ctx,
+      |state| &state.intercept_update_fns,
+      |state, callback_id| state.host.on_intercept_update_unregister(callback_id),
+      list,
+      cb,
+      |state, callback_id, types| state.host.on_intercept_update_register(callback_id, types),
+    )
+  }
+
+  fn js_on_demuxed<'js>(
+    self: &Rc<Self>,
+    ctx: &Ctx<'js>,
+    kind: &str,
+    types: &[&str],
+    cb: Function<'js>,
+  ) -> JsResult<Function<'js>> {
+    if self.lifecycle.is_unloading() {
+      return noop_disposer(ctx);
+    }
+    self.grants.check_grant(ctx, "onUpdate", Some(kind), MATCH_EXACT)?;
+    let build = match self.demux.borrow().as_ref() {
+      Some(build) => build.clone().restore(ctx)?,
+      None => return Err(Exception::throw_type(ctx, "the demuxed events are not installed")),
+    };
+    let listener: Function = build.call((kind, cb))?;
+    self.register_update_listener(ctx, types.iter().map(ToString::to_string).collect(), kind, listener)
+  }
+
+  fn register_update_listener<'js>(
+    self: &Rc<Self>,
+    ctx: &Ctx<'js>,
+    types: Vec<String>,
+    scope: &str,
+    listener: Function<'js>,
+  ) -> JsResult<Function<'js>> {
+    self.register_update_reg(
+      ctx,
+      |state| &state.update_fns,
+      |state, callback_id| state.host.on_update_unregister(callback_id),
+      types,
+      listener,
+      |state, callback_id, types| state.host.on_update_register(callback_id, types, scope),
+    )
+  }
+
+  fn register_update_reg<'js>(
+    self: &Rc<Self>,
+    ctx: &Ctx<'js>,
+    pick: fn(&RpcState) -> &Registry<UpdateReg>,
+    unregister: fn(&RpcState, u32),
+    types: Vec<String>,
+    callback: Function<'js>,
+    register: impl FnOnce(&RpcState, u32, &[String]) -> Option<String>,
+  ) -> JsResult<Function<'js>> {
+    let callback_id = pick(self).alloc();
+    if let Some(err) = register(self, callback_id, &types) {
+      return Err(ctx.throw(error::host_error_to_js(ctx, &err)?));
+    }
+    pick(self).insert(
+      callback_id,
+      None,
+      UpdateReg {
+        callback: Persistent::save(ctx, callback),
+        types: types.into(),
+      },
+    );
+
+    let state = self.clone();
+    make_disposer(ctx, move |ctx| {
+      if let Some(reg) = pick(&state).remove(callback_id) {
+        let _ = reg.callback.restore(ctx);
+        unregister(&state, callback_id);
+      }
+    })
+  }
+}
+
+impl RpcState {
+  fn settle_update_verdict(&self, ctx: &Ctx<'_>, ustate: &Rc<UpdateDispatchState>, dispatch_id: i64, deliver: bool) {
+    if ustate.settled.replace(true) {
+      return;
+    }
+    self.remove_update_dispatch(dispatch_id);
+    ustate.signal.finish(ctx);
+    self.host.on_update_verdict(dispatch_id, deliver);
+  }
+
+  fn try_dispatch_update_intercept<'js>(
+    self: &Rc<Self>,
+    ctx: &Ctx<'js>,
+    callback_id: u32,
+    dispatch_id: i64,
+    type_name: &str,
+    account_id: i32,
+    update_wire: &str,
+  ) -> JsResult<()> {
+    let state = self;
+    let ustate = Rc::new(UpdateDispatchState::default());
+    let Some(reg) = state.intercept_update_fns.get(callback_id) else {
+      (state.log)(&format!(
+        "interceptUpdate({type_name}): dispatch {dispatch_id} names disposed interceptor {callback_id}, delivering"
+      ));
+      state.settle_update_verdict(ctx, &ustate, dispatch_id, true);
+      return Ok(());
+    };
+    let middleware = reg.callback.restore(ctx)?;
+    let context = Object::new(ctx.clone())?;
+    context.set("update", state.tl.wire_to_js_value(ctx, update_wire, ViewLife::Dispatch)?)?;
+    context.set("account", dispatch_account(ctx, &state.accounts, account_id)?)?;
+    state.define_signal(&context, &ustate.signal)?;
+
+    state.insert_update_dispatch(dispatch_id, ustate.clone());
+    let call_result = middleware.call::<_, Value>((context,));
+    let result_value = match call_result {
+      Ok(v) => v,
+      Err(rquickjs::Error::Exception) => {
+        let caught = ctx.catch();
+        (state.log)(&crate::fault(format_args!(
+          "interceptUpdate({type_name}) middleware threw, delivering: {}",
+          format_thrown(ctx, &caught)
+        )));
+        state.settle_update_verdict(ctx, &ustate, dispatch_id, true);
+        return Ok(());
+      }
+      Err(e) => return Err(e),
+    };
+
+    let ok_fn = {
+      let state = state.clone();
+      let ustate = ustate.clone();
+      let type_name = type_name.to_string();
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, value: Value<'js>| {
+        let verdict = value.as_string().and_then(|s| s.to_string().ok());
+        let deliver = match verdict.as_deref() {
+          Some("deliver") => true,
+          Some("drop") => false,
+          _ => {
+            (state.log)(&crate::fault(format_args!(
+              "interceptUpdate({type_name}) middleware returned {}, delivering: expected 'deliver' or 'drop'",
+              format_thrown(&ctx, &value)
+            )));
+            true
+          }
+        };
+        state.settle_update_verdict(&ctx, &ustate, dispatch_id, deliver);
+      })?
+    };
+    let err_fn = {
+      let state = state.clone();
+      let ustate = ustate.clone();
+      let type_name = type_name.to_string();
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, value: Value<'js>| {
+        if ustate.signal.abandoned.get().is_some() {
+          return;
+        }
+        (state.log)(&crate::fault(format_args!(
+          "interceptUpdate({type_name}) middleware rejected, delivering: {}",
+          format_thrown(&ctx, &value)
+        )));
+        state.settle_update_verdict(&ctx, &ustate, dispatch_id, true);
+      })?
+    };
+    resolve_and_then(ctx, result_value, ok_fn, err_fn)
+  }
+
+  fn complete_dispatch(&self, ctx: &Ctx<'_>, dstate: &Rc<DispatchState>, dispatch_id: i64, result_wire: &str) {
+    if dstate.settled.replace(true) {
+      return;
+    }
+    self.remove_dispatch(dispatch_id);
+    dstate.release(ctx);
+    self.host.on_complete(dispatch_id, result_wire);
+  }
+
+  fn passthrough_dispatch(&self, ctx: &Ctx<'_>, dispatch_id: i64, request_wire: &str) {
+    let dstate = Rc::new(DispatchState::default());
+    dstate.called.set(true);
+    dstate.want_passthrough.set(true);
+    self.insert_dispatch(dispatch_id, dstate.clone());
+    if let Some(err) = self.host.on_next(dispatch_id, request_wire) {
+      self.complete_dispatch(ctx, &dstate, dispatch_id, &error::host_error_to_wire(&err));
+    }
+  }
+
+  fn try_dispatch_rpc<'js>(
+    self: &Rc<Self>,
+    ctx: &Ctx<'js>,
+    callback_id: u32,
+    dispatch_id: i64,
+    method: &str,
+    account_id: i32,
+    request_wire: &str,
+  ) -> JsResult<()> {
+    let state = self;
+    let Some(middleware) = state.intercept_fns.restore(ctx, callback_id) else {
+      (state.log)(&format!(
+        "interceptRpc({method}): dispatch {dispatch_id} names disposed interceptor {callback_id}, passing through"
+      ));
+      state.passthrough_dispatch(ctx, dispatch_id, request_wire);
+      return Ok(());
+    };
+    let request_value = state.tl.wire_to_js_value(ctx, request_wire, ViewLife::Dispatch)?;
+
+    let dstate = Rc::new(DispatchState::default());
+    *dstate.request.borrow_mut() = Some(Persistent::save(ctx, request_value.clone()));
+    state.insert_dispatch(dispatch_id, dstate.clone());
+
+    let next_fn = {
+      let state = state.clone();
+      let dstate = dstate.clone();
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, req: Opt<Value<'js>>| -> JsResult<Value<'js>> {
+        if let Some(abandon) = dstate.signal.abandoned.get() {
+          return abandon.code().throw(&ctx, &format!("next(): {}", abandon.message()));
+        }
+        if dstate.settled.get() {
+          return PluginErrorCode::InvalidArgument.throw(&ctx, "next(): this dispatch already settled");
+        }
+        if dstate.called.replace(true) {
+          return Err(Exception::throw_type(&ctx, "next() may only be called once"));
+        }
+        let req = match req.0.filter(|req| !req.is_undefined()) {
+          Some(req) => req,
+          None => match dstate.request.borrow().clone() {
+            Some(request) => request.restore(&ctx)?,
+            None => return PluginErrorCode::InvalidArgument.throw(&ctx, "next(): this dispatch already settled"),
+          },
+        };
+        let wire = proxy::js_value_to_wire(&ctx, req)?;
+        let (promise, pending) = PendingSettle::new(&ctx)?;
+        *dstate.next_resolvers.borrow_mut() = Some(pending);
+        if let Some(err) = state.host.on_next(dispatch_id, &wire) {
+          if let Some(pending) = dstate.next_resolvers.borrow_mut().take() {
+            pending.reject_with(&ctx, &err)?;
+          }
+        }
+        Ok(promise.into_value())
+      })?
+    };
+
+    let context = Object::new(ctx.clone())?;
+    context.set("request", request_value)?;
+    context.set("account", dispatch_account(ctx, &state.accounts, account_id)?)?;
+    state.define_signal(&context, &dstate.signal)?;
+    // the third argument is the send prelude's; the raw `interceptRpc` form takes two and ignores it
+    let call_result = middleware.call::<_, Value>((context, next_fn, dispatch_id as f64));
+    let result_value = match call_result {
+      Ok(v) => v,
+      Err(rquickjs::Error::Exception) => {
+        let caught = ctx.catch();
+        (state.log)(&describe_stage_failure(ctx, format_args!("interceptRpc({method}) callback threw"), &caught));
+        let wire = thrown_to_result_wire(ctx, &caught);
+        state.complete_dispatch(ctx, &dstate, dispatch_id, &wire);
+        return Ok(());
+      }
+      Err(e) => return Err(e),
+    };
+
+    let ok_fn = {
+      let state = state.clone();
+      let dstate = dstate.clone();
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, value: Value<'js>| -> JsResult<()> {
+        if value.is_undefined() {
+          if dstate.called.get() {
+            let stored = dstate.next_response.borrow().clone();
+            match stored {
+              Some(wire) => state.complete_dispatch(&ctx, &dstate, dispatch_id, &wire),
+              None => dstate.want_passthrough.set(true),
+            }
+          } else {
+            state.complete_dispatch(&ctx, &dstate, dispatch_id, &proxy::encode_error("middleware returned undefined"));
+          }
+        } else {
+          let wire = match rpc_error_to_wire(&ctx, &value) {
+            Some(wire) => wire,
+            None => proxy::js_value_to_wire(&ctx, value)?,
+          };
+          state.complete_dispatch(&ctx, &dstate, dispatch_id, &wire);
+        }
+        Ok(())
+      })?
+    };
+    let err_fn = {
+      let state = state.clone();
+      let dstate = dstate.clone();
+      let method = method.to_string();
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, value: Value<'js>| -> JsResult<()> {
+        if dstate.signal.abandoned.get().is_some() {
+          return Ok(());
+        }
+        (state.log)(&describe_stage_failure(&ctx, format_args!("interceptRpc({method}) callback rejected"), &value));
+        let wire = thrown_to_result_wire(&ctx, &value);
+        state.complete_dispatch(&ctx, &dstate, dispatch_id, &wire);
+        Ok(())
+      })?
+    };
+
+    resolve_and_then(ctx, result_value, ok_fn, err_fn)
+  }
+}
+
+impl RpcState {
+  pub fn settle(self: &Rc<Self>, context: &rquickjs::Context, invoke_id: i64, result_wire: &str) {
+    self.invokes.settle_and_pump(context, &self.log, "invoke", invoke_id, result_wire, |ctx, _, wire| {
+      self.tl.wire_to_js_value(ctx, wire, ViewLife::Plugin)
+    });
+  }
+
+  pub fn settle_bytes(self: &Rc<Self>, context: &rquickjs::Context, invoke_id: i64, response: &[u8]) {
+    enter_js(context, |ctx| {
+      let settled = self.invokes.settle_with(&ctx, invoke_id, false, |ctx, _| proxy::make_bytes_value(ctx, response));
+      if let Err(why) = settled {
+        (self.log)(&format!("invokeRaw({invoke_id}) settle failed: {why}"));
+      }
+    });
+    pump_jobs(context, self.log.as_ref());
+  }
+
+  pub fn dispatch_update(
+    self: &Rc<Self>,
+    context: &rquickjs::Context,
+    type_name: &str,
+    account_id: i32,
+    update_wire: &str,
+  ) {
+    enter_js(context, |ctx| {
+      let value = match self.tl.wire_to_js_value(&ctx, update_wire, ViewLife::Plugin) {
+        Ok(v) => v,
+        Err(e) => {
+          (self.log)(&format!("dispatchUpdate: bad update wire: {}", describe_js_error(&ctx, e)));
+          return;
+        }
+      };
+      let listening: Vec<UpdateReg> = self
+        .update_fns
+        .values()
+        .into_iter()
+        .filter(|reg| reg.types.iter().any(|t| t == type_name))
+        .collect();
+      if listening.is_empty() {
+        return;
+      }
+      let account = match dispatch_account(&ctx, &self.accounts, account_id) {
+        Ok(v) => v,
+        Err(e) => {
+          (self.log)(&format!("dispatchUpdate: cannot build the account handle: {e:?}"));
+          return;
+        }
+      };
+      for reg in listening {
+        let Ok(f) = reg.callback.restore(&ctx) else {
+          continue;
+        };
+        call_callback(&ctx, &self.log, "onUpdate callback", &f, (value.clone(), account.clone()));
+      }
+    });
+    pump_jobs(context, self.log.as_ref());
+  }
+
+  #[allow(clippy::too_many_arguments)]
+  pub fn dispatch_update_intercept(
+    self: &Rc<Self>,
+    context: &rquickjs::Context,
+    callback_id: u32,
+    dispatch_id: i64,
+    type_name: &str,
+    account_id: i32,
+    update_wire: &str,
+  ) {
+    enter_js(context, |ctx| {
+      if let Err(e) =
+        self.try_dispatch_update_intercept(&ctx, callback_id, dispatch_id, type_name, account_id, update_wire)
+      {
+        let msg = describe_js_error(&ctx, e);
+        (self.log)(&format!("interceptUpdate({type_name}) dispatch failed, delivering: {msg}"));
+        if let Some(ustate) = self.remove_update_dispatch(dispatch_id) {
+          self.settle_update_verdict(&ctx, &ustate, dispatch_id, true);
+        } else {
+          self.host.on_update_verdict(dispatch_id, true);
+        }
+      }
+    });
+    pump_jobs(context, self.log.as_ref());
+  }
+
+  pub fn abandon_update_dispatch(self: &Rc<Self>, context: &rquickjs::Context, dispatch_id: i64, reason_wire: &str) {
+    enter_js(context, |ctx| {
+      if let Some(ustate) = self.remove_update_dispatch(dispatch_id) {
+        ustate.settled.set(true);
+        if let Err(e) = ustate.signal.abandon(&ctx, Abandon::from_wire(reason_wire)) {
+          (self.log)(&format!("abandonUpdateDispatch({dispatch_id}) failed to abort the signal: {e:?}"));
+        }
+      }
+    });
+    pump_jobs(context, self.log.as_ref());
+  }
+
+  #[allow(clippy::too_many_arguments)]
+  pub fn dispatch(
+    self: &Rc<Self>,
+    context: &rquickjs::Context,
+    callback_id: u32,
+    dispatch_id: i64,
+    method: &str,
+    account_id: i32,
+    request_wire: &str,
+  ) {
+    enter_js(context, |ctx| {
+      if let Err(e) = self.try_dispatch_rpc(&ctx, callback_id, dispatch_id, method, account_id, request_wire) {
+        let msg = describe_js_error(&ctx, e);
+        (self.log)(&format!("interceptRpc({method}) dispatch failed: {msg}"));
+        let wire = proxy::encode_error(&msg);
+        let dstate = self.dispatches.borrow().get(&dispatch_id).cloned();
+        match dstate {
+          Some(dstate) => self.complete_dispatch(&ctx, &dstate, dispatch_id, &wire),
+          None => self.host.on_complete(dispatch_id, &wire),
+        }
+      }
+    });
+    pump_jobs(context, self.log.as_ref());
+  }
+
+  pub fn complete_next(self: &Rc<Self>, context: &rquickjs::Context, dispatch_id: i64, result_wire: &str) {
+    enter_js(context, |ctx| {
+      let dstate = match self.dispatches.borrow().get(&dispatch_id).cloned() {
+        Some(d) => d,
+        None => return,
+      };
+      *dstate.next_response.borrow_mut() = Some(result_wire.to_string());
+
+      if let Some(pending) = dstate.next_resolvers.borrow_mut().take() {
+        if let Err(e) = pending.settle_from_wire(&ctx, &self.tl, result_wire, ViewLife::Dispatch) {
+          (self.log)(&format!("completeNext({dispatch_id}) failed to settle next(): {e:?}"));
+        }
+      }
+
+      if dstate.want_passthrough.get() {
+        self.complete_dispatch(&ctx, &dstate, dispatch_id, result_wire);
+      }
+    });
+    pump_jobs(context, self.log.as_ref());
+  }
+
+  pub fn abandon_dispatch(self: &Rc<Self>, context: &rquickjs::Context, dispatch_id: i64, reason_wire: &str) {
+    enter_js(context, |ctx| {
+      let removed = self.remove_dispatch(dispatch_id);
+      let Some(dstate) = removed else { return };
+      dstate.settled.set(true);
+      if let Err(e) = dstate.signal.abandon(&ctx, Abandon::from_wire(reason_wire)) {
+        (self.log)(&format!("abandonDispatch({dispatch_id}) failed to abort the signal: {e:?}"));
+      }
+
+      let pending = dstate.next_resolvers.borrow_mut().take();
+      if let Some(pending) = pending {
+        if let Err(e) = pending.reject_with(&ctx, reason_wire) {
+          (self.log)(&format!("abandonDispatch({dispatch_id}) failed to reject next(): {e:?}"));
+        }
+      }
+      dstate.release(&ctx);
+    });
+    pump_jobs(context, self.log.as_ref());
+  }
+}
+
+impl Dispose for RpcState {
+  fn dispose(&self, context: &rquickjs::Context) {
+    enter_js(context, |ctx| {
+      self.intercept_fns.release_all(&ctx);
+      drop(self.update_fns.remove_matching(|_| true));
+      drop(self.intercept_update_fns.remove_matching(|_| true));
+      let built = (self.demux.take(), self.send_wrap.take(), self.abort_controller.take());
+      drop(built);
+      if let Some(accounts) = self.accounts.as_ref() {
+        let _ = accounts.take_prototype(&ctx);
+      }
+      self.drain_update_dispatches(&ctx);
+      self.invokes.dispose(&ctx);
+      for (_, dstate) in self.drain_dispatches() {
+        dstate.release(&ctx);
+      }
+    });
+  }
+}
+
+#[cfg(test)]
+#[path = "rpc_tests.rs"]
+pub(crate) mod tests;

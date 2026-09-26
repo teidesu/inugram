@@ -1,0 +1,199 @@
+use crate::runtime::Dispose;
+use std::fs;
+use std::path::PathBuf;
+use std::rc::Rc;
+
+use rquickjs::function::Opt;
+use rquickjs::{Array, Ctx, Exception, Function, Object, Result as JsResult, Value};
+
+use crate::api::error::PluginErrorCode;
+use crate::api::io::blob::{mint_owned_file, BlobState, BUILD_LIMIT_BYTES};
+use crate::api::io::fs::FsState;
+use crate::api::io::staging::{SourceStager, StagedFile, StagedSource};
+use crate::api::tl::proxy::plain_wire_to_js;
+use crate::api::ui::{OP_PICK_FILE, OP_SAVE_FILE};
+use crate::runtime::{enter_js, Parked, PendingTable};
+use crate::utils::arguments::{opt_bool, stringify_json};
+
+const MAX_ACCEPT_TYPES: usize = 32;
+
+pub trait FilesHost {
+  /// both answer through [`FilesState::settle`]; the return is the refusal of the ask itself
+  fn ui_files(&self, op: i32, request_id: i64, options_json: &str) -> Option<String>;
+}
+
+enum FileRequest {
+  Pick { multiple: bool },
+  Save { _staged: Option<StagedFile> },
+}
+
+impl Parked for FileRequest {}
+
+pub struct FilesState {
+  host: Rc<dyn FilesHost>,
+  blobs: Rc<BlobState>,
+  sources: SourceStager,
+  log: crate::Log,
+  pending: PendingTable<FileRequest>,
+}
+
+pub fn install_files<'js>(
+  ctx: &Ctx<'js>,
+  host: Rc<dyn FilesHost>,
+  blobs: Rc<BlobState>,
+  stage_dir: PathBuf,
+  log: crate::Log,
+  globals: &crate::api::Globals<'js>,
+) -> JsResult<Rc<FilesState>> {
+  let state = Rc::new(FilesState {
+    host,
+    blobs: blobs.clone(),
+    sources: SourceStager::new(stage_dir, "save", BUILD_LIMIT_BYTES, "inu.ui.saveFile"),
+    log,
+    pending: PendingTable::default(),
+  });
+
+  let ui = globals.get_namespace(ctx, "ui")?;
+
+  let owned = state.clone();
+  ui.set(
+    "pickFile",
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>, options: Opt<Value<'js>>| -> JsResult<Value<'js>> {
+      owned.pick(&ctx, options)
+    })?,
+  )?;
+
+  let owned = state.clone();
+  ui.set(
+    "saveFile",
+    Function::new(
+      ctx.clone(),
+      move |ctx: Ctx<'js>, content: Opt<Value<'js>>, options: Opt<Value<'js>>| -> JsResult<Value<'js>> {
+        let content = content.0.unwrap_or_else(|| Value::new_undefined(ctx.clone()));
+        owned.save(&ctx, &content, options)
+      },
+    )?,
+  )?;
+
+  Ok(state)
+}
+
+impl FilesState {
+  pub fn attach_fs(self: &Rc<Self>, fs: Rc<FsState>) {
+    self.sources.attach_fs(fs);
+  }
+
+  fn pick<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, options: Opt<Value<'js>>) -> JsResult<Value<'js>> {
+    let mut multiple = false;
+    let out = Object::new(ctx.clone())?;
+    if let Some(options) = options.0.as_ref().and_then(|v| v.as_object()) {
+      multiple = opt_bool(ctx, options, "pickFile", "multiple")?.unwrap_or_default();
+      if let Some(accept) = options.get::<_, Option<Value>>("accept")? {
+        let array =
+          accept.as_array().ok_or_else(|| Exception::throw_type(ctx, "pickFile: 'accept' must be an array"))?;
+        let types = crate::utils::arguments::array_values(ctx, array, "pickFile: 'accept'")?;
+        if types.len() > MAX_ACCEPT_TYPES {
+          return PluginErrorCode::InvalidArgument
+            .throw(ctx, &format!("pickFile: at most {MAX_ACCEPT_TYPES} types may be accepted"));
+        }
+        let wanted = Array::new(ctx.clone())?;
+        for (index, value) in types.into_iter().enumerate() {
+          let Some(text) = value.as_string() else {
+            return PluginErrorCode::InvalidArgument.throw(ctx, "pickFile: 'accept' takes media types as strings");
+          };
+          wanted.set(index, text.to_string()?)?;
+        }
+        out.set("accept", wanted)?;
+      }
+    }
+    out.set("multiple", multiple)?;
+    self.start(ctx, OP_PICK_FILE, out, FileRequest::Pick { multiple })
+  }
+
+  fn save<'js>(
+    self: &Rc<Self>,
+    ctx: &Ctx<'js>,
+    content: &Value<'js>,
+    options: Opt<Value<'js>>,
+  ) -> JsResult<Value<'js>> {
+    let out = Object::new(ctx.clone())?;
+    if let Some(options) = options.0.as_ref().and_then(|v| v.as_object()) {
+      for name in ["fileName", "type"] {
+        if let Some(value) = options.get::<_, Option<String>>(name)? {
+          out.set(name, value)?;
+        }
+      }
+    }
+    let StagedSource { path, owned } = self.sources.stage(ctx, content)?;
+    out.set("path", path.to_string_lossy().to_string())?;
+    self.start(ctx, OP_SAVE_FILE, out, FileRequest::Save { _staged: owned.then(|| StagedFile(path)) })
+  }
+
+  fn start<'js>(
+    self: &Rc<Self>,
+    ctx: &Ctx<'js>,
+    op: i32,
+    options: Object<'js>,
+    kind: FileRequest,
+  ) -> JsResult<Value<'js>> {
+    let json = stringify_json(ctx, options.into_value(), "ui: serialization failed")?;
+    Ok(self.pending.park(ctx, kind, |request_id| self.host.ui_files(op, request_id, &json))?.into_value())
+  }
+
+  /// A pick answers `J` and the copies it made, a save `B1` or `B0` for whether it happened, and
+  /// either may answer an error wire instead.
+  pub fn settle(self: &Rc<Self>, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
+    self
+      .pending
+      .settle_and_pump(context, &self.log, "ui: files", request_id, result_wire, |ctx, request, wire| match request {
+        FileRequest::Pick { multiple } => {
+          let json = wire
+            .strip_prefix('J')
+            .ok_or_else(|| Exception::throw_message(ctx, "pickFile: malformed host answer"))?;
+          self.picked(ctx, json, *multiple)
+        }
+        FileRequest::Save { .. } => plain_wire_to_js(ctx, wire),
+      });
+  }
+
+  fn picked<'js>(&self, ctx: &Ctx<'js>, answer: &str, multiple: bool) -> JsResult<Value<'js>> {
+    let parsed = ctx.json_parse(answer)?;
+    let array = parsed.as_array().ok_or_else(|| Exception::throw_message(ctx, "pickFile: malformed host answer"))?;
+    let files = Array::new(ctx.clone())?;
+    for (index, entry) in array.iter::<Object>().enumerate() {
+      let entry = entry?;
+      let path: String = entry.get("path")?;
+      let name: String = entry.get("name")?;
+      let mime: String = entry.get("type").unwrap_or_default();
+      let path = PathBuf::from(path);
+      // a copy that is not there is a failure and not a cancellation, which is what an empty answer is
+      let Ok(meta) = fs::metadata(&path) else {
+        return PluginErrorCode::Internal.throw(ctx, "pickFile: the copy of this file is gone");
+      };
+      let mtime = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+      files.set(index, mint_owned_file(ctx, &self.blobs, &path, meta.len(), &mime, &name, mtime)?)?;
+    }
+    if multiple {
+      return Ok(files.into_value());
+    }
+    match files.get::<Value>(0) {
+      Ok(first) if !first.is_undefined() => Ok(first),
+      _ => Ok(Value::new_null(ctx.clone())),
+    }
+  }
+}
+
+impl Dispose for FilesState {
+  fn dispose(&self, context: &rquickjs::Context) {
+    enter_js(context, |ctx| self.pending.dispose(&ctx));
+  }
+}
+
+#[cfg(test)]
+#[path = "files_tests.rs"]
+mod tests;

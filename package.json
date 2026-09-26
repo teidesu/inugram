@@ -6,14 +6,21 @@
   "scripts": {
     "setup": "tsx scripts/setup.ts",
     "generate-icons": "tsx scripts/generate-icons.ts",
+    "generate-tl": "tsx scripts/generate-tl.ts",
     "export": "tsx scripts/export.ts",
     "rebase": "tsx scripts/rebase.ts",
     "find-patches": "tsx scripts/find-patches.ts",
     "lint-patches": "tsx scripts/lint-patches.ts",
     "push-theme": "tsx scripts/push-theme.ts",
-    "build-debug": "cd worktree && ./gradlew TMessagesProj_App:assembleDebug",
+    "build-debug": "tsx scripts/generate-grants.ts && cd worktree && ./gradlew TMessagesProj_App:assembleDebug",
     "run-debug": "cd worktree && ./gradlew TMessagesProj_App:installDebug && adb shell am start desu.inugram.beta/org.telegram.ui.LaunchActivity",
-    "prepare": "husky"
+    "check-plugin-syntax": "for f in src/test/plugins/*.js $(find src/native/src -name '*.js'); do node --check \"$f\" || exit 1; done",
+    "typecheck-plugins": "pnpm run check-plugin-syntax && tsx scripts/generate-tl.ts && tsx scripts/generate-grants.ts && tsc -p sdk/types/tsconfig.self.json --noEmit && tsc -p src/test/plugins --noEmit",
+    "prepare": "husky",
+    "generate-grants": "tsx scripts/generate-grants.ts",
+    "build-sdk": "pnpm --filter @inugram/cli run build",
+    "typecheck-sdk": "tsc -p sdk/cli --noEmit && tsc -p sdk/cli/src/templates/default --noEmit",
+    "test-sdk": "pnpm --filter @inugram/cli run test"
   },
   "dependencies": {
     "@antfu/eslint-config": "^8.1.0",
@@ -25,6 +32,7 @@
     "zx": "^8.8.4"
   },
   "devDependencies": {
+    "@inugram/plugin-types": "workspace:*",
     "@types/node": "^24.6.1",
     "husky": "^9.1.7",
     "tsx": "^4.20.6",

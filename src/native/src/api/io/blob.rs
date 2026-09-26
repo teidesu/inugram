@@ -1,0 +1,989 @@
+use std::cell::{Cell, RefCell};
+use std::fs;
+use std::io::Write;
+use std::os::unix::fs::FileExt;
+use std::path::{Path, PathBuf};
+use std::rc::Rc;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use rquickjs::class::{Trace, Tracer};
+use rquickjs::function::{Constructor, Opt, This};
+use rquickjs::object::Property;
+use rquickjs::{
+  ArrayBuffer, Class, Coerced, Ctx, Exception, FromJs, Function, JsLifetime, Object, Result as JsResult, TypedArray,
+  Value,
+};
+
+use crate::api::error::{make_plugin_error, PluginErrorCode};
+use crate::sandbox::limits::{ExternalCharge, ExternalMemory, EXTERNAL_LIMIT_BYTES, HEAP_LIMIT_BYTES};
+use crate::utils::arguments::{array_values, opt};
+use crate::utils::qjs::qjs_read_buffer_bytes;
+use crate::utils::shape::{alias_dispose, define_getter, get_class_prototype};
+
+pub const SPILL_THRESHOLD_BYTES: u64 = 2 * 1024 * 1024;
+
+pub const MATERIALIZE_LIMIT_BYTES: u64 = (HEAP_LIMIT_BYTES / 2) as u64;
+
+pub const TEXT_LIMIT_BYTES: u64 = MATERIALIZE_LIMIT_BYTES / 2;
+
+pub const BUILD_LIMIT_BYTES: u64 = 32 * 1024 * 1024;
+
+pub const SPILL_LIMIT_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+
+pub const SPILL_FILE_LIMIT: usize = 64;
+
+const COPY_CHUNK_BYTES: usize = 256 * 1024;
+
+const MIN_MEMORY_CAPACITY: usize = 4096;
+
+const ENOSPC: i32 = 28;
+
+pub struct BlobState {
+  spill_dir: PathBuf,
+  external: Rc<ExternalMemory>,
+  limits: BlobLimits,
+  spilled: Cell<u64>,
+  open_spills: Cell<usize>,
+  next_file: Cell<u64>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct BlobLimits {
+  pub build: u64,
+  pub spill_bytes: u64,
+  pub spill_files: usize,
+}
+
+impl Default for BlobLimits {
+  fn default() -> Self {
+    BlobLimits {
+      build: BUILD_LIMIT_BYTES,
+      spill_bytes: SPILL_LIMIT_BYTES,
+      spill_files: SPILL_FILE_LIMIT,
+    }
+  }
+}
+
+impl BlobState {
+  fn can_spill(&self) -> bool {
+    !self.spill_dir.as_os_str().is_empty()
+  }
+
+  fn reserve_spill_slot(&self, ctx: &Ctx<'_>) -> Result<(), BlobFault> {
+    if self.open_spills.get() >= self.limits.spill_files {
+      ctx.run_gc();
+    }
+    if self.open_spills.get() >= self.limits.spill_files {
+      return Err(BlobFault::Quota {
+        usage: self.open_spills.get() as u64 + 1,
+        quota: self.limits.spill_files as u64,
+        message: format!(
+          "this plugin already holds {} blobs too large to keep in memory, which is all the open files it may have; dispose the ones it is done with",
+          self.open_spills.get(),
+        ),
+      });
+    }
+    Ok(())
+  }
+
+  fn open_spill(self: &Rc<Self>, ctx: &Ctx<'_>) -> Result<SpillFile, BlobFault> {
+    if !self.can_spill() {
+      return Err(BlobFault::Io("this engine has no spill directory".to_string()));
+    }
+    self.reserve_spill_slot(ctx)?;
+    fs::create_dir_all(&self.spill_dir).map_err(io_fault)?;
+    let index = self.next_file.get();
+    self.next_file.set(index + 1);
+    let path = self.spill_dir.join(format!("{index}.bin"));
+    let file = fs::OpenOptions::new()
+      .read(true)
+      .write(true)
+      .create(true)
+      .truncate(true)
+      .open(&path)
+      .map_err(io_fault)?;
+    self.open_spills.set(self.open_spills.get() + 1);
+    Ok(SpillFile {
+      state: self.clone(),
+      file,
+      path,
+      charged: Cell::new(0),
+    })
+  }
+
+  fn adopt_spill(self: &Rc<Self>, ctx: &Ctx<'_>, path: &Path, len: u64) -> Result<SpillFile, BlobFault> {
+    self.reserve_spill_slot(ctx)?;
+    let file = fs::OpenOptions::new().read(true).open(path).map_err(io_fault)?;
+    self.open_spills.set(self.open_spills.get() + 1);
+    let spill = SpillFile {
+      state: self.clone(),
+      file,
+      path: path.to_path_buf(),
+      charged: Cell::new(0),
+    };
+    spill.reserve(ctx, len)?;
+    Ok(spill)
+  }
+
+  fn release_spill(&self, bytes: u64) {
+    self.spilled.set(self.spilled.get().saturating_sub(bytes));
+    self.open_spills.set(self.open_spills.get().saturating_sub(1));
+  }
+
+  #[cfg(test)]
+  fn spilled_bytes(&self) -> u64 {
+    self.spilled.get()
+  }
+
+  #[cfg(test)]
+  fn open_spills(&self) -> usize {
+    self.open_spills.get()
+  }
+
+  #[cfg(test)]
+  pub fn charged_bytes(&self) -> usize {
+    self.external.charged_bytes()
+  }
+}
+
+struct SpillFile {
+  state: Rc<BlobState>,
+  file: fs::File,
+  path: PathBuf,
+  charged: Cell<u64>,
+}
+
+impl SpillFile {
+  fn reserve(&self, ctx: &Ctx<'_>, total: u64) -> Result<(), BlobFault> {
+    let extra = total.saturating_sub(self.charged.get());
+    if extra == 0 {
+      return Ok(());
+    }
+    if self.state.spilled.get().saturating_add(extra) > self.state.limits.spill_bytes {
+      ctx.run_gc();
+    }
+    let live = self.state.spilled.get();
+    let wanted = live.saturating_add(extra);
+    if wanted > self.state.limits.spill_bytes {
+      return Err(BlobFault::Quota {
+        usage: wanted,
+        quota: self.state.limits.spill_bytes,
+        message: format!(
+          "this plugin holds {:.1} MB of spilled blob content and asked for {:.1} MB more, past its ceiling of {} MB",
+          live as f64 / (1024.0 * 1024.0),
+          extra as f64 / (1024.0 * 1024.0),
+          self.state.limits.spill_bytes / (1024 * 1024),
+        ),
+      });
+    }
+    self.state.spilled.set(wanted);
+    self.charged.set(total);
+    Ok(())
+  }
+}
+
+impl Drop for SpillFile {
+  fn drop(&mut self) {
+    let _ = fs::remove_file(&self.path);
+    self.state.release_spill(self.charged.get());
+  }
+}
+
+enum BackingKind {
+  Memory { bytes: Vec<u8>, _charge: Option<ExternalCharge> },
+  Spill(SpillFile),
+  AppFile { path: PathBuf, mtime_ms: i64 },
+  Freed,
+}
+
+pub struct Backing {
+  kind: RefCell<BackingKind>,
+  len: u64,
+}
+
+impl Backing {
+  fn alive(&self) -> bool {
+    !matches!(*self.kind.borrow(), BackingKind::Freed)
+  }
+
+  fn release(&self) {
+    let kind = std::mem::replace(&mut *self.kind.borrow_mut(), BackingKind::Freed);
+    drop(kind);
+  }
+
+  fn read(&self, start: u64, end: u64) -> Result<Vec<u8>, BlobFault> {
+    let len = end.saturating_sub(start);
+    if len == 0 {
+      return Ok(Vec::new());
+    }
+    match &*self.kind.borrow() {
+      BackingKind::Freed => Err(BlobFault::Gone("the blob this content belongs to was disposed".to_string())),
+      BackingKind::Memory { bytes, .. } => bytes
+        .get(start as usize..end as usize)
+        .map(<[u8]>::to_vec)
+        .ok_or_else(|| BlobFault::Gone("the blob this content belongs to was disposed".to_string())),
+      BackingKind::Spill(spill) => {
+        read_range(&spill.file, start, len as usize).map_err(|e| BlobFault::Io(format!("spilled blob: {e}")))
+      }
+      BackingKind::AppFile { path, mtime_ms } => {
+        let file = fs::File::open(path)
+          .map_err(|_| BlobFault::Gone("the file behind this blob is gone or has been replaced".to_string()))?;
+        let meta = file
+          .metadata()
+          .map_err(|_| BlobFault::Gone("the file behind this blob is gone or has been replaced".to_string()))?;
+        if meta.len() < self.len || mtime_millis(meta.modified().ok()) != *mtime_ms {
+          return Err(BlobFault::Gone("the file behind this blob is gone or has been replaced".to_string()));
+        }
+        read_range(&file, start, len as usize)
+          .map_err(|_| BlobFault::Gone("the file behind this blob is gone or has been replaced".to_string()))
+      }
+    }
+  }
+
+  fn copy_into(&self, ctx: &Ctx<'_>, start: u64, end: u64, sink: &mut Accumulator) -> Result<(), BlobFault> {
+    sink.check_room(end.saturating_sub(start))?;
+    if let BackingKind::Memory { bytes, .. } = &*self.kind.borrow() {
+      let slice = bytes
+        .get(start as usize..end as usize)
+        .ok_or_else(|| BlobFault::Gone("the blob this content belongs to was disposed".to_string()))?;
+      return sink.write(ctx, slice);
+    }
+    let mut at = start;
+    while at < end {
+      let take = (end - at).min(COPY_CHUNK_BYTES as u64);
+      let chunk = self.read(at, at + take)?;
+      sink.write(ctx, &chunk)?;
+      at += take;
+    }
+    Ok(())
+  }
+}
+
+impl Drop for Backing {
+  fn drop(&mut self) {
+    self.release();
+  }
+}
+
+fn io_fault(e: std::io::Error) -> BlobFault {
+  if e.raw_os_error() == Some(ENOSPC) {
+    return BlobFault::Quota {
+      usage: 0,
+      quota: 0,
+      message: "there is no room left on the device for this blob".to_string(),
+    };
+  }
+  BlobFault::Io(format!("blob storage: {e}"))
+}
+
+pub(crate) fn mtime_millis(time: Option<SystemTime>) -> i64 {
+  let Some(time) = time else { return 0 };
+  match time.duration_since(UNIX_EPOCH) {
+    Ok(duration) => i64::try_from(duration.as_millis()).unwrap_or(i64::MAX),
+    Err(error) => i64::try_from(error.duration().as_millis()).map_or(i64::MIN, i64::saturating_neg),
+  }
+}
+
+fn read_range(file: &fs::File, offset: u64, len: usize) -> std::io::Result<Vec<u8>> {
+  let mut buf = vec![0u8; len];
+  file.read_exact_at(&mut buf, offset)?;
+  Ok(buf)
+}
+
+pub(crate) enum BlobFault {
+  Gone(String),
+  Quota { usage: u64, quota: u64, message: String },
+  Io(String),
+}
+
+impl BlobFault {
+  pub(crate) fn message(&self) -> &str {
+    match self {
+      BlobFault::Gone(message) | BlobFault::Quota { message, .. } | BlobFault::Io(message) => message,
+    }
+  }
+
+  fn to_value<'js>(&self, ctx: &Ctx<'js>) -> JsResult<Value<'js>> {
+    match self {
+      BlobFault::Gone(message) => make_plugin_error(ctx, "handle-expired", message, None, None, None),
+      BlobFault::Quota { usage, quota, message } => make_plugin_error(
+        ctx,
+        "quota-exceeded",
+        message,
+        None,
+        (*usage > 0).then_some(*usage as i64),
+        (*quota > 0).then_some(*quota as i64),
+      ),
+      BlobFault::Io(message) => make_plugin_error(ctx, "internal", message, None, None, None),
+    }
+  }
+
+  fn throw<'js, T>(&self, ctx: &Ctx<'js>) -> JsResult<T> {
+    let value = self.to_value(ctx)?;
+    Err(ctx.throw(value))
+  }
+}
+
+struct Accumulator {
+  state: Rc<BlobState>,
+  memory: Vec<u8>,
+  charge: Option<ExternalCharge>,
+  spill: Option<SpillFile>,
+  len: u64,
+  limit: u64,
+}
+
+impl Accumulator {
+  fn new(state: Rc<BlobState>, limit: u64) -> Self {
+    Accumulator {
+      state,
+      memory: Vec::new(),
+      charge: None,
+      spill: None,
+      len: 0,
+      limit,
+    }
+  }
+
+  fn check_room(&self, add: u64) -> Result<(), BlobFault> {
+    let after = self.len.saturating_add(add);
+    if after <= self.limit {
+      return Ok(());
+    }
+    Err(BlobFault::Quota {
+      usage: after,
+      quota: self.limit,
+      message: format!(
+        "building a blob of {:.1} MB is past the {} MB one may assemble in a single call; join it in pieces or write it out with inu.fs",
+        after as f64 / (1024.0 * 1024.0),
+        self.limit / (1024 * 1024),
+      ),
+    })
+  }
+
+  fn write(&mut self, ctx: &Ctx<'_>, data: &[u8]) -> Result<(), BlobFault> {
+    if data.is_empty() {
+      return Ok(());
+    }
+    self.check_room(data.len() as u64)?;
+    let after = self.len + data.len() as u64;
+    if self.spill.is_none() && after > SPILL_THRESHOLD_BYTES && self.state.can_spill() {
+      self.start_spilling(ctx)?;
+    }
+    if self.spill.is_none() && !self.reserve_memory(ctx, after)? {
+      self.start_spilling(ctx)?;
+    }
+    match self.spill.as_mut() {
+      Some(spill) => {
+        spill.reserve(ctx, after)?;
+        spill.file.write_all(data).map_err(io_fault)?;
+      }
+      None => self.memory.extend_from_slice(data),
+    }
+    self.len = after;
+    Ok(())
+  }
+
+  fn reserve_memory(&mut self, ctx: &Ctx<'_>, after: u64) -> Result<bool, BlobFault> {
+    if after <= self.memory.capacity() as u64 {
+      return Ok(true);
+    }
+    let target = after
+      .max((self.memory.capacity() as u64).saturating_mul(2))
+      .max(MIN_MEMORY_CAPACITY as u64)
+      .min(self.limit.max(after));
+    if !self.charge_up_to(ctx, target) {
+      if !self.state.can_spill() {
+        let held = self.charge.as_ref().map_or(0, ExternalCharge::bytes) as u64;
+        let wanted = target - held;
+        return Err(BlobFault::Quota {
+          usage: self.state.external.charged_bytes() as u64 + wanted,
+          quota: EXTERNAL_LIMIT_BYTES as u64,
+          message: format!(
+            "this plugin holds {:.1} MB of native memory, this blob needs {:.1} MB more, and this engine has nowhere to spill it to",
+            self.state.external.charged_bytes() as f64 / (1024.0 * 1024.0),
+            wanted as f64 / (1024.0 * 1024.0),
+          ),
+        });
+      }
+      return Ok(false);
+    }
+    self.memory.reserve_exact(target as usize - self.memory.len());
+    let _ = self.charge_up_to(ctx, self.memory.capacity() as u64);
+    Ok(true)
+  }
+
+  fn charge_up_to(&mut self, ctx: &Ctx<'_>, total: u64) -> bool {
+    let held = self.charge.as_ref().map_or(0, ExternalCharge::bytes) as u64;
+    let Some(extra) = total.checked_sub(held).filter(|extra| *extra > 0) else {
+      return true;
+    };
+    match self.charge.as_mut() {
+      Some(charge) => charge.try_grow(ctx, extra as usize),
+      None => match self.state.external.try_charge(ctx, extra as usize) {
+        Some(charge) => {
+          self.charge = Some(charge);
+          true
+        }
+        None => false,
+      },
+    }
+  }
+
+  fn start_spilling(&mut self, ctx: &Ctx<'_>) -> Result<(), BlobFault> {
+    let spill = self.state.open_spill(ctx)?;
+    spill.reserve(ctx, self.len)?;
+    (&spill.file).write_all(&self.memory).map_err(io_fault)?;
+    self.memory = Vec::new();
+    self.charge = None;
+    self.spill = Some(spill);
+    Ok(())
+  }
+
+  fn finish(self) -> Rc<Backing> {
+    let Accumulator { mut memory, mut charge, spill, len, .. } = self;
+    if let Some(spill) = spill {
+      return Rc::new(Backing {
+        kind: RefCell::new(BackingKind::Spill(spill)),
+        len,
+      });
+    }
+    memory.shrink_to_fit();
+    if let Some(charge) = charge.as_mut() {
+      charge.shrink_to(memory.capacity());
+    }
+    Rc::new(Backing {
+      kind: RefCell::new(BackingKind::Memory { bytes: memory, _charge: charge }),
+      len,
+    })
+  }
+}
+
+#[derive(Clone)]
+struct FileMeta {
+  name: String,
+  last_modified: f64,
+}
+
+#[derive(JsLifetime)]
+#[rquickjs::class(rename = "Blob", frozen)]
+pub struct BlobHandle {
+  backing: RefCell<Option<Rc<Backing>>>,
+  start: u64,
+  end: u64,
+  mime: String,
+  owns_backing: bool,
+  meta: Option<FileMeta>,
+}
+
+impl<'js> Trace<'js> for BlobHandle {
+  fn trace<'a>(&self, _tracer: Tracer<'a, 'js>) {}
+}
+
+impl BlobHandle {
+  fn size(&self) -> u64 {
+    self.end - self.start
+  }
+
+  fn live(&self, ctx: &Ctx<'_>) -> JsResult<Rc<Backing>> {
+    match self.backing.borrow().clone() {
+      Some(backing) => Ok(backing),
+      None => PluginErrorCode::HandleExpired.throw(ctx, "this blob was disposed"),
+    }
+  }
+
+  fn read_all(&self, limit: u64) -> Result<Vec<u8>, BlobFault> {
+    let Some(backing) = self.backing.borrow().clone() else {
+      return Err(BlobFault::Gone("this blob was disposed".to_string()));
+    };
+    if self.size() > limit {
+      return Err(BlobFault::Quota {
+        usage: self.size(),
+        quota: limit,
+        message: format!(
+          "reading {:.1} MB into javascript is past the {} MB a single read may take; slice it or write it out with inu.fs",
+          self.size() as f64 / (1024.0 * 1024.0),
+          limit / (1024 * 1024),
+        ),
+      });
+    }
+    backing.read(self.start, self.end)
+  }
+}
+
+fn make_view(backing: Rc<Backing>, start: u64, end: u64, mime: String, meta: Option<FileMeta>) -> BlobHandle {
+  BlobHandle {
+    backing: RefCell::new(Some(backing)),
+    start,
+    end,
+    mime,
+    owns_backing: false,
+    meta,
+  }
+}
+
+const LABEL_LIMIT_CHARS: usize = 1024;
+
+fn truncate_label(raw: &str) -> String {
+  match raw.char_indices().nth(LABEL_LIMIT_CHARS) {
+    Some((at, _)) => raw[..at].to_string(),
+    None => raw.to_string(),
+  }
+}
+
+fn normalize_mime(raw: &str) -> String {
+  if raw.chars().any(|c| !(' '..='~').contains(&c)) {
+    return String::new();
+  }
+  truncate_label(&raw.to_ascii_lowercase())
+}
+
+fn read_mime_option<'js>(options: &Opt<Value<'js>>) -> JsResult<String> {
+  let Some(options) = options.0.as_ref().and_then(|v| v.as_object()) else {
+    return Ok(String::new());
+  };
+  match options.get::<_, Option<Coerced<String>>>("type")? {
+    Some(value) => Ok(normalize_mime(&value.0)),
+    None => Ok(String::new()),
+  }
+}
+
+fn clamp_index(value: Option<f64>, size: u64, default: u64) -> u64 {
+  let Some(value) = value else { return default };
+  if value.is_nan() {
+    return 0;
+  }
+  let value = value.trunc();
+  if value < 0.0 {
+    let from_end = size as f64 + value;
+    if from_end <= 0.0 {
+      return 0;
+    }
+    return from_end as u64;
+  }
+  if value >= size as f64 {
+    return size;
+  }
+  value as u64
+}
+
+impl Accumulator {
+  fn append_part<'js>(&mut self, ctx: &Ctx<'js>, part: Value<'js>) -> JsResult<()> {
+    if let Ok(class) = Class::<BlobHandle>::from_value(&part) {
+      let (backing, start, end) = {
+        let handle = class.borrow();
+        (handle.live(ctx)?, handle.start, handle.end)
+      };
+      return match backing.copy_into(ctx, start, end, self) {
+        Ok(()) => Ok(()),
+        Err(fault) => fault.throw(ctx),
+      };
+    }
+    if let Some(buffer) = ArrayBuffer::from_value(part.clone()) {
+      let Some(written) = qjs_read_buffer_bytes(&buffer, |bytes| self.write(ctx, bytes)) else {
+        return Err(Exception::throw_type(ctx, "Blob: this ArrayBuffer is detached"));
+      };
+      return match written {
+        Ok(()) => Ok(()),
+        Err(fault) => fault.throw(ctx),
+      };
+    }
+    if self.append_buffer_view(ctx, &part)? {
+      return Ok(());
+    }
+    let text = Coerced::<String>::from_js(ctx, part)?;
+    match self.write(ctx, text.0.as_bytes()) {
+      Ok(()) => Ok(()),
+      Err(fault) => fault.throw(ctx),
+    }
+  }
+
+  fn append_buffer_view<'js>(&mut self, ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<bool> {
+    let Some(object) = value.as_object() else {
+      return Ok(false);
+    };
+    let Ok(buffer) = object.get::<_, Value<'js>>("buffer") else {
+      return Ok(false);
+    };
+    let Some(buffer) = ArrayBuffer::from_value(buffer) else {
+      return Ok(false);
+    };
+    let offset = object.get::<_, Option<Coerced<f64>>>("byteOffset")?;
+    let length = object.get::<_, Option<Coerced<f64>>>("byteLength")?;
+    let (Some(offset), Some(length)) = (offset, length) else {
+      return Ok(false);
+    };
+    let start = offset.0.max(0.0) as usize;
+    let end = start.saturating_add(length.0.max(0.0) as usize);
+    let written = qjs_read_buffer_bytes(&buffer, |bytes| bytes.get(start..end).map(|window| self.write(ctx, window)));
+    match written {
+      None => Err(Exception::throw_type(ctx, "Blob: this view's buffer is detached")),
+      Some(None) => Err(Exception::throw_type(ctx, "Blob: this view was resized")),
+      Some(Some(Ok(()))) => Ok(true),
+      Some(Some(Err(fault))) => fault.throw(ctx),
+    }
+  }
+}
+
+impl BlobState {
+  fn build_blob<'js>(
+    self: &Rc<Self>,
+    ctx: &Ctx<'js>,
+    parts: Opt<Value<'js>>,
+    options: Opt<Value<'js>>,
+    meta: Option<FileMeta>,
+  ) -> JsResult<Value<'js>> {
+    let mime = read_mime_option(&options)?;
+    let mut sink = Accumulator::new(self.clone(), self.limits.build);
+    if let Some(parts) = parts.0 {
+      if !parts.is_undefined() && !parts.is_null() {
+        let Some(array) = parts.as_array() else {
+          return Err(Exception::throw_type(ctx, "Blob: expected an array of parts"));
+        };
+        for part in array_values(ctx, array, "Blob")? {
+          sink.append_part(ctx, part)?;
+        }
+      }
+    }
+    let backing = sink.finish();
+    let len = backing.len;
+    let handle = BlobHandle {
+      backing: RefCell::new(Some(backing)),
+      start: 0,
+      end: len,
+      mime,
+      owns_backing: true,
+      meta,
+    };
+    Ok(Class::instance(ctx.clone(), handle)?.into_value())
+  }
+}
+
+fn now_millis() -> f64 {
+  SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as f64).unwrap_or(0.0)
+}
+
+pub fn mint_owned_file<'js>(
+  ctx: &Ctx<'js>,
+  blobs: &Rc<BlobState>,
+  path: &Path,
+  size: u64,
+  mime: &str,
+  name: &str,
+  mtime_ms: i64,
+) -> JsResult<Value<'js>> {
+  let spill = match blobs.adopt_spill(ctx, path, size) {
+    Ok(spill) => spill,
+    Err(fault) => return fault.throw(ctx),
+  };
+  let backing = Rc::new(Backing {
+    kind: RefCell::new(BackingKind::Spill(spill)),
+    len: size,
+  });
+  mint_file(ctx, backing, size, mime, Some(name), mtime_ms)
+}
+
+pub fn mint_app_file<'js>(
+  ctx: &Ctx<'js>,
+  path: &Path,
+  size: u64,
+  mime: &str,
+  name: Option<&str>,
+  mtime_ms: i64,
+) -> JsResult<Value<'js>> {
+  let backing = Rc::new(Backing {
+    kind: RefCell::new(BackingKind::AppFile { path: path.to_path_buf(), mtime_ms }),
+    len: size,
+  });
+  mint_file(ctx, backing, size, mime, name, mtime_ms)
+}
+
+pub fn mint_app_file_at<'js>(ctx: &Ctx<'js>, path: &Path, mime: &str) -> JsResult<Value<'js>> {
+  let (size, mtime) = match fs::metadata(path) {
+    Ok(meta) => (meta.len(), mtime_millis(meta.modified().ok())),
+    Err(_) => (0, 0),
+  };
+  mint_app_file(ctx, path, size, mime, None, mtime)
+}
+
+fn mint_file<'js>(
+  ctx: &Ctx<'js>,
+  backing: Rc<Backing>,
+  size: u64,
+  mime: &str,
+  name: Option<&str>,
+  mtime_ms: i64,
+) -> JsResult<Value<'js>> {
+  let handle = BlobHandle {
+    backing: RefCell::new(Some(backing)),
+    start: 0,
+    end: size,
+    mime: normalize_mime(mime),
+    owns_backing: true,
+    meta: name.map(|name| FileMeta {
+      name: sanitize_name(name),
+      last_modified: mtime_ms as f64,
+    }),
+  };
+  let instance = Class::instance(ctx.clone(), handle)?;
+  if name.is_some() {
+    if let Some(proto) = file_prototype(ctx)? {
+      instance.as_inner().set_prototype(Some(&proto))?;
+    }
+  }
+  Ok(instance.into_value())
+}
+
+fn sanitize_name(name: &str) -> String {
+  truncate_label(&name.replace('/', ":"))
+}
+
+/// the live range a Blob handle names, for the host-side readers that copy it out
+pub fn export_blob(value: &Value<'_>) -> Option<BlobExport> {
+  let class = Class::<BlobHandle>::from_value(value).ok()?;
+  let handle = class.borrow();
+  let backing = handle.backing.borrow().clone().filter(|backing| backing.alive())?;
+  Some(BlobExport {
+    backing,
+    start: handle.start,
+    end: handle.end,
+  })
+}
+
+pub struct BlobExport {
+  backing: Rc<Backing>,
+  start: u64,
+  end: u64,
+}
+
+impl BlobExport {
+  pub fn len(&self) -> u64 {
+    self.end - self.start
+  }
+
+  pub fn read(&self, offset: u64, len: u64) -> Result<Vec<u8>, BlobFault> {
+    let end = offset.checked_add(len).filter(|end| *end <= self.len()).ok_or_else(|| {
+      BlobFault::Io(format!("this blob is {} bytes; a read of {len} at {offset} is past its end", self.len(),))
+    })?;
+    self.backing.read(self.start + offset, self.start + end)
+  }
+
+  pub fn write_to(&self, out: &mut impl Write) -> Result<(), BlobFault> {
+    let mut at = 0u64;
+    while at < self.len() {
+      let take = (COPY_CHUNK_BYTES as u64).min(self.len() - at);
+      let chunk = self.read(at, take)?;
+      out.write_all(&chunk).map_err(|e| BlobFault::Io(e.to_string()))?;
+      at += take;
+    }
+    Ok(())
+  }
+}
+
+const FILE_PROTO_KEY: &str = "inu.blob.fileProto";
+
+fn file_prototype<'js>(ctx: &Ctx<'js>) -> JsResult<Option<Object<'js>>> {
+  let Some(blob_proto) = Class::<BlobHandle>::prototype(ctx)? else {
+    return Ok(None);
+  };
+  let key = rquickjs::Symbol::new_global(ctx.clone(), FILE_PROTO_KEY)?;
+  Ok(blob_proto.get::<_, Value<'js>>(key.as_atom())?.into_object())
+}
+
+pub fn make_clone_fn<'js>(ctx: &Ctx<'js>) -> JsResult<Function<'js>> {
+  Function::new(ctx.clone(), |ctx: Ctx<'js>, value: Value<'js>| -> JsResult<Value<'js>> {
+    let Ok(class) = Class::<BlobHandle>::from_value(&value) else {
+      return Ok(Value::new_undefined(ctx.clone()));
+    };
+    let clone = {
+      let handle = class.borrow();
+      let backing = handle.live(&ctx)?;
+      make_view(backing, handle.start, handle.end, handle.mime.clone(), handle.meta.clone())
+    };
+    let instance = Class::instance(ctx.clone(), clone)?;
+    if let Some(proto) = class.as_inner().get_prototype() {
+      instance.as_inner().set_prototype(Some(&proto))?;
+    }
+    Ok(instance.into_value())
+  })
+}
+
+pub fn install<'js>(ctx: &Ctx<'js>, spill_dir: &Path, external: Rc<ExternalMemory>) -> JsResult<Rc<BlobState>> {
+  install_with_limits(ctx, spill_dir, external, BlobLimits::default())
+}
+
+pub(crate) fn install_with_limits<'js>(
+  ctx: &Ctx<'js>,
+  spill_dir: &Path,
+  external: Rc<ExternalMemory>,
+  limits: BlobLimits,
+) -> JsResult<Rc<BlobState>> {
+  let state = Rc::new(BlobState {
+    spill_dir: spill_dir.to_path_buf(),
+    external,
+    limits,
+    spilled: Cell::new(0),
+    open_spills: Cell::new(0),
+    next_file: Cell::new(1),
+  });
+
+  alias_dispose::<BlobHandle>(ctx)?;
+  let blob_proto = get_class_prototype::<BlobHandle>(ctx)?;
+
+  let file_proto = Object::new(ctx.clone())?;
+  file_proto.set_prototype(Some(&blob_proto))?;
+  install_file_members(&file_proto)?;
+  let key = rquickjs::Symbol::new_global(ctx.clone(), FILE_PROTO_KEY)?;
+  blob_proto.prop(key.as_atom(), Property::from(file_proto.clone()))?;
+
+  let state2 = state.clone();
+  let blob_ctor = Constructor::new_class::<BlobHandle, _, _>(
+    ctx.clone(),
+    move |ctx: Ctx<'js>, parts: Opt<Value<'js>>, options: Opt<Value<'js>>| {
+      state2.build_blob(&ctx, parts, options, None)
+    },
+  )?;
+
+  let state2 = state.clone();
+  let file_ctor = Constructor::new_prototype(
+    ctx,
+    file_proto,
+    move |ctx: Ctx<'js>, parts: Opt<Value<'js>>, name: Opt<Coerced<String>>, options: Opt<Value<'js>>| {
+      let Some(name) = name.0 else {
+        return Err(Exception::throw_type(&ctx, "File: a name is required"));
+      };
+      let last_modified = match options.0.as_ref().and_then(|v| v.as_object()) {
+        Some(options) => {
+          options.get::<_, Option<Coerced<f64>>>("lastModified")?.map(|v| v.0).unwrap_or_else(now_millis)
+        }
+        None => now_millis(),
+      };
+      let meta = FileMeta {
+        name: sanitize_name(&name.0),
+        last_modified,
+      };
+      state2.build_blob(&ctx, parts, options, Some(meta))
+    },
+  )?;
+
+  ctx.globals().set("Blob", blob_ctor)?;
+  ctx.globals().set("File", file_ctor)?;
+  Ok(state)
+}
+
+#[rquickjs::methods(rename_all = "camelCase")]
+impl<'js> BlobHandle {
+  #[qjs(get, enumerable, configurable, rename = "size")]
+  fn get_size(&self, ctx: Ctx<'js>) -> JsResult<f64> {
+    self.live(&ctx)?;
+    Ok(self.size() as f64)
+  }
+
+  #[qjs(get, enumerable, configurable, rename = "type")]
+  fn get_type(&self, ctx: Ctx<'js>) -> JsResult<String> {
+    self.live(&ctx)?;
+    Ok(self.mime.clone())
+  }
+
+  fn slice(
+    &self,
+    ctx: Ctx<'js>,
+    start: Opt<Value<'js>>,
+    end: Opt<Value<'js>>,
+    content_type: Opt<Value<'js>>,
+  ) -> JsResult<Value<'js>> {
+    let coerce = |v: Option<Value<'js>>| -> JsResult<Option<f64>> {
+      v.map(|v| Ok(Coerced::<f64>::from_js(&ctx, v)?.0)).transpose()
+    };
+    let start = coerce(opt(start))?;
+    let end = coerce(opt(end))?;
+    let backing = self.live(&ctx)?;
+    let size = self.size();
+    let from = clamp_index(start, size, 0);
+    let to = clamp_index(end, size, size).max(from);
+    let mime = match opt(content_type) {
+      Some(v) => normalize_mime(&Coerced::<String>::from_js(&ctx, v)?.0),
+      None => String::new(),
+    };
+    let slice = make_view(backing, self.start + from, self.start + to, mime, None);
+    Ok(Class::instance(ctx.clone(), slice)?.into_value())
+  }
+
+  fn bytes(ctx: Ctx<'js>, this: This<Class<'js, Self>>) -> JsResult<Value<'js>> {
+    read_promise(&ctx, &this.0, ReadAs::Bytes)
+  }
+
+  fn array_buffer(ctx: Ctx<'js>, this: This<Class<'js, Self>>) -> JsResult<Value<'js>> {
+    read_promise(&ctx, &this.0, ReadAs::Buffer)
+  }
+
+  fn text(ctx: Ctx<'js>, this: This<Class<'js, Self>>) -> JsResult<Value<'js>> {
+    read_promise(&ctx, &this.0, ReadAs::Text)
+  }
+
+  fn dispose(&self) {
+    let Some(backing) = self.backing.borrow_mut().take() else {
+      return;
+    };
+    if self.owns_backing {
+      backing.release();
+    }
+  }
+}
+
+fn install_file_members<'js>(proto: &Object<'js>) -> JsResult<()> {
+  define_getter(proto, "name", |ctx: Ctx<'js>, this: This<Class<'js, BlobHandle>>| {
+    let handle = this.0.borrow();
+    handle.live(&ctx)?;
+    Ok::<_, rquickjs::Error>(handle.meta.as_ref().map(|meta| meta.name.clone()).unwrap_or_default())
+  })?;
+  define_getter(proto, "lastModified", |ctx: Ctx<'js>, this: This<Class<'js, BlobHandle>>| {
+    let handle = this.0.borrow();
+    handle.live(&ctx)?;
+    Ok::<_, rquickjs::Error>(handle.meta.as_ref().map(|meta| meta.last_modified).unwrap_or(0.0))
+  })?;
+  Ok(())
+}
+
+#[derive(Clone, Copy)]
+enum ReadAs {
+  Bytes,
+  Buffer,
+  Text,
+}
+
+impl ReadAs {
+  fn limit(self) -> u64 {
+    match self {
+      ReadAs::Bytes | ReadAs::Buffer => MATERIALIZE_LIMIT_BYTES,
+      ReadAs::Text => TEXT_LIMIT_BYTES,
+    }
+  }
+}
+
+fn read_promise<'js>(ctx: &Ctx<'js>, class: &Class<'js, BlobHandle>, kind: ReadAs) -> JsResult<Value<'js>> {
+  let (promise, resolve, reject) = rquickjs::Promise::new(ctx)?;
+  let read = class.borrow().read_all(kind.limit());
+  match read {
+    Ok(bytes) => {
+      let value = match kind {
+        ReadAs::Bytes => TypedArray::<u8>::new(ctx.clone(), bytes)?.into_value(),
+        ReadAs::Buffer => ArrayBuffer::new(ctx.clone(), bytes)?.into_value(),
+        ReadAs::Text => {
+          use rquickjs::IntoJs;
+          String::from_utf8_lossy(&bytes).into_owned().into_js(ctx)?
+        }
+      };
+      resolve.call::<_, Value>((value,))?;
+    }
+    Err(fault) => {
+      let value = fault.to_value(ctx)?;
+      reject.call::<_, Value>((value,))?;
+    }
+  }
+  Ok(promise.into_value())
+}
+
+#[cfg(test)]
+#[path = "blob_tests.rs"]
+mod tests;

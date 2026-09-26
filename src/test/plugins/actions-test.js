@@ -1,0 +1,149 @@
+// ==InuPlugin==
+// @name         actions test
+// @description  registers one row of every action kind and asserts the context each one is handed
+// @grant        account.read(draft)
+// ==/InuPlugin==
+/* eslint-disable eslint-comments/no-unlimited-disable */
+/* eslint-disable */
+
+expectThrow('a row without an id is refused', TypeError, () => {
+  // @ts-expect-error
+  inu.registerChatAction({ text: 'no id', callback: () => {} })
+})
+
+expectThrow('a row without text is refused', TypeError, () => {
+  // @ts-expect-error
+  inu.registerChatAction({ id: 'no-text', callback: () => {} })
+})
+
+expectThrow('a row without a callback is refused', TypeError, () => {
+  // @ts-expect-error
+  inu.registerChatAction({ id: 'no-callback', text: 'no callback' })
+})
+
+expectThrow('an icon not minted by inu.icons is refused', TypeError, () => {
+  // @ts-expect-error
+  inu.registerChatAction({ id: 'iconed', text: 'iconed', icon: 'settings', callback: () => {} })
+})
+
+const throwaway = inu.registerChatAction({ id: 'throwaway', text: 'throwaway', callback: () => {} })
+check('register returns a disposer', typeof throwaway === 'function')
+throwaway()
+throwaway()
+pass('disposing twice is a no-op')
+
+inu.registerChatAction({
+  id: 'chat',
+  text: (ctx) => {
+    if (ctx === null) return 'Chat row'
+    check('a chat action names its dialog', ctx.dialogId === -100, String(ctx.dialogId))
+    return 'Chat row'
+  },
+  visible: (ctx) => {
+    check('a chat action names its topic', ctx.topicId === 7, String(ctx.topicId))
+    return true
+  },
+  callback: () => {},
+})
+
+inu.registerChatAction({
+  id: 'hidden',
+  text: 'never drawn',
+  visible: () => false,
+  callback: () => {},
+})
+
+// a throwing predicate drops only its own row. logs one error per chat menu, deliberately
+inu.registerChatAction({
+  id: 'thrower',
+  text: 'never drawn either',
+  visible: () => {
+    throw new Error('visible blew up')
+  },
+  callback: () => {},
+})
+
+inu.registerMessageAction({
+  id: 'message',
+  text: 'Message row',
+  placements: ['bubble', 'selection'],
+  callback: (ctx) => {
+    if (ctx.source === 'bubble') {
+      check(
+        'a bubble action names every message and its album',
+        ctx.messages.length === 2 &&
+          ctx.messages[0] instanceof inu.Message && ctx.messages[0].id === 11 && ctx.messages[0].groupedId === '77' &&
+          ctx.messages[1] instanceof inu.Message && ctx.messages[1].id === 12 && ctx.messages[1].groupedId === '77',
+        JSON.stringify(ctx.messages),
+      )
+      check('a topic the bubble surface has none of is absent', ctx.topicId === undefined, String(ctx.topicId))
+    } else {
+      check(
+        'a selection action keeps its source and each message dialog',
+        ctx.messages.length === 2 &&
+          ctx.messages[0] instanceof inu.Message && ctx.messages[0].dialogId === -200 && ctx.messages[0].id === 3 &&
+          ctx.messages[1] instanceof inu.Message && ctx.messages[1].dialogId === -100 && ctx.messages[1].id === 14,
+        `${ctx.source}: ${JSON.stringify(ctx.messages)}`,
+      )
+      check('a selection action names its topic', ctx.topicId === 7, String(ctx.topicId))
+    }
+  },
+})
+
+inu.registerProfileAction({
+  id: 'profile',
+  text: 'Profile row',
+  callback: (ctx) => {
+    check('a profile action names its dialog', ctx.dialogId === -100, String(ctx.dialogId))
+  },
+})
+
+inu.registerGlobalAction({
+  id: 'global',
+  text: 'Global row',
+  callback: (ctx) => {
+    // @ts-expect-error a global action's ctx declares no dialog, which is what this asserts
+    check('a global action has no dialog at all', ctx.dialogId === undefined, String(ctx.dialogId))
+  },
+})
+
+inu.registerMessageEditorAction({
+  id: 'editor',
+  text: 'Editor row',
+  callback: (ctx) => {
+    check('an editor action is handed the draft', ctx.draft.text === 'hello', ctx.draft.text)
+    ctx.replace('replaced')
+    pass('replace crosses to the composer')
+    ctx.send({ text: 'sent', entities: [{ _: 'messageEntityBold', offset: 0, length: 4 }] })
+    pass('send crosses to the composer')
+  },
+})
+
+// counted at registration, never at draw. the editor row above is the first of the eight
+const CAP = 8
+for (let i = 1; i < CAP; i++) {
+  inu.registerMessageEditorAction({
+    id: 'filler-' + i,
+    text: 'filler ' + i,
+    visible: () => false,
+    callback: () => {},
+  })
+}
+expectThrow('a ninth row of one menu is refused', 'quota-exceeded', () => {
+  inu.registerMessageEditorAction({ id: 'one-too-many', text: 'nope', callback: () => {} })
+})
+
+let replaced = 'no-throw'
+try {
+  inu.registerMessageEditorAction({
+    id: 'filler-1',
+    text: 'filler 1 (updated)',
+    visible: () => false,
+    callback: () => {},
+  })
+} catch (e) {
+  replaced = `${e.name}: ${e.message}`
+}
+check('a row can still be updated once the menu is full', replaced === 'no-throw', replaced)
+
+console.log('actions test done')

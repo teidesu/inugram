@@ -1,0 +1,50 @@
+use rquickjs::{Ctx, Function, Object};
+use std::sync::Arc;
+
+pub(crate) struct InuInfo {
+  pub(crate) app_version: String,
+  pub(crate) app_build: String,
+  pub(crate) api_version: i32,
+  pub(crate) layer: i32,
+  pub(crate) language: String,
+  pub(crate) header: Vec<(String, String)>,
+}
+
+pub(crate) fn build_info_object<'js>(ctx: Ctx<'js>, info: &InuInfo) -> rquickjs::Result<Object<'js>> {
+  let obj = Object::new(ctx.clone())?;
+  obj.set("platform", "android")?;
+  obj.set("appVersion", info.app_version.as_str())?;
+  obj.set("appBuild", info.app_build.as_str())?;
+  obj.set("apiVersion", info.api_version)?;
+  obj.set("layer", info.layer)?;
+  obj.set("language", info.language.as_str())?;
+  let header = Object::new(ctx.clone())?;
+  for (k, v) in info.header.iter() {
+    let existing: Option<rquickjs::Array> = header.get(k.as_str()).ok();
+    let values = match existing {
+      Some(array) => array,
+      None => {
+        let array = rquickjs::Array::new(ctx.clone())?;
+        header.set(k.as_str(), array.clone())?;
+        array
+      }
+    };
+    values.set(values.len(), v.as_str())?;
+  }
+  obj.set("header", header)?;
+  Ok(obj)
+}
+
+pub(crate) fn install_inu<'js>(
+  ctx: &Ctx<'js>,
+  info: Arc<InuInfo>,
+  globals: &crate::api::Globals<'js>,
+) -> rquickjs::Result<()> {
+  let info_fn = Function::new(ctx.clone(), move |ctx| build_info_object(ctx, &info))?;
+  globals.inu.set("info", info_fn)?;
+  Ok(())
+}
+
+#[cfg(test)]
+#[path = "info_tests.rs"]
+mod tests;

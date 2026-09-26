@@ -5,8 +5,8 @@ Subject: replacements for web previews + menu option to refetch web preview in m
 
 ---
  .../java/org/telegram/ui/ChatActivity.java    | 41 ++++++++++++++++++-
- .../ui/Components/ChatActivityEnterView.java  | 21 +++++++++-
- 2 files changed, 60 insertions(+), 2 deletions(-)
+ .../ui/Components/ChatActivityEnterView.java  |  3 +-
+ 2 files changed, 42 insertions(+), 2 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 index 0000000..0000000 100644
@@ -85,32 +85,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivity
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
-@@ -5107,6 +5107,24 @@ public class ChatActivityEnterView extends FrameLayout implements
-                 }
-             });
-         }
-+        if (containsSendMessage && parentFragment != null && messageEditText != null) {
-+            CharSequence inu_text = messageEditText.getText();
-+            boolean inu_hasUrl = false;
-+            try {
-+                inu_hasUrl = inu_text != null && AndroidUtilities.WEB_URL.matcher(inu_text).find();
-+            } catch (Exception ignore) {}
-+            if (inu_hasUrl) {
-+                options.add(R.drawable.msg_retry, getString(R.string.InuRefetchWebPreview), () -> {
-+                    if (messageSendPreview != null) {
-+                        messageSendPreview.dismiss(false);
-+                        messageSendPreview = null;
-+                    }
-+                    if (parentFragment != null) {
-+                        parentFragment.inu_refetchWebPreview();
-+                    }
-+                });
-+            }
-+        }
-         options.setupSelectors();
-         if (sendWhenOnlineButton != null) {
-             TLRPC.User user = parentFragment == null ? null : parentFragment.getCurrentUser();
-@@ -9924,6 +9942,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -9925,6 +9925,7 @@ public class ChatActivityEnterView extends FrameLayout implements
              }
  
              doneButton.setOnLongClickListener(v -> {
@@ -118,7 +93,7 @@ index 0000000..0000000 100644
                  if (messageObject.isMediaEmpty()) return false;
                  if (messageEditText == null || TextUtils.isEmpty(messageEditText.getTextToUse())) return false;
                  if (groupedMessages != null && (!groupedMessages.hasCaption || groupedMessages.isDocuments)) return false;
-@@ -10017,7 +10036,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -10018,7 +10019,7 @@ public class ChatActivityEnterView extends FrameLayout implements
                  draftMessage = messageEditText != null && messageEditText.length() > 0 ? messageEditText.getText() : null;
                  draftSearchWebpage = messageWebPageSearch;
              }

@@ -1,0 +1,59 @@
+[package]
+name = "inu_native"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+members = [ "crates/tgtext" ]
+
+[lib]
+crate-type = [ "cdylib" ]
+
+[dependencies]
+adler = "1.0"
+sha1 = "0.10"
+base64 = "0.23"
+cap-std = "4.0.3"
+csscolorparser = { version = "0.8", default-features = false, features = [ "named-colors" ] }
+hex = "0.4.3"
+jni = "0.22"
+kurbo = "0.13.1"
+leb128 = "0.2.7"
+libc = "0.2"
+lzma-rs = "0.3"
+object = { version = "0.40.0", default-features = false, features = [
+  "read_core",
+  "elf",
+  "unaligned"
+] }
+rquickjs = { version = "0.14", default-features = true, features = [
+  "bindgen",
+  "macro",
+  "parallel"
+] }
+serde_json = "1.0.151"
+slotmap = "1.1.1"
+tgtext = { path = "crates/tgtext" }
+url = "2.5.8"
+yuv = { version = "0.8.18", default-features = false, features = [ "rdm" ] }
+
+[build-dependencies]
+rquickjs = { version = "0.14", features = [ "loader" ] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.profiling]
+inherits = "release"
+strip = false
+
+[profile.release.package.yuv]
+opt-level = 3
+
+[profile.release.package.rquickjs-sys]
+opt-level = 3

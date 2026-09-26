@@ -25,7 +25,7 @@ index 0000000..0000000 100644
  
      implementation 'com.google.android.gms:play-services-mlkit-subject-segmentation:16.0.0-beta1'
      implementation 'com.google.android.gms:play-services-mlkit-image-labeling:16.0.8'
-@@ -99,7 +97,6 @@ dependencies {
+@@ -103,7 +101,6 @@ dependencies {
              because("kotlin-stdlib-jdk8 is now a part of kotlin-stdlib")
          }
      }

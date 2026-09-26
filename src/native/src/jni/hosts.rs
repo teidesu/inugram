@@ -1,0 +1,458 @@
+use crate::LEVEL_ERROR;
+
+use crate::api::canvas::{CanvasHost, OP_DESTROY, OP_RELEASE_IMAGE};
+use crate::api::globals::RandomHost;
+use crate::api::io::fetch::FetchHost;
+use crate::api::platform::clipboard::ClipboardHost;
+use crate::api::platform::jvm::{JvmHost, JvmReflectHost};
+use crate::api::platform::notifications::NotificationHost;
+use crate::api::platform::open_url::OpenUrlHost;
+use crate::api::platform::xposed::XposedHost;
+use crate::api::telegram::account::AccountHost;
+use crate::api::telegram::reads::ReadsHost;
+use crate::api::telegram::rpc::RpcHost;
+use crate::api::telegram::writes::WritesHost;
+use crate::api::timers::TimerHost;
+use crate::api::tl::proxy::{TlHost, ORDINAL_FALLBACK};
+use crate::api::tl::utils::UtilsHost;
+use crate::api::ui::actions::ActionHost;
+use crate::api::ui::dialogs::DialogHost;
+use crate::api::ui::files::FilesHost;
+use crate::api::ui::icons::IconHost;
+use crate::api::ui::pages::UiHost;
+use crate::api::ui::screens::ScreenHost;
+use crate::api::ui::{OP_BULLETIN, OP_CHOOSER, OP_DIALOG, OP_PROMPT};
+
+use super::bridge::{Arg, JniBridge};
+use super::env::clear_exception;
+use jni::objects::{JObject, JObjectArray, JValue};
+use jni::signature::ReturnType;
+use jni::Env;
+
+impl RpcHost for JniBridge {
+  fn on_register(
+    &self,
+    methods: &[String],
+    callback_id: u32,
+    scope: &str,
+    strict: bool,
+    filter_json: &str,
+  ) -> Option<String> {
+    self.call_refusal(
+      "interceptRpc",
+      self.on_rpc_register,
+      &[Arg::Strs(methods), Arg::Int(callback_id as i32), Arg::Str(scope), Arg::Bool(strict), Arg::Str(filter_json)],
+    )
+  }
+
+  fn on_unregister(&self, callback_id: u32) {
+    self.call_void("interceptRpc", self.on_rpc_unregister, &[Arg::Int(callback_id as i32)]);
+  }
+
+  fn on_invoke(&self, invoke_id: i64, slot: i32, request_wire: &str) -> Option<String> {
+    self.call_refusal("invokeRpc", self.on_invoke_rpc, &[Arg::Long(invoke_id), Arg::Int(slot), Arg::Str(request_wire)])
+  }
+
+  fn on_invoke_raw(&self, invoke_id: i64, slot: i32, method: &[u8]) -> Option<String> {
+    self.call_refusal(
+      "invokeRaw",
+      self.on_invoke_raw,
+      &[Arg::Long(invoke_id), Arg::Int(slot), Arg::Bytes(Some(method))],
+    )
+  }
+
+  fn on_takeout(&self, invoke_id: i64, slot: i32, op: i32, takeout_id: &str, arg: &str) -> Option<String> {
+    self.call_refusal(
+      "takeout",
+      self.on_takeout,
+      &[Arg::Long(invoke_id), Arg::Int(slot), Arg::Int(op), Arg::Str(takeout_id), Arg::Str(arg)],
+    )
+  }
+
+  fn on_next(&self, dispatch_id: i64, request_wire: &str) -> Option<String> {
+    self.call_refusal("next()", self.on_rpc_next, &[Arg::Long(dispatch_id), Arg::Str(request_wire)])
+  }
+
+  fn on_complete(&self, dispatch_id: i64, result_wire: &str) {
+    self.call_void("next()", self.on_rpc_complete, &[Arg::Long(dispatch_id), Arg::Str(result_wire)]);
+  }
+
+  fn on_update_register(&self, callback_id: u32, types: &[String], scope: &str) -> Option<String> {
+    self.call_refusal(
+      "onUpdate",
+      self.on_update_register,
+      &[Arg::Int(callback_id as i32), Arg::Strs(types), Arg::Str(scope)],
+    )
+  }
+
+  fn on_update_unregister(&self, callback_id: u32) {
+    self.call_void("onUpdate", self.on_update_unregister, &[Arg::Int(callback_id as i32)]);
+  }
+
+  fn on_intercept_update_register(&self, callback_id: u32, types: &[String]) -> Option<String> {
+    self.call_refusal(
+      "interceptUpdate",
+      self.on_intercept_update_register,
+      &[Arg::Int(callback_id as i32), Arg::Strs(types)],
+    )
+  }
+
+  fn on_intercept_update_unregister(&self, callback_id: u32) {
+    self.call_void("interceptUpdate", self.on_intercept_update_unregister, &[Arg::Int(callback_id as i32)]);
+  }
+
+  fn on_update_verdict(&self, dispatch_id: i64, deliver: bool) {
+    self.call_void("interceptUpdate", self.on_update_verdict, &[Arg::Long(dispatch_id), Arg::Bool(deliver)]);
+  }
+}
+
+impl AccountHost for JniBridge {
+  fn accounts(&self) -> Option<String> {
+    match self.call_string("accounts", self.on_accounts, &[]) {
+      Ok(Some(json)) => Some(json),
+      Ok(None) => {
+        self.emit_console(LEVEL_ERROR, "accounts: the host returned null");
+        None
+      }
+      Err(e) => {
+        self.emit_console(LEVEL_ERROR, &e);
+        None
+      }
+    }
+  }
+}
+
+impl TlHost for JniBridge {
+  fn tl_get(&self, handle: i64, key: &str) -> String {
+    self.call_wire("tlGet", self.on_tl_get, &[Arg::Long(handle), Arg::Str(key)])
+  }
+
+  fn tl_resolve_field(&self, class_id: i32, key: &str) -> i32 {
+    self.call_int("tlResolveField", self.on_tl_resolve_field, &[Arg::Int(class_id), Arg::Str(key)], ORDINAL_FALLBACK)
+  }
+
+  fn tl_read_field(&self, handle: i64, class_id: i32, ordinal: i32) -> i32 {
+    let args = [JValue::Long(handle).as_jni(), JValue::Int(class_id).as_jni(), JValue::Int(ordinal).as_jni()];
+    self.call_int_prims("tlReadField", self.on_tl_read_field, &args, ORDINAL_FALLBACK)
+  }
+
+  fn read_buffer(&self) -> &[u8] {
+    self.read_buffer()
+  }
+
+  fn tl_set(&self, handle: i64, key: &str, value_wire: &str) -> Option<String> {
+    self.call_refusal("tlSet", self.on_tl_set, &[Arg::Long(handle), Arg::Str(key), Arg::Str(value_wire)])
+  }
+
+  fn tl_set_bytes(&self, handle: i64, key: &str, value: &[u8]) -> Option<String> {
+    self.call_refusal("tlSetBytes", self.on_tl_set_bytes, &[Arg::Long(handle), Arg::Str(key), Arg::Bytes(Some(value))])
+  }
+
+  fn tl_has(&self, handle: i64, key: &str) -> i32 {
+    self.call_int("tlHas", self.on_tl_has, &[Arg::Long(handle), Arg::Str(key)], -1)
+  }
+
+  fn tl_own_keys(&self, handle: i64) -> Option<String> {
+    self.call_string_opt("tlOwnKeys", self.on_tl_own_keys, &[Arg::Long(handle)])
+  }
+
+  fn tl_copy(&self, handle: i64) -> Option<String> {
+    self.call_string_opt("tlCopy", self.on_tl_copy, &[Arg::Long(handle)])
+  }
+
+  fn tl_release(&self, handle: i64) {
+    self.call_void("tlRelease", self.on_tl_release, &[Arg::Long(handle)]);
+  }
+}
+
+impl ReadsHost for JniBridge {
+  fn account_read(&self, account_id: i32, op: i32, arg: &str) -> String {
+    self.call_wire("accountRead", self.on_account_read, &[Arg::Int(account_id), Arg::Int(op), Arg::Str(arg)])
+  }
+
+  fn resolve_peer(&self, account_id: i32, request_id: i64, spec: &str, kind: i32) -> Option<String> {
+    self.call_refusal(
+      "resolvePeer",
+      self.on_resolve_peer,
+      &[Arg::Int(account_id), Arg::Long(request_id), Arg::Str(spec), Arg::Int(kind)],
+    )
+  }
+
+  fn account_fetch(
+    &self,
+    account_id: i32,
+    request_id: i64,
+    op: i32,
+    peer: &str,
+    args: &str,
+    cursor: &str,
+  ) -> Option<String> {
+    self.call_refusal(
+      "accountFetch",
+      self.on_account_fetch,
+      &[Arg::Int(account_id), Arg::Long(request_id), Arg::Int(op), Arg::Str(peer), Arg::Str(args), Arg::Str(cursor)],
+    )
+  }
+}
+
+impl WritesHost for JniBridge {
+  fn account_write(&self, account_id: i32, request_id: i64, op: i32, arg: &str, values: &[String]) -> Option<String> {
+    self.call_refusal(
+      "accountWrite",
+      self.on_account_write,
+      &[Arg::Int(account_id), Arg::Long(request_id), Arg::Int(op), Arg::Str(arg), Arg::Strs(values)],
+    )
+  }
+
+  fn message_file(&self, account_id: i32, value: &str) -> String {
+    self.call_wire("getMessageFile", self.on_message_file, &[Arg::Int(account_id), Arg::Str(value)])
+  }
+}
+
+impl JniBridge {
+  fn ui_modal(&self, op: i32, request_id: i64, options_json: &str) -> Option<String> {
+    self.call_refusal("modal", self.on_ui_modal, &[Arg::Int(op), Arg::Long(request_id), Arg::Str(options_json)])
+  }
+}
+
+impl DialogHost for JniBridge {
+  fn toast(&self, text: &str) {
+    self.call_void("toast", self.on_ui_toast, &[Arg::Str(text)]);
+  }
+
+  fn bulletin(&self, request_id: i64, options_json: &str) -> Option<String> {
+    self.ui_modal(OP_BULLETIN, request_id, options_json)
+  }
+
+  fn dialog(&self, request_id: i64, options_json: &str) -> Option<String> {
+    self.ui_modal(OP_DIALOG, request_id, options_json)
+  }
+
+  fn chooser(&self, request_id: i64, options_json: &str) -> Option<String> {
+    self.ui_modal(OP_CHOOSER, request_id, options_json)
+  }
+
+  fn prompt(&self, request_id: i64, options_json: &str) -> Option<String> {
+    self.ui_modal(OP_PROMPT, request_id, options_json)
+  }
+}
+
+impl OpenUrlHost for JniBridge {
+  fn open_url(&self, url: &str) {
+    self.call_void("openUrl", self.on_open_url, &[Arg::Str(url)]);
+  }
+}
+
+impl ClipboardHost for JniBridge {
+  fn read(&self) -> String {
+    self.call_string_or_empty("clipboardRead", self.on_clipboard_read, &[])
+  }
+
+  fn write(&self, text: &str) {
+    self.call_void("clipboardWrite", self.on_clipboard_write, &[Arg::Str(text)]);
+  }
+}
+
+impl UtilsHost for JniBridge {
+  fn format(&self, op: i32, value: i64) -> String {
+    self.call_string_or_empty("format", self.on_format, &[Arg::Int(op), Arg::Long(value)])
+  }
+}
+
+impl ScreenHost for JniBridge {
+  fn current_screen(&self) -> String {
+    self.call_string_or_empty("getCurrentScreen", self.on_ui_current_screen, &[])
+  }
+}
+
+impl NotificationHost for JniBridge {
+  fn notification_register(&self, callback_id: u32, events: &[String]) -> Option<String> {
+    self.call_refusal(
+      "addNotificationCenterDelegate",
+      self.on_notification_register,
+      &[Arg::Int(callback_id as i32), Arg::Strs(events)],
+    )
+  }
+
+  fn notification_unregister(&self, callback_id: u32) {
+    self.call_void("addNotificationCenterDelegate", self.on_notification_unregister, &[Arg::Int(callback_id as i32)]);
+  }
+
+  fn notification_suppress(&self, token: u32, account: i32, on: bool) {
+    self.call_void(
+      "suppressNotifications",
+      self.on_notification_suppress,
+      &[Arg::Int(token as i32), Arg::Int(account), Arg::Bool(on)],
+    );
+  }
+}
+
+impl FilesHost for JniBridge {
+  fn ui_files(&self, op: i32, request_id: i64, options_json: &str) -> Option<String> {
+    self.ui_modal(op, request_id, options_json)
+  }
+}
+
+impl UiHost for JniBridge {
+  fn ui_open_page(&self, page_id: i64) -> Option<String> {
+    self.call_refusal("openPage", self.on_ui_open_page, &[Arg::Long(page_id)])
+  }
+
+  fn ui_open_fragment(&self, handle: i64) -> Option<String> {
+    self.call_refusal("openPage", self.on_ui_open_fragment, &[Arg::Long(handle)])
+  }
+
+  fn ui_open_screen(&self, options_json: &str) -> Option<String> {
+    self.call_refusal("openPage", self.on_ui_open_screen, &[Arg::Str(options_json)])
+  }
+
+  fn ui_register_settings(&self, page_id: i64) {
+    self.call_void("registerSettingsPage", self.on_ui_register_settings, &[Arg::Long(page_id)]);
+  }
+
+  fn ui_unregister_settings(&self, page_id: i64) {
+    self.call_void("registerSettingsPage", self.on_ui_unregister_settings, &[Arg::Long(page_id)]);
+  }
+
+  fn ui_invalidate(&self, page_id: i64) {
+    self.call_void("invalidate", self.on_ui_invalidate, &[Arg::Long(page_id)]);
+  }
+
+  fn ui_open_menu(&self, menu_id: i64, page_id: i64, anchor_key: &str, items_json: &str) -> Option<String> {
+    self.call_refusal(
+      "openMenu",
+      self.on_ui_open_menu,
+      &[Arg::Long(menu_id), Arg::Long(page_id), Arg::Str(anchor_key), Arg::Str(items_json)],
+    )
+  }
+}
+
+impl IconHost for JniBridge {
+  fn icon_resolves(&self, kind: i32, value: &str) -> bool {
+    self.call_bool("iconResolves", self.on_icon_resolves, &[Arg::Int(kind), Arg::Str(value)])
+  }
+
+  fn common_icon(&self, name: &str) -> Option<String> {
+    self.call_string_opt("commonIcon", self.on_common_icon, &[Arg::Str(name)])
+  }
+}
+
+impl JvmHost for JniBridge {
+  fn jvm(&self, op: i32, target: i64, name: &str, args: &[String]) -> String {
+    self.call_wire("jvm", self.on_jvm, &[Arg::Int(op), Arg::Long(target), Arg::Str(name), Arg::Strs(args)])
+  }
+}
+
+impl JvmReflectHost for JniBridge {
+  fn jvm_resolve<'l>(
+    &self,
+    env: &mut Env<'l>,
+    target: &JObject,
+    name: &str,
+    mode: i32,
+  ) -> Result<JObjectArray<'l, JObject<'l>>, String> {
+    let name = Self::new_jstring(env, "jvmResolve", name)?;
+    let args = [JValue::Object(target).as_jni(), JValue::Object(&name).as_jni(), JValue::Int(mode).as_jni()];
+    let result = self.call_target(env, self.on_jvm_resolve, ReturnType::Object, &args);
+    if clear_exception(env) {
+      return Err("jvmResolve: host callback threw".to_string());
+    }
+    let obj = result.and_then(|v| v.l()).map_err(|e| format!("jvmResolve: {e}"))?;
+    if obj.is_null() {
+      return Err("jvmResolve: host returned null".to_string());
+    }
+    env.cast_local::<JObjectArray<JObject>>(obj).map_err(|e| format!("jvmResolve: {e}"))
+  }
+}
+
+impl XposedHost for JniBridge {
+  fn xposed(&self, op: i32, target: i64, name: &str, args: &[String]) -> String {
+    self.call_wire("xposed", self.on_xposed, &[Arg::Int(op), Arg::Long(target), Arg::Str(name), Arg::Strs(args)])
+  }
+}
+
+impl ActionHost for JniBridge {
+  fn action_register(
+    &self,
+    kind: i32,
+    token: u32,
+    id: &str,
+    placements: i32,
+    text: Option<&str>,
+    icon: Option<&str>,
+    dynamic_fields: i32,
+  ) -> Option<String> {
+    self.call_refusal(
+      "registerAction",
+      self.on_action_register,
+      &[
+        Arg::Int(kind),
+        Arg::Int(token as i32),
+        Arg::Str(id),
+        Arg::Int(placements),
+        Arg::OptStr(text),
+        Arg::OptStr(icon),
+        Arg::Int(dynamic_fields),
+      ],
+    )
+  }
+
+  fn action_unregister(&self, kind: i32, token: u32) {
+    self.call_void("registerAction", self.on_action_unregister, &[Arg::Int(kind), Arg::Int(token as i32)]);
+  }
+
+  fn action_editor(&self, op: i32, surface: i64, payload_json: &str) -> Option<String> {
+    self.call_refusal("action", self.on_action_editor, &[Arg::Int(op), Arg::Long(surface), Arg::Str(payload_json)])
+  }
+}
+
+impl RandomHost for JniBridge {
+  fn random_bytes(&self, out: &mut [u8]) -> bool {
+    let wanted = out.len() as i32;
+    self.call_bytes("randomBytes", self.on_random_bytes, &[Arg::Int(wanted)], out)
+  }
+}
+
+impl TimerHost for JniBridge {
+  fn schedule_wake(&self, delay_ms: i64) {
+    self.call_void("timerSchedule", self.on_timer_schedule, &[Arg::Long(delay_ms)]);
+  }
+}
+
+impl FetchHost for JniBridge {
+  fn send(
+    &self,
+    request_id: i64,
+    url: &str,
+    spec: &crate::api::io::fetch::Spec,
+    body: Option<&[u8]>,
+  ) -> Option<String> {
+    self.call_refusal(
+      "fetch",
+      self.on_fetch,
+      &[
+        Arg::Long(request_id),
+        Arg::Str(url),
+        Arg::Str(&spec.method),
+        Arg::Str(&spec.redirect),
+        Arg::Strs(&spec.headers),
+        Arg::Bytes(body),
+      ],
+    )
+  }
+
+  fn abort(&self, request_id: i64) {
+    self.call_void("fetch", self.on_fetch_abort, &[Arg::Long(request_id)]);
+  }
+}
+
+impl CanvasHost for JniBridge {
+  fn canvas(&self, op: i32, id: i64, arg: &str, bytes: Option<&[u8]>) -> String {
+    let what = if matches!(op, OP_DESTROY | OP_RELEASE_IMAGE) { "canvasRelease" } else { "canvas" };
+    match self.call_string(what, self.on_canvas, &[Arg::Int(op), Arg::Long(id), Arg::Str(arg), Arg::Bytes(bytes)]) {
+      Ok(Some(answer)) => answer,
+      Ok(None) => String::new(),
+      Err(e) => e,
+    }
+  }
+}

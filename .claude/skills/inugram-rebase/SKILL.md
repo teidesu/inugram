@@ -189,7 +189,7 @@ done and what to re-check.
 
 ## End of rebase
 
-`stg push -a` exits 0 with no conflict when done. Then run **all four** checks —
+`stg push -a` exits 0 with no conflict when done. Then run **all six** checks —
 a rebase is not finished until they pass.
 
 ### 1. Stack fully applied, no leftovers
@@ -221,7 +221,49 @@ It reports `missing from patches/`, `not in stgit stack` (orphaned files), and
 `content drift`. Any output = the export and the stack disagree; re-export and
 investigate rather than hand-editing `patches/`.
 
-### 4. The app actually builds
+### 4. Regenerate the TL tables
+
+The plugin bridge's TL typings and `tl_tables.txt` are generated (gitignored) from
+stock's tgnet sources, so a new layer leaves them stale. `pnpm run setup` would
+regenerate them, but it refuses while the stack diverges from `series`, so run the
+generator directly. First refresh mtcute's int53 overrides, vendored because
+mtcute's layer drifts from stock's independently:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mtcute/mtcute/refs/heads/master/packages/core/scripts/tl/data/int53-overrides.json -o scripts/data/int53-overrides.json
+pnpm run generate-tl
+```
+
+Read the `int53 override matches no long field stock declares` warnings: an entry
+stock doesn't have yet is expected, but a field stock *renamed* means ids that
+should be numbers silently stay strings. Log those to `TODO.md`.
+
+### 5. NotificationCenter typings
+
+`sdk/types/android.notification-center.d.ts` is hand-written against stock's
+`NotificationCenter` events and their post sites. Nothing regenerates it, and the
+host reflects event names off stock at runtime, so drift only shows up as wrong typings.
+
+```bash
+.claude/skills/inugram-rebase/scripts/notification-events.sh
+```
+
+It prints name drift (`<` stock only, `>` typings only) and every event named on a
+line upstream changed. Add new events, drop removed ones, and for each listed event
+reread **all** its `postNotificationName` sites (calls span lines, so the list is a
+starting point, not the whole change). The map describes what JS receives:
+
+- `Boolean` → `boolean`; `Integer`/`Long`/`Float`/`Double` → `number`; a random
+  64-bit long (random/grouped/query/document ids, hashes) → `number | bigint`,
+  since longs past 2^53 cross as bigint
+- `String`/`Character` → `string`; `byte[]` → `Uint8Array`
+- anything else (TL objects, `MessageObject`, lists, maps, other arrays) → `JavaObject`
+- a slot some site passes `null` → `| null`; a slot some site omits → optional
+
+Many sites dispatch to a background post, so check the declared type of each
+argument, not just the call. Delegate this to a subagent when the list is long.
+
+### 6. The app actually builds
 
 Compile errors are the main thing a marker-free resolution still gets wrong:
 upstream renames a class, moves a package, or changes a signature, and both the

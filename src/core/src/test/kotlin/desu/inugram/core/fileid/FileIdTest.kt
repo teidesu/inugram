@@ -6,35 +6,35 @@ import org.junit.Test
 
 class FileIdTest {
     @Test
-    fun parsesKnownFileIds() {
+    fun parses_known_file_ids() {
         for (vector in ALL_VECTORS) {
             assertEquals(vector.fileId, vector.location, parseFileId(vector.fileId))
         }
     }
 
     @Test
-    fun serializesKnownFileIds() {
+    fun serializes_known_file_ids() {
         for (vector in ALL_VECTORS) {
             assertEquals(vector.fileId, vector.reserialized, serializeFileId(vector.location))
         }
     }
 
     @Test
-    fun reserializedFileIdsParseBack() {
+    fun reserialized_file_ids_parse_back() {
         for (vector in ALL_VECTORS) {
             assertEquals(vector.fileId, vector.location, parseFileId(vector.reserialized))
         }
     }
 
     @Test
-    fun serializesKnownUniqueFileIds() {
+    fun serializes_known_unique_file_ids() {
         for (vector in ALL_VECTORS) {
             assertEquals(vector.fileId, vector.uniqueFileId, serializeUniqueFileId(vector.location))
         }
     }
 
     @Test
-    fun parsesUniqueIdsForDocuments() {
+    fun parses_unique_ids_for_documents() {
         assertEquals(
             ParsedUniqueFileId.Document(1282363671355326586L),
             parseUniqueFileId("AgADegAD997LEQ"),
@@ -50,7 +50,7 @@ class FileIdTest {
     }
 
     @Test
-    fun parsesUniqueIdsForThumbnails() {
+    fun parses_unique_ids_for_thumbnails() {
         assertEquals(
             ParsedUniqueFileId.Photo(UniquePhotoLocation.Id(5213102278772264052L, 114)),
             parseUniqueFileId("AQADdAwAAueoWEhy"),
@@ -58,7 +58,7 @@ class FileIdTest {
     }
 
     @Test
-    fun parsesUniqueIdsForProfilePictures() {
+    fun parses_unique_ids_for_profile_pictures() {
         assertEquals(
             ParsedUniqueFileId.Photo(UniquePhotoLocation.VolumeId(247538121L, 338431)),
             parseUniqueFileId("AQADySHBDgAE_ykFAAE"),
@@ -70,14 +70,14 @@ class FileIdTest {
     }
 
     @Test
-    fun rejectsUnsupportedVersion() {
+    fun rejects_unsupported_version() {
         assertThrows(UnsupportedFileIdException::class.java) {
             parseFileId("CAADAQADegAD997LEUiQZafDlhIeAQ")
         }
     }
 
     @Test
-    fun rejectsTruncatedFileId() {
+    fun rejects_truncated_file_id() {
         assertThrows(FileIdException::class.java) {
             parseFileId(byteArrayOf(PERSISTENT_ID_VERSION_OLD.toByte()))
         }
