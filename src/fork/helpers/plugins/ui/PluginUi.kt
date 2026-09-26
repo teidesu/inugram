@@ -65,8 +65,8 @@ object PluginUi : SessionResource {
     const val OP_PROMPT = 1
     const val OP_CHOOSER = 2
     const val OP_BULLETIN = 3
-    const val OP_PICK_FILE = 3
-    const val OP_SAVE_FILE = 4
+    const val OP_PICK_FILE = 4
+    const val OP_SAVE_FILE = 5
 
     // keyed per engine so page ids can't cross plugins. ui thread only
     private data class PageKey(val session: PluginSession, val pageId: Long)
