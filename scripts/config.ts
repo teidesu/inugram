@@ -12,6 +12,13 @@ export const seriesFile = join(rootDir, 'series')
 export const upstreamCommitFile = join(rootDir, 'upstream-commit')
 export const assetsDir = join(rootDir, 'src/res/assets')
 
+// nested submodules we never build, skipped by the recursive update. lsplant's test deps are
+// private repos behind ssh urls
+export const skippedSubmodules = [
+  'test/src/main/jni/external/lsparself',
+  'test/src/main/jni/external/lsprism',
+]
+
 export interface SubmodulePatch {
   submodule: string
   patch: string

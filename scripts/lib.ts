@@ -7,6 +7,7 @@ import {
   forkSyncFiles,
   rootDir,
   seriesFile,
+  skippedSubmodules,
   submodulePatches,
   upstreamCommitFile,
   upstreamUrl,
@@ -119,7 +120,8 @@ export async function syncSubmodules(repoDir: string) {
   }
 
   step(`Syncing ${stale.length} submodule(s), this will take a while`)
-  await git`git submodule update --init --recursive --filter=blob:none`
+  const skips = skippedSubmodules.flatMap(name => ['-c', `submodule.${name}.update=none`])
+  await git`git ${skips} submodule update --init --recursive --filter=blob:none`
   return true
 }
 
@@ -324,7 +326,7 @@ export async function getPatchSubject(repoDir: string, patchName: string) {
 }
 
 export async function generateStablePatchFromCommit(repoDir: string, commitId: string) {
-  const patch = await cd(repoDir)`git format-patch --stdout --zero-commit --no-signature --subject-prefix= -1 ${commitId}`
+  const patch = await cd(repoDir)`git format-patch --stdout --ignore-submodules=none --zero-commit --no-signature --subject-prefix= -1 ${commitId}`
   return patch.stdout
     .replace(/^index [0-9a-f]+\.\.[0-9a-f]+( \d+)?$/gm, 'index 0000000..0000000$1')
     .replace(/^Subject:.*(?:\n[ \t].*)+/m, m => m.replace(/\n[ \t]+/g, ' '))

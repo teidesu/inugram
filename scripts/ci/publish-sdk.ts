@@ -106,6 +106,12 @@ for (const pkg of PACKAGES) {
     step(`${pkg.name} unchanged since the last publish, skipping`)
     continue
   }
+  const published = await $({ nothrow: true })`npm view ${pkg.name}@${version} version`
+  if (published.stdout.trim() === version) {
+    step(`${pkg.name}@${version} is already on the registry, skipping`)
+    if (!dryRun) await storeHash(pkg, hash)
+    continue
+  }
   if (dryRun) {
     success(`${pkg.name}@${version} would be published`)
     continue

@@ -92,7 +92,7 @@ try {
 } finally {
   const exported = await tg.exportSession()
   if (exported !== cachedSession) {
-    await persistSession(exported)
+    await persistSession(exported).catch(e => console.warn('failed to persist session:', e))
   }
   await tg.destroy()
 }

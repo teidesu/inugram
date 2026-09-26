@@ -1,11 +1,11 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: alina sireneva <alina@tei.su>
-Date: Tue, 21 Apr 2026 07:47:50 +0300
+From: alina sireneva <alina@tei.pet>
+Date: Sat, 26 Sep 2026 21:53:56 +0400
 Subject: build support stuff for fork-specific code: - added kotlin - bumped min sdk to 26, removed desugaring - versioning
 
 ---
  .gitmodules                                   |   3 +
- TMessagesProj/build.gradle                    | 120 +++-------
+ TMessagesProj/build.gradle                    | 121 +++-------
  TMessagesProj/google-services.json            |  76 +-----
  TMessagesProj/proguard-rules.pro              |  13 +
  TMessagesProj/src/main/AndroidManifest.xml    |   7 +
@@ -13,15 +13,17 @@ Subject: build support stuff for fork-specific code: - added kotlin - bumped min
  .../telegram/tgnet/ConnectionsManager.java    |   2 +-
  .../org/telegram/ui/PaymentFormActivity.java  |  28 +--
  .../org/telegram/ui/SettingsActivity.java     |  24 +-
- TMessagesProj_App/build.gradle                | 224 ++++++++++--------
+ TMessagesProj_App/build.gradle                | 225 ++++++++++--------
  TMessagesProj_App/google-services.json        |  76 +-----
  TMessagesProj_App/jni/CMakeLists.txt          |  10 +
+ TMessagesProj_App/jni/lsplant                 |   1 +
  TMessagesProj_AppTests/build.gradle           |   5 +-
  build.gradle                                  |  14 +-
  gradle.properties                             |   2 +-
  settings.gradle                               |  40 +++-
- 16 files changed, 298 insertions(+), 358 deletions(-)
+ 17 files changed, 300 insertions(+), 359 deletions(-)
  create mode 100644 TMessagesProj_App/jni/CMakeLists.txt
+ create mode 160000 TMessagesProj_App/jni/lsplant
 
 diff --git a/.gitmodules b/.gitmodules
 index 0000000..0000000 100644
@@ -87,7 +89,7 @@ index 0000000..0000000 100644
  }
  
  android {
-@@ -104,6 +112,8 @@ android {
+@@ -104,10 +112,13 @@ android {
      ndkVersion "27.2.12479018"
  
      sourceSets.main.jniLibs.srcDirs = ['./jni/']
@@ -96,7 +98,12 @@ index 0000000..0000000 100644
  
      externalNativeBuild {
          cmake {
-@@ -120,24 +130,31 @@ android {
+             path 'jni/CMakeLists.txt'
++            version '3.31.6'
+         }
+     }
+ 
+@@ -120,24 +131,31 @@ android {
      compileOptions {
          sourceCompatibility JavaVersion.VERSION_1_8
          targetCompatibility JavaVersion.VERSION_1_8
@@ -134,7 +141,7 @@ index 0000000..0000000 100644
              }
          }
      }
-@@ -150,77 +167,13 @@ android {
+@@ -150,77 +168,13 @@ android {
              multiDexEnabled true
              proguardFiles getDefaultProguardFile('proguard-android.txt'), '../TMessagesProj/proguard-rules.pro', '../TMessagesProj/proguard-rules-beta.pro'
              ndk.debugSymbolLevel = 'FULL'
@@ -216,7 +223,7 @@ index 0000000..0000000 100644
          }
  
          release {
-@@ -230,13 +183,13 @@ android {
+@@ -230,13 +184,13 @@ android {
              multiDexEnabled true
              proguardFiles getDefaultProguardFile('proguard-android.txt'), '../TMessagesProj/proguard-rules.pro'
              ndk.debugSymbolLevel = 'FULL'
@@ -234,7 +241,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -254,7 +207,6 @@ def getProps(String propName) {
+@@ -254,7 +208,6 @@ def getProps(String propName) {
          return "";
      }
  }
@@ -242,7 +249,7 @@ index 0000000..0000000 100644
  
  task checkVisibility {
      doFirst {
-@@ -277,3 +229,7 @@ task checkVisibility {
+@@ -277,3 +230,7 @@ task checkVisibility {
  }
  
  preBuild.dependsOn checkVisibility
@@ -670,7 +677,7 @@ index 0000000..0000000 100644
          release {
              debuggable false
              jniDebuggable false
-@@ -95,100 +87,50 @@ android {
+@@ -95,100 +87,49 @@ android {
      }
  
      sourceSets.debug {
@@ -770,7 +777,7 @@ index 0000000..0000000 100644
  
          externalNativeBuild {
              cmake {
-                 version '3.22.1'
+-                version '3.22.1'
 -                arguments '-DANDROID_STL=c++_static', '-DANDROID_PLATFORM=android-21' // , '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
 -                targets 'tmessages.49'
 +                arguments '-DANDROID_STL=c++_static', '-DANDROID_PLATFORM=android-26' // , '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
@@ -785,14 +792,14 @@ index 0000000..0000000 100644
 +    externalNativeBuild {
 +        cmake {
 +            path 'jni/CMakeLists.txt'
-+            version '3.28.0+'
++            version '3.31.6'
 +        }
 +    }
 +
      buildFeatures {
          buildConfig = true
      }
-@@ -197,6 +139,96 @@ android {
+@@ -197,6 +138,96 @@ android {
      lintOptions {
          checkReleaseBuilds false
      }
@@ -1018,6 +1025,13 @@ index 0000000..0000000
 +
 +set(LSPLANT_BUILD_SHARED ON CACHE BOOL "" FORCE)
 +add_subdirectory(lsplant/lsplant/src/main/jni)
+diff --git a/TMessagesProj_App/jni/lsplant b/TMessagesProj_App/jni/lsplant
+new file mode 160000
+index 0000000..0000000
+--- /dev/null
++++ b/TMessagesProj_App/jni/lsplant
+@@ -0,0 +1 @@
++Subproject commit 61e10e51eb99dca00dd873f48c28a674dd2b4c4c
 diff --git a/TMessagesProj_AppTests/build.gradle b/TMessagesProj_AppTests/build.gradle
 index 0000000..0000000 100644
 --- a/TMessagesProj_AppTests/build.gradle

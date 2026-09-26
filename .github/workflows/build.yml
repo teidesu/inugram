@@ -75,7 +75,7 @@ jobs:
       - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
@@ -97,6 +97,11 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('src/native/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
+
+      - name: install android rust toolchain
+        run: |
+          rustup target add aarch64-linux-android
+          cargo install cargo-ndk --version 4.1.2 --locked
 
       # the plugin engine's own suite, including every bundled oracle; ubuntu-latest already ships
       # rustup and a stable toolchain
@@ -156,7 +161,7 @@ jobs:
           packages: >-
             platforms;android-36
             build-tools;36.0.0
-            cmake;3.22.1
+            cmake;3.31.6
             ndk;27.2.12479018
 
       - name: tune gradle
