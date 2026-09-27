@@ -1013,6 +1013,10 @@ declare namespace inu {
     function svg(source: string): UIIcon
   }
 
+  /**
+   * **Limits: 3 dialogs, prompts, choosers and file pickers open at once, across every plugin; one more
+   * rejects with `quota-exceeded`. Bulletins and toasts do not count.**
+   */
   namespace ui {
     interface UIPage {
       /** Refresh the page by calling its callback again */

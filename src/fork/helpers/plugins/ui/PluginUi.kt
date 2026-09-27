@@ -52,6 +52,7 @@ import org.telegram.ui.Components.RLottieImageView
 import org.telegram.ui.LaunchActivity
 import org.telegram.ui.ProfileActivity
 import org.telegram.ui.SettingsActivity
+import java.util.concurrent.atomic.AtomicInteger
 
 object PluginUi : SessionResource {
 
@@ -67,6 +68,22 @@ object PluginUi : SessionResource {
     const val OP_BULLETIN = 3
     const val OP_PICK_FILE = 4
     const val OP_SAVE_FILE = 5
+
+    private const val MAX_OPEN_MODALS = 3
+
+    /** across every plugin, so timers cannot stack dialogs over the settings needed to remove them */
+    private val openModals = AtomicInteger()
+
+    /** a refusal, or `null` with a slot taken that [releaseModal] gives back */
+    fun acquireModal(name: String): String? {
+        if (openModals.incrementAndGet() <= MAX_OPEN_MODALS) return null
+        openModals.decrementAndGet()
+        return PluginWire.encodePluginError("quota-exceeded", "$name: $MAX_OPEN_MODALS plugin dialogs are already open", usage = MAX_OPEN_MODALS.toLong(), quota = MAX_OPEN_MODALS.toLong())
+    }
+
+    fun releaseModal() {
+        openModals.decrementAndGet()
+    }
 
     // keyed per engine so page ids can't cross plugins. ui thread only
     private data class PageKey(val session: PluginSession, val pageId: Long)
@@ -430,6 +447,7 @@ object PluginUi : SessionResource {
             OP_BULLETIN -> showModal(
                 session,
                 "bulletin",
+                counted = false,
                 dismissed = "dismissed",
                 resolve = resolveString,
                 prepare = { BulletinSpec(session, JSONObject(optionsJson)) },
@@ -477,23 +495,25 @@ object PluginUi : SessionResource {
     private fun <S, T> showModal(
         session: PluginSession,
         name: String,
+        counted: Boolean = true,
         dismissed: T,
         resolve: (T) -> Unit,
         prepare: () -> S,
         show: (S, (T) -> Unit) -> Unit,
     ): String? {
+        if (counted) acquireModal(name)?.let { return it }
         val prepared = try {
             prepare()
-        } catch (e: PluginRefusal) {
-            return e.wire
         } catch (e: Exception) {
-            return PluginWire.encodePluginError("invalid-argument", "$name: ${e.message}")
+            if (counted) releaseModal()
+            return if (e is PluginRefusal) e.wire else PluginWire.encodePluginError("invalid-argument", "$name: ${e.message}")
         }
         AndroidUtilities.runOnUIThread {
             var settled = false
             val settle: (T) -> Unit = { result ->
                 if (!settled) {
                     settled = true
+                    if (counted) releaseModal()
                     EngineDispatch.onEngine(session) { resolve(result) }
                 }
             }

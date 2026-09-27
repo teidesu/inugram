@@ -46,7 +46,10 @@ internal object PluginFilePicker : SessionResource {
     override fun detach(session: PluginSession) {
         AndroidUtilities.runOnUIThread {
             val center = NotificationCenter.getGlobalInstance()
-            waiting.take(session).forEach { center.removeObserver(it, NotificationCenter.onActivityResultReceived) }
+            for (observer in waiting.take(session)) {
+                center.removeObserver(observer, NotificationCenter.onActivityResultReceived)
+                PluginUi.releaseModal()
+            }
         }
     }
 
@@ -98,9 +101,11 @@ internal object PluginFilePicker : SessionResource {
         intent: () -> Intent,
         answer: (Intent?) -> Picked,
     ): String? {
+        PluginUi.acquireModal(name)?.let { return it }
         AndroidUtilities.runOnUIThread {
             val activity = LaunchActivity.instance
             if (activity == null || activity.isFinishing) {
+                PluginUi.releaseModal()
                 settle(session, requestId, name, Picked(PluginWire.encodePluginError("unsupported", "$name: there is no screen to open a picker over")))
                 return@runOnUIThread
             }
@@ -142,7 +147,7 @@ internal object PluginFilePicker : SessionResource {
 
     private fun unwatch(session: PluginSession, observer: NotificationCenter.NotificationCenterDelegate) {
         NotificationCenter.getGlobalInstance().removeObserver(observer, NotificationCenter.onActivityResultReceived)
-        waiting.remove(session) { it === observer }
+        if (waiting.remove(session) { it === observer } != null) PluginUi.releaseModal()
     }
 
     private fun settle(session: PluginSession, requestId: Long, name: String, picked: Picked) {
