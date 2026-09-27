@@ -68,16 +68,21 @@ impl SourceStager {
     }
     if let Some(object) = value.as_object() {
       if let Some(path) = object.get::<_, Option<String>>("path")? {
-        let Some(fs) = self.fs.borrow().clone() else {
-          return PluginErrorCode::NotGranted("fs").throw(ctx, "naming a file needs @grant fs");
-        };
         return Ok(StagedSource {
-          path: fs.resolve_external(ctx, &path)?,
+          path: self.resolve_path(ctx, &path)?,
           owned: false,
         });
       }
     }
     PluginErrorCode::InvalidArgument.throw(ctx, "expected a Blob, a Uint8Array or { path }")
+  }
+
+  /// a `{ path }` the plugin names, through `inu.fs` and its grants
+  pub fn resolve_path(&self, ctx: &Ctx<'_>, path: &str) -> JsResult<PathBuf> {
+    let Some(fs) = self.fs.borrow().clone() else {
+      return PluginErrorCode::NotGranted("fs").throw(ctx, "naming a file needs @grant fs");
+    };
+    fs.resolve_external(ctx, path)
   }
 
   fn stage_blob<'js>(&self, ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<StagedSource> {

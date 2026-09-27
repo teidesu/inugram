@@ -284,6 +284,7 @@ fn setup(grants: &[&str]) -> Fixture {
 fn setup_with_limit(grants: &[&str], transfer_limit: u64) -> Fixture {
   let (rt, ctx) = crate::testing::harness::new_engine();
   let host = TestWritesHost::new();
+  let with_fs = grants.contains(&"fs");
   let grants: Rc<dyn GrantHost> = CachedGrantHost::new(grants);
   let log: crate::Log = std::sync::Arc::new(|_| {});
   let dir = crate::testing::harness::TestDir::new("stage");
@@ -296,12 +297,20 @@ fn setup_with_limit(grants: &[&str], transfer_limit: u64) -> Fixture {
     let (shared, reads) = install_test_reads(&ctx, &grants, &views, empty.clone(), &accounts, &log, &inu);
     let deps = WritesDeps {
       host: host.clone(),
-      grants,
+      grants: grants.clone(),
       views,
       stage_dir: dir.path().to_path_buf(),
       log: log.clone(),
     };
     let writes = install_writes_with_limit(&ctx, deps, &shared, &accounts, &inu, transfer_limit).unwrap();
+    if with_fs {
+      let root = dir.path().join("fs");
+      fs::create_dir_all(&root).unwrap();
+      let fs =
+        crate::api::io::fs::install_fs(&ctx, grants, &root, crate::api::io::fs::DEFAULT_QUOTA_BYTES, false, "", &inu)
+          .unwrap();
+      writes.attach_fs(fs);
+    }
     (writes, reads, accounts)
   });
   let writes = crate::testing::harness::DisposeOnDrop::new(&ctx, writes, |ctx, state| state.dispose(ctx));
@@ -514,26 +523,31 @@ fn a_transfer_past_the_staging_cap_is_refused_before_a_byte_is_written() {
 }
 
 #[test]
-fn a_path_is_gated_on_fs_and_the_relative_form_says_it_is_not_here_yet() {
+fn a_path_is_read_through_inu_fs_and_its_grants() {
   let (out, host) = run_async(
     ALL_WRITES,
     r#"
-      const a = inu.account()
-      a.uploadFile({ path: '/etc/hosts' }).then(() => __out.push('ok'), (e) => __out.push(`${e.code}:${e.grant}`))
-      a.uploadFile({ path: 'own.bin' }).then(() => __out.push('ok'), (e) => __out.push(`${e.code}:${e.grant}`))
+      inu.account().uploadFile({ path: 'own.bin' }).then(() => __out.push('ok'), (e) => __out.push(`${e.code}:${e.grant}`))
     "#,
   );
-  assert_eq!(out, r#"["not-granted:unsafe.fs","not-granted:fs"]"#);
+  assert_eq!(out, r#"["not-granted:fs"]"#);
   assert!(host.calls.borrow().is_empty());
 
-  let (out, _) = run_async(
-    &["account.write(send)", "fs", "unsafe.fs"],
+  let (out, host) = run_async(
+    &["account.write(send)", "fs"],
     r#"
+      inu.fs.write('own.bin', new Uint8Array([1, 2, 3]))
       const a = inu.account()
+      a.uploadFile({ path: '/etc/hosts' }).then(() => __out.push('ok'), (e) => __out.push(`${e.code}:${e.grant}`))
+      a.uploadFile({ path: '../escape.bin' }).then(() => __out.push('ok'), (e) => __out.push(`${e.code}:${e.grant}`))
       a.uploadFile({ path: 'own.bin' }).then(() => __out.push('ok'), (e) => __out.push(e.code))
     "#,
   );
-  assert_eq!(out, r#"["unsupported"]"#, "the scoped directory arrives with inu.fs");
+  assert_eq!(out, r#"["not-granted:unsafe.fs","not-granted:unsafe.fs","ok"]"#);
+  let calls = host.calls.borrow();
+  let (_, _, values) = calls.first().expect("the upload must cross");
+  let wire = values.iter().find(|wire| wire.starts_with('F')).expect("the file crosses as a file wire");
+  assert!(wire.contains(r#"fs/own.bin""#), "the host is handed the resolved path, got: {wire}");
 }
 
 /// the other terminal call `write_result` owes the throttle. `common.d.ts` promises a plugin is

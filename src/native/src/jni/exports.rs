@@ -245,6 +245,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
           crate::api::io::fs::install_fs(&ctx, grants.clone(), &fs_dir, quota, fs_unscoped, &android_dirs, &globals)
         })?;
         canvas.attach_fs(fs.clone());
+        writes.attach_fs(fs.clone());
         files.attach_fs(fs);
       } else {
         install_part(&ctx, "inu.fs", log.as_ref(), |ctx, globals| {

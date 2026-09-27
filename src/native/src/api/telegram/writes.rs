@@ -8,6 +8,7 @@ use rquickjs::{Array, Ctx, Function, Object, Result as JsResult, TypedArray, Val
 
 use crate::api::error::PluginErrorCode;
 use crate::api::io::blob::{self, BlobHandle};
+use crate::api::io::fs::FsState;
 use crate::api::io::staging::{SourceStager, StagedFile};
 use crate::api::telegram::account::AccountState;
 use crate::api::telegram::progress::ProgressReporter;
@@ -104,22 +105,15 @@ impl Parked for PendingWrite {
 }
 
 impl WritesState {
+  pub fn attach_fs(&self, fs: Rc<FsState>) {
+    self.sources.attach_fs(fs);
+  }
+
   fn check_write_grant(&self, ctx: &Ctx<'_>, op: i32) -> JsResult<()> {
     let Some((name, scope)) = get_op_grant(op) else {
       return PluginErrorCode::InvalidArgument.throw(ctx, "unknown account write");
     };
     self.grants.check_grant(ctx, name, Some(scope), MATCH_EXACT)
-  }
-
-  fn check_path_grant(&self, ctx: &Ctx<'_>, path: &str) -> JsResult<()> {
-    if Path::new(path).is_absolute() {
-      return self.grants.check_grant(ctx, "unsafe.fs", None, MATCH_EXACT);
-    }
-    self.grants.check_grant(ctx, "fs", None, MATCH_EXACT)?;
-    PluginErrorCode::Unsupported.throw(
-    ctx,
-    "a relative path needs the plugin's scoped directory, which arrives with inu.fs; pass a Blob, bytes, or an absolute path under unsafe.fs",
-  )
   }
 }
 
@@ -154,9 +148,9 @@ impl WritesState {
     if let Some(object) = value.as_object() {
       if object.get::<_, Value>("_")?.is_undefined() {
         if let Some(path) = object.get::<_, Option<String>>("path")? {
-          self.check_path_grant(ctx, &path)?;
+          let resolved = self.sources.resolve_path(ctx, &path)?;
           return Ok(Staged {
-            wire: file_wire(ctx, &path, "", "")?,
+            wire: file_wire(ctx, &resolved.to_string_lossy(), "", "")?,
             path: None,
           });
         }

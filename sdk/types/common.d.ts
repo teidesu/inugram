@@ -450,6 +450,8 @@ declare namespace inu {
     }): Promise<{ path: string }>
 
     /**
+     * `{ path }` names a file the way {@link fs} does, and needs its grant.
+     *
      * **Limits: 256 MB per staged copy, for all write operations.**
      *
      * @needs-grant account.write(send)
@@ -636,7 +638,7 @@ declare namespace inu {
      *
      * @needs-grant account.write(send)
      * @param peer the dialog
-     * @param file the media file
+     * @param file the media file. `{ path }` names a file the way {@link fs} does, and needs its grant
      */
     sendMedia(
       peer: InputPeerLike, file: Blob | Uint8Array | tl.TypeInputFile | tl.TypeInputMedia | { path: string },
