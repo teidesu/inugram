@@ -26,7 +26,7 @@ class BootGuard(
     private val wallMillis: () -> Long = System::currentTimeMillis,
     private val diedOfNativeCrashSince: (Long) -> Boolean = ::readDiedOfNativeCrashSince,
 ) {
-    enum class Reason { FORCED, CRASHED, CRASH_LOOP }
+    enum class Reason { FORCED, CRASHED, CRASH_LOOP, HOST_ERROR }
 
     @Volatile
     var reason: Reason? = null
@@ -56,6 +56,15 @@ class BootGuard(
         }
         for (name in arrayOf(FORCED, STARTING, CRASHES)) File(dir, name).delete()
         return false
+    }
+
+    /** `false` when this process is already in safe mode */
+    @Synchronized
+    fun enterSafeMode(reason: Reason): Boolean {
+        if (this.reason != null) return false
+        decided = true
+        this.reason = reason
+        return true
     }
 
     fun guardPlugin(body: () -> Unit) {

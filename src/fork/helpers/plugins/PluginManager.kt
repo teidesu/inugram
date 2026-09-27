@@ -198,6 +198,14 @@ object PluginManager {
         EngineDispatch.scheduler.postRunnable({ guard.survivedWindow() }, BootGuard.CRASH_WINDOW_MILLIS)
     }
 
+    /** plugin queue only; the looper resumes after this returns */
+    fun onEngineThreadError(e: Throwable) {
+        PluginLog.HOST.e("manager", "uncaught on the plugin thread, stopping every plugin", e)
+        if (!guard.enterSafeMode(BootGuard.Reason.HOST_ERROR)) return
+        for (plugin in plugins()) stop(plugin)
+        notifyChanged()
+    }
+
     /** closes rather than restarts: android refuses a background activity start, and no alarm set here would fire in time */
     fun requestSafeMode() {
         guard.armForcedSafeMode()

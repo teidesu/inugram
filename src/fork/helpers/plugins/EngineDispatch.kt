@@ -22,7 +22,14 @@ internal object EngineDispatch {
         val thread = Thread(null, {
             Looper.prepare()
             ready.put(Looper.myLooper()!!)
-            Looper.loop()
+            while (true) {
+                try {
+                    Looper.loop()
+                    return@Thread
+                } catch (e: Throwable) {
+                    PluginManager.onEngineThreadError(e)
+                }
+            }
         }, "inuPlugins", STACK_BYTES)
         thread.start()
         return ready.take()

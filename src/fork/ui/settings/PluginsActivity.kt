@@ -196,6 +196,7 @@ class PluginsActivity : SettingsPageActivity() {
         BootGuard.Reason.FORCED -> LocaleController.getString(R.string.InuPluginsSafeModeForced)
         BootGuard.Reason.CRASHED -> LocaleController.getString(R.string.InuPluginsSafeModeCrashed)
         BootGuard.Reason.CRASH_LOOP -> LocaleController.getString(R.string.InuPluginsSafeModeCrashLoop)
+        BootGuard.Reason.HOST_ERROR -> LocaleController.getString(R.string.InuPluginsSafeModeHostError)
         null -> null
     }
 
