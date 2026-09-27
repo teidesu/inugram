@@ -233,7 +233,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
       })?;
       let fetch_host: Rc<dyn FetchHost> = bridge.clone();
       let fetch = install_part(&ctx, "fetch", log.as_ref(), |ctx, globals| {
-        install_fetch(&ctx, fetch_host, grants.clone(), log.clone(), &globals)
+        install_fetch(&ctx, fetch_host, grants.clone(), blobs.clone(), log.clone(), &globals)
       })?;
       if install_fs {
         let quota = match fs_quota_bytes {

@@ -46,6 +46,7 @@ impl GrantHost for TestDomainGrants {
 
 struct Sent {
   id: i64,
+  body_id: i64,
   url: String,
   spec: String,
   body: Option<Vec<u8>>,
@@ -58,9 +59,10 @@ struct TestFetchHost {
 }
 
 impl FetchHost for TestFetchHost {
-  fn send(&self, request_id: i64, url: &str, spec: &Spec, body: Option<&[u8]>) -> Option<String> {
+  fn send(&self, request_id: i64, body_id: i64, url: &str, spec: &Spec, body: Option<&[u8]>) -> Option<String> {
     self.sent.borrow_mut().push(Sent {
       id: request_id,
+      body_id,
       url: url.to_string(),
       spec: format!("{} {} {:?}", spec.method, spec.redirect, spec.headers),
       body: body.map(<[u8]>::to_vec),
@@ -125,11 +127,11 @@ fn setup(grant: Option<&str>) -> Fixture {
   let log: crate::Log = std::sync::Arc::new(|_| {});
   let (timers, state) = ctx.with(|ctx| {
     let inu = crate::testing::harness::get_api_globals(&ctx);
-    install_sandbox_globals(&ctx, dir.path()).unwrap();
+    let blobs = install_sandbox_globals(&ctx, dir.path()).unwrap();
     let timers =
       crate::api::timers::install_timers(&ctx, clock_dyn, crate::sandbox::registry::Lifecycle::new(), log.clone())
         .unwrap();
-    let state = install_fetch(&ctx, host_dyn, grants, log.clone(), &inu).unwrap();
+    let state = install_fetch(&ctx, host_dyn, grants, blobs, log.clone(), &inu).unwrap();
     (timers, state)
   });
   let timers = DisposingTimers::new(&ctx, timers, |ctx, state| state.dispose(ctx));
@@ -174,14 +176,35 @@ fn out(f: &Fixture) -> String {
   eval(f, "String(globalThis.__out)")
 }
 
-fn answer(f: &Fixture, request_id: i64, status: i32, headers: &str, body: &str) {
-  let path = f.dir.path().join(format!("body-{request_id}"));
-  std::fs::write(&path, body).unwrap();
-  let wire = format!(
-    r#"J{{"status":{status},"statusText":"OK","url":"https://api.example.com/x","headers":{headers},"body":{{"path":{:?},"type":"text/plain"}}}}"#,
-    path.to_string_lossy(),
-  );
+fn answer_head(f: &Fixture, request_id: i64, status: i32, headers: &str) {
+  let wire =
+    format!(r#"J{{"status":{status},"statusText":"OK","url":"https://api.example.com/x","headers":{headers}}}"#);
   f.state.settle(&f.ctx, request_id, &wire);
+}
+
+fn body_path(f: &Fixture, body_id: i64) -> std::path::PathBuf {
+  f.dir.path().join(format!("body-{body_id}"))
+}
+
+fn answer_body(f: &Fixture, body_id: i64, body: &str) {
+  let path = body_path(f, body_id);
+  std::fs::write(&path, body).unwrap();
+  let wire = format!(r#"J{{"path":{:?},"type":"text/plain"}}"#, path.to_string_lossy());
+  f.state.settle(&f.ctx, body_id, &wire);
+}
+
+fn body_id_of(f: &Fixture, request_id: i64) -> i64 {
+  f.host
+    .sent
+    .borrow()
+    .iter()
+    .find(|sent| sent.id == request_id)
+    .map_or(request_id + 1000, |sent| sent.body_id)
+}
+
+fn answer(f: &Fixture, request_id: i64, status: i32, headers: &str, body: &str) {
+  answer_head(f, request_id, status, headers);
+  answer_body(f, body_id_of(f, request_id), body);
 }
 
 #[test]
@@ -266,7 +289,7 @@ fn an_unscoped_grant_reaches_any_host() {
   assert_eq!(out(&f), "null");
   let sent = f.host.sent.borrow();
   assert_eq!(sent[0].url, "https://anything.example/x");
-  assert_eq!(sent[0].id, 1, "the id the host is given is the one an abort would name");
+  assert_eq!(sent[0].id, 2, "the id the host is given is the one an abort would name");
 }
 
 /// every failure arrives in the `catch`, including the ones this module decides synchronously -
@@ -453,7 +476,7 @@ fn a_body_may_be_bytes_or_a_blob_and_a_blob_is_read_on_this_side() {
 fn a_response_carries_the_status_headers_and_body() {
   let f = setup(Some("fetch"));
   start(&f, "fetch('https://example.com/x')");
-  answer(&f, 1, 200, r#"{"content-type":["text/plain"],"set-cookie":["a=1","b=2"]}"#, "hello body");
+  answer(&f, 2, 200, r#"{"content-type":["text/plain"],"set-cookie":["a=1","b=2"]}"#, "hello body");
   assert_eq!(out(&f), "ok");
   let got = eval(
     &f,
@@ -471,7 +494,7 @@ fn a_response_carries_the_status_headers_and_body() {
 fn a_failing_status_is_a_resolved_response_that_says_so() {
   let f = setup(Some("fetch"));
   start(&f, "fetch('https://example.com/x')");
-  answer(&f, 1, 404, "{}", "nope");
+  answer(&f, 2, 404, "{}", "nope");
   assert_eq!(out(&f), "ok", "an http error is not a rejection");
   assert_eq!(eval(&f, "JSON.stringify([__res.ok, __res.status])"), "[false,404]");
 }
@@ -480,7 +503,7 @@ fn a_failing_status_is_a_resolved_response_that_says_so() {
 fn an_empty_body_still_reads_as_the_empty_string() {
   let f = setup(Some("fetch"));
   start(&f, "fetch('https://example.com/x')");
-  answer(&f, 1, 204, "{}", "");
+  answer(&f, 2, 204, "{}", "");
   run(&f, "__res.text().then(t => { globalThis.__body = `[${t}]` })");
   assert_eq!(eval(&f, "globalThis.__body"), "[]");
 }
@@ -502,7 +525,7 @@ fn an_abort_signal_rejects_and_tells_the_host_to_stop() {
   assert_eq!(out(&f), "null");
   run(&f, "__c.abort()");
   assert_eq!(out(&f), "PluginError|aborted|the request was aborted");
-  assert_eq!(*f.host.aborted.borrow(), vec![1]);
+  assert_eq!(*f.host.aborted.borrow(), vec![2]);
 }
 
 #[test]
@@ -514,7 +537,7 @@ fn a_timeout_rejects_and_tells_the_host_to_stop() {
   assert_eq!(out(&f), "null", "and not before it elapses");
   f.advance(1);
   assert_eq!(out(&f), "PluginError|timed-out|the request timed out after 50 ms");
-  assert_eq!(*f.host.aborted.borrow(), vec![1]);
+  assert_eq!(*f.host.aborted.borrow(), vec![2]);
 }
 
 #[test]
@@ -524,7 +547,7 @@ fn an_answer_that_arrives_first_wins_and_nothing_is_aborted() {
     &f,
     "(() => { globalThis.__c = new AbortController(); return fetch('https://example.com/x', { signal: __c.signal, timeout: 50 }) })()",
   );
-  answer(&f, 1, 200, "{}", "done");
+  answer(&f, 2, 200, "{}", "done");
   assert_eq!(out(&f), "ok");
   run(&f, "__c.abort()");
   assert_eq!(out(&f), "ok", "a settled request cannot be un-settled");
@@ -539,7 +562,7 @@ fn an_answer_after_an_abort_is_dropped() {
     "(() => { globalThis.__c = new AbortController(); return fetch('https://example.com/x', { signal: __c.signal }) })()",
   );
   run(&f, "__c.abort()");
-  answer(&f, 1, 200, "{}", "late");
+  answer(&f, 2, 200, "{}", "late");
   assert_eq!(out(&f), "PluginError|aborted|the request was aborted");
 }
 
@@ -563,18 +586,18 @@ mod bundled_oracle {
   /// the egress screening the host does is asserted where it lives (`PluginFetchTest`)
   struct OracleHost {
     dir: std::path::PathBuf,
-    answers: RefCell<Vec<i64>>,
+    answers: RefCell<Vec<(i64, i64)>>,
   }
 
   impl FetchHost for OracleHost {
-    fn send(&self, request_id: i64, url: &str, _spec: &Spec, _body: Option<&[u8]>) -> Option<String> {
+    fn send(&self, request_id: i64, body_id: i64, url: &str, _spec: &Spec, _body: Option<&[u8]>) -> Option<String> {
       if url.contains("/refuse") {
         return Some("Pforbidden\n\n\n\nthat address is not a place this api goes".to_string());
       }
       if url.contains("/never") {
         return None;
       }
-      self.answers.borrow_mut().push(request_id);
+      self.answers.borrow_mut().push((request_id, body_id));
       None
     }
 
@@ -596,13 +619,12 @@ mod bundled_oracle {
     let clock_dyn: Rc<dyn crate::api::timers::TimerHost> = clock.clone();
     let (timers, state) = ctx.with(|ctx| {
       let inu = crate::testing::harness::get_api_globals(&ctx);
-      install_sandbox_globals(&ctx, dir.path()).unwrap();
+      let blobs = install_sandbox_globals(&ctx, dir.path()).unwrap();
       let timers =
         crate::api::timers::install_timers(&ctx, clock_dyn, crate::sandbox::registry::Lifecycle::new(), log.clone())
           .unwrap();
-      let state =
-        install_fetch(&ctx, host_dyn, super::tests::TestDomainGrants::new(oracle_grant()).as_host(), log.clone(), &inu)
-          .unwrap();
+      let grants = super::tests::TestDomainGrants::new(oracle_grant()).as_host();
+      let state = install_fetch(&ctx, host_dyn, grants, blobs, log.clone(), &inu).unwrap();
       (timers, state)
     });
     crate::testing::harness::eval_unit(&ctx, ORACLE);
@@ -612,9 +634,9 @@ mod bundled_oracle {
     // oracle is parked on can come due
     for _ in 0..64 {
       pump_jobs(&ctx, &|_| {});
-      let due: Vec<i64> = host.answers.borrow_mut().drain(..).collect();
-      for request_id in due {
-        answer_ok(&ctx, &state, &host.dir, request_id);
+      let due: Vec<(i64, i64)> = host.answers.borrow_mut().drain(..).collect();
+      for (request_id, body_id) in due {
+        answer_ok(&ctx, &state, &host.dir, request_id, body_id);
       }
       clock.advance(1000);
       timers.run_due(&ctx);
@@ -630,14 +652,62 @@ mod bundled_oracle {
   }
 
   /// the one answer the fake ever gives, with a real file behind the body so the oracle's `blob()`
-  /// assertions run against the same app-file backing a device would hand them
-  fn answer_ok(ctx: &rquickjs::Context, state: &Rc<FetchState>, dir: &std::path::Path, request_id: i64) {
-    let path = dir.join(format!("body-{request_id}"));
+  /// assertions run against the same owned-file backing a device would hand them
+  fn answer_ok(ctx: &rquickjs::Context, state: &Rc<FetchState>, dir: &std::path::Path, request_id: i64, body_id: i64) {
+    let head = r#"J{"status":200,"statusText":"OK","url":"https://example.com/final","headers":{"content-type":["application/json"],"set-cookie":["a=1","b=2"]}}"#;
+    state.settle(ctx, request_id, head);
+    let path = dir.join(format!("body-{body_id}"));
     std::fs::write(&path, r#"{"hello":"world"}"#).unwrap();
-    let wire = format!(
-      r#"J{{"status":200,"statusText":"OK","url":"https://example.com/final","headers":{{"content-type":["application/json"],"set-cookie":["a=1","b=2"]}},"body":{{"path":{:?},"type":"application/json"}}}}"#,
-      path.to_string_lossy(),
-    );
-    state.settle(ctx, request_id, &wire);
+    state.settle(ctx, body_id, &format!(r#"J{{"path":{:?},"type":"application/json"}}"#, path.to_string_lossy()));
   }
+}
+
+#[test]
+fn fetch_resolves_on_the_head_and_body_reads_wait_for_the_download() {
+  let f = setup(Some("fetch"));
+  start(&f, "fetch('https://example.com/x')");
+  answer_head(&f, 2, 200, r#"{"content-type":["text/plain"]}"#);
+  assert_eq!(out(&f), "ok", "the headers alone resolve the fetch");
+  run(&f, "__res.text().then(t => { globalThis.__body = t })");
+  assert_eq!(eval(&f, "String(globalThis.__body)"), "undefined");
+  answer_body(&f, 1, "late body");
+  assert_eq!(eval(&f, "globalThis.__body"), "late body");
+}
+
+#[test]
+fn an_abort_after_the_head_fails_the_body_reads_and_stops_the_download() {
+  let f = setup(Some("fetch"));
+  start(
+    &f,
+    "(() => { globalThis.__c = new AbortController(); return fetch('https://example.com/x', { signal: __c.signal }) })()",
+  );
+  answer_head(&f, 2, 200, "{}");
+  run(&f, "__res.text().then(() => { globalThis.__body = 'read' }, e => { globalThis.__body = e.code })");
+  run(&f, "__c.abort()");
+  assert_eq!(eval(&f, "globalThis.__body"), "aborted");
+  assert_eq!(*f.host.aborted.borrow(), vec![2]);
+  answer_body(&f, 1, "too late");
+  assert!(f.state.pending.is_empty());
+}
+
+#[test]
+fn a_failed_head_leaves_no_body_waiting() {
+  let f = setup(Some("fetch"));
+  start(&f, "fetch('https://example.com/x')");
+  f.state.settle(&f.ctx, 2, "Pnetwork\n\n\n\nconnection reset");
+  assert_eq!(out(&f), "PluginError|network|connection reset");
+  assert!(f.state.pending.is_empty());
+}
+
+#[test]
+fn a_response_body_file_is_deleted_once_nothing_holds_it() {
+  let f = setup(Some("fetch"));
+  start(&f, "fetch('https://example.com/x')");
+  answer(&f, 2, 200, "{}", "held");
+  run(&f, "__res.text().then(t => { globalThis.__body = t })");
+  assert_eq!(eval(&f, "globalThis.__body"), "held");
+  assert!(body_path(&f, 1).exists());
+  run(&f, "globalThis.__res = null");
+  f.ctx.with(|ctx| ctx.run_gc());
+  assert!(!body_path(&f, 1).exists(), "a collected response still holds its body on disk");
 }

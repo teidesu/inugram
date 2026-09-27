@@ -178,7 +178,7 @@ impl FilesState {
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
         .map(|d| d.as_millis() as i64)
         .unwrap_or(0);
-      files.set(index, mint_owned_file(ctx, &self.blobs, &path, meta.len(), &mime, &name, mtime)?)?;
+      files.set(index, mint_owned_file(ctx, &self.blobs, &path, meta.len(), &mime, Some(&name), mtime)?)?;
     }
     if multiple {
       return Ok(files.into_value());

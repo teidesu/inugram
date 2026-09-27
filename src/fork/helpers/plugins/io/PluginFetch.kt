@@ -17,6 +17,7 @@ import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.ThreadFactory
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import org.json.JSONObject
 
@@ -60,6 +61,7 @@ object PluginFetch : SessionResource {
         object : FetchListener {
             override fun fetch(
                 requestId: Long,
+                bodyId: Long,
                 url: String,
                 method: String,
                 redirect: String,
@@ -72,13 +74,14 @@ object PluginFetch : SessionResource {
                 val flight = Flight()
                 flights.add(session, InFlight(requestId, flight))
                 transfers.execute {
-                    val delivery = try {
-                        exchange(session.permissions, session.plugin.id, url, spec, body, bodiesDir, flight)
+                    try {
+                        transfer(session, requestId, bodyId, url, spec, body, bodiesDir, flight)
                     } catch (e: Throwable) {
-                        Delivery(PluginWire.encodePluginError("internal", "fetch: ${e.message ?: e.toString()}"), null)
+                        val failure = Delivery(PluginWire.encodePluginError("internal", "fetch: ${e.message ?: e.toString()}"))
+                        EngineDispatch.scheduler.postRunnable { deliver(session, requestId, failure, flight) }
+                    } finally {
+                        flights.remove(session) { it.flight === flight }
                     }
-                    flights.remove(session) { it.flight === flight }
-                    EngineDispatch.scheduler.postRunnable { deliver(session, requestId, delivery, flight) }
                 }
                 return null
             }
@@ -88,15 +91,39 @@ object PluginFetch : SessionResource {
             }
         }
 
-    class Delivery(val wire: String, private val body: Hop?) {
+    /** a drained body, charged against [budget] until the engine adopts the file or it is discarded */
+    class Body(val file: File, private val bytes: Long, private val budget: AtomicLong) {
+        private val settled = AtomicBoolean()
+
+        fun discard() {
+            if (!settled.compareAndSet(false, true)) return
+            file.delete()
+            budget.addAndGet(-bytes)
+        }
+
+        /** the engine owns the file from here and deletes it with the blob over it */
+        fun handOver() {
+            if (settled.compareAndSet(false, true)) budget.addAndGet(-bytes)
+        }
+    }
+
+    class Delivery(val wire: String, private val body: Body? = null) {
         fun drop() {
             body?.discard()
+        }
+
+        fun handOver() {
+            body?.handOver()
         }
     }
 
     fun deliver(session: PluginSession, requestId: Long, delivery: Delivery, flight: Flight) {
-        if (!session.isCurrent() || flight.cancelled) delivery.drop()
-        else session.engine.settle(QuickJs.SETTLE_FETCH, requestId, delivery.wire)
+        if (!session.isCurrent() || flight.cancelled) {
+            delivery.drop()
+            return
+        }
+        session.engine.settle(QuickJs.SETTLE_FETCH, requestId, delivery.wire)
+        delivery.handOver()
     }
 
     override fun detach(session: PluginSession) {
@@ -140,24 +167,23 @@ object PluginFetch : SessionResource {
     private fun refuse(code: String, message: String, grant: String? = null) =
         PluginWire.encodePluginError(code, message, grant = grant)
 
+    /** a response whose headers are in and whose [body] is still on the wire until [close] */
     class Hop(
         val status: Int,
         val statusText: String,
         val headers: Map<String, List<String>>,
-        val bodyFile: File?,
         val contentType: String,
-        val bodyBytes: Long,
-        private val budget: AtomicLong,
+        val body: InputStream?,
+        private val onClose: () -> Unit = {},
     ) {
         val location: String? get() = headers.entries.firstOrNull { it.key.equals("location", true) }?.value?.firstOrNull()
 
-        private var discarded = false
+        private val closed = AtomicBoolean()
 
-        fun discard() {
-            if (discarded) return
-            discarded = true
-            bodyFile?.delete()
-            budget.addAndGet(-bodyBytes)
+        fun close() {
+            if (!closed.compareAndSet(false, true)) return
+            runCatching { body?.close() }
+            onClose()
         }
     }
 
@@ -195,7 +221,7 @@ object PluginFetch : SessionResource {
             if (hop.status !in 300..399 || location == null || spec.redirect == "manual") {
                 return Outcome.Answer(hop, url)
             }
-            hop.discard()
+            hop.close()
             if (spec.redirect == "error") {
                 return Outcome.Refused(refuse("network", "fetch: the server redirected and redirect was 'error'"))
             }
@@ -224,41 +250,55 @@ object PluginFetch : SessionResource {
 
     private fun aborted(): Outcome.Refused = Outcome.Refused(refuse("aborted", "fetch: the request was aborted"))
 
-    private fun exchange(
-        permissions: PluginPermissions,
-        installId: String,
+    private fun describeFailure(e: Exception, flight: Flight): String = when {
+        e is BodyTooBig -> PluginWire.encodePluginError(
+            "quota-exceeded",
+            e.message ?: "fetch: the response is too big",
+            usage = e.usage,
+            quota = e.quota,
+        )
+        flight.cancelled -> PluginWire.encodePluginError("aborted", "fetch: the request was aborted")
+        else -> PluginWire.encodePluginError("network", "fetch: ${e.message ?: e.toString()}")
+    }
+
+    /** the head settles as soon as the final hop's headers are in; the body settles once drained */
+    private fun transfer(
+        session: PluginSession,
+        requestId: Long,
+        bodyId: Long,
         url: String,
         spec: Spec,
         body: ByteArray?,
         bodiesDir: File,
         flight: Flight,
-    ): Delivery {
-        val budget = budgetFor(installId)
-        val transport = Transport { hopUrl, method, headers, payload ->
-            send(hopUrl, method, headers, payload, bodiesDir, budget, flight)
-        }
+    ) {
+        val transport = Transport { hopUrl, method, headers, payload -> send(hopUrl, method, headers, payload, flight) }
         val outcome = try {
-            runExchange(permissions, url, spec, body, transport, flight)
-        } catch (e: BodyTooBig) {
-            return Delivery(
-                PluginWire.encodePluginError(
-                    "quota-exceeded",
-                    e.message ?: "fetch: the response is too big",
-                    usage = e.usage,
-                    quota = e.quota,
-                ),
-                null,
-            )
+            runExchange(session.permissions, url, spec, body, transport, flight)
         } catch (e: Exception) {
-            if (flight.cancelled) {
-                return Delivery(PluginWire.encodePluginError("aborted", "fetch: the request was aborted"), null)
-            }
-            return Delivery(PluginWire.encodePluginError("network", "fetch: ${e.message ?: e.toString()}"), null)
+            Outcome.Refused(describeFailure(e, flight))
         }
-        return when (outcome) {
-            is Outcome.Refused -> Delivery(outcome.wire, null)
-            is Outcome.Answer -> Delivery(describe(outcome), outcome.hop)
+        if (outcome is Outcome.Refused) {
+            EngineDispatch.scheduler.postRunnable { deliver(session, requestId, Delivery(outcome.wire), flight) }
+            return
         }
+        val answer = outcome as Outcome.Answer
+        val hop = answer.hop
+        val head = Delivery(describe(answer))
+        EngineDispatch.scheduler.postRunnable { deliver(session, requestId, head, flight) }
+        // always a file, even for a 204, so a body is always a `Blob`
+        val file = File(bodiesDir, "b${nextBody.getAndIncrement()}-${hop.status}")
+        val budget = budgetFor(session.plugin.id)
+        val drained = try {
+            val bytes = drainTo(hop.body, file, budget, flight)
+            val json = JSONObject().put("path", file.absolutePath).put("type", hop.contentType)
+            Delivery(PluginWire.encodeJson(json.toString()), Body(file, bytes, budget))
+        } catch (e: Exception) {
+            Delivery(describeFailure(e, flight))
+        } finally {
+            hop.close()
+        }
+        EngineDispatch.scheduler.postRunnable { deliver(session, bodyId, drained, flight) }
     }
 
     private fun describe(answer: Outcome.Answer): String {
@@ -272,9 +312,6 @@ object PluginFetch : SessionResource {
             .put("statusText", hop.statusText)
             .put("url", answer.finalUrl)
             .put("headers", headers)
-        hop.bodyFile?.let {
-            json.put("body", JSONObject().put("path", it.absolutePath).put("type", hop.contentType))
-        }
         return PluginWire.encodeJson(json.toString())
     }
 
@@ -290,17 +327,20 @@ object PluginFetch : SessionResource {
         }
     }
 
+    /** the connection stays open, and abortable through [flight], until the hop is closed */
     private fun send(
         url: String,
         method: String,
         headers: Map<String, List<String>>,
         body: ByteArray?,
-        bodiesDir: File,
-        budget: AtomicLong,
         flight: Flight,
     ): Hop {
         val connection = URI(url).toURL().openConnection() as HttpURLConnection
         flight.connection = connection
+        val release = {
+            flight.connection = null
+            connection.disconnect()
+        }
         try {
             prepareConnection(connection, method, headers)
             if (body != null) {
@@ -315,21 +355,17 @@ object PluginFetch : SessionResource {
                 if (name == null) continue
                 headerFields[name.lowercase()] = values
             }
-            val stream = if (status >= 400) connection.errorStream else connection.inputStream
-            // always a file, even for a 204, so a body is always a `Blob`
-            val file = File(bodiesDir, "b${nextBody.getAndIncrement()}-$status")
             return Hop(
                 status = status,
                 statusText = connection.responseMessage ?: "",
                 headers = headerFields,
-                bodyFile = file,
                 contentType = connection.contentType?.substringBefore(';')?.trim()?.lowercase().orEmpty(),
-                bodyBytes = drainTo(stream, file, budget, flight),
-                budget = budget,
+                body = if (status >= 400) connection.errorStream else connection.inputStream,
+                onClose = release,
             )
-        } finally {
-            flight.connection = null
-            connection.disconnect()
+        } catch (e: Throwable) {
+            release()
+            throw e
         }
     }
 
@@ -363,7 +399,7 @@ object PluginFetch : SessionResource {
                         charged += read
                         if (held > BODY_BUDGET_BYTES) {
                             throw BodyTooBig(
-                                "fetch: this plugin is already holding $BODY_BUDGET_BYTES bytes of fetched content",
+                                "fetch: this plugin is already downloading $BODY_BUDGET_BYTES bytes of responses",
                                 held,
                                 BODY_BUDGET_BYTES,
                             )

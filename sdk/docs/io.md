@@ -26,7 +26,11 @@ const dogs = await res.json()
 - No `credentials` and similar options, since the app does not store credentials.
 - The app proxy is currently not used.
 - A non-standard `timeout` option which rejects with `timed-out`
-- The response bodies are written to temporary files, and the `Response` reads from a `Blob` over that file.
+- `fetch` resolves once the headers are in. The body downloads into a temporary file, and every
+  body read waits for it and then reads from a `Blob` over that file. `signal` and `timeout` keep
+  covering the download, so aborting after the headers rejects the body reads.
+- The file is deleted when that `Blob` is disposed or collected, and counts against the blob data
+  on disk until then.
 
 ## Blob and File
 

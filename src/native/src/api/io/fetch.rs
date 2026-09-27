@@ -8,8 +8,8 @@ use rquickjs::convert::Coerced;
 use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, TypedArray, Value};
 
 use crate::api::error::PluginErrorCode;
-use crate::api::io::blob::{self, mint_app_file_at, BlobHandle, BUILD_LIMIT_BYTES};
-use crate::runtime::PendingTable;
+use crate::api::io::blob::{self, mint_owned_file, BlobHandle, BlobState, BUILD_LIMIT_BYTES};
+use crate::runtime::{Parked, PendingTable};
 use crate::sandbox::grants::{GrantHost, MATCH_DOMAIN};
 use crate::utils::qjs::{qjs_load_prelude, qjs_read_typed_bytes};
 
@@ -22,17 +22,28 @@ pub struct Spec {
   pub headers: Vec<String>,
 }
 
+/// `request_id` settles with the status and headers of the final hop as soon as they are in,
+/// `body_id` with the file the body was drained to once it is complete
 pub trait FetchHost {
-  fn send(&self, request_id: i64, url: &str, spec: &Spec, body: Option<&[u8]>) -> Option<String>;
+  fn send(&self, request_id: i64, body_id: i64, url: &str, spec: &Spec, body: Option<&[u8]>) -> Option<String>;
 
   fn abort(&self, request_id: i64);
 }
 
+#[derive(Clone, Copy)]
+enum Part {
+  Head { body: i64 },
+  Body,
+}
+
+impl Parked for Part {}
+
 pub struct FetchState {
   host: Rc<dyn FetchHost>,
   grants: Rc<dyn GrantHost>,
+  blobs: Rc<BlobState>,
   log: crate::Log,
-  pending: PendingTable<()>,
+  pending: PendingTable<Part>,
 }
 
 /// rfc7230's token, which is what a header name and a method are allowed to be
@@ -163,15 +174,25 @@ impl FetchState {
 
     let body = self.read_body(ctx, &body)?;
 
-    let mut request_id = 0;
-    let promise = self.pending.park(ctx, (), |id| {
-      request_id = id;
-      self.host.send(id, &url, &spec, body.as_deref())
+    let mut body_id = 0;
+    let body_promise = self.pending.park(ctx, Part::Body, |id| {
+      body_id = id;
+      None
     })?;
+    let mut request_id = 0;
+    let head = self.pending.park(ctx, Part::Head { body: body_id }, |id| {
+      request_id = id;
+      self.host.send(id, body_id, &url, &spec, body.as_deref())
+    })?;
+    if self.pending.with_parked(request_id, |_| ()).is_none() {
+      self.pending.forget(ctx, body_id);
+    }
 
     let handle = Object::new(ctx.clone())?;
     handle.set("id", request_id)?;
-    handle.set("promise", promise)?;
+    handle.set("bodyId", body_id)?;
+    handle.set("head", head)?;
+    handle.set("body", body_promise)?;
     Ok(handle)
   }
 }
@@ -180,12 +201,14 @@ pub fn install_fetch<'js>(
   ctx: &Ctx<'js>,
   host: Rc<dyn FetchHost>,
   grants: Rc<dyn GrantHost>,
+  blobs: Rc<BlobState>,
   log: crate::Log,
   globals: &crate::api::Globals<'js>,
 ) -> JsResult<Rc<FetchState>> {
   let state = Rc::new(FetchState {
     host,
     grants,
+    blobs,
     log,
     pending: PendingTable::default(),
   });
@@ -214,8 +237,9 @@ pub fn install_fetch<'js>(
       normalize_header_value(&ctx, &value)
     })?,
   )?;
-  set_fn!(natives, "abort", ctx, state, move |ctx: Ctx<'js>, request_id: i64| {
+  set_fn!(natives, "abort", ctx, state, move |ctx: Ctx<'js>, request_id: i64, body_id: i64| {
     state.pending.forget(&ctx, request_id);
+    state.pending.forget(&ctx, body_id);
     state.host.abort(request_id);
   });
 
@@ -231,31 +255,46 @@ pub fn install_fetch<'js>(
   Ok(state)
 }
 
-fn mint_body<'js>(ctx: &Ctx<'js>, body: &Object<'js>) -> JsResult<Value<'js>> {
-  let path: String = body.get("path")?;
-  let mime: String = body.get("type").unwrap_or_default();
-  mint_app_file_at(ctx, &PathBuf::from(path), &mime)
+fn parse_answer<'js>(ctx: &Ctx<'js>, wire: &str) -> JsResult<Object<'js>> {
+  let json = wire
+    .strip_prefix('J')
+    .ok_or_else(|| Exception::throw_message(ctx, "fetch: malformed host response"))?;
+  ctx
+    .json_parse(json)?
+    .as_object()
+    .cloned()
+    .ok_or_else(|| Exception::throw_message(ctx, "fetch: malformed host response"))
 }
 
 impl FetchState {
+  /// the body file becomes the plugin's: counted as spilled content, and deleted with its blob
+  fn adopt_body<'js>(&self, ctx: &Ctx<'js>, wire: &str) -> JsResult<Value<'js>> {
+    let answer = parse_answer(ctx, wire)?;
+    let path = PathBuf::from(answer.get::<_, String>("path")?);
+    let mime: String = answer.get("type").unwrap_or_default();
+    let adopted = std::fs::metadata(&path)
+      .map_err(|e| Exception::throw_message(ctx, &format!("fetch: the response body is gone: {e}")))
+      .and_then(|meta| mint_owned_file(ctx, &self.blobs, &path, meta.len(), &mime, None, 0));
+    if adopted.is_err() {
+      let _ = std::fs::remove_file(&path);
+    }
+    adopted
+  }
+
   pub fn settle(self: &Rc<Self>, context: &rquickjs::Context, request_id: i64, result_wire: &str) {
-    self.pending.settle_and_pump(context, &self.log, "fetch", request_id, result_wire, |ctx, _, wire| {
-      let json = wire
-        .strip_prefix('J')
-        .ok_or_else(|| rquickjs::Exception::throw_message(ctx, "fetch: malformed host response"))?;
-      let value = ctx.json_parse(json)?;
-      let object = value
-        .as_object()
-        .cloned()
-        .ok_or_else(|| rquickjs::Exception::throw_message(ctx, "fetch: malformed host response"))?;
-      let body: Option<Object> = object.get("body")?;
-      let blob = match body {
-        Some(body) => mint_body(ctx, &body)?,
-        None => Value::new_null(ctx.clone()),
-      };
-      object.set("body", blob)?;
-      Ok(object.into_value())
+    enter_js(context, |ctx| {
+      if let Some(Part::Head { body }) = self.pending.with_parked(request_id, |part| *part) {
+        if !result_wire.starts_with('J') {
+          self.pending.forget(&ctx, body);
+        }
+      }
     });
+    self
+      .pending
+      .settle_and_pump(context, &self.log, "fetch", request_id, result_wire, |ctx, part, wire| match part {
+        Part::Head { .. } => Ok(parse_answer(ctx, wire)?.into_value()),
+        Part::Body => self.adopt_body(ctx, wire),
+      });
   }
 }
 

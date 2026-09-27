@@ -423,6 +423,7 @@ impl FetchHost for JniBridge {
   fn send(
     &self,
     request_id: i64,
+    body_id: i64,
     url: &str,
     spec: &crate::api::io::fetch::Spec,
     body: Option<&[u8]>,
@@ -432,6 +433,7 @@ impl FetchHost for JniBridge {
       self.on_fetch,
       &[
         Arg::Long(request_id),
+        Arg::Long(body_id),
         Arg::Str(url),
         Arg::Str(&spec.method),
         Arg::Str(&spec.redirect),

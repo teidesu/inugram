@@ -181,12 +181,12 @@ class PluginFetchTest {
 
     @Test
     fun an_abort_mid_chain_stops_the_redirects_rather_than_following_twenty_more() {
-        val budget = AtomicLong(0)
         val flight = PluginFetch.Flight()
+        val closed = ArrayList<String>()
         val transport = Recorder(
             mapOf(
-                "https://example.com/a" to bodyHop(302, "https://example.com/b", 500, budget),
-                "https://example.com/b" to bodyHop(200, null, 100, budget),
+                "https://example.com/a" to okHop(302, "https://example.com/b") { closed.add("a") },
+                "https://example.com/b" to okHop(200) { closed.add("b") },
             ),
         )
         transport.whileServing = { url -> if (url.endsWith("/a")) flight.cancel() }
@@ -194,41 +194,42 @@ class PluginFetchTest {
 
         assertEquals("aborted", readErrorCode((outcome as PluginFetch.Outcome.Refused).wire))
         assertEquals(listOf("GET https://example.com/a"), transport.urls, "the second hop never went out")
-        assertEquals(100L, budget.get(), "the abandoned hop's body is not left charged")
+        assertEquals(listOf("a"), closed, "the abandoned hop's connection is not left open")
     }
 
     @Test
-    fun a_chain_of_redirects_that_all_carry_bodies_leaves_nothing_behind() {
-        val budget = AtomicLong(0)
+    fun a_chain_of_redirects_closes_every_hop_but_the_answer() {
+        val closed = ArrayList<Int>()
         val script = HashMap<String, PluginFetch.Hop>()
         for (i in 0 until 10) {
-            script["https://example.com/$i"] = bodyHop(302, "https://example.com/${i + 1}", 1000, budget)
+            script["https://example.com/$i"] = okHop(302, "https://example.com/${i + 1}") { closed.add(i) }
         }
-        script["https://example.com/10"] = bodyHop(200, null, 7, budget)
+        script["https://example.com/10"] = okHop(200) { closed.add(10) }
         val transport = Recorder(script)
 
         val outcome = exchange(grants("fetch"), "https://example.com/0", transport)
 
         assertEquals(200, (outcome as PluginFetch.Outcome.Answer).hop.status)
-        assertEquals(7L, budget.get())
-        assertTrue((0 until 10).none { script.getValue("https://example.com/$it").bodyFile!!.exists() })
+        assertEquals((0 until 10).toList(), closed, "the answer's body is still to be read")
     }
 
     @Test
-    fun discarding_the_same_hop_twice_does_not_credit_it_twice() {
+    fun discarding_the_same_body_twice_does_not_credit_it_twice() {
         val budget = AtomicLong(0)
-        val hop = bodyHop(200, null, 400, budget)
+        val body = drainedBody(400, budget)
 
-        hop.discard()
+        body.discard()
         assertEquals(0L, budget.get())
-        hop.discard()
+        body.discard()
         assertEquals(0L, budget.get(), "a second discard is not a second refund")
+        body.handOver()
+        assertEquals(0L, budget.get(), "nor is a hand-over after it")
     }
 
     @Test
     fun an_answer_no_engine_is_waiting_for_is_dropped_and_its_bytes_come_back() {
         val budget = AtomicLong(0)
-        val kept = bodyHop(200, null, 900, budget)
+        val kept = drainedBody(900, budget)
         val plugin = startPlugin("fetch-reload", "fetch")
         val stale = plugin.session!!
         plugin.session = PluginSession(plugin, RecordingQuickJs())
@@ -237,28 +238,29 @@ class PluginFetchTest {
 
         assertTrue((stale.engine as RecordingQuickJs).httpResults.isEmpty(), "a stale engine must not be settled")
         assertTrue(plugin.js.httpResults.isEmpty(), "and neither must the new one, whose ids restart")
-        assertFalse(kept.bodyFile!!.exists())
+        assertFalse(kept.file.exists())
         assertEquals(0L, budget.get())
     }
 
+    /** the engine adopts the file and deletes it with its blob, so the in-flight charge ends here */
     @Test
-    fun an_answer_the_engine_took_keeps_its_body_and_its_charge() {
+    fun an_answer_the_engine_took_hands_over_its_file_and_its_charge() {
         val budget = AtomicLong(0)
-        val kept = bodyHop(200, null, 900, budget)
+        val kept = drainedBody(900, budget)
         val plugin = startPlugin("fetch-live", "fetch")
 
         PluginFetch.deliver(plugin.session!!, 7, PluginFetch.Delivery("J{}", kept), PluginFetch.Flight())
 
         assertEquals(listOf(7L), plugin.js.httpResults.map { it.requestId })
-        assertTrue(kept.bodyFile!!.exists(), "the blob the plugin is handed is over this file")
-        assertEquals(900L, budget.get())
+        assertTrue(kept.file.exists(), "the blob the plugin is handed is over this file")
+        assertEquals(0L, budget.get())
     }
 
     /** the engine settles an aborted promise itself before telling the host */
     @Test
     fun an_answer_for_a_request_the_plugin_aborted_is_dropped_rather_than_settled() {
         val budget = AtomicLong(0)
-        val kept = bodyHop(200, null, 900, budget)
+        val kept = drainedBody(900, budget)
         val plugin = startPlugin("fetch-aborted", "fetch")
         val flight = PluginFetch.Flight()
         flight.cancel()
@@ -266,7 +268,7 @@ class PluginFetchTest {
         PluginFetch.deliver(plugin.session!!, 7, PluginFetch.Delivery("J{}", kept), flight)
 
         assertTrue(plugin.js.httpResults.isEmpty())
-        assertFalse(kept.bodyFile!!.exists())
+        assertFalse(kept.file.exists())
         assertEquals(0L, budget.get())
     }
 
@@ -372,28 +374,21 @@ class PluginFetchTest {
         assertEquals("1", connection.getRequestProperty("x-inu"))
     }
 
-    private fun hop(status: Int, location: String? = null, body: File? = null) = okHop(status, location, body)
+    private fun hop(status: Int, location: String? = null) = okHop(status, location)
 
-    private fun bodyHop(status: Int, location: String?, bytes: Int, budget: AtomicLong): PluginFetch.Hop {
-        val file = File.createTempFile("inu-hop", ".bin").apply { deleteOnExit() }
+    private fun drainedBody(bytes: Int, budget: AtomicLong): PluginFetch.Body {
+        val file = File.createTempFile("inu-body", ".bin").apply { deleteOnExit() }
         file.writeBytes(ByteArray(bytes))
         budget.addAndGet(bytes.toLong())
-        return okHop(status, location, file, bytes.toLong(), budget)
+        return PluginFetch.Body(file, bytes.toLong(), budget)
     }
 }
 
-private fun okHop(
-    status: Int = 200,
-    location: String? = null,
-    body: File? = null,
-    bodyBytes: Long = 0,
-    budget: AtomicLong = AtomicLong(0),
-) = PluginFetch.Hop(
+private fun okHop(status: Int = 200, location: String? = null, onClose: () -> Unit = {}) = PluginFetch.Hop(
     status = status,
     statusText = "",
     headers = if (location == null) emptyMap() else mapOf("location" to listOf(location)),
-    bodyFile = body,
     contentType = "text/plain",
-    bodyBytes = bodyBytes,
-    budget = budget,
+    body = null,
+    onClose = onClose,
 )

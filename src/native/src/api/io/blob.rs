@@ -663,13 +663,15 @@ fn now_millis() -> f64 {
   SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as f64).unwrap_or(0.0)
 }
 
+/// adopts a file the host wrote for this plugin: it counts as spilled content and is deleted with
+/// the blob. `name` makes it a `File`
 pub fn mint_owned_file<'js>(
   ctx: &Ctx<'js>,
   blobs: &Rc<BlobState>,
   path: &Path,
   size: u64,
   mime: &str,
-  name: &str,
+  name: Option<&str>,
   mtime_ms: i64,
 ) -> JsResult<Value<'js>> {
   let spill = match blobs.adopt_spill(ctx, path, size) {
@@ -680,7 +682,7 @@ pub fn mint_owned_file<'js>(
     kind: RefCell::new(BackingKind::Spill(spill)),
     len: size,
   });
-  mint_file(ctx, backing, size, mime, Some(name), mtime_ms)
+  mint_file(ctx, backing, size, mime, name, mtime_ms)
 }
 
 pub fn mint_app_file<'js>(

@@ -300,7 +300,11 @@ declare interface Response {
  *
  * While being *close* to WHATWG fetch, this is a simplified implementation lacking some of the features.
  *
- * **Limits: 32 MB per request or response, 256 MB of fetched content held per plugin.**
+ * Resolves as soon as the response headers are in; reading the body waits for the rest of the download.
+ * `signal` and `timeout` cover the download too.
+ *
+ * **Limits: 32 MB per request or response, 256 MB of responses downloading at once per plugin; a
+ * downloaded body counts as blob data on disk.**
  *
  * **Note**: `fetch()` calls currently **bypass** the app proxy, with no way around that.
  *

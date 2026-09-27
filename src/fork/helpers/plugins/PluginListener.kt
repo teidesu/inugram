@@ -178,8 +178,19 @@ interface TlListener {
 
 /** the engine checks the initial URL; the host checks redirects and resolved addresses */
 interface FetchListener {
-    /** names are lowercased; rust has checked all of it */
-    fun fetch(requestId: Long, url: String, method: String, redirect: String, headers: Array<String>, body: ByteArray?): String?
+    /**
+     * names are lowercased; rust has checked all of it. [requestId] settles with the final hop's
+     * status and headers, [bodyId] with the file its body was drained to
+     */
+    fun fetch(
+        requestId: Long,
+        bodyId: Long,
+        url: String,
+        method: String,
+        redirect: String,
+        headers: Array<String>,
+        body: ByteArray?,
+    ): String?
 
     /** the engine already settled the promise */
     fun abort(requestId: Long)

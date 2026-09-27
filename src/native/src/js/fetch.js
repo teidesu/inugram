@@ -165,11 +165,11 @@
     return blob
   }
 
-  // the body is a `Blob` over the file the host wrote, so every read here inherits that type's
-  // ceilings and its `handle-expired` rather than growing a second set of them
+  // the body is a promise of a `Blob` over the file the host drains the response into, so every
+  // read here waits for the download and inherits that type's ceilings and its `handle-expired`
   class Response {
-    constructor(raw) {
-      bodies.set(this, raw.body)
+    constructor(raw, body) {
+      bodies.set(this, body)
       Object.defineProperties(this, {
         status: { value: raw.status, enumerable: true },
         statusText: { value: raw.statusText, enumerable: true },
@@ -180,23 +180,23 @@
     }
 
     blob() {
-      return Promise.resolve(getResponseBody(this))
+      return getResponseBody(this)
     }
 
     bytes() {
-      return getResponseBody(this).bytes()
+      return getResponseBody(this).then(blob => blob.bytes())
     }
 
     arrayBuffer() {
-      return getResponseBody(this).arrayBuffer()
+      return getResponseBody(this).then(blob => blob.arrayBuffer())
     }
 
     text() {
-      return getResponseBody(this).text()
+      return getResponseBody(this).then(blob => blob.text())
     }
 
     json() {
-      return getResponseBody(this).text().then(JSON.parse)
+      return this.text().then(JSON.parse)
     }
   }
 
@@ -239,30 +239,43 @@
     const started = natives.send(String(url), init.method, flattenHeaders(init.headers), init.redirect, body)
 
     return new Promise((resolve, reject) => {
-      let settled = false
+      let done = false
       let timer
+      let failBody
+
+      // the signal and the timeout cover the download too, so they stay armed until the body is in
+      const download = new Promise((resolveBody, rejectBody) => {
+        started.body.then(resolveBody, rejectBody)
+        failBody = rejectBody
+      })
+      download.catch(() => {})
 
       // The first completion wins. Later responses, errors, or aborts do nothing.
-      const finish = (run) => {
-        if (settled) return false
-        settled = true
+      const finish = () => {
+        if (done) return false
+        done = true
         if (timer !== undefined) clearTimeout(timer)
         // eslint-disable-next-line no-use-before-define
         if (signal !== undefined) signal.removeEventListener('abort', onAbort)
-        run()
         return true
       }
 
       const giveUp = (error) => {
-        if (finish(() => reject(error))) natives.abort(started.id)
+        if (!finish()) return
+        natives.abort(started.id, started.bodyId)
+        reject(error)
+        failBody(error)
       }
 
       const onAbort = () => giveUp(new PluginError('aborted', 'the request was aborted'))
 
-      started.promise.then(
-        raw => finish(() => resolve(new Response(raw))),
-        e => finish(() => reject(e)),
+      started.head.then(
+        raw => resolve(new Response(raw, download)),
+        (e) => {
+          if (finish()) reject(e)
+        },
       )
+      download.then(finish, finish)
 
       if (signal !== undefined) signal.addEventListener('abort', onAbort)
       if (timeout !== undefined) {
