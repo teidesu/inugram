@@ -131,7 +131,7 @@
             ...sendOptions(opts, 'sendMessage'),
             optimistic: toFlag(opts.optimistic, 'sendMessage', 'optimistic', true),
             noWebpage: toFlag(opts.noWebpage, 'sendMessage', 'noWebpage'),
-            clearDraft: toFlag(opts.clearDraft, 'sendMessage', 'clearDraft'),
+            clearDraft: toFlag(opts.clearDraft, 'sendMessage', 'clearDraft', true),
           },
           [],
           null,

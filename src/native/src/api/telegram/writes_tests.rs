@@ -390,6 +390,7 @@ fn a_peer_crosses_as_a_spec_and_the_options_as_scalars() {
   assert!(arg.contains(r#""sendAs":"D-1001""#), "got: {arg}");
   assert!(arg.contains(r#""replyTo":5"#) && arg.contains(r#""topicId":9"#), "got: {arg}");
   assert!(arg.contains(r#""silent":true"#) && arg.contains(r#""scheduleDate":100"#), "got: {arg}");
+  assert!(arg.contains(r#""clearDraft":true"#), "the draft is cleared unless asked not to, got: {arg}");
   assert!(values.is_empty(), "a text send carries no values");
   assert_eq!(out, r#"["sent"]"#);
 }
