@@ -248,7 +248,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 
 ## 🐶 plugins (experimental, wip)
 
-- Plugin JVM Runnables and Xposed JS hooks execute on the calling thread with serialized engine access; promise jobs stay on the engine queue and hosts manage their own queueing. Busy Runnables skip safely and off-thread canvas cleanup is queued.
+- Plugin JVM Runnables and Xposed JS hooks execute on the calling thread with serialized engine access; promise jobs stay on the engine queue and hosts manage their own queueing. Busy Runnables skip safely and off-thread canvas cleanup is queued. A plugin that runs out of its JS time budget 3 times is stopped.
 
 - InuPlugin-style js plugins running on a rust engine (rquickjs/quickjs-ng) — exposes `console.*` (arguments printed `util.inspect`-style, TL views as their type and fields), `inu.info()`, and an rpc bridge (`inu.interceptRpc`/`inu.invokeRpc`/`inu.onUpdate`) gated by `@grant` permissions
 - plugins persist settings through a web `localStorage` (1 MB per plugin, no grant, wiped on uninstall): items also read and write as properties, and `setItems()` stores a batch whole or not at all

@@ -1,7 +1,7 @@
 /*
 Plugin lifecycle follows its grants. Network hooks can run with no activity after a push wakeup.
 
-**Limits: 2 seconds of uninterrupted work per JavaScript turn, 10 seconds for top-level evaluation, 64 MB of native-backed values per plugin, 65536 elements per API array.**
+**Limits: 2 seconds of uninterrupted work per JavaScript turn, 10 seconds for top-level evaluation (a plugin going over either 3 times is stopped), 64 MB of native-backed values per plugin, 65536 elements per API array.**
 
 Unknown grant names give no access. Unknown grant scopes reject installation.
 

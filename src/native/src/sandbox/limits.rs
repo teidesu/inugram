@@ -59,7 +59,10 @@ impl Drop for Deadline {
   }
 }
 
+pub const MAX_BUDGET_STRIKES: u32 = 3;
+
 pub fn install_interrupt_handler(rt: &Runtime, log: crate::Log) {
+  let mut strikes = 0;
   rt.set_interrupt_handler(Some(Box::new(move || {
     let Some(armed) = ARMED.with(|a| a.get()) else {
       return false;
@@ -68,10 +71,16 @@ pub fn install_interrupt_handler(rt: &Runtime, log: crate::Log) {
       return false;
     }
     if !TRIPPED.with(|t| t.replace(true)) {
-      log(&format!(
-        "execution budget exceeded: this call ran more than {}ms of uninterrupted JS and was stopped",
+      strikes += 1;
+      let message = format!(
+        "execution budget exceeded: this call ran more than {}ms of uninterrupted JS and was stopped ({strikes}/{MAX_BUDGET_STRIKES})",
         armed.limit_ms,
-      ));
+      );
+      if strikes >= MAX_BUDGET_STRIKES {
+        log(&crate::fault(message));
+      } else {
+        log(&message);
+      }
     }
     true
   })));

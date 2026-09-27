@@ -392,3 +392,16 @@ fn the_stack_limit_follows_the_thread_that_enters() {
     assert!(err.contains("Maximum call stack size exceeded"), "unexpected error on a {stack} byte stack: {err}");
   }
 }
+
+#[test]
+fn the_third_exceeded_budget_is_a_fault() {
+  let (_rt, ctx, logs) = setup();
+  for _ in 0..MAX_BUDGET_STRIKES {
+    let _armed = arm(20);
+    eval(&ctx, "while (true) {}").unwrap_err();
+  }
+
+  let logged = logs.borrow().clone();
+  let faults: Vec<bool> = logged.iter().map(|line| line.starts_with(crate::FAULT_PREFIX)).collect();
+  assert_eq!(faults, [false, false, true], "got: {logged:?}");
+}
