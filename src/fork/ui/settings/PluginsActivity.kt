@@ -37,6 +37,7 @@ import org.telegram.messenger.Utilities
 import org.telegram.ui.ActionBar.ActionBar
 import org.telegram.ui.ActionBar.ActionBarMenuSubItem
 import org.telegram.ui.ActionBar.AlertDialog
+import org.telegram.ui.ActionBar.BaseFragment
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Cells.NotificationsCheckCell
 import org.telegram.ui.Components.BackupImageView
@@ -291,9 +292,15 @@ class PluginsActivity : SettingsPageActivity() {
     }
 
     private fun removePlugin(plugin: Plugin) {
-        PluginManager.remove(plugin)
-        rows.remove(plugin.id)
-        listView.adapter.update(true)
+        confirmRemovePlugins(
+            this,
+            listOf(plugin),
+            LocaleController.formatString(R.string.InuPluginsRemoveTitle, plugin.manifest.name),
+            LocaleController.getString(R.string.InuPluginsRemoveConfirm),
+        ) {
+            rows.remove(plugin.id)
+            listView.adapter.update(true)
+        }
     }
 
     private fun setDevMode(enabled: Boolean) {
@@ -304,22 +311,17 @@ class PluginsActivity : SettingsPageActivity() {
     }
 
     private fun confirmRemoveAll() {
-        val ctx = parentActivity ?: return
         val plugins = PluginManager.plugins()
         if (plugins.isEmpty()) return
-        val dialog = AlertDialog.Builder(ctx, resourceProvider)
-            .setTitle(LocaleController.getString(R.string.InuPluginsRemoveAll))
-            .setMessage(LocaleController.formatPluralString("InuPluginsRemoveAllConfirm", plugins.size))
-            .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
-            .setPositiveButton(LocaleController.getString(R.string.Remove)) { _, _ ->
-                for (plugin in plugins) PluginManager.remove(plugin)
-                rows.clear()
-                listView.adapter.update(true)
-            }
-            .create()
-        showDialog(dialog)
-        (dialog.getButton(Dialog.BUTTON_POSITIVE) as? TextView)
-            ?.setTextColor(getThemedColor(Theme.key_text_RedBold))
+        confirmRemovePlugins(
+            this,
+            plugins,
+            LocaleController.getString(R.string.InuPluginsRemoveAll),
+            LocaleController.formatPluralString("InuPluginsRemoveAllConfirm", plugins.size),
+        ) {
+            rows.clear()
+            listView.adapter.update(true)
+        }
     }
 
     private fun launchLoad() {
@@ -667,4 +669,26 @@ class PluginRow(context: Context, val compact: Boolean) : LinearLayout(context) 
         private const val WARNING_SIZE_DP = 12.5f
         private const val WARNING_OFFSET_DP = 1.5f
     }
+}
+
+internal fun confirmRemovePlugins(
+    fragment: BaseFragment,
+    plugins: List<Plugin>,
+    title: CharSequence,
+    message: CharSequence,
+    onRemoved: () -> Unit,
+) {
+    val ctx = fragment.parentActivity ?: return
+    val dialog = AlertDialog.Builder(ctx, fragment.resourceProvider)
+        .setTitle(title)
+        .setMessage(message)
+        .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
+        .setPositiveButton(LocaleController.getString(R.string.Remove)) { _, _ ->
+            for (plugin in plugins) PluginManager.remove(plugin)
+            onRemoved()
+        }
+        .create()
+    fragment.showDialog(dialog)
+    (dialog.getButton(Dialog.BUTTON_POSITIVE) as? TextView)
+        ?.setTextColor(fragment.getThemedColor(Theme.key_text_RedBold))
 }

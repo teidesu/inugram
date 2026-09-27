@@ -142,10 +142,13 @@ class PluginInfoActivity(private val plugin: Plugin) : SettingsPageActivity() {
             BUTTON_SOURCE -> showDialog(PluginSourceSheet(context, plugin.manifest.name, plugin.source))
             BUTTON_SHARE -> sharePlugin(this, plugin)
             BUTTON_RELOAD -> PluginManager.reload(plugin)
-            BUTTON_REMOVE -> {
-                PluginManager.remove(plugin)
-                finishFragment()
-            }
+            BUTTON_REMOVE -> confirmRemovePlugins(
+                this,
+                listOf(plugin),
+                LocaleController.formatString(R.string.InuPluginsRemoveTitle, plugin.manifest.name),
+                LocaleController.getString(R.string.InuPluginsRemoveConfirm),
+                ::finishFragment,
+            )
         }
     }
 

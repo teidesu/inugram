@@ -773,6 +773,8 @@
     <string name="InuPluginsViewSource">View source code</string>
     <string name="InuPluginSourceTitle">Source code</string>
     <string name="InuPluginsRemove">Remove</string>
+    <string name="InuPluginsRemoveTitle">Remove %s</string>
+    <string name="InuPluginsRemoveConfirm">Remove this plugin along with all of its data? This cannot be undone.</string>
     <string name="InuPluginsRemoveAll">Remove all plugins</string>
     <string name="InuPluginsRemoveAllConfirm_one">Remove %d installed plugin, along with all of its data? This cannot be undone.</string>
     <string name="InuPluginsRemoveAllConfirm_other">Remove all %d installed plugins, along with all of their data? This cannot be undone.</string>
