@@ -1,6 +1,7 @@
 # @inugram/cli
 
 CLI to develop and build [Inugram](https://github.com/teidesu/inugram) plugins.
+Guides on grants, routines, interception and more are in the [plugin docs](https://github.com/teidesu/inugram/tree/main/sdk/docs).
 
 ```bash
 pnpm dlx @inugram/cli init my-plugins

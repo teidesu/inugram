@@ -1,6 +1,7 @@
 # @inugram/plugin-types
 
 TypeScript typings for the [Inugram](https://github.com/teidesu/inugram) plugin API.
+Guides are in the [plugin docs](https://github.com/teidesu/inugram/tree/main/sdk/docs).
 
 Package versions follow app releases, keeping the types, TL layer, and grant catalogue in sync.
 
