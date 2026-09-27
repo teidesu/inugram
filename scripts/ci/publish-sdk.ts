@@ -12,16 +12,15 @@ import { step, success, warn } from '../lib.js'
 // the registry is npm's own config, so `npm_config_registry` points it elsewhere.
 //
 // version: `<build number>.0.0`, the app's own version code, so a package names the build it came
-// out of. stock's version name says nothing about the plugin api.
+// out of. stock's version name says nothing about the plugin api. both packages always publish
+// together: `inu init` from cli@N depends on plugin-types@^N.0.0.
 
 $.verbose = false
 
 interface Package {
   dir: string
   name: string
-  /** the github variable holding the hash of what was published last */
-  hashVar: string
-  /** what a republish is worth: if none of it changed, the last version still describes this build */
+  /** what a republish is worth: if none of it changed in either package, the last version still describes this build */
   contents: string[]
   /**
    * puts the package in its published shape and answers with the directory to publish from, and
@@ -42,7 +41,6 @@ const PACKAGES: Package[] = [
   {
     dir: typesDir,
     name: '@inugram/plugin-types',
-    hashVar: 'SDK_TYPES_HASH',
     contents: ['*.d.ts', 'grants.json', 'tl-names.txt', 'tsconfig.json', 'tsconfig.js.json', 'README.md'],
     async prepare(version) {
       const path = join(typesDir, 'package.json')
@@ -56,7 +54,6 @@ const PACKAGES: Package[] = [
   {
     dir: cliDir,
     name: '@inugram/cli',
-    hashVar: 'SDK_CLI_HASH',
     contents: ['src/**/*', 'vite.config.ts', 'package.json', 'README.md'],
     async prepare(version) {
       // fuman-build writes the published package.json itself, version included, so nothing in the
@@ -74,42 +71,44 @@ function readVersion(): string {
 }
 
 /** over the published contents, in a stable order, path included so a rename counts as a change */
-async function hashPublishedContents(pkg: Package): Promise<string> {
-  const files = (await glob(pkg.contents, { cwd: pkg.dir, dot: true })).sort()
-  if (files.length === 0) throw new Error(`${pkg.name} would publish nothing; did \`pnpm run setup\` run?`)
-  const bodies = await parallelMap(files, file => fs.readFile(join(pkg.dir, file)))
+async function hashPublishedContents(): Promise<string> {
   const digest = createHash('sha256')
-  for (const [index, file] of files.entries()) {
-    digest.update(file)
-    digest.update(bodies[index])
+  for (const pkg of PACKAGES) {
+    const files = (await glob(pkg.contents, { cwd: pkg.dir, dot: true })).sort()
+    if (files.length === 0) throw new Error(`${pkg.name} would publish nothing; did \`pnpm run setup\` run?`)
+    const bodies = await parallelMap(files, file => fs.readFile(join(pkg.dir, file)))
+    for (const [index, file] of files.entries()) {
+      digest.update(`${pkg.name}/${file}`)
+      digest.update(bodies[index])
+    }
   }
   return digest.digest('hex')
 }
 
-async function storeHash(pkg: Package, hash: string) {
+async function storeHash(hash: string) {
   if (!process.env.GH_TOKEN) {
-    warn(`no GH_TOKEN, so ${pkg.hashVar} was not updated; the next run will publish again`)
+    warn('no GH_TOKEN, so SDK_HASH was not updated; the next run will publish again')
     return
   }
-  await $`gh variable set ${pkg.hashVar} --body ${hash}`
+  await $`gh variable set SDK_HASH --body ${hash}`
 }
 
 const version = readVersion()
 const dryRun = process.argv.includes('--dry-run')
 step(`sdk version ${chalk.bold(version)}${dryRun ? ' (dry run)' : ''}`)
 
+// the typings' hash covers their own package.json, which carries the version we are about to
+// write, so it is taken before the bump: otherwise every run would look changed
+const hash = await hashPublishedContents()
+if (process.env.SDK_HASH === hash) {
+  step('sdk unchanged since the last publish, skipping')
+  process.exit(0)
+}
+
 for (const pkg of PACKAGES) {
-  const hash = await hashPublishedContents(pkg)
-  // the typings' hash covers their own package.json, which carries the version we are about to
-  // write, so it is taken before the bump: otherwise every run would look changed
-  if (process.env[pkg.hashVar] === hash) {
-    step(`${pkg.name} unchanged since the last publish, skipping`)
-    continue
-  }
   const published = await $({ nothrow: true })`npm view ${pkg.name}@${version} version`
   if (published.stdout.trim() === version) {
     step(`${pkg.name}@${version} is already on the registry, skipping`)
-    if (!dryRun) await storeHash(pkg, hash)
     continue
   }
   if (dryRun) {
@@ -122,6 +121,6 @@ for (const pkg of PACKAGES) {
   } finally {
     await prepared.restore()
   }
-  await storeHash(pkg, hash)
   success(`${pkg.name}@${version} published`)
 }
+if (!dryRun) await storeHash(hash)

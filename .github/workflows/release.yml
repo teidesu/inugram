@@ -189,6 +189,5 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           GH_TOKEN: ${{ secrets.INU_VARS_TOKEN }}
           INU_BUILD: ${{ needs.build.outputs.build-num }}
-          SDK_TYPES_HASH: ${{ vars.SDK_TYPES_HASH }}
-          SDK_CLI_HASH: ${{ vars.SDK_CLI_HASH }}
+          SDK_HASH: ${{ vars.SDK_HASH }}
         run: pnpm tsx scripts/ci/publish-sdk.ts
