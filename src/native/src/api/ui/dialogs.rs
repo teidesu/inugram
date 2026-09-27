@@ -71,7 +71,7 @@ impl DialogState {
       let ids = arguments::array_values(ctx, list, "bulletin: 'avatars'")?;
       // stock's own layout draws three and counts the rest; more than that is a silent no-op
       if ids.len() > AVATAR_LIMIT {
-        return PluginErrorCode::InvalidArgument.throw(ctx, &format!("bulletin: at most {AVATAR_LIMIT} avatars"));
+        return Err(Exception::throw_type(ctx, &format!("bulletin: at most {AVATAR_LIMIT} avatars")));
       }
       if ids.is_empty() {
         return Err(Exception::throw_type(ctx, "bulletin: 'avatars' must name at least one peer"));
@@ -103,9 +103,7 @@ impl DialogState {
         match name.to_string()?.as_str() {
           "short" => DURATION_SHORT_MS,
           "long" => DURATION_LONG_MS,
-          other => {
-            return PluginErrorCode::InvalidArgument.throw(ctx, &format!("bulletin: unknown duration '{other}'"))
-          }
+          other => return Err(Exception::throw_type(ctx, &format!("bulletin: unknown duration '{other}'"))),
         }
       } else {
         let millis = duration
@@ -114,8 +112,10 @@ impl DialogState {
           .or_else(|| duration.as_float().map(|f| f as i64))
           .ok_or_else(|| Exception::throw_type(ctx, "bulletin: 'duration' must be a number or a name"))?;
         if !(DURATION_MIN_MS..=DURATION_MAX_MS).contains(&millis) {
-          return PluginErrorCode::InvalidArgument
-            .throw(ctx, &format!("bulletin: 'duration' must be between {DURATION_MIN_MS} and {DURATION_MAX_MS} ms"));
+          return Err(Exception::throw_type(
+            ctx,
+            &format!("bulletin: 'duration' must be between {DURATION_MIN_MS} and {DURATION_MAX_MS} ms"),
+          ));
         }
         millis
       };
@@ -126,7 +126,7 @@ impl DialogState {
       match position.as_str() {
         "top" => out.set("top", true)?,
         "bottom" => out.set("top", false)?,
-        other => return PluginErrorCode::InvalidArgument.throw(ctx, &format!("bulletin: unknown position '{other}'")),
+        other => return Err(Exception::throw_type(ctx, &format!("bulletin: unknown position '{other}'"))),
       }
     }
 

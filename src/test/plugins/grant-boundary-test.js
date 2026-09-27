@@ -24,9 +24,9 @@ async function expectDenied(label, expected, fn) {
     () => inu.interceptRpc('users.getUsers', ({ request: req }, next) => next(req)),
   )
 
-  await expectDenied(
+  await expectReject(
     'invokeRpc without a type name',
-    { code: 'invalid-argument' },
+    TypeError,
     // @ts-expect-error
     () => inu.invokeRpc({}),
   )

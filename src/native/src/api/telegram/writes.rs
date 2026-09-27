@@ -4,7 +4,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use rquickjs::{Array, Ctx, Function, Object, Result as JsResult, TypedArray, Value};
+use rquickjs::{Array, Ctx, Exception, Function, Object, Result as JsResult, TypedArray, Value};
 
 use crate::api::error::PluginErrorCode;
 use crate::api::io::blob::{self, BlobHandle};
@@ -111,7 +111,7 @@ impl WritesState {
 
   fn check_write_grant(&self, ctx: &Ctx<'_>, op: i32) -> JsResult<()> {
     let Some((name, scope)) = get_op_grant(op) else {
-      return PluginErrorCode::InvalidArgument.throw(ctx, "unknown account write");
+      return Err(Exception::throw_type(ctx, "unknown account write"));
     };
     self.grants.check_grant(ctx, name, Some(scope), MATCH_EXACT)
   }
@@ -137,7 +137,7 @@ impl WritesState {
         self.sources.write(ctx, |file| file.write_all(bytes))
       });
       let Some(staged) = staged else {
-        return PluginErrorCode::InvalidArgument.throw(ctx, "this Uint8Array is detached");
+        return Err(Exception::throw_type(ctx, "this Uint8Array is detached"));
       };
       let path = staged?;
       return Ok(Staged {
@@ -313,7 +313,6 @@ pub(crate) fn install_writes_with_limit<'js>(
   });
 
   let message = globals.get_message(ctx)?;
-  let plugin_error = globals.plugin_error.clone();
 
   let reads = accounts.take_prototype(ctx);
   let ops = Object::new(ctx.clone())?;
@@ -337,7 +336,7 @@ pub(crate) fn install_writes_with_limit<'js>(
   }
 
   let factory = qjs_load_prelude(ctx, PRELUDE)?;
-  let prototype: Object = factory.call((natives, shared.clone(), message, plugin_error, reads, ops))?;
+  let prototype: Object = factory.call((natives, shared.clone(), message, reads, ops))?;
   accounts.set_prototype(ctx, &prototype);
 
   Ok(state)

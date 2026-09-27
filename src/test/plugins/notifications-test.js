@@ -8,15 +8,15 @@
 // the rest reports as the app posts; each check depends only on its post, so opening the app and
 // pulling to refresh finishes it
 
-expectThrow('a delegate that is not an object', 'invalid-argument', () =>
+expectThrow('a delegate that is not an object', TypeError, () =>
   // @ts-expect-error
   inu.android.addNotificationCenterDelegate(null))
-expectThrow('a delegate with no handlers', 'invalid-argument', () =>
+expectThrow('a delegate with no handlers', TypeError, () =>
   inu.android.addNotificationCenterDelegate({}))
-expectThrow('a handler that is not a function', 'invalid-argument', () =>
+expectThrow('a handler that is not a function', TypeError, () =>
   // @ts-expect-error
   inu.android.addNotificationCenterDelegate({ closeChats: 7 }))
-expectThrow('an event the app does not have', 'invalid-argument', () =>
+expectThrow('an event the app does not have', TypeError, () =>
   // @ts-expect-error
   inu.android.addNotificationCenterDelegate({ notAnEventAtAll: () => {} }))
 

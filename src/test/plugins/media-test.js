@@ -44,11 +44,11 @@ const WITH_MEDIA = {
   for (const bad of [null, undefined, 7, 'a message']) {
     const shown = JSON.stringify(bad) ?? String(bad)
     // @ts-expect-error
-    expectThrow(`getMessageFile(${shown}) throws`, 'invalid-argument', () => acc.getMessageFile(bad))
+    expectThrow(`getMessageFile(${shown}) throws`, TypeError, () => acc.getMessageFile(bad))
     // @ts-expect-error
-    await expectReject(`downloadMedia(${shown}) rejects`, 'invalid-argument', () => acc.downloadMedia(bad))
+    await expectReject(`downloadMedia(${shown}) rejects`, TypeError, () => acc.downloadMedia(bad))
   }
-  expectThrow('a torn-off getMessageFile throws', 'invalid-argument', () => {
+  expectThrow('a torn-off getMessageFile throws', TypeError, () => {
     const { getMessageFile } = acc
     return getMessageFile(WITH_MEDIA)
   })
@@ -56,7 +56,7 @@ const WITH_MEDIA = {
   /** @type {tl.RawMessage} */
   const bare = { _: 'message', id: 1, peer_id: { _: 'peerUser', user_id: 4242 }, date: 1715540640, message: 'hi' }
   check('getMessageFile on a message with no media is null', acc.getMessageFile(bare) === null)
-  await expectReject('and downloading one rejects', 'invalid-argument', () => acc.downloadMedia(bare))
+  await expectReject('and downloading one rejects', TypeError, () => acc.downloadMedia(bare))
 
   const where = acc.getMessageFile(WITH_MEDIA)
   if (where === null) {
@@ -99,7 +99,7 @@ const WITH_MEDIA = {
   }
 
   // @ts-expect-error
-  await expectReject('uploadFile with nothing rejects', 'invalid-argument', () => acc.uploadFile(null))
+  await expectReject('uploadFile with nothing rejects', TypeError, () => acc.uploadFile(null))
   await expectReject('uploading a path without fs is refused', 'not-granted', () => acc.uploadFile({ path: '/etc/hosts' }))
 
   const content = new Blob([new Uint8Array([1, 2, 3, 4, 5])], { type: 'application/octet-stream' })

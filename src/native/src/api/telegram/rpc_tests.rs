@@ -315,7 +315,7 @@ fn a_stage_that_already_settled_neither_aborts_nor_forwards() {
   assert_eq!(eval_json(&ctx, "__signal.aborted"), "false");
   assert_eq!(
     catch_json(&ctx, "globalThis.__next({ _: 'foo.bar' })"),
-    r#"[true,"invalid-argument",null,"next(): this dispatch already settled"]"#,
+    r#"[false,"TypeError",null,"next(): this dispatch already settled"]"#,
   );
   assert!(host.next_calls.borrow().is_empty());
 }
@@ -332,7 +332,7 @@ fn abandoning_a_stage_aborts_its_signal_before_rejecting_next() {
         signal.addEventListener('abort', () => {
           __order.push(['abort', signal.reason instanceof inu.PluginError, signal.reason.code, signal.reason.message]);
         });
-        try { return await next(); } catch (e) { __order.push(['next', e instanceof inu.RpcError, e.code, e.text]); throw e; }
+        try { return await next(); } catch (e) { __order.push(['next', e instanceof inu.RpcError, (e.code ?? e.name), e.text]); throw e; }
       });
     "#,
   );
@@ -389,22 +389,22 @@ fn a_refused_registration_or_call_never_reaches_the_host() {
     (
       "interceptRpc(users.getUsers)",
       "inu.interceptRpc('users.getUsers', () => {}, true)",
-      r#"[false,null,null,"interceptRpc: options must be an object"]"#,
+      r#"[false,"TypeError",null,"interceptRpc: options must be an object"]"#,
     ),
     (
       "interceptRpc(users.getUsers)",
       "inu.interceptRpc('users.getUsers', () => {}, { strict: 'yes' })",
-      r#"[false,null,null,"interceptRpc: 'strict' must be a boolean"]"#,
+      r#"[false,"TypeError",null,"interceptRpc: 'strict' must be a boolean"]"#,
     ),
     (
       "invokeRpc",
       "inu.invokeRpc({})",
-      r#"[true,"invalid-argument",null,"invokeRpc: the request must carry its method name in '_'"]"#,
+      r#"[false,"TypeError",null,"invokeRpc: the request must carry its method name in '_'"]"#,
     ),
     (
       "invokeRpc",
       "inu.invokeRpc({ _: 42 })",
-      r#"[true,"invalid-argument",null,"invokeRpc: the request must carry its method name in '_'"]"#,
+      r#"[false,"TypeError",null,"invokeRpc: the request must carry its method name in '_'"]"#,
     ),
     (
       "invokeRpc(users.getUsers)",
@@ -419,12 +419,12 @@ fn a_refused_registration_or_call_never_reaches_the_host() {
     (
       "onUpdate",
       "inu.onUpdate([], () => {})",
-      r#"[false,null,null,"onUpdate: type list must not be empty"]"#,
+      r#"[false,"TypeError",null,"onUpdate: type list must not be empty"]"#,
     ),
     (
       "onUpdate",
       "inu.onUpdate([1], () => {})",
-      r#"[false,null,null,"onUpdate: type list must contain only strings"]"#,
+      r#"[false,"TypeError",null,"onUpdate: type list must contain only strings"]"#,
     ),
     // the two halves of the scope vocabulary do not imply each other, in either direction
     (
@@ -450,7 +450,7 @@ fn a_refused_registration_or_call_never_reaches_the_host() {
     (
       "interceptUpdate(updateEditMessage)",
       "inu.interceptUpdate([], () => 'deliver')",
-      r#"[false,null,null,"interceptUpdate: type list must not be empty"]"#,
+      r#"[false,"TypeError",null,"interceptUpdate: type list must not be empty"]"#,
     ),
     (
       "invokeRpc",
@@ -460,7 +460,7 @@ fn a_refused_registration_or_call_never_reaches_the_host() {
     (
       "unsafe.invokeRaw",
       "inu.invokeRaw({ _: 'foo.bar' })",
-      r#"[true,"invalid-argument",null,"invokeRaw: expected the serialized method as a Uint8Array"]"#,
+      r#"[false,"TypeError",null,"invokeRaw: expected the serialized method as a Uint8Array"]"#,
     ),
     (
       "invokeRpc account.read(self)",
@@ -548,7 +548,7 @@ fn update_payload_handle_resolves_to_a_read_only_view() {
         r#"
           (() => {
             try { globalThis.__seen.x = 5; return 'no-throw' }
-            catch (e) { return [e instanceof inu.PluginError, e.code].join('|') }
+            catch (e) { return [e instanceof inu.PluginError, (e.code ?? e.name)].join('|') }
           })()
         "#,
       )
@@ -1176,7 +1176,7 @@ fn media_may_be_replaced_but_not_added_or_removed() {
     r#"
       globalThis.__errors = [];
       inu.interceptSendMessage(({ message: m }) => {
-        try { m.media = [{ _: 'inputMediaEmpty' }] } catch (e) { __errors.push([e.code, m.isEdit]) }
+        try { m.media = [{ _: 'inputMediaEmpty' }] } catch (e) { __errors.push([(e.code ?? e.name), m.isEdit]) }
         return 'send';
       });
     "#,

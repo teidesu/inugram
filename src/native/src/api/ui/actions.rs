@@ -5,7 +5,7 @@ use std::rc::Rc;
 use rquickjs::object::Accessor;
 use rquickjs::{Array, Ctx, Exception, Function, Object, Persistent, Result as JsResult, Value};
 
-use crate::api::error::{call_callback, describe_js_error, format_exception, PluginErrorCode};
+use crate::api::error::{call_callback, describe_js_error, format_exception};
 use crate::api::platform::jvm::JvmState;
 use crate::api::telegram::account::AccountState;
 use crate::api::tl::proxy::json_parse_tl;
@@ -324,20 +324,18 @@ impl ActionState {
     } else if let Some(obj) = value.as_object() {
       let text: Value = obj.get("text")?;
       let Some(text) = text.as_string() else {
-        return PluginErrorCode::InvalidArgument
-          .throw(ctx, &format!("{what}: expected a string or {{ text, entities }}"));
+        return Err(Exception::throw_type(ctx, &format!("{what}: expected a string or {{ text, entities }}")));
       };
       payload.set("text", text.to_string()?)?;
       let entities: Value = obj.get("entities")?;
       if !entities.is_undefined() && !entities.is_null() {
         if entities.as_array().is_none() {
-          return PluginErrorCode::InvalidArgument.throw(ctx, &format!("{what}: entities must be an array"));
+          return Err(Exception::throw_type(ctx, &format!("{what}: entities must be an array")));
         }
         payload.set("entities", entities)?;
       }
     } else {
-      return PluginErrorCode::InvalidArgument
-        .throw(ctx, &format!("{what}: expected a string or {{ text, entities }}"));
+      return Err(Exception::throw_type(ctx, &format!("{what}: expected a string or {{ text, entities }}")));
     }
     let json = stringify_json(ctx, payload.into_value(), &format!("{what}: serialization failed"))?;
     match self.host.action_editor(op, surface, &json) {

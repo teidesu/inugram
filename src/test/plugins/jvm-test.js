@@ -27,7 +27,7 @@ check('a class resolves', typeof ArrayList === 'function')
 const list = new ArrayList()
 check('new gives a java object', typeof list === 'object' && typeof list.call === 'function')
 
-expectThrow('cls takes a name', 'invalid-argument', () => inu.jvm.cls(''))
+expectThrow('cls takes a name', TypeError, () => inu.jvm.cls(''))
 
 list.call('add', 1)
 list.call('add', 2)
@@ -50,7 +50,7 @@ const unconvertible = [
 ]
 
 for (const [what, value] of unconvertible) {
-  expectThrow(`${what} cannot be handed to java`, 'invalid-argument', () => list.call('add', value))
+  expectThrow(`${what} cannot be handed to java`, TypeError, () => list.call('add', value))
 }
 
 expectThrow('a string past the value bound is refused', 'quota-exceeded', () =>
@@ -73,7 +73,7 @@ check(
   Object.keys(Object.getPrototypeOf(sizedCtor)).join() === 'newInstance' &&
     Object.keys(Object.getPrototypeOf(add)).join() === 'invoke',
 )
-expectThrow('getDeclaredConstructor takes a descriptor', 'invalid-argument', () =>
+expectThrow('getDeclaredConstructor takes a descriptor', TypeError, () =>
   ArrayList.getDeclaredConstructor('add'),
 )
 
@@ -103,13 +103,13 @@ const Listish = inu.jvm.defineClass({
   superclass: inu.jvm.cls('java.util.AbstractList'),
   methods: { size: () => 0, get: () => null },
 })
-expectThrow('callSuper refuses an abstract super member', 'invalid-argument', () =>
+expectThrow('callSuper refuses an abstract super member', TypeError, () =>
   inu.jvm.callSuper(Listish, new Listish(), 'size'),
 )
-expectThrow('callSuper refuses a receiver of another class', 'invalid-argument', () =>
+expectThrow('callSuper refuses a receiver of another class', TypeError, () =>
   inu.jvm.callSuper(Sized, list, 'size'),
 )
-expectThrow('callSuper refuses a class with no superclass', 'invalid-argument', () =>
+expectThrow('callSuper refuses a class with no superclass', TypeError, () =>
   inu.jvm.callSuper(inu.jvm.cls('java.lang.Object'), list, 'hashCode'),
 )
 
@@ -118,7 +118,7 @@ const onClick = inu.jvm.runnable(() => {
   clicks++
 })
 check('runnable gives a java object', typeof onClick === 'object' && typeof onClick.call === 'function')
-expectThrow('runnable takes a function', 'invalid-argument', () =>
+expectThrow('runnable takes a function', TypeError, () =>
   // @ts-expect-error - the contract says a function, and the engine says so at runtime too
   inu.jvm.runnable('later'),
 )

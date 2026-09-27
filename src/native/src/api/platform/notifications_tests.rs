@@ -209,7 +209,7 @@ fn a_host_refusal_is_what_the_plugin_is_thrown() {
   let (_rt, ctx, host, state, _logs, _jvm) = setup(GRANTED);
   assert_eq!(
     catch_json(&ctx, "inu.android.addNotificationCenterDelegate({ closeChats: () => {}, nope: () => {} })"),
-    r#"[true,"invalid-argument",null,"no notification named 'nope'"]"#,
+    r#"[false,"TypeError",null,"no notification named 'nope'"]"#,
   );
   assert!(host.registered.borrow().is_empty(), "one bad name refuses the whole delegate");
   assert!(host.unregistered.borrow().is_empty(), "a refused registration has nothing to unregister");
@@ -231,7 +231,7 @@ fn a_delegate_that_is_not_an_object_of_functions_is_refused() {
     "{ closeChats: 7, updateInterfaces: () => {} }",
   ] {
     let caught = catch_json(&ctx, &format!("inu.android.addNotificationCenterDelegate({bad})"));
-    assert!(caught.starts_with(r#"[true,"invalid-argument""#), "{bad}: {caught}");
+    assert!(caught.starts_with(r#"[false,"TypeError""#), "{bad}: {caught}");
   }
   assert!(host.registered.borrow().is_empty());
 }

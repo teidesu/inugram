@@ -16,12 +16,13 @@ function halfDone() {
   if (--halvesLeft === 0) console.log('api filter test done')
 }
 
-// common.d.ts: a stripped field is refused as absent (invalid-argument), a sealed one as forbidden
-function refuses(write, code = 'forbidden') {
+// common.d.ts: a stripped field is refused as absent (TypeError), a sealed one as forbidden
+/** @param {string | typeof TypeError} want */
+function refuses(write, want = 'forbidden') {
   try {
     write()
   } catch (e) {
-    return e instanceof inu.PluginError && e.code === code
+    return typeof want === 'string' ? e instanceof inu.PluginError && e.code === want : e instanceof want
   }
   return false
 }
@@ -35,7 +36,7 @@ inu.invokeRpc({ _: 'help.getConfig' }).then(
     if (config.autologin_token !== null) return fail(label, `reads back ${config.autologin_token}`)
     if ('autologin_token' in structuredClone(config)) return fail(label, 'a structuredClone copy carries it')
     // a server that sent no token passes the reads above; this tells stripped from never-there
-    if (!refuses(() => { config.autologin_token = 'x' }, 'invalid-argument')) {
+    if (!refuses(() => { config.autologin_token = 'x' }, TypeError)) {
       return fail(label, 'assigning it was not refused, so nothing is filtering')
     }
     pass(label, `${Object.keys(config).length} other field(s) still readable`)

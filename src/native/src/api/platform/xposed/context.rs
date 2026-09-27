@@ -2,7 +2,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use rquickjs::class::{Trace, Tracer};
-use rquickjs::{Array, Class, Ctx, JsLifetime, Object, Result as JsResult, Value};
+use rquickjs::{Array, Class, Ctx, Exception, JsLifetime, Object, Result as JsResult, Value};
 
 use super::{Invocation, JavaValues, Returned, FIRST_ARG_INDEX, KEEP_ARGUMENT};
 use crate::api::error::PluginErrorCode;
@@ -184,7 +184,7 @@ impl<'js> HookContext<'js> {
     };
     let args = self.args.borrow().clone();
     let Some(array) = args.as_ref().and_then(|value| value.as_array()) else {
-      return PluginErrorCode::InvalidArgument.throw(ctx, "xposed: 'args' must be an array");
+      return Err(Exception::throw_type(ctx, "xposed: 'args' must be an array"));
     };
     let mut wires = Vec::new();
     for (index, value) in array_values(ctx, array, "xposed: 'args'")?.iter().enumerate() {

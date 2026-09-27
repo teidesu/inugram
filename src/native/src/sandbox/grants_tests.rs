@@ -17,7 +17,9 @@ fn check_grant_throws_a_not_granted_error_naming_the_token() {
     let err = host.check_grant(&ctx, "invokeRpc", Some("messages.sendMessage"), MATCH_EXACT).unwrap_err();
     assert!(matches!(err, rquickjs::Error::Exception));
     ctx.globals().set("e", ctx.catch()).unwrap();
-    let got: String = ctx.eval("JSON.stringify([e.code, e.grant, e.message, e instanceof inu.PluginError])").unwrap();
+    let got: String = ctx
+      .eval("JSON.stringify([(e.code ?? e.name), e.grant, e.message, e instanceof inu.PluginError])")
+      .unwrap();
     assert_eq!(
       got,
       r#"["not-granted","invokeRpc(messages.sendMessage)","missing grant: invokeRpc(messages.sendMessage)",true]"#,

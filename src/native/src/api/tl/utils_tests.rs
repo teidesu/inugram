@@ -28,7 +28,7 @@ fn catch_error_code(ctx: &Context, code: &str) -> String {
       r#"
         (() => {{
           try {{ {code}; return 'no-throw' }}
-          catch (e) {{ return e instanceof inu.PluginError ? e.code : e.constructor.name }}
+          catch (e) {{ return e instanceof inu.PluginError ? (e.code ?? e.name) : e.constructor.name }}
         }})()
       "#,
     ),
@@ -60,7 +60,7 @@ fn a_peer_helper_refuses_what_it_cannot_answer_for() {
     "inu.utils.peers.toInputPeer({ _: 'userEmpty', id: '1' })",
     "inu.utils.formatDuration(2147483648)",
   ] {
-    assert_eq!(catch_error_code(&ctx, call), "invalid-argument", "{call}");
+    assert_eq!(catch_error_code(&ctx, call), "TypeError", "{call}");
   }
 }
 
@@ -156,7 +156,7 @@ fn join_text_with_entities_refuses_what_is_not_a_text() {
     "inu.utils.joinTextWithEntities([{ text: 'a', entities: 7 }])",
     "inu.utils.joinTextWithEntities(['a'], 7)",
   ] {
-    assert_eq!(catch_error_code(&ctx, call), "invalid-argument", "{call}");
+    assert_eq!(catch_error_code(&ctx, call), "TypeError", "{call}");
   }
 }
 
@@ -264,11 +264,11 @@ fn bad_input_refuses_rather_than_guessing() {
           () => inu.utils.md.unparse({ text: 'a', entities: 'no' }),
         ]) {
           try { fn(); codes.push('no-throw') }
-          catch (e) { codes.push(e instanceof inu.PluginError ? e.code : e.constructor.name) }
+          catch (e) { codes.push(e instanceof inu.PluginError ? (e.code ?? e.name) : e.constructor.name) }
         }
         return JSON.stringify(codes)
       })()
     "#,
   );
-  assert_eq!(out, r#"["invalid-argument","invalid-argument","invalid-argument"]"#);
+  assert_eq!(out, r#"["TypeError","TypeError","TypeError"]"#);
 }

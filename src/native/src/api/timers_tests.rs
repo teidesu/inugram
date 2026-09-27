@@ -432,7 +432,7 @@ fn live_timers_are_capped_and_clearing_one_restores_capacity() {
         const ids = [];
         for (let i = 0; i < {TIMER_LIMIT}; i++) ids.push(setInterval(() => {{}}, 100));
         let refused;
-        try {{ setTimeout(() => {{}}, 100); }} catch (e) {{ refused = [e.code, e.usage, e.quota]; }}
+        try {{ setTimeout(() => {{}}, 100); }} catch (e) {{ refused = [(e.code ?? e.name), e.usage, e.quota]; }}
         clearInterval(ids.pop());
         const replacement = setTimeout(() => {{}}, 100);
         JSON.stringify([refused, replacement > 0]);

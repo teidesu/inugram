@@ -20,18 +20,18 @@ async function main() {
   const cased = await fetch('https://EXAMPLE.com:8443/x')
   check('and so is the same name in another case, on another port', cased.status === 200)
 
-  await expectReject('a url whose host hides behind userinfo is refused', 'invalid-argument', fetch('https://example.com@127.0.0.1/x'))
+  await expectReject('a url whose host hides behind userinfo is refused', TypeError, fetch('https://example.com@127.0.0.1/x'))
   for (const url of ['file:///etc/hosts', 'content://media/external/1', 'ftp://example.com/x', 'not a url']) {
-    await expectReject(`'${url}' is not something this api speaks`, 'invalid-argument', fetch(url))
+    await expectReject(`'${url}' is not something this api speaks`, TypeError, fetch(url))
   }
 
-  await expectReject('a header the transport owns is refused', 'invalid-argument', fetch(OK, { headers: { 'Content-Length': '10' } }))
+  await expectReject('a header the transport owns is refused', TypeError, fetch(OK, { headers: { 'Content-Length': '10' } }))
   await expectReject('a header value with a line break in it is a TypeError', TypeError, fetch(OK, { headers: { 'X-A': 'a\r\nX-B: b' } }))
   // @ts-expect-error
-  await expectReject('an unknown redirect mode is refused', 'invalid-argument', fetch(OK, { redirect: 'ignore' }))
-  await expectReject('a non-positive timeout is refused', 'invalid-argument', fetch(OK, { timeout: 0 }))
+  await expectReject('an unknown redirect mode is refused', TypeError, fetch(OK, { redirect: 'ignore' }))
+  await expectReject('a non-positive timeout is refused', TypeError, fetch(OK, { timeout: 0 }))
   // @ts-expect-error
-  await expectReject('a body that is not content is refused', 'invalid-argument', fetch(OK, { method: 'POST', body: { a: 1 } }))
+  await expectReject('a body that is not content is refused', TypeError, fetch(OK, { method: 'POST', body: { a: 1 } }))
 
   const disposed = new Blob(['gone'])
   disposed.dispose()

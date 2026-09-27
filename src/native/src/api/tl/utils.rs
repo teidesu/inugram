@@ -4,7 +4,6 @@ use rquickjs::function::Opt;
 use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, TypedArray, Value};
 use std::rc::Rc;
 
-use crate::api::error::PluginErrorCode;
 use crate::utils::qjs::{qjs_load_prelude, qjs_read_typed_bytes};
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/utils.qbc"));
@@ -48,7 +47,7 @@ pub fn install_utils_with_host<'js>(
       let bytes = STANDARD.decode(text).ok().or_else(|| STANDARD_NO_PAD.decode(text).ok());
       match bytes {
         Some(bytes) => TypedArray::<u8>::new(ctx, bytes),
-        None => PluginErrorCode::InvalidArgument.throw(&ctx, "fromBase64: not base64"),
+        None => Err(Exception::throw_type(&ctx, "fromBase64: not base64")),
       }
     })?,
   )?;
@@ -63,7 +62,7 @@ pub fn install_utils_with_host<'js>(
     Function::new(ctx.clone(), |ctx: Ctx<'js>, text: String| -> JsResult<TypedArray<'js, u8>> {
       match hex::decode(&text) {
         Ok(bytes) => TypedArray::<u8>::new(ctx, bytes),
-        Err(_) => PluginErrorCode::InvalidArgument.throw(&ctx, "fromHex: expected hex digits, in pairs"),
+        Err(_) => Err(Exception::throw_type(&ctx, "fromHex: expected hex digits, in pairs")),
       }
     })?,
   )?;
@@ -80,10 +79,8 @@ pub fn install_utils_with_host<'js>(
             Some("time") => FORMAT_TIME,
             Some("dateTime") => FORMAT_DATE_TIME,
             Some("relative") => FORMAT_RELATIVE_DATE,
-            Some(style) => {
-              return PluginErrorCode::InvalidArgument.throw(&ctx, &format!("formatDate: unknown style '{style}'"))
-            }
-            None => return PluginErrorCode::InvalidArgument.throw(&ctx, "formatDate: unknown style"),
+            Some(style) => return Err(Exception::throw_type(&ctx, &format!("formatDate: unknown style '{style}'"))),
+            None => return Err(Exception::throw_type(&ctx, "formatDate: unknown style")),
           },
         };
         Ok(host.format(op, value))
@@ -110,11 +107,10 @@ pub fn install_utils_with_host<'js>(
     Ok(host.format(FORMAT_DURATION, format_integer(&ctx, &value, "formatDuration", 0, i32::MAX as i64)?))
   });
 
-  let plugin_error = globals.plugin_error.clone();
   let text = crate::api::tl::text::install_text(ctx)?;
 
   let factory = qjs_load_prelude(ctx, PRELUDE)?;
-  let shared: Object = factory.call((utils.clone(), plugin_error, text))?;
+  let shared: Object = factory.call((utils.clone(), text))?;
 
   globals.inu.set("utils", utils)?;
   Ok(shared)
@@ -132,7 +128,7 @@ impl UtilsHost for UnavailableUtilsHost {
 
 fn format_integer<'js>(ctx: &Ctx<'js>, value: &Value<'js>, what: &str, min: i64, max: i64) -> JsResult<i64> {
   let Some(value) = value.as_number() else {
-    return PluginErrorCode::InvalidArgument.throw(ctx, &format!("{what}: expected a safe integer"));
+    return Err(Exception::throw_type(ctx, &format!("{what}: expected a safe integer")));
   };
   if !value.is_finite()
     || value.fract() != 0.0
@@ -140,7 +136,7 @@ fn format_integer<'js>(ctx: &Ctx<'js>, value: &Value<'js>, what: &str, min: i64,
     || value > max as f64
     || value.abs() > 9_007_199_254_740_991.0
   {
-    return PluginErrorCode::InvalidArgument.throw(ctx, &format!("{what}: expected a safe integer"));
+    return Err(Exception::throw_type(ctx, &format!("{what}: expected a safe integer")));
   }
   Ok(value as i64)
 }

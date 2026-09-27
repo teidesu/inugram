@@ -33,7 +33,7 @@
   // opaque per `common.d.ts`: it is a token native mints, and which list minted it is checked there
   const toCursor = (value, what) => {
     if (value === undefined || value === null) return ''
-    if (typeof value !== 'string') throw new PluginError('invalid-argument', `${what}: cursor must be a previous page's next`)
+    if (typeof value !== 'string') throw new TypeError(`${what}: cursor must be a previous page's next`)
     return value
   }
 
@@ -53,7 +53,7 @@
   const toArchive = (value, what) => {
     if (value === undefined || value === null) return ARCHIVE.get('exclude')
     const mode = ARCHIVE.get(value)
-    if (mode === undefined) throw new PluginError('invalid-argument', `${what}: archive must be 'exclude', 'only' or 'keep'`)
+    if (mode === undefined) throw new TypeError(`${what}: archive must be 'exclude', 'only' or 'keep'`)
     return mode
   }
 
@@ -214,7 +214,7 @@
         // the same gate every read runs, before the first element crosses - so an empty list is
         // refused for the same reason a full one is rather than answering `[]` to anybody
         natives.checkPeers(slot)
-        if (!Array.isArray(peers)) throw new PluginError('invalid-argument', 'resolvePeerMany: expected an array of peers')
+        if (!Array.isArray(peers)) throw new TypeError('resolvePeerMany: expected an array of peers')
         const out = Array.from({ length: peers.length }).fill(null)
         const misses = []
         for (let index = 0; index < peers.length; index++) {
@@ -295,7 +295,7 @@
         if (named && opts.archive !== undefined && opts.archive !== null) {
           // Folders have their own archive flag. Reject an explicit archive option to avoid
           // filtering out chats the folder includes.
-          throw new PluginError('invalid-argument', 'getDialogsCached: name either archive or chatFolderId, not both')
+          throw new TypeError('getDialogsCached: name either archive or chatFolderId, not both')
         }
         return [
           '',

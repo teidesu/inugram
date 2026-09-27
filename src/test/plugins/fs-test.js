@@ -33,9 +33,9 @@ function main() {
   check('and nothing was left behind', !inu.fs.exists('dead.bin'))
 
   // @ts-expect-error
-  expectThrow('a string is not content', 'invalid-argument', () => inu.fs.write('x', 'a string'))
+  expectThrow('a string is not content', TypeError, () => inu.fs.write('x', 'a string'))
   // @ts-expect-error
-  expectThrow('nor is an array', 'invalid-argument', () => inu.fs.write('x', [1, 2, 3]))
+  expectThrow('nor is an array', TypeError, () => inu.fs.write('x', [1, 2, 3]))
 
   inu.fs.mkdir('a/b/c')
   check('mkdir makes parents too', inu.fs.stat('a/b').isDirectory)
@@ -50,8 +50,8 @@ function main() {
   check('and carries times', stat.mtime > 0 && stat.ctime > 0, `${stat.mtime}/${stat.ctime}`)
   check('a directory says so', inu.fs.stat('a/b').isDirectory && !inu.fs.stat('a/b').isFile)
 
-  expectThrow('a directory is not a file', 'invalid-argument', () => inu.fs.read('a/b'))
-  expectThrow('removing a directory needs the flag', 'invalid-argument', () => inu.fs.rm('a'))
+  expectThrow('a directory is not a file', TypeError, () => inu.fs.read('a/b'))
+  expectThrow('removing a directory needs the flag', TypeError, () => inu.fs.rm('a'))
   inu.fs.rm('a', { recursive: true })
   check('and with it the whole tree goes', !inu.fs.exists('a'))
   inu.fs.rm('a')
@@ -86,9 +86,9 @@ function main() {
     expectThrow(`'${absolute}' is refused as absolute`, 'not-granted', () => inu.fs.read(absolute))
   }
 
-  expectThrow('an empty path names nothing', 'invalid-argument', () => inu.fs.read(''))
-  expectThrow('and neither does one with a NUL', 'invalid-argument', () => inu.fs.read('a\u0000b'))
-  expectThrow('the directory itself cannot be removed', 'invalid-argument', () => inu.fs.rm('.', { recursive: true }))
+  expectThrow('an empty path names nothing', TypeError, () => inu.fs.read(''))
+  expectThrow('and neither does one with a NUL', TypeError, () => inu.fs.read('a\u0000b'))
+  expectThrow('the directory itself cannot be removed', TypeError, () => inu.fs.rm('.', { recursive: true }))
   check('so it is still there', inu.fs.stat('.').isDirectory)
 
   const quota = inu.fs.quota()

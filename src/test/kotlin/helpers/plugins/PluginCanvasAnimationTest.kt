@@ -288,7 +288,7 @@ class PluginCanvasAnimationTest {
                   await body()
                   t[label] = 'nothing was thrown'
                 } catch (e) {
-                  t[label] = e instanceof inu.PluginError ? e.code : String(e)
+                  t[label] = e instanceof inu.PluginError ? e.code : e.name
                 }
               }
               await refused('odd', () => inu.canvas.createEncoder({ width: 101, height: 80 }))
@@ -304,7 +304,7 @@ class PluginCanvasAnimationTest {
             """,
         ))
         for (key in listOf("odd", "notAnEncoding", "notAnAnimation", "empty", "pastTheEnd")) {
-            assertEquals("invalid-argument", t.getString(key), key)
+            assertEquals("TypeError", t.getString(key), key)
         }
     }
 
@@ -383,14 +383,14 @@ class PluginCanvasAnimationTest {
               }
               using first = await animation.frame(0)
               try { await animation.frame(3); t.pastEnd = 'accepted' }
-              catch (e) { t.pastEnd = e.code }
+              catch (e) { t.pastEnd = e.name }
               return t
             })()
             """,
         ))
         assertEquals("[0,900,1000]", t.getJSONArray("times").toString())
         assertTrue(t.getBoolean("same"), "indexed reads differed from decoded frames")
-        assertEquals("invalid-argument", t.getString("pastEnd"))
+        assertEquals("TypeError", t.getString("pastEnd"))
     }
 
     private companion object {

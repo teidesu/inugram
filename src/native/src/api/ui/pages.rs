@@ -24,10 +24,10 @@ fn slider_steps(min: f64, max: f64, step: f64) -> usize {
 fn check_slider_steps<'js>(ctx: &Ctx<'js>, min: f64, max: f64, step: f64) -> JsResult<()> {
   let steps = slider_steps(min, max, step);
   if steps > MAX_SLIDER_LABELS {
-    return PluginErrorCode::InvalidArgument.throw(
+    return Err(Exception::throw_type(
       ctx,
       &format!("slider: a 'label' is evaluated per step, and {steps} steps is past the {MAX_SLIDER_LABELS} allowed"),
-    );
+    ));
   }
   Ok(())
 }
@@ -303,7 +303,7 @@ pub fn install_ui<'js>(
         if page.contains_key("type")? {
           let kind: String = page.get("type")?;
           if !matches!(kind.as_str(), "chat" | "profile" | "dialogs" | "settings") {
-            return PluginErrorCode::InvalidArgument.throw(&ctx, "openPage: unsupported screen type");
+            return Err(Exception::throw_type(&ctx, "openPage: unsupported screen type"));
           }
           let out = Object::new(ctx.clone())?;
           out.set("type", kind.clone())?;
@@ -317,19 +317,20 @@ pub fn install_ui<'js>(
               || dialog_id == 0.0
               || dialog_id.abs() > 9_007_199_254_740_991.0
             {
-              return PluginErrorCode::InvalidArgument
-                .throw(&ctx, "openPage: 'dialogId' must be a non-zero safe integer");
+              return Err(Exception::throw_type(&ctx, "openPage: 'dialogId' must be a non-zero safe integer"));
             }
             out.set("dialogId", dialog_id)?;
           }
           if page.contains_key("topicId")? {
             if kind != "chat" {
-              return PluginErrorCode::InvalidArgument.throw(&ctx, "openPage: 'topicId' is only valid for a chat");
+              return Err(Exception::throw_type(&ctx, "openPage: 'topicId' is only valid for a chat"));
             }
             let topic_id: f64 = page.get("topicId")?;
             if !topic_id.is_finite() || topic_id.fract() != 0.0 || topic_id < 0.0 || topic_id > i32::MAX as f64 {
-              return PluginErrorCode::InvalidArgument
-                .throw(&ctx, "openPage: 'topicId' must be a non-negative signed 32-bit integer");
+              return Err(Exception::throw_type(
+                &ctx,
+                "openPage: 'topicId' must be a non-negative signed 32-bit integer",
+              ));
             }
             out.set("topicId", topic_id as i32)?;
           }

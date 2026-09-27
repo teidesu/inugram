@@ -288,7 +288,8 @@ mod memory_tests {
       };
       assert!(matches!(err, rquickjs::Error::Exception));
       ctx.globals().set("e", ctx.catch()).unwrap();
-      let got: String = ctx.eval("[e instanceof inu.PluginError, e.code, e.usage, e.quota].join('|')").unwrap();
+      let got: String =
+        ctx.eval("[e instanceof inu.PluginError, (e.code ?? e.name), e.usage, e.quota].join('|')").unwrap();
       assert_eq!(
         got,
         format!("true|quota-exceeded|{}|{}", EXTERNAL_LIMIT_BYTES - 1024 + 4 * 1024 * 1024, EXTERNAL_LIMIT_BYTES,),

@@ -22,7 +22,7 @@ fn settle(rt: &Runtime, ctx: &Context, expr: &str) -> String {
         globalThis.__out = 'pending';
         ({expr}).then(
           v => {{ globalThis.__out = String(v); }},
-          e => {{ globalThis.__out = `${{e.name}}:${{e.code}}`; }},
+          e => {{ globalThis.__out = `${{e.name}}:${{(e.code ?? e.name)}}`; }},
         );
       "#,
     ),

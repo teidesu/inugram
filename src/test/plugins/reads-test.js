@@ -24,19 +24,19 @@ const NO_CHAT = -4242424242
   for (const bad of [null, undefined, {}, [], 1.5, 'not a name!', '@', true, NaN]) {
     const label = typeof bad === 'string' ? `'${bad}'` : String(bad)
     // @ts-expect-error
-    expectThrow(`getUser(${label}) is refused`, 'invalid-argument', () => acc.getUser(bad))
+    expectThrow(`getUser(${label}) is refused`, TypeError, () => acc.getUser(bad))
   }
   // @ts-expect-error
-  expectThrow('getUsers wants an array', 'invalid-argument', () => acc.getUsers('me'))
+  expectThrow('getUsers wants an array', TypeError, () => acc.getUsers('me'))
   // @ts-expect-error
-  expectThrow('getChats wants an array', 'invalid-argument', () => acc.getChats(NO_CHAT))
-  expectThrow('getMessagesCached wants an integer id', 'invalid-argument', () => acc.getMessagesCached('me', 1.5))
+  expectThrow('getChats wants an array', TypeError, () => acc.getChats(NO_CHAT))
+  expectThrow('getMessagesCached wants an integer id', TypeError, () => acc.getMessagesCached('me', 1.5))
   // @ts-expect-error
-  expectThrow('getMessagesCached refuses a peer that names nothing', 'invalid-argument', () => acc.getMessagesCached(null, 7))
-  await expectReject('getMessages wants an integer id', 'invalid-argument', () => acc.getMessages('me', 1.5))
+  expectThrow('getMessagesCached refuses a peer that names nothing', TypeError, () => acc.getMessagesCached(null, 7))
+  await expectReject('getMessages wants an integer id', TypeError, () => acc.getMessages('me', 1.5))
 
   const torn = acc.getUser
-  expectThrow('a torn-off getter says so', 'invalid-argument', () => torn(NOBODY))
+  expectThrow('a torn-off getter says so', TypeError, () => torn(NOBODY))
 
   check('getUser misses as null', acc.getUser(NOBODY) === null)
   check('getUser(0) is a miss rather than a refusal', acc.getUser(0) === null)
@@ -86,7 +86,7 @@ const NO_CHAT = -4242424242
   check('self is the same for both spellings', acc.resolvePeerCached('self')?._ === 'inputPeerSelf')
   check('resolvePeer(me) is inputPeerSelf', (await acc.resolvePeer('me'))._ === 'inputPeerSelf')
   check('resolveUser(me) is inputUserSelf', (await acc.resolveUser('me'))._ === 'inputUserSelf')
-  await expectReject('resolveChannel(me) is refused', 'invalid-argument', () => acc.resolveChannel('me'))
+  await expectReject('resolveChannel(me) is refused', TypeError, () => acc.resolveChannel('me'))
 
   /** @type {tl.RawInputPeerUser} */
   const built = { _: 'inputPeerUser', user_id: 222, access_hash: '22' }
@@ -151,21 +151,21 @@ const NO_CHAT = -4242424242
     unknown.length === plain.length && unknown.every((dialog, at) => dialog.top_message === plain[at].top_message),
   )
 
-  await expectReject('a field name that is not a string is refused', 'invalid-argument', () =>
+  await expectReject('a field name that is not a string is refused', TypeError, () =>
     // @ts-expect-error - refused at runtime too, which is what this asserts
     acc.getDialogsCached({ fields: [7] }))
-  await expectReject('and one that could smuggle a separator is refused', 'invalid-argument', () =>
+  await expectReject('and one that could smuggle a separator is refused', TypeError, () =>
     acc.getDialogsCached({ fields: ['top_message,peer'] }))
-  await expectReject('fields must be an array', 'invalid-argument', () =>
+  await expectReject('fields must be an array', TypeError, () =>
     // @ts-expect-error - refused at runtime too, which is what this asserts
     acc.getDialogsCached({ fields: 'top_message' }))
 
-  await expectReject('an unknown archive mode is refused', 'invalid-argument', () =>
+  await expectReject('an unknown archive mode is refused', TypeError, () =>
     // @ts-expect-error - refused at runtime too, which is what this asserts
     acc.getDialogsCached({ archive: 'both' }))
-  await expectReject('archive and chatFolderId together are refused', 'invalid-argument', () =>
+  await expectReject('archive and chatFolderId together are refused', TypeError, () =>
     acc.getDialogsCached({ archive: 'keep', chatFolderId: 0 }))
-  await expectReject('a negative chatFolderId is refused', 'invalid-argument', () =>
+  await expectReject('a negative chatFolderId is refused', TypeError, () =>
     acc.getDialogsCached({ chatFolderId: -1 }))
 
   const folders = await acc.getChatFoldersCached()
@@ -198,7 +198,7 @@ const NO_CHAT = -4242424242
     check('and the cache answers for it afterwards', acc.resolvePeerCached('telegram')?._ === 'inputPeerChannel')
     check('the @ and the case are both optional', acc.resolvePeerCached('@TELEGRAM')?._ === 'inputPeerChannel')
     check('resolveChannel narrows it', (await acc.resolveChannel('telegram'))._ === 'inputChannel')
-    await expectReject('resolveUser refuses a channel', 'invalid-argument', () => acc.resolveUser('telegram'))
+    await expectReject('resolveUser refuses a channel', TypeError, () => acc.resolveUser('telegram'))
   }
 
   console.log('reads test done')

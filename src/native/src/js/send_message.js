@@ -38,14 +38,14 @@
 
   const writeText = (raw, shape, value) => {
     const holder = selectCaptionHolder(raw, shape)
-    if (holder === null) throw new PluginError('invalid-argument', 'text: this send carries nothing to write a caption on')
+    if (holder === null) throw new TypeError('text: this send carries nothing to write a caption on')
     if (typeof value === 'string') {
       holder.message = value
       holder.entities = []
       return
     }
     if (value === null || typeof value !== 'object' || typeof value.text !== 'string') {
-      throw new PluginError('invalid-argument', 'text: expected a string or { text, entities }')
+      throw new TypeError('text: expected a string or { text, entities }')
     }
     holder.message = value.text
     holder.entities = Array.isArray(value.entities) ? value.entities : []
@@ -87,7 +87,7 @@
   const toOptionalId = (value, what) => {
     if (value === null || value === undefined) return null
     const id = toNumber(value)
-    if (id === null || !Number.isInteger(id)) throw new PluginError('invalid-argument', `${what}: expected an integer or null`)
+    if (id === null || !Number.isInteger(id)) throw new TypeError(`${what}: expected an integer or null`)
     return id
   }
 
@@ -107,7 +107,7 @@
   // a length change means a different method, which `next()` refuses to rewrite; `common.d.ts` points
   // at `drop` plus `account.sendMedia` for that
   const writeMedia = (raw, shape, value) => {
-    if (!Array.isArray(value)) throw new PluginError('invalid-argument', 'media: expected an array of InputMedia')
+    if (!Array.isArray(value)) throw new TypeError('media: expected an array of InputMedia')
     if (shape.media === 'none') {
       if (value.length === 0) return
       throw new PluginError('unsupported', 'attaching media to a text send would change the method the app is awaiting; drop it and send your own')
@@ -133,12 +133,12 @@
         const peer = raw.peer
         if (baseName(peer) === 'inputPeerSelf') return account.userId
         const id = getMarkedPeerId(peer)
-        if (id === null) throw new PluginError('invalid-argument', `peer: the request carries no readable peer`)
+        if (id === null) throw new TypeError(`peer: the request carries no readable peer`)
         return id
       },
       set peer(value) {
         const id = toNumber(value)
-        if (id === null || id === 0) throw new PluginError('invalid-argument', `peer: not a marked peer id: ${value}`)
+        if (id === null || id === 0) throw new TypeError(`peer: not a marked peer id: ${value}`)
         // retargeting is naming a peer this middleware was not handed, which is a read: it goes
         // through the account handle's own gate rather than around it
         const resolved = account.resolvePeerCached(id)

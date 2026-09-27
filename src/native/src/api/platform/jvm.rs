@@ -6,8 +6,8 @@ use std::sync::Arc;
 
 use rquickjs::function::Rest;
 use rquickjs::{
-  object::Filter, Array, Class, Context, Ctx, FromJs, Function, IntoJs, Object, Persistent, Result as JsResult,
-  TypedArray, Value,
+  object::Filter, Array, Class, Context, Ctx, Exception, FromJs, Function, IntoJs, Object, Persistent,
+  Result as JsResult, TypedArray, Value,
 };
 
 use crate::api::error::{format_exception, report_callback_error, throw_wire_error, PluginErrorCode};
@@ -125,7 +125,7 @@ impl JvmState {
       }
       let value: Value = callback.call_arg(call_args)?;
       if value.is_promise() {
-        return PluginErrorCode::InvalidArgument.throw(ctx, "defineClass: method bodies must be synchronous");
+        return Err(Exception::throw_type(ctx, "defineClass: method bodies must be synchronous"));
       }
       match value.as_array() {
         Some(array) => self.array_to_wire(ctx, array),
@@ -154,7 +154,7 @@ impl JvmState {
     let mut size = 0usize;
     for item in array_values(ctx, array, "defineClass: an array result")? {
       let wire = match item.as_array() {
-        Some(_) => PluginErrorCode::InvalidArgument.throw(ctx, "defineClass: an array result cannot nest arrays"),
+        Some(_) => Err(Exception::throw_type(ctx, "defineClass: an array result cannot nest arrays")),
         None => self.body_result_to_wire(ctx, &item).and_then(|wire| match wire.strip_prefix('E') {
           Some(message) => PluginErrorCode::HandleExpired.throw(ctx, message),
           None => Ok(wire),
@@ -291,9 +291,7 @@ impl JvmState {
   fn handle_arg<'js>(&self, ctx: &Ctx<'js>, value: &Value<'js>, what: &str) -> JsResult<Class<'js, JvmRef>> {
     match get_jvm_ref(value) {
       Some(handle) => Ok(handle),
-      None => {
-        PluginErrorCode::InvalidArgument.throw(ctx, &format!("{what}: expected a java class, object, method or field"))
-      }
+      None => Err(Exception::throw_type(ctx, &format!("{what}: expected a java class, object, method or field"))),
     }
   }
 
@@ -405,7 +403,7 @@ impl JvmState {
       "putInt"
     } else if let Some(number) = value.as_float() {
       if !number.is_finite() {
-        return PluginErrorCode::InvalidArgument.throw(ctx, &format!("bundle: '{key}' must be finite"));
+        return Err(Exception::throw_type(ctx, &format!("bundle: '{key}' must be finite")));
       }
       if number.fract() == 0.0 && number.abs() <= 9_007_199_254_740_991.0 {
         "putLong"
@@ -418,14 +416,12 @@ impl JvmState {
       "putByteArray"
     } else {
       let Some(handle) = get_jvm_ref(value) else {
-        return PluginErrorCode::InvalidArgument
-          .throw(ctx, &format!("bundle: '{key}' has unsupported type {}", value.type_of()));
+        return Err(Exception::throw_type(ctx, &format!("bundle: '{key}' has unsupported type {}", value.type_of())));
       };
       let wire = self.host.jvm(OP_BUNDLE_METHOD, handle.borrow().id, "", &[]);
       let method = self.wire_to_value(ctx, &wire)?;
       let Some(method) = method.as_string() else {
-        return PluginErrorCode::InvalidArgument
-          .throw(ctx, &format!("bundle: '{key}' is not a Bundle-compatible java object"));
+        return Err(Exception::throw_type(ctx, &format!("bundle: '{key}' is not a Bundle-compatible java object")));
       };
       let method = method.to_string()?;
       self.js_call(ctx, bundle.clone(), method, Rest(vec![key.into_js(ctx)?, value.clone()]))?;
@@ -437,10 +433,10 @@ impl JvmState {
 
   fn js_bundle<'js>(&self, ctx: &Ctx<'js>, values: Value<'js>) -> JsResult<Value<'js>> {
     let Some(values) = values.as_object() else {
-      return PluginErrorCode::InvalidArgument.throw(ctx, "bundle: expected an object");
+      return Err(Exception::throw_type(ctx, "bundle: expected an object"));
     };
     if values.as_array().is_some() || get_jvm_ref(&values.clone().into_value()).is_some() {
-      return PluginErrorCode::InvalidArgument.throw(ctx, "bundle: expected an object");
+      return Err(Exception::throw_type(ctx, "bundle: expected an object"));
     }
     let class = self.js_cls(ctx, "android.os.Bundle".to_string())?;
     let bundle = self.js_construct(ctx, class, Rest(Vec::new()))?;
@@ -516,7 +512,7 @@ pub fn install_jvm<'js>(
         let methods: Vec<Vec<String>> = metadata.get("methods")?;
         let bytes = match dex::build(&name, &superclass, &interfaces, &fields, &methods) {
           Ok(bytes) => bytes,
-          Err(error) => return PluginErrorCode::InvalidArgument.throw(&ctx, &format!("defineClass: {error}")),
+          Err(error) => return Err(Exception::throw_type(&ctx, &format!("defineClass: {error}"))),
         };
         let wire = encode_bytes_wire(&bytes);
         let handle = state.ask(&ctx, OP_LOAD_CLASS, ticket, "", &[wire])?;
@@ -708,13 +704,11 @@ pub fn install_jvm<'js>(
         return Ok(());
       }
     }
-    PluginErrorCode::InvalidArgument.throw(ctx, "loadDex: expected an absolute path or a Uint8Array")
+    Err(Exception::throw_type(ctx, "loadDex: expected an absolute path or a Uint8Array"))
   });
 
-  let plugin_error = globals.plugin_error.clone();
-
   let factory = qjs_load_prelude(ctx, PRELUDE)?;
-  let built: Object = factory.call((natives, plugin_error, ops))?;
+  let built: Object = factory.call((natives, ops))?;
   let jvm: Object = built.get("jvm")?;
   let protos: Object = built.get("protos")?;
   *state.prelude.borrow_mut() = Some(Prelude {

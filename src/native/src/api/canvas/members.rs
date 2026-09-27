@@ -107,7 +107,7 @@ impl<'js> CanvasHandle {
   fn get_context(ctx: Ctx<'js>, this: This<Class<'js, Self>>, id: Opt<Coerced<String>>) -> JsResult<Value<'js>> {
     match id.0.as_ref().map(|v| v.0.as_str()) {
       Some("2d") => {}
-      _ => return PluginErrorCode::InvalidArgument.throw(&ctx, "getContext: only '2d' is available"),
+      _ => return Err(Exception::throw_type(&ctx, "getContext: only '2d' is available")),
     }
     let key = rquickjs::Symbol::new_global(ctx.clone(), CONTEXT_KEY)?;
     let canvas = this.0.as_inner().clone();
@@ -691,7 +691,7 @@ impl<'js> Context2d {
     } else {
       let region = (num(&sx), num(&sy), num(&sw), num(&sh));
       if !finite(&[region.0, region.1, region.2, region.3]) {
-        return PluginErrorCode::InvalidArgument.throw(&ctx, "getAverageColor: the region must be four finite numbers");
+        return Err(Exception::throw_type(&ctx, "getAverageColor: the region must be four finite numbers"));
       }
       region
     };
@@ -913,8 +913,10 @@ impl<'js> AnimationHandle {
     }
     let index = num(&index);
     if !index.is_finite() || index < 0.0 || index.trunc() as i64 >= animation.frame_count as i64 {
-      return PluginErrorCode::InvalidArgument
-        .throw(&ctx, &format!("frame: this animation has frames 0 to {}", animation.frame_count.saturating_sub(1)));
+      return Err(Exception::throw_type(
+        &ctx,
+        &format!("frame: this animation has frames 0 to {}", animation.frame_count.saturating_sub(1)),
+      ));
     }
     let index = index.trunc() as i32;
     let image = animation.state.blank_image();
@@ -970,7 +972,7 @@ impl<'js> EncoderHandle {
         .throw(&ctx, &format!("a video may have at most {MAX_ENCODER_FRAMES} frames"));
     }
     let Some(value) = source.0 else {
-      return PluginErrorCode::InvalidArgument.throw(&ctx, "addFrame: expected an image");
+      return Err(Exception::throw_type(&ctx, "addFrame: expected an image"));
     };
     let source = image_source(&ctx, &value)?;
     if let ImageSource::Canvas(canvas) = &source {
@@ -979,9 +981,7 @@ impl<'js> EncoderHandle {
     let millis = match duration.0.as_ref().map(|v| v.0) {
       None => 1000.0 / encoder.fps as f64,
       Some(value) if value.is_finite() && value > 0.0 => value,
-      Some(_) => {
-        return PluginErrorCode::InvalidArgument.throw(&ctx, "addFrame: a frame's duration must be a positive number")
-      }
+      Some(_) => return Err(Exception::throw_type(&ctx, "addFrame: a frame's duration must be a positive number")),
     };
     let (kind, id) = (source.kind(), source.id());
     let describe = |args: &mut Encoder| {
@@ -1006,7 +1006,7 @@ impl<'js> EncoderHandle {
     let encoder = self.encoder.clone();
     encoder.writable(&ctx)?;
     if encoder.frames.get() == 0 {
-      return PluginErrorCode::InvalidArgument.throw(&ctx, "finish: this video has no frames");
+      return Err(Exception::throw_type(&ctx, "finish: this video has no frames"));
     }
     encoder.finished.set(true);
     let state = encoder.state.clone();

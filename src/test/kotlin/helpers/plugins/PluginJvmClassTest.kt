@@ -113,7 +113,7 @@ class PluginJvmClassTest {
         for (const parent of ['java.lang.String', 'desu.inugram.jvmfixture.JvmAbstractClassFixture']) {
             let refused = false;
             try { inu.jvm.defineClass('inu.test.InvalidClass', { superclass: inu.jvm.cls(parent), constructors: [] }); }
-            catch (error) { refused = error.code === 'invalid-argument'; }
+            catch (error) { refused = error instanceof TypeError; }
             if (!refused) throw Error('invalid superclass accepted');
         }
         'ok';

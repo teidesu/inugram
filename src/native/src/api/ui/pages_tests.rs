@@ -303,7 +303,7 @@ fn an_anchor_whose_page_was_disposed_is_handle_expired() {
           let out = 'no-throw';
           try {
             globalThis.__anchor.openMenu([{ text: 'late', onClick: () => {} }]);
-          } catch (e) { out = `${e instanceof inu.PluginError}:${e.code}`; }
+          } catch (e) { out = `${e instanceof inu.PluginError}:${(e.code ?? e.name)}`; }
           out;
         "#,
       )
@@ -694,7 +694,7 @@ fn slider_label_cap_is_enforced_where_minted_and_where_rendered() {
               try {{
                 inu.ui.slider({{ min: 0, max, step: 1, value: 0, label: String, onChange: () => {{}} }});
                 return 'ok';
-              }} catch (e) {{ return e.code }}
+              }} catch (e) {{ return (e.code ?? e.name) }}
             }};
             return [mk({}), mk({})].join('|');
           }})()
@@ -704,7 +704,7 @@ fn slider_label_cap_is_enforced_where_minted_and_where_rendered() {
       ))
       .unwrap()
   });
-  assert_eq!(out, "ok|invalid-argument", "the cap counts the values a label is called for");
+  assert_eq!(out, "ok|TypeError", "the cap counts the values a label is called for");
 
   ctx.with(|ctx| {
     ctx

@@ -51,6 +51,11 @@ class PluginJvmTest {
         assertTrue(outcome.startsWith("P$code|"), "expected a '$code' PluginError from `$expr`, got $outcome")
     }
 
+    private fun Plugin.assertTypeError(expr: String) {
+        val outcome = outcome(expr)
+        assertTrue(outcome.startsWith("XTypeError:"), "expected a TypeError from `$expr`, got $outcome")
+    }
+
     @Test
     fun the_api_is_installed_only_for_a_plugin_that_holds_the_grant() {
         val without = startPlugin("plain", "openUrl")
@@ -104,8 +109,8 @@ class PluginJvmTest {
                 """,
             ),
         )
-        plugin.assertRefused("invalid-argument", "inu.android.bundle({ value: null })")
-        plugin.assertRefused("invalid-argument", "inu.android.bundle({ value: [] })")
+        plugin.assertTypeError("inu.android.bundle({ value: null })")
+        plugin.assertTypeError("inu.android.bundle({ value: [] })")
     }
 
     @Test
@@ -229,7 +234,7 @@ class PluginJvmTest {
     fun an_argument_that_does_not_fit_is_refused_rather_than_truncated() {
         val fixture = JvmFixture()
         val plugin = engineWith(fixture)
-        plugin.assertRefused("invalid-argument", "o.setField('count', 2 ** 40)")
+        plugin.assertTypeError("o.setField('count', 2 ** 40)")
         assertEquals(3, fixture.count)
         plugin.assertRefused("not-found", "o.call('width', 'text')")
     }
@@ -255,9 +260,9 @@ class PluginJvmTest {
     fun a_descriptor_pins_the_overload_the_narrowest_rule_would_not_have_picked() {
         val plugin = engineWith()
         assertEquals("Vlong", plugin.outcome("o.call('width(J)Ljava/lang/String;', 5)"))
-        plugin.assertRefused("invalid-argument", "o.call('ambiguous', 'x')")
+        plugin.assertTypeError("o.call('ambiguous', 'x')")
         assertEquals("VcharSequence", plugin.outcome("o.call('ambiguous(Ljava/lang/CharSequence;)Ljava/lang/String;', 'x')"))
-        plugin.assertRefused("invalid-argument", "o.call('width(J)Ljava/lang/String;', 'text')")
+        plugin.assertTypeError("o.call('width(J)Ljava/lang/String;', 'text')")
         plugin.assertRefused("not-found", "o.call('width(Z)Ljava/lang/String;', true)")
     }
 
@@ -291,10 +296,10 @@ class PluginJvmTest {
         assertEquals("V9", plugin.outcome("o.getField('count')"))
         assertEquals("V3", plugin.outcome("F.getDeclaredConstructor('()V').newInstance().getField('count')"))
 
-        plugin.assertRefused("invalid-argument", "F.getDeclaredMethod('width')")
+        plugin.assertTypeError("F.getDeclaredMethod('width')")
         assertEquals("Vfunction", plugin.outcome("typeof F.getDeclaredMethod('width(J)Ljava/lang/String;').invoke"))
-        plugin.assertRefused("invalid-argument", "F.getDeclaredMethod('echo').invoke(F, 'hi')")
-        plugin.assertRefused("invalid-argument", "F.getDeclaredMethod('echo').invoke(o, 5)")
+        plugin.assertTypeError("F.getDeclaredMethod('echo').invoke(F, 'hi')")
+        plugin.assertTypeError("F.getDeclaredMethod('echo').invoke(o, 5)")
     }
 
     @Test
@@ -305,7 +310,7 @@ class PluginJvmTest {
         assertEquals("V5", plugin.outcome("F.getDeclaredConstructor('(J)V').newInstance(5).getField('big')"))
         assertEquals("Vundefined", plugin.outcome("typeof F.getDeclaredConstructor('()V').invoke"))
         assertEquals("Vundefined", plugin.outcome("typeof F.getDeclaredMethod('echo').newInstance"))
-        plugin.assertRefused("invalid-argument", "F.getDeclaredConstructor('(J)V').newInstance('text')")
+        plugin.assertTypeError("F.getDeclaredConstructor('(J)V').newInstance('text')")
         plugin.assertRefused("not-found", "F.getDeclaredConstructor('(Z)V')")
     }
 
@@ -445,7 +450,7 @@ class PluginJvmTest {
         plugin.js("globalThis.view = inu.jvm.toTl(inu.jvm.fromTl({ _: 'messageEntityBold', offset: 1, length: 2 }))")
         plugin.js("view.offset = 9")
         assertEquals("V9", plugin.outcome("view.offset"))
-        plugin.assertRefused("invalid-argument", "inu.jvm.toTl(o)")
+        plugin.assertTypeError("inu.jvm.toTl(o)")
     }
 
     @Test
@@ -475,7 +480,7 @@ class PluginJvmTest {
         )
         val outcome = plugin.outcome("({ ...o }).getField('count')")
         assertTrue(outcome.startsWith("XTypeError"), outcome)
-        plugin.assertRefused("invalid-argument", "Object.create(Object.getPrototypeOf(o)).getField('count')")
+        plugin.assertTypeError("Object.create(Object.getPrototypeOf(o)).getField('count')")
     }
 
     private fun Plugin.mint(value: Any): Long = engine!!.jvmMint(value, 'O')

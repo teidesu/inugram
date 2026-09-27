@@ -96,8 +96,7 @@ fn read_header_pairs<'js>(ctx: &Ctx<'js>, headers: Value<'js>) -> JsResult<Vec<S
   for pair in pairs.chunks_exact_mut(2) {
     let name = normalize_header_name(ctx, &pair[0])?;
     if RESERVED_HEADERS.contains(&name.as_str()) {
-      return PluginErrorCode::InvalidArgument
-        .throw(ctx, &format!("fetch: the '{name}' header belongs to the transport"));
+      return Err(Exception::throw_type(ctx, &format!("fetch: the '{name}' header belongs to the transport")));
     }
     if !is_header_value(&pair[1]) {
       return Err(Exception::throw_type(ctx, &format!("fetch: the '{name}' header has a control character in it")));
@@ -110,11 +109,11 @@ fn read_header_pairs<'js>(ctx: &Ctx<'js>, headers: Value<'js>) -> JsResult<Vec<S
 fn read_spec<'js>(ctx: &Ctx<'js>, method: Value<'js>, headers: Value<'js>, redirect: Value<'js>) -> JsResult<Spec> {
   let redirect = if redirect.is_undefined() { "follow".to_string() } else { coerce_string(ctx, redirect)? };
   if !REDIRECT_MODES.contains(&redirect.as_str()) {
-    return PluginErrorCode::InvalidArgument.throw(ctx, &format!("fetch: '{redirect}' is not a redirect mode"));
+    return Err(Exception::throw_type(ctx, &format!("fetch: '{redirect}' is not a redirect mode")));
   }
   let method = if method.is_undefined() { "GET".to_string() } else { coerce_string(ctx, method)? };
   if !is_token(&method) {
-    return PluginErrorCode::InvalidArgument.throw(ctx, &format!("fetch: '{method}' is not a method"));
+    return Err(Exception::throw_type(ctx, &format!("fetch: '{method}' is not a method")));
   }
   Ok(Spec {
     method: method.to_ascii_uppercase(),
@@ -133,7 +132,7 @@ impl FetchState {
     }
     if let Ok(typed) = TypedArray::<u8>::from_value(value.clone()) {
       let Some(bytes) = qjs_read_typed_bytes(&typed, <[u8]>::to_vec) else {
-        return PluginErrorCode::InvalidArgument.throw(ctx, "fetch: the body array is detached");
+        return Err(Exception::throw_type(ctx, "fetch: the body array is detached"));
       };
       return Ok(Some(bytes));
     }
@@ -152,13 +151,13 @@ impl FetchState {
     if rquickjs::Class::<BlobHandle>::from_value(value).is_ok() {
       return PluginErrorCode::HandleExpired.throw(ctx, "fetch: the body blob was disposed");
     }
-    PluginErrorCode::InvalidArgument.throw(ctx, "fetch: the body must be a string, a Uint8Array or a Blob")
+    Err(Exception::throw_type(ctx, "fetch: the body must be a string, a Uint8Array or a Blob"))
   }
 
   fn js_send<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, url: String, spec: Spec, body: Value<'js>) -> JsResult<Object<'js>> {
     let host = match url::parse_http_url("fetch", &url) {
       Ok(host) => host,
-      Err(message) => return PluginErrorCode::InvalidArgument.throw(ctx, &message),
+      Err(message) => return Err(Exception::throw_type(ctx, &message)),
     };
     self.grants.check_grant(ctx, "fetch", Some(&host), MATCH_DOMAIN)?;
 

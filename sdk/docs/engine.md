@@ -122,6 +122,7 @@ The error text goes to the plugin's log, visible via `inu dev`
 ### `inu.PluginError`
 
 The error most `inu.*` APIs throw is `inu.PluginError`. Most of the time, they are unrecoverable.
+An argument of the wrong type or value is a plain `TypeError` instead.
 
 | Code | Meaning |
 | --- | --- |
@@ -130,7 +131,6 @@ The error most `inu.*` APIs throw is `inu.PluginError`. Most of the time, they a
 | `quota-exceeded` | You hit a quota limit (storage/memory/etc). `usage` and `quota` are set where they apply |
 | `handle-expired` | You are trying to access an expired handle (a disposed blob, a stale cursor, a dead TL view) |
 | `unknown-constructor` | You are trying to use an unknown TL constructor |
-| `invalid-argument` | Wrong type or value |
 | `not-found` | Something you're trying to access does not exist |
 | `unsupported` | This feature is not available in this app build or in this situation (this normally shouldnt happen) |
 | `timed-out`, `aborted`, `network` | Network issues |
@@ -169,7 +169,7 @@ Most of the time, those are also unrecoverable, so there isn't much point in cat
 | Top-level evaluation | 10 s | The plugin gets disabled |
 | JavaScript heap | 32 MB | The allocation throws. Uncaught, that stops the plugin like any error |
 | Native memory (blobs, canvas, buffers) | 64 MB | `PluginError` `quota-exceeded`, and nothing is allocated |
-| Elements in one array passed to an API | 65536 | `invalid-argument` |
+| Elements in one array passed to an API | 65536 | `TypeError` |
 | Active timers | 512 | `quota-exceeded` |
 | Log lines | 200 per 10 s | Further lines are dropped, with one warning |
 

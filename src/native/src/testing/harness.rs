@@ -147,7 +147,7 @@ pub(crate) fn eval_json(ctx: &Context, code: &str) -> String {
   eval_string(ctx, &format!("JSON.stringify({code})"))
 }
 
-/// `[is a PluginError, code, grant, message]`, or `'no-throw'`
+/// `[is a PluginError, code (or the error's name), grant, message]`, or `'no-throw'`
 pub(crate) fn catch_json(ctx: &Context, code: &str) -> String {
   eval_string(
     ctx,
@@ -156,7 +156,7 @@ pub(crate) fn catch_json(ctx: &Context, code: &str) -> String {
         (() => {{
           try {{ {code}; return 'no-throw'; }}
           catch (e) {{
-            return JSON.stringify([e instanceof inu.PluginError, e.code, e.grant ?? null, e.message]);
+            return JSON.stringify([e instanceof inu.PluginError, e.code ?? e.name, e.grant ?? null, e.message]);
           }}
         }})()
       "#

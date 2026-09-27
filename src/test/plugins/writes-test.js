@@ -30,43 +30,43 @@ const SECRET = '4611686018427387911'
   for (const bad of [null, undefined, {}, [], 1.5, 'not a name!', true]) {
     const shown = JSON.stringify(bad) ?? String(bad)
     // @ts-expect-error
-    await expectReject(`sendMessage(${shown}) rejects`, 'invalid-argument', () => acc.sendMessage(bad, 'hi'))
+    await expectReject(`sendMessage(${shown}) rejects`, TypeError, () => acc.sendMessage(bad, 'hi'))
   }
   await expectReject('sendMessage(0) is a miss, not a refusal', 'not-found', () => acc.sendMessage(0, 'hi'))
-  await expectReject('a torn-off sendMessage rejects', 'invalid-argument', () => {
+  await expectReject('a torn-off sendMessage rejects', TypeError, () => {
     const { sendMessage } = acc
     return sendMessage(NOBODY, 'hi')
   })
 
-  /** @type {[string, string, () => Promise<unknown>][]} */
+  /** @type {[string, ErrorWant, () => Promise<unknown>][]} */
   const refusals = [
     // @ts-expect-error
-    ['sendMessage without text rejects', 'invalid-argument', () => acc.sendMessage(NOBODY, null)],
+    ['sendMessage without text rejects', TypeError, () => acc.sendMessage(NOBODY, null)],
     // @ts-expect-error
-    ['sendMessage with a number as text rejects', 'invalid-argument', () => acc.sendMessage(NOBODY, 7)],
+    ['sendMessage with a number as text rejects', TypeError, () => acc.sendMessage(NOBODY, 7)],
     // @ts-expect-error
-    ['entities that are not an array reject', 'invalid-argument', () => acc.sendMessage(NOBODY, { text: 'hi', entities: 'bold' })],
+    ['entities that are not an array reject', TypeError, () => acc.sendMessage(NOBODY, { text: 'hi', entities: 'bold' })],
     // @ts-expect-error
-    ['a non-boolean flag rejects', 'invalid-argument', () => acc.sendMessage(NOBODY, 'hi', { silent: 'yes' })],
-    ['a negative scheduleDate rejects', 'invalid-argument', () => acc.sendMessage(NOBODY, 'hi', { scheduleDate: -1 })],
+    ['a non-boolean flag rejects', TypeError, () => acc.sendMessage(NOBODY, 'hi', { silent: 'yes' })],
+    ['a negative scheduleDate rejects', TypeError, () => acc.sendMessage(NOBODY, 'hi', { scheduleDate: -1 })],
     // @ts-expect-error
-    ['options that are not an object reject', 'invalid-argument', () => acc.sendMessage(NOBODY, 'hi', 7)],
+    ['options that are not an object reject', TypeError, () => acc.sendMessage(NOBODY, 'hi', 7)],
     // @ts-expect-error
-    ['deleteMessages without ids rejects', 'invalid-argument', () => acc.deleteMessages(NOBODY, 'all')],
-    ['a non-integer message id rejects', 'invalid-argument', () => acc.deleteMessages(NOBODY, [1.5])],
+    ['deleteMessages without ids rejects', TypeError, () => acc.deleteMessages(NOBODY, 'all')],
+    ['a non-integer message id rejects', TypeError, () => acc.deleteMessages(NOBODY, [1.5])],
     // @ts-expect-error
-    ['editMessage with a bad id rejects', 'invalid-argument', () => acc.editMessage(NOBODY, {}, 'hi')],
+    ['editMessage with a bad id rejects', TypeError, () => acc.editMessage(NOBODY, {}, 'hi')],
     // @ts-expect-error
-    ['setReaction with a non-array rejects', 'invalid-argument', () => acc.setReaction(NOBODY, 1, '👍')],
-    ['setReaction with an empty emoji rejects', 'invalid-argument', () => acc.setReaction(NOBODY, 1, [''])],
-    ['setReaction with a bad customEmojiId rejects', 'invalid-argument', () => acc.setReaction(NOBODY, 1, [{ customEmojiId: 'nope' }])],
+    ['setReaction with a non-array rejects', TypeError, () => acc.setReaction(NOBODY, 1, '👍')],
+    ['setReaction with an empty emoji rejects', TypeError, () => acc.setReaction(NOBODY, 1, [''])],
+    ['setReaction with a bad customEmojiId rejects', TypeError, () => acc.setReaction(NOBODY, 1, [{ customEmojiId: 'nope' }])],
     // @ts-expect-error
-    ['sendTyping with an unknown action rejects', 'invalid-argument', () => acc.sendTyping(NOBODY, 'dancing')],
-    ['sendMultiMedia with no items rejects', 'invalid-argument', () => acc.sendMultiMedia(NOBODY, [])],
+    ['sendTyping with an unknown action rejects', TypeError, () => acc.sendTyping(NOBODY, 'dancing')],
+    ['sendMultiMedia with no items rejects', TypeError, () => acc.sendMultiMedia(NOBODY, [])],
     // @ts-expect-error
-    ['sendMedia without a file rejects', 'invalid-argument', () => acc.sendMedia(NOBODY, null)],
+    ['sendMedia without a file rejects', TypeError, () => acc.sendMedia(NOBODY, null)],
     // @ts-expect-error
-    ['a non-function onProgress rejects', 'invalid-argument', () => acc.sendMedia(NOBODY, new Uint8Array([1]), { onProgress: 'yes' })],
+    ['a non-function onProgress rejects', TypeError, () => acc.sendMedia(NOBODY, new Uint8Array([1]), { onProgress: 'yes' })],
     ['sendMessage into a secret chat is forbidden', 'forbidden', () => acc.sendMessage(SECRET, 'hi')],
     ['setDraft into a secret chat is forbidden', 'forbidden', () => acc.setDraft(SECRET, 'hi')],
     ['forwarding *out of* a secret chat is forbidden', 'forbidden', () => acc.forwardMessages(SECRET, [1], NOBODY)],

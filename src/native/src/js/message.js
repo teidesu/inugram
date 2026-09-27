@@ -1,4 +1,4 @@
-((shared, PluginError) => {
+((shared) => {
   const { baseName, toNumber, getMarkedPeerId, peerUserId } = shared
 
   const MEDIA_TYPES = Object.assign(Object.create(null), {
@@ -86,7 +86,7 @@
   class Message {
     constructor(raw) {
       if (raw === null || typeof raw !== 'object') {
-        throw new PluginError('invalid-argument', `Message: expected a raw TL message, got ${typeof raw}`)
+        throw new TypeError(`Message: expected a raw TL message, got ${typeof raw}`)
       }
       Object.defineProperty(this, 'raw', { value: raw, enumerable: true })
     }

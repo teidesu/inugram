@@ -41,7 +41,7 @@ fn a_plugin_error_wire_decodes_to_its_fields_and_leaves_empty_ones_absent() {
       ctx.globals().set("e", value).unwrap();
       ctx
         .eval::<String, _>(
-          "JSON.stringify([e instanceof inu.PluginError, e.name, e.code, e.message, e.grant ?? null, \
+          "JSON.stringify([e instanceof inu.PluginError, e.name, (e.code ?? e.name), e.message, e.grant ?? null, \
              e.usage ?? null, e.quota ?? null, 'usage' in e, 'quota' in e])",
         )
         .unwrap()
@@ -62,7 +62,7 @@ fn replacing_inu_plugin_error_does_not_change_host_errors() {
     let value = make_plugin_error(&ctx, "internal", "boom", None, None, None).unwrap();
     ctx.globals().set("e", value).unwrap();
     ctx
-      .eval::<String, _>("[e instanceof __realPluginError, e instanceof inu.PluginError, e.code].join('|')")
+      .eval::<String, _>("[e instanceof __realPluginError, e instanceof inu.PluginError, (e.code ?? e.name)].join('|')")
       .unwrap()
   });
   assert_eq!(got, "true|false|internal");

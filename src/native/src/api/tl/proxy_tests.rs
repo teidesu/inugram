@@ -529,7 +529,7 @@ fn every_read_of_an_expired_handle_throws_handle_expired() {
             ];
             return JSON.stringify(reads.map((read) => {
               try { return 'no-throw:' + String(read()) }
-              catch (e) { return [e instanceof inu.PluginError, e.code, e.message].join('|') }
+              catch (e) { return [e instanceof inu.PluginError, (e.code ?? e.name), e.message].join('|') }
             }));
           })()
         "#,
@@ -669,7 +669,7 @@ fn read_only_view_refuses_writes_and_defines_with_a_forbidden_plugin_error() {
             ];
             return JSON.stringify(writes.map((write) => {
               try { write(); return 'no-throw' }
-              catch (e) { return [e instanceof inu.PluginError, e.code, e.message].join('|') }
+              catch (e) { return [e instanceof inu.PluginError, (e.code ?? e.name), e.message].join('|') }
             }));
           })()
         "#,
@@ -794,7 +794,7 @@ fn define_property_refuses_anything_but_a_plain_value_descriptor() {
             ];
             return JSON.stringify(descriptors.map((descriptor) => {
               try { Object.defineProperty(obj, 'x', descriptor); return 'no-throw' }
-              catch (e) { return [e instanceof inu.PluginError, e.code].join('|') }
+              catch (e) { return [e instanceof inu.PluginError, (e.code ?? e.name)].join('|') }
             }));
           })()
         "#,
@@ -831,7 +831,7 @@ fn a_view_cannot_be_sealed_or_frozen() {
             ];
             return JSON.stringify(seals.map((seal) => {
               try { seal(); return 'no-throw' }
-              catch (e) { return [e instanceof inu.PluginError, e.code, e.message].join('|') }
+              catch (e) { return [e instanceof inu.PluginError, (e.code ?? e.name), e.message].join('|') }
             }));
           })()
         "#,

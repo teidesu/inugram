@@ -435,7 +435,7 @@ fn reading_the_draft_needs_the_same_grant_get_draft_does() {
           try {
             __log.push(ctx.draft.text)
           } catch (e) {
-            __log.push(e.code + ':' + e.message)
+            __log.push((e.code ?? e.name) + ':' + e.message)
           }
           ctx.replace('written anyway');
         },
@@ -451,7 +451,7 @@ fn reading_the_draft_needs_the_same_grant_get_draft_does() {
 }
 
 #[test]
-fn a_bad_editor_argument_is_an_invalid_argument_error() {
+fn a_bad_editor_argument_is_a_type_error() {
   let (_rt, ctx, host, state, _logs) = setup();
   eval(
     &ctx,
@@ -460,14 +460,14 @@ fn a_bad_editor_argument_is_an_invalid_argument_error() {
       inu.registerMessageEditorAction({
         id: 'a', text: 'x',
         callback: ctx => {
-          try { ctx.replace(42) } catch (e) { __log.push(`${e.name}:${e.code}`) }
-          try { ctx.send({ text: 'ok', entities: 'no' }) } catch (e) { __log.push(`${e.name}:${e.code}`) }
+          try { ctx.replace(42) } catch (e) { __log.push(e.name) }
+          try { ctx.send({ text: 'ok', entities: 'no' }) } catch (e) { __log.push(e.name) }
         },
       })
     "#,
   );
   state.dispatch(&ctx, KIND_EDITOR, 1, r#"{"accountId":0,"dialogId":5,"surface":1,"draft":{"text":""}}"#);
-  assert_eq!(read_log(&ctx), r#"["PluginError:invalid-argument","PluginError:invalid-argument"]"#);
+  assert_eq!(read_log(&ctx), r#"["TypeError","TypeError"]"#);
   assert!(host.editor.borrow().is_empty());
 }
 

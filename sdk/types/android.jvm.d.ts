@@ -209,7 +209,7 @@ declare namespace inu {
     /**
      * Returns a writable TL view of a {@link JavaObject}.
      *
-     * Throws `invalid-argument` if the handle is not a `TLObject`.
+     * Throws a `TypeError` if the handle is not a `TLObject`.
      */
     function toTl(value: JavaObject): TLObject
 
@@ -250,7 +250,7 @@ declare namespace inu {
      *
      * Available inside {@link inu.jvm.routine} and {@link inu.xposed.routine} bodies as well.
      *
-     * Throws `invalid-argument` if `cls` has no superclass, or the picked method is abstract.
+     * Throws a `TypeError` if `cls` has no superclass, or the picked method is abstract.
      *
      * @example `inu.jvm.callSuper(MySpan, self, 'updateDrawState', paint)`
      */

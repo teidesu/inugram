@@ -1,4 +1,4 @@
-(natives, shared, Message, PluginError, readsPrototype, ops) => {
+(natives, shared, Message, readsPrototype, ops) => {
   const { toSpec, toTextPart, toOptions, toCount, toMessageId, toMessageIds, readAccountSlot } = shared
 
   const INT64 = /^-?\d+$/
@@ -18,13 +18,13 @@
 
   const toFlag = (value, what, field, fallback = false) => {
     if (value === undefined || value === null) return fallback
-    if (typeof value !== 'boolean') throw new PluginError('invalid-argument', `${what}: ${field} must be a boolean`)
+    if (typeof value !== 'boolean') throw new TypeError(`${what}: ${field} must be a boolean`)
     return value
   }
 
   const toName = (value, what, field) => {
     if (value === undefined || value === null) return ''
-    if (typeof value !== 'string') throw new PluginError('invalid-argument', `${what}: ${field} must be a string`)
+    if (typeof value !== 'string') throw new TypeError(`${what}: ${field} must be a string`)
     return value
   }
 
@@ -32,22 +32,22 @@
 
   const toProgress = (value, what) => {
     if (value === undefined || value === null) return null
-    if (typeof value !== 'function') throw new PluginError('invalid-argument', `${what}: onProgress must be a function`)
+    if (typeof value !== 'function') throw new TypeError(`${what}: onProgress must be a function`)
     return value
   }
 
   const toReactions = (list, what) => {
-    if (!Array.isArray(list)) throw new PluginError('invalid-argument', `${what}: expected an array of reactions`)
+    if (!Array.isArray(list)) throw new TypeError(`${what}: expected an array of reactions`)
     return list.map((reaction) => {
       if (typeof reaction === 'string') {
-        if (reaction.length === 0) throw new PluginError('invalid-argument', `${what}: an empty string is not an emoji`)
+        if (reaction.length === 0) throw new TypeError(`${what}: an empty string is not an emoji`)
         return { emoji: reaction }
       }
       if (reaction !== null && typeof reaction === 'object') {
         const id = reaction.customEmojiId
         if (id !== undefined && id !== null && INT64.test(String(id))) return { customEmojiId: String(id) }
       }
-      throw new PluginError('invalid-argument', `${what}: expected an emoji or { customEmojiId }`)
+      throw new TypeError(`${what}: expected an emoji or { customEmojiId }`)
     })
   }
 
@@ -56,7 +56,7 @@
   // their parent message.
   const toRawMessage = (message, what) => {
     const raw = message instanceof Message ? message.raw : message
-    if (raw === null || typeof raw !== 'object') throw new PluginError('invalid-argument', `${what}: expected a message`)
+    if (raw === null || typeof raw !== 'object') throw new TypeError(`${what}: expected a message`)
     return raw
   }
 
@@ -65,13 +65,13 @@
   // key, which is how the encoder tells it from a TL object literal without guessing
   const toFile = (file, what) => {
     if (file === null || typeof file !== 'object') {
-      throw new PluginError('invalid-argument', `${what}: expected a Blob, bytes, an InputFile/InputMedia or { path }`)
+      throw new TypeError(`${what}: expected a Blob, bytes, an InputFile/InputMedia or { path }`)
     }
     if (file._ !== undefined) return file
     // A `path` property selects the path variant and must be a string. Do not fall through to TL
     // encoding, which would report the wrong error.
     if (file.path !== undefined) {
-      if (typeof file.path !== 'string') throw new PluginError('invalid-argument', `${what}: path must be a string`)
+      if (typeof file.path !== 'string') throw new TypeError(`${what}: path must be a string`)
       return { path: file.path }
     }
     return file
@@ -163,7 +163,7 @@
     sendMultiMedia(peer, items, options) {
       return startWrite(this, ops.sendMultiMedia, 'sendMultiMedia', () => {
         if (!Array.isArray(items) || items.length === 0) {
-          throw new PluginError('invalid-argument', 'sendMultiMedia: expected a non-empty array of items')
+          throw new TypeError('sendMultiMedia: expected a non-empty array of items')
         }
         const opts = toOptions(options, 'sendMultiMedia')
         const files = []
@@ -273,7 +273,7 @@
       return voidly(startWrite(this, ops.sendTyping, 'sendTyping', () => {
         const opts = toOptions(options, 'sendTyping')
         const what = action ?? 'typing'
-        if (!TYPING_ACTIONS.has(what)) throw new PluginError('invalid-argument', `sendTyping: unknown action '${what}'`)
+        if (!TYPING_ACTIONS.has(what)) throw new TypeError(`sendTyping: unknown action '${what}'`)
         return [
           { peer: toSpec(peer), action: what, topicId: toCount(opts.topicId, 'sendTyping', 'topicId') },
           [],

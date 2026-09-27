@@ -142,7 +142,7 @@ on the last page. Pass `next` back as `cursor` to get the following page.
 A cursor is opaque and short-lived:
 
 - It only works with the list that made it. A dialogs cursor passed to `getTopics` is rejected.
-- Only the 32 newest cursors are kept. An older one throws `invalid-argument`.
+- Only the 32 newest cursors are kept. An older one throws a `TypeError`.
 - Cursors do not survive a plugin reload.
 
 If you just want every item, use the iterators instead. `iterDialogs`, `iterHistory` and

@@ -43,7 +43,7 @@ fn settle(fixture: &Fixture, expr: &str) -> String {
         globalThis.__out = 'pending';
         Promise.resolve().then(() => {expr}).then(
           v => {{ globalThis.__out = 'ok:' + v; }},
-          e => {{ globalThis.__out = `${{e.name}}:${{e.code}}:${{e.message}}`; }},
+          e => {{ globalThis.__out = `${{e.name}}:${{(e.code ?? e.name)}}:${{e.message}}`; }},
         );
       "#,
     ),
@@ -159,7 +159,7 @@ fn a_spill_past_the_ceiling_is_refused_and_leaves_nothing_behind() {
       r#"
         let out = 'no-throw';
         try {{ new Blob([new Uint8Array({})]); }}
-        catch (e) {{ out = [e instanceof inu.PluginError, e.code, e.quota].join('|'); }}
+        catch (e) {{ out = [e instanceof inu.PluginError, (e.code ?? e.name), e.quota].join('|'); }}
         out;
       "#,
       SPILL_THRESHOLD_BYTES * 2,
@@ -213,7 +213,7 @@ fn with_nowhere_to_spill_the_buffer_is_charged_as_it_grows() {
       globalThis.__seen = [];
       const part = { toString() { __seen.push(__charged()); return 'x'.repeat(1024 * 1024); } };
       let code = 'no-throw';
-      try { new Blob(Array(16).fill(part)); } catch (e) { code = e.code; }
+      try { new Blob(Array(16).fill(part)); } catch (e) { code = (e.code ?? e.name); }
       [code, __seen.length, __seen[__seen.length - 1] - __seen[0]].join('|');
     "#,
   );
@@ -250,7 +250,7 @@ fn a_construction_past_what_one_call_may_move_is_refused_before_it_reads() {
     r#"
       let out = 'no-throw';
       try { new Blob(['head', __f]); }
-      catch (e) { out = [e instanceof inu.PluginError, e.code, e.usage, e.quota].join('|'); }
+      catch (e) { out = [e instanceof inu.PluginError, (e.code ?? e.name), e.usage, e.quota].join('|'); }
       out;
     "#,
   );
@@ -279,7 +279,7 @@ fn a_plugin_may_not_hold_more_spill_files_than_the_engine_will_open() {
       globalThis.__kept = [];
       let out = 'no-throw';
       try { for (let i = 0; i < 10; i++) __kept.push(new Blob(['x'])); }
-      catch (e) { out = [e instanceof inu.PluginError, e.code, __kept.length, e.usage, e.quota].join('|'); }
+      catch (e) { out = [e instanceof inu.PluginError, (e.code ?? e.name), __kept.length, e.usage, e.quota].join('|'); }
       out;
     "#,
   );
@@ -533,7 +533,7 @@ fn a_disposed_blob_refuses_every_use() {
   let out = eval(
     &f,
     r#"
-      const code = (fn) => { try { fn(); return 'no-throw'; } catch (e) { return e.code; } };
+      const code = (fn) => { try { fn(); return 'no-throw'; } catch (e) { return (e.code ?? e.name); } };
       JSON.stringify([
         code(() => __b.size), code(() => __b.type), code(() => __b.slice(0, 1)),
         code(() => new Blob([__b])),

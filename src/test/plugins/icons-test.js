@@ -26,11 +26,11 @@ for (const name of CURATED) {
 check(`all ${CURATED.length} curated icons resolve`, missing.length === 0, missing.join(', '))
 
 // @ts-expect-error not a name in the set
-expectThrow('an unknown name is refused', 'invalid-argument', () => inu.icons.common('lightbulb'))
+expectThrow('an unknown name is refused', TypeError, () => inu.icons.common('lightbulb'))
 // @ts-expect-error the set is case-sensitive and so is the lookup
-expectThrow('and so is the wrong case', 'invalid-argument', () => inu.icons.common('Settings'))
+expectThrow('and so is the wrong case', TypeError, () => inu.icons.common('Settings'))
 // @ts-expect-error not a name in the set
-expectThrow('and so is a prototype member', 'invalid-argument', () => inu.icons.common('constructor'))
+expectThrow('and so is a prototype member', TypeError, () => inu.icons.common('constructor'))
 // @ts-expect-error not a string at all
 expectThrow('a name that is not a string is a TypeError', TypeError, () => inu.icons.common(42))
 
@@ -40,15 +40,15 @@ check('a drawable the app ships resolves', inu.android.resourceIcon('msg_setting
 expectThrow('a drawable it does not ship is not-found', 'not-found', () =>
   inu.android.resourceIcon('inu_no_such_drawable_anywhere'))
 // getIdentifier would read this as another resource type in another package
-expectThrow('a qualified resource reference is refused', 'invalid-argument', () =>
+expectThrow('a qualified resource reference is refused', TypeError, () =>
   inu.android.resourceIcon('org.telegram.messenger:raw/notification'))
-expectThrow('and so is an empty name', 'invalid-argument', () => inu.android.resourceIcon(''))
+expectThrow('and so is an empty name', TypeError, () => inu.android.resourceIcon(''))
 
 /** @type {Parameters<typeof inu.icons.animation>[0][]} */
 const ANIMATIONS = ['success', 'error', 'info', 'loading']
 check('all animation presets resolve', ANIMATIONS.every(name => inu.icons.animation(name) !== undefined))
 // @ts-expect-error not a preset
-expectThrow('an unknown animation preset is refused', 'invalid-argument', () => inu.icons.animation('unknown'))
+expectThrow('an unknown animation preset is refused', TypeError, () => inu.icons.animation('unknown'))
 check('a raw animation the app ships resolves', inu.android.rawAnimation('done') !== undefined)
 expectThrow('a raw animation it does not ship is not-found', 'not-found', () =>
   inu.android.rawAnimation('inu_no_such_animation_anywhere'))
@@ -58,17 +58,17 @@ check('a sticker index builds an icon', inu.icons.sticker({ slug: 'teidesu_favs'
 check('a sticker emoji builds an icon', inu.icons.sticker({ slug: 'teidesu_favs', emoji: '🐶' }) !== undefined)
 check('a sticker document id builds an icon', inu.icons.sticker({ slug: 'teidesu_favs', id: '5361751237382052539' }) !== undefined)
 // @ts-expect-error selector required
-expectThrow('a sticker needs one selector', 'invalid-argument', () => inu.icons.sticker({ slug: 'teidesu_favs' }))
-expectThrow('a sticker refuses multiple selectors', 'invalid-argument', () =>
+expectThrow('a sticker needs one selector', TypeError, () => inu.icons.sticker({ slug: 'teidesu_favs' }))
+expectThrow('a sticker refuses multiple selectors', TypeError, () =>
   // @ts-expect-error selectors are exclusive
   inu.icons.sticker({ slug: 'teidesu_favs', index: 2, emoji: '🐶' }))
 
 const HEART = '<svg viewBox="0 0 24 24"><path d="M12 21C12 21 3 14 3 8.5 3 5.4 5.4 3 8.5 3 10.4 3 12 4.2 12 4.2 12 4.2 13.6 3 15.5 3 18.6 3 21 5.4 21 8.5 21 14 12 21 12 21Z"/></svg>'
 check('an inline svg parses', inu.icons.svg(HEART) !== undefined)
-expectThrow('something that is not markup is refused', 'invalid-argument', () => inu.icons.svg('hello'))
-expectThrow('and markup with no <svg> in it', 'invalid-argument', () => inu.icons.svg('<html><body/></html>'))
+expectThrow('something that is not markup is refused', TypeError, () => inu.icons.svg('hello'))
+expectThrow('and markup with no <svg> in it', TypeError, () => inu.icons.svg('<html><body/></html>'))
 // the one xml construct that can name an external file or expand to more of itself
-expectThrow('a doctype is refused outright', 'invalid-argument', () =>
+expectThrow('a doctype is refused outright', TypeError, () =>
   inu.icons.svg('<!DOCTYPE svg SYSTEM "file:///etc/hosts"><svg><path d="M0 0"/></svg>'))
 check('but a comment is fine', inu.icons.svg('<svg><!-- a note --><path d="M0 0h4v4H0z"/></svg>') !== undefined)
 
@@ -96,7 +96,7 @@ expectThrow('a row refuses an icon it was not handed', TypeError, () => inu.ui.b
   icon: 'msg_settings',
   onClick: () => {},
 }))
-expectThrow('and a hand-built one is re-checked, not trusted', 'invalid-argument', () => inu.ui.button({
+expectThrow('and a hand-built one is re-checked, not trusted', TypeError, () => inu.ui.button({
   text: 'x',
   // @ts-expect-error a forged tag is not a UIIcon
   icon: { __inuIcon: 'rorg.telegram.messenger:raw/notification' },

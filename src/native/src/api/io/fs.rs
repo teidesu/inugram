@@ -8,7 +8,7 @@ use std::rc::Rc;
 use cap_std::ambient_authority;
 use cap_std::fs::Dir;
 use rquickjs::function::Opt;
-use rquickjs::{Ctx, Function, Object, Result as JsResult, TypedArray, Value};
+use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, TypedArray, Value};
 
 use crate::api::error::PluginErrorCode;
 use crate::api::io::blob::{mtime_millis, BlobExport, BlobFault, BlobHandle, MATERIALIZE_LIMIT_BYTES};
@@ -85,7 +85,7 @@ impl Fault {
     match self {
       Fault::Escape(path) => PluginErrorCode::NotGranted("unsafe.fs")
         .throw(ctx, &format!("'{path}' is outside this plugin's directory; only @grant unsafe.fs reaches there")),
-      Fault::Invalid(message) => PluginErrorCode::InvalidArgument.throw(ctx, &message),
+      Fault::Invalid(message) => Err(Exception::throw_type(ctx, &message)),
       Fault::NotFound(message) => PluginErrorCode::NotFound.throw(ctx, &message),
       Fault::Quota { usage, quota, message } => PluginErrorCode::QuotaExceeded(
         i64::try_from(usage).unwrap_or(i64::MAX),
@@ -725,8 +725,10 @@ impl FsState {
         "getMediaDir",
         Function::new(ctx.clone(), move |ctx: Ctx<'js>, kind: String| -> JsResult<String> {
           let Some(index) = ANDROID_DIR_NAMES.iter().position(|k| *k == kind) else {
-            return PluginErrorCode::InvalidArgument
-              .throw(&ctx, &format!("getMediaDir: '{kind}' is not one of {}", ANDROID_DIR_NAMES.join(", ")));
+            return Err(Exception::throw_type(
+              &ctx,
+              &format!("getMediaDir: '{kind}' is not one of {}", ANDROID_DIR_NAMES.join(", ")),
+            ));
           };
           state.android_dir(&ctx, 2 + index, "getMediaDir")
         })?,

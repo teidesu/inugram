@@ -13,7 +13,7 @@ use jni::signature::{JavaType, MethodSignature, Primitive, RuntimeMethodSignatur
 use jni::strings::JNIString;
 use jni::sys::jvalue;
 use jni::Env;
-use rquickjs::{Class, Coerced, Ctx, FromJs, IntoJs, Result as JsResult, TypedArray, Value};
+use rquickjs::{Class, Coerced, Ctx, Exception, FromJs, IntoJs, Result as JsResult, TypedArray, Value};
 
 use super::refs::{Entry, JvmRef, RefTable, KIND_CLASS, KIND_CONSTRUCTOR, KIND_FIELD, KIND_METHOD, KIND_OBJECT};
 use super::VALUE_LIMIT_BYTES;
@@ -478,7 +478,7 @@ pub(crate) fn read_arg<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<Arg<
     let text = Coerced::<String>::from_js(ctx, value.clone())?.0;
     return match text.parse::<i64>() {
       Ok(v) => Ok(Arg::Int(v)),
-      Err(_) => PluginErrorCode::InvalidArgument.throw(ctx, &format!("jvm: {text} does not fit in a java long")),
+      Err(_) => Err(Exception::throw_type(ctx, &format!("jvm: {text} does not fit in a java long"))),
     };
   }
   if let Some(s) = value.as_string() {
@@ -503,7 +503,7 @@ pub(crate) fn read_arg<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<Arg<
   if let Some(handle) = super::get_jvm_ref(value) {
     return Ok(Arg::Ref(handle));
   }
-  PluginErrorCode::InvalidArgument.throw(ctx, &format!("jvm: cannot hand a {} to java", value.type_of()))
+  Err(Exception::throw_type(ctx, &format!("jvm: cannot hand a {} to java", value.type_of())))
 }
 
 pub(crate) struct HandleSpec {
@@ -582,7 +582,7 @@ impl Native {
   ) -> OpResult<usize> {
     let entry = self.get_live_entry(ctx, target)?;
     if entry.kind != KIND_CLASS {
-      return PluginErrorCode::InvalidArgument.throw(ctx, "jvm: that handle is not a class").map_err(OpError::Js);
+      return Err(Exception::throw_type(ctx, "jvm: that handle is not a class")).map_err(OpError::Js);
     }
     self.resolve_class_key(env, known, target, &entry)
   }
@@ -597,11 +597,11 @@ impl Native {
   ) -> OpResult<(Rc<FieldPlan>, Option<Entry>)> {
     let entry = self.get_live_entry(ctx, target)?;
     if entry.kind != KIND_FIELD {
-      return PluginErrorCode::InvalidArgument.throw(ctx, "jvm: that handle is not a field").map_err(OpError::Js);
+      return Err(Exception::throw_type(ctx, "jvm: that handle is not a field")).map_err(OpError::Js);
     }
     let pinned = self.get_pinned(ctx, env, known, target, &entry)?;
     let Pinned::Field(plan) = &*pinned else {
-      return PluginErrorCode::InvalidArgument.throw(ctx, "jvm: that handle is not a field").map_err(OpError::Js);
+      return Err(Exception::throw_type(ctx, "jvm: that handle is not a field")).map_err(OpError::Js);
     };
     let plan = plan.clone();
     let receiver = self.receiver_arg(ctx, env, receiver, Self::field_owner(&plan))?;
@@ -964,8 +964,7 @@ impl Native {
       Ok((_, _, Some(field))) => Pinned::Field(field),
       Ok((_, candidates, None)) if candidates.len() == 1 => Pinned::Method(candidates[0].clone()),
       Ok(_) => {
-        return PluginErrorCode::InvalidArgument
-          .throw(ctx, "jvm: that handle is not a method, constructor or field")
+        return Err(Exception::throw_type(ctx, "jvm: that handle is not a method, constructor or field"))
           .map_err(OpError::Js)
       }
       Err(wire) => return throw_wire(ctx, &wire),
@@ -1186,8 +1185,7 @@ impl Native {
     }
     if fitting.is_empty() {
       if pinned {
-        return PluginErrorCode::InvalidArgument
-          .throw(ctx, &format!("jvm: {} does not take these arguments", what()))
+        return Err(Exception::throw_type(ctx, &format!("jvm: {} does not take these arguments", what())))
           .map_err(OpError::Js);
       }
       return PluginErrorCode::NotFound
@@ -1216,12 +1214,11 @@ impl Native {
     }
     if narrowest.len() != 1 {
       let examples = fitting.iter().take(3).map(|c| c.descriptor.clone()).collect::<Vec<_>>().join(", ");
-      return PluginErrorCode::InvalidArgument
-        .throw(
-          ctx,
-          &format!("jvm: {} is ambiguous for these arguments; pin one with a descriptor, e.g. {examples}", what()),
-        )
-        .map_err(OpError::Js);
+      return Err(Exception::throw_type(
+        ctx,
+        &format!("jvm: {} is ambiguous for these arguments; pin one with a descriptor, e.g. {examples}", what()),
+      ))
+      .map_err(OpError::Js);
     }
     Ok(narrowest.remove(0))
   }
@@ -1250,9 +1247,7 @@ impl Native {
     // parameter's type, the id was resolved for this owner, and a receiver is checked against the owner
     // before it reaches here
     if matches!(candidate.id, MethodId::Instance(_)) && receiver.is_none() {
-      return PluginErrorCode::InvalidArgument
-        .throw(ctx, "jvm: an instance method needs a receiver")
-        .map_err(OpError::Js);
+      return Err(Exception::throw_type(ctx, "jvm: an instance method needs a receiver")).map_err(OpError::Js);
     }
     let called = crate::jni::lend_engine(|| unsafe {
       match (&candidate.id, receiver) {
@@ -1349,9 +1344,7 @@ impl Native {
         FieldId::Static(id) => env.get_static_field_unchecked(&plan.owner, *id, plan.ty.java_type()),
         FieldId::Instance(id) => {
           let Some(receiver) = receiver else {
-            return PluginErrorCode::InvalidArgument
-              .throw(ctx, "jvm: an instance field needs a receiver")
-              .map_err(OpError::Js);
+            return Err(Exception::throw_type(ctx, "jvm: an instance field needs a receiver")).map_err(OpError::Js);
           };
           env.get_field_unchecked(receiver, *id, plan.ty.java_type())
         }
@@ -1379,8 +1372,7 @@ impl Native {
     }
     self.ensure_initialized(ctx, env, known, &plan.owner, &plan.initialized)?;
     if !self.matches(ctx, env, &plan.ty, value)? {
-      return PluginErrorCode::InvalidArgument
-        .throw(ctx, &format!("jvm: cannot assign that to a {}", plan.type_name))
+      return Err(Exception::throw_type(ctx, &format!("jvm: cannot assign that to a {}", plan.type_name)))
         .map_err(OpError::Js);
     }
     let prepared = self.prepare(env, known, &plan.ty, value)?;
@@ -1390,9 +1382,7 @@ impl Native {
         FieldId::Static(id) => env.set_static_field_unchecked(&plan.owner, *id, prepared.borrow())?,
         FieldId::Instance(id) => {
           let Some(receiver) = receiver else {
-            return PluginErrorCode::InvalidArgument
-              .throw(ctx, "jvm: an instance field needs a receiver")
-              .map_err(OpError::Js);
+            return Err(Exception::throw_type(ctx, "jvm: an instance field needs a receiver")).map_err(OpError::Js);
           };
           env.set_field_unchecked(receiver, *id, prepared.borrow())?
         }
@@ -1565,37 +1555,28 @@ impl Native {
       let receiver = match receiver {
         Arg::Ref(handle) => self.get_live_entry(ctx, handle)?,
         _ => {
-          return PluginErrorCode::InvalidArgument
-            .throw(ctx, "jvm: callSuper needs a java object to call on")
-            .map_err(OpError::Js)
+          return Err(Exception::throw_type(ctx, "jvm: callSuper needs a java object to call on")).map_err(OpError::Js)
         }
       };
       if !env.is_instance_of(receiver.obj.as_obj(), &cls)? {
         let class_name = Self::class_name(env, known, &cls)?;
         let message = format!("jvm: that receiver is not an instance of {class_name}");
-        return PluginErrorCode::InvalidArgument.throw(ctx, &message).map_err(OpError::Js);
+        return Err(Exception::throw_type(ctx, &message)).map_err(OpError::Js);
       }
       let Some(parent) = env.get_superclass(&cls)? else {
         let class_name = Self::class_name(env, known, &cls)?;
-        return PluginErrorCode::InvalidArgument
-          .throw(ctx, &format!("jvm: {class_name} has no superclass"))
-          .map_err(OpError::Js);
+        return Err(Exception::throw_type(ctx, &format!("jvm: {class_name} has no superclass"))).map_err(OpError::Js);
       };
       let parent_key = self.intern_class_key(env, known, &parent)?;
       let plan = self.method_plan(ctx, env, known, parent_key, name, false)?;
       let what = || format!("{}.{}", plan.class_name, name.split('(').next().unwrap_or(name));
       let candidate = self.pick(ctx, env, known, &plan, what, name.contains('('), false, args)?;
       if candidate.is_abstract {
-        return PluginErrorCode::InvalidArgument
-          .throw(
-            ctx,
-            &format!(
-              "jvm: {}{} is abstract, so there is no super implementation to call",
-              what(),
-              candidate.descriptor
-            ),
-          )
-          .map_err(OpError::Js);
+        return Err(Exception::throw_type(
+          ctx,
+          &format!("jvm: {}{} is abstract, so there is no super implementation to call", what(), candidate.descriptor),
+        ))
+        .map_err(OpError::Js);
       }
       let value = self.invoke(ctx, env, known, &candidate, Some(receiver.obj.as_obj()), Dispatch::Nonvirtual, args)?;
       self.result_to_js(ctx, env, known, value)
@@ -1645,9 +1626,11 @@ impl Native {
       }
       if plan.candidates.len() > 1 {
         let examples = plan.candidates.iter().take(3).map(|c| c.descriptor.clone()).collect::<Vec<_>>().join(", ");
-        return PluginErrorCode::InvalidArgument
-          .throw(ctx, &format!("jvm: {what} is overloaded; pin one with a descriptor, e.g. {examples}"))
-          .map_err(OpError::Js);
+        return Err(Exception::throw_type(
+          ctx,
+          &format!("jvm: {what} is overloaded; pin one with a descriptor, e.g. {examples}"),
+        ))
+        .map_err(OpError::Js);
       }
       let candidate = plan.candidates[0].clone();
       if let Some(wire) = &candidate.refusal {
@@ -1696,20 +1679,20 @@ impl Native {
       Arg::Ref(handle) => {
         let entry = self.get_live_entry(ctx, handle)?;
         if entry.kind == KIND_CLASS {
-          return PluginErrorCode::InvalidArgument.throw(ctx, "jvm: a class is not a receiver").map_err(OpError::Js);
+          return Err(Exception::throw_type(ctx, "jvm: a class is not a receiver")).map_err(OpError::Js);
         }
         if let Some((owner, what)) = instance_owner {
           if !env.is_instance_of(entry.obj.as_obj(), owner)? {
-            return PluginErrorCode::InvalidArgument
-              .throw(ctx, &format!("jvm: that receiver is not an instance of the class declaring {what}"))
-              .map_err(OpError::Js);
+            return Err(Exception::throw_type(
+              ctx,
+              &format!("jvm: that receiver is not an instance of the class declaring {what}"),
+            ))
+            .map_err(OpError::Js);
           }
         }
         Ok(Some(entry))
       }
-      _ => PluginErrorCode::InvalidArgument
-        .throw(ctx, "jvm: the receiver must be a java object or null")
-        .map_err(OpError::Js),
+      _ => Err(Exception::throw_type(ctx, "jvm: the receiver must be a java object or null")).map_err(OpError::Js),
     }
   }
 
@@ -1723,15 +1706,11 @@ impl Native {
     self.with_env(ctx, |env, known| {
       let entry = self.get_live_entry(ctx, target)?;
       if entry.kind != KIND_METHOD && entry.kind != KIND_CONSTRUCTOR {
-        return PluginErrorCode::InvalidArgument
-          .throw(ctx, "jvm: that handle is not a method or constructor")
-          .map_err(OpError::Js);
+        return Err(Exception::throw_type(ctx, "jvm: that handle is not a method or constructor")).map_err(OpError::Js);
       }
       let pinned = self.get_pinned(ctx, env, known, target, &entry)?;
       let Pinned::Method(candidate) = &*pinned else {
-        return PluginErrorCode::InvalidArgument
-          .throw(ctx, "jvm: that handle is not a method or constructor")
-          .map_err(OpError::Js);
+        return Err(Exception::throw_type(ctx, "jvm: that handle is not a method or constructor")).map_err(OpError::Js);
       };
       let receiver = match &candidate.id {
         MethodId::Constructor(_) => None,
@@ -1742,8 +1721,7 @@ impl Native {
       };
       if !self.fits(ctx, env, candidate, args)? {
         let what = if candidate.is_constructor() { "constructor" } else { &candidate.descriptor };
-        return PluginErrorCode::InvalidArgument
-          .throw(ctx, &format!("jvm: {what} does not take these arguments"))
+        return Err(Exception::throw_type(ctx, &format!("jvm: {what} does not take these arguments")))
           .map_err(OpError::Js);
       }
       let receiver_obj = receiver.as_ref().map(|entry| entry.obj.as_obj());
@@ -1761,7 +1739,7 @@ impl Native {
     self.with_env(ctx, |env, known| {
       let entry = self.get_live_entry(ctx, target)?;
       if entry.kind != KIND_CLASS {
-        return PluginErrorCode::InvalidArgument.throw(ctx, "jvm: isInstance needs a class").map_err(OpError::Js);
+        return Err(Exception::throw_type(ctx, "jvm: isInstance needs a class")).map_err(OpError::Js);
       }
       // resolved for its own sake: it is what caches the key and pins the scope check on the class
       let _ = self.resolve_class_key(env, known, target, &entry)?;

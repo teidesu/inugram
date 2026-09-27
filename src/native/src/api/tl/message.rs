@@ -5,10 +5,8 @@ use crate::utils::qjs::qjs_load_prelude;
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/message.qbc"));
 
 pub fn install_message<'js>(ctx: &Ctx<'js>, shared: &Object<'js>, globals: &crate::api::Globals<'js>) -> JsResult<()> {
-  let plugin_error = globals.plugin_error.clone();
-
   let factory = qjs_load_prelude(ctx, PRELUDE)?;
-  let class = factory.call((shared.clone(), plugin_error))?;
+  let class = factory.call((shared.clone(),))?;
 
   globals.set_message(class)
 }

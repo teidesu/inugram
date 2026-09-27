@@ -51,7 +51,7 @@ fn thrown_code(ctx: &Context, expr: &str) -> String {
     ctx
       .eval::<String, _>(format!(
         "(() => {{ try {{ {expr}; return 'did-not-throw' }} \
-             catch (e) {{ return e instanceof inu.PluginError ? e.code : e.constructor.name }} }})()"
+             catch (e) {{ return e instanceof inu.PluginError ? (e.code ?? e.name) : e.constructor.name }} }})()"
       ))
       .unwrap()
   })
@@ -90,7 +90,7 @@ fn resource_icon_checks_shape_then_existence() {
   assert_eq!(thrown_code(&ctx, "inu.android.resourceIcon('msg_nothing')"), "not-found");
   assert_eq!(
     thrown_code(&ctx, "inu.android.resourceIcon('org.telegram.messenger:raw/notification')"),
-    "invalid-argument",
+    "TypeError",
   );
   let asked: Vec<String> = host.asked.borrow().iter().map(|(_, v)| v.clone()).collect();
   assert_eq!(asked, vec!["msg_settings".to_string(), "msg_nothing".to_string()]);
@@ -105,17 +105,14 @@ fn preset_and_android_raw_animations_mint_the_same_icon_kind() {
   assert_eq!(eval_string(&ctx, "inu.android.rawAnimation('info', { loop: true }).__inuIcon"), "a1info");
   assert_eq!(eval_string(&ctx, "inu.android.rawAnimation('info', { loop: 3 }).__inuIcon"), "an3:info");
   assert_eq!(eval_string(&ctx, "inu.android.rawAnimation('info', { static: true }).__inuIcon"), "asinfo");
-  assert_eq!(
-    thrown_code(&ctx, "inu.android.rawAnimation('info', { loop: true, static: true })"),
-    "invalid-argument"
-  );
+  assert_eq!(thrown_code(&ctx, "inu.android.rawAnimation('info', { loop: true, static: true })"), "TypeError");
   for loop_value in ["-1", "1.5", "65536"] {
     assert_eq!(
       thrown_code(&ctx, &format!("inu.android.rawAnimation('info', {{ loop: {loop_value} }})")),
-      "invalid-argument",
+      "TypeError",
     );
   }
-  assert_eq!(thrown_code(&ctx, "inu.icons.animation('unknown')"), "invalid-argument");
+  assert_eq!(thrown_code(&ctx, "inu.icons.animation('unknown')"), "TypeError");
   assert_eq!(thrown_code(&ctx, "inu.android.rawAnimation('missing_animation')"), "not-found");
   assert!(host.asked.borrow().iter().all(|(kind, _)| *kind == KIND_RAW_ANIMATION));
 }
@@ -173,15 +170,15 @@ fn sticker_selector_is_explicit_and_bounded() {
     "{ slug: 'dogs', index: -1 }",
     "{ slug: 'bad/slugs', index: 0 }",
   ] {
-    assert_eq!(thrown_code(&ctx, &format!("inu.icons.sticker({bad})")), "invalid-argument");
+    assert_eq!(thrown_code(&ctx, &format!("inu.icons.sticker({bad})")), "TypeError");
   }
 }
 
 #[test]
 fn svg_refuses_before_it_asks_the_host() {
   let (_rt, ctx, host) = setup(&[]);
-  assert_eq!(thrown_code(&ctx, "inu.icons.svg('hello')"), "invalid-argument");
-  assert_eq!(thrown_code(&ctx, "inu.icons.svg('<!DOCTYPE svg><svg/>')"), "invalid-argument");
+  assert_eq!(thrown_code(&ctx, "inu.icons.svg('hello')"), "TypeError");
+  assert_eq!(thrown_code(&ctx, "inu.icons.svg('<!DOCTYPE svg><svg/>')"), "TypeError");
   assert_eq!(
     thrown_code(&ctx, &format!("inu.icons.svg('<svg>' + 'x'.repeat({SVG_LIMIT_BYTES}) + '</svg>')")),
     "quota-exceeded",
@@ -193,7 +190,7 @@ fn svg_refuses_before_it_asks_the_host() {
 fn an_svg_the_host_cannot_parse_is_invalid_argument() {
   let source = "<svg><path d='not a path'/></svg>";
   let (_rt, ctx, host) = setup(&[source]);
-  assert_eq!(thrown_code(&ctx, &format!("inu.icons.svg({source:?})")), "invalid-argument");
+  assert_eq!(thrown_code(&ctx, &format!("inu.icons.svg({source:?})")), "TypeError");
   assert_eq!(host.asked.borrow().len(), 1);
   assert_eq!(host.asked.borrow()[0].0, KIND_SVG);
 }
@@ -290,9 +287,9 @@ fn an_element_refuses_an_icon_it_was_not_handed() {
   assert_eq!(thrown_code(&ctx, &make("{}")), "TypeError");
   assert_eq!(
     thrown_code(&ctx, &make(&format!("{{ __inuIcon: 's<svg>' + 'x'.repeat({SVG_LIMIT_BYTES}) }}"))),
-    "invalid-argument",
+    "TypeError",
   );
-  assert_eq!(thrown_code(&ctx, &make("{ __inuIcon: 'q' }")), "invalid-argument");
+  assert_eq!(thrown_code(&ctx, &make("{ __inuIcon: 'q' }")), "TypeError");
   ctx.with(|ctx| {
     ctx.eval::<Value, _>(make("inu.icons.common('star')")).unwrap();
   });

@@ -93,13 +93,15 @@ impl FilesState {
           accept.as_array().ok_or_else(|| Exception::throw_type(ctx, "pickFile: 'accept' must be an array"))?;
         let types = crate::utils::arguments::array_values(ctx, array, "pickFile: 'accept'")?;
         if types.len() > MAX_ACCEPT_TYPES {
-          return PluginErrorCode::InvalidArgument
-            .throw(ctx, &format!("pickFile: at most {MAX_ACCEPT_TYPES} types may be accepted"));
+          return Err(Exception::throw_type(
+            ctx,
+            &format!("pickFile: at most {MAX_ACCEPT_TYPES} types may be accepted"),
+          ));
         }
         let wanted = Array::new(ctx.clone())?;
         for (index, value) in types.into_iter().enumerate() {
           let Some(text) = value.as_string() else {
-            return PluginErrorCode::InvalidArgument.throw(ctx, "pickFile: 'accept' takes media types as strings");
+            return Err(Exception::throw_type(ctx, "pickFile: 'accept' takes media types as strings"));
           };
           wanted.set(index, text.to_string()?)?;
         }

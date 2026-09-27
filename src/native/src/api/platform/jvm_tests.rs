@@ -106,7 +106,7 @@ fn error_code(f: &Fixture, code: &str) -> String {
   f.ctx.with(|ctx| {
     let script = format!(
       "(() => {{ try {{ {code}; return 'no-throw' }} catch (e) {{ \
-             return (e instanceof inu.PluginError ? e.code : e.name) + '|' + (e.grant ?? '') }} }})()"
+             return (e instanceof inu.PluginError ? (e.code ?? e.name) : e.name) + '|' + (e.grant ?? '') }} }})()"
     );
     ctx.eval::<String, _>(script).unwrap()
   })
@@ -155,7 +155,7 @@ fn from_tl_sends_a_view_as_its_handle_and_an_object_as_json() {
     &format!(r#"{OP_FROM_TL}|0|J{{"_":"messageEntityBold","offset":0,"length":2}}|"#),
   );
   for bad in ["inu.jvm.fromTl(null)", "inu.jvm.fromTl(7)", "inu.jvm.fromTl('x')"] {
-    assert_eq!(error_code(&f, bad), "invalid-argument|", "{bad}");
+    assert_eq!(error_code(&f, bad), "TypeError|", "{bad}");
   }
 }
 
@@ -163,7 +163,7 @@ fn from_tl_sends_a_view_as_its_handle_and_an_object_as_json() {
 fn to_tl_takes_a_handle_and_nothing_else() {
   let f = setup(&["unsafe.jvm"]);
   for bad in ["inu.jvm.toTl(null)", "inu.jvm.toTl(7)", "inu.jvm.toTl({ _: 'messageEntityBold' })"] {
-    assert_eq!(error_code(&f, bad), "invalid-argument|", "{bad}");
+    assert_eq!(error_code(&f, bad), "TypeError|", "{bad}");
   }
   // a real handle gets past that and finds this fixture has no view table, which is the one thing
   // `toTl` cannot do without
@@ -174,7 +174,7 @@ fn to_tl_takes_a_handle_and_nothing_else() {
 fn load_dex_takes_a_path_or_bytes_and_nothing_else() {
   let f = setup(&["unsafe.jvm"]);
   for code in ["inu.jvm.loadDex(42)", "inu.jvm.loadDex(null)", "inu.jvm.loadDex({})"] {
-    assert_eq!(error_code(&f, code), "invalid-argument|", "{code}");
+    assert_eq!(error_code(&f, code), "TypeError|", "{code}");
   }
   assert_eq!(eval(&f, "inu.jvm.loadDex('/data/local/tmp/x.dex')"), "undefined");
   assert_eq!(f.host.calls().last().unwrap(), &format!("{OP_LOAD_DEX}|0|/data/local/tmp/x.dex|"));
@@ -203,7 +203,7 @@ fn thrown_code(ctx: &Ctx<'_>) -> String {
   let thrown = ctx.catch();
   thrown
     .as_object()
-    .and_then(|o| o.get::<_, Option<String>>("code").ok().flatten())
+    .and_then(|o| o.get::<_, Option<String>>("code").ok().flatten().or_else(|| o.get("name").ok()))
     .unwrap_or_else(|| "Error".to_string())
 }
 
@@ -249,7 +249,7 @@ fn only_values_java_can_be_handed_without_guessing_cross() {
   }
   // wider than a java long, which `to_i64` would have truncated
   for code in ["({})", "[]", "(() => {})", "Symbol()", "92233720368547758070n"] {
-    assert_eq!(encode_arg_wire(&f, code), "invalid-argument", "{code}");
+    assert_eq!(encode_arg_wire(&f, code), "TypeError", "{code}");
   }
 }
 
@@ -310,7 +310,7 @@ fn call_super_validates_its_arguments_before_reaching_the_vm() {
     format!("inu.jvm.callSuper({cls}, o, '')"),
     format!("inu.jvm.callSuper({cls}, o, 7)"),
   ] {
-    assert_eq!(error_code(&f, &code), "invalid-argument|", "{code}");
+    assert_eq!(error_code(&f, &code), "TypeError|", "{code}");
   }
   assert_eq!(error_code(&f, &format!("inu.jvm.callSuper({cls}, o, 'toString')")), "unsupported|");
   assert!(f.host.calls().iter().all(|call| call.starts_with(&format!("{OP_CLASS}|"))));
@@ -338,7 +338,7 @@ fn a_runnable_registers_its_callback_only_once_the_host_has_taken_it() {
   let f = setup(&["unsafe.jvm"]);
   assert_eq!(eval(&f, "typeof inu.jvm.runnable(() => {})"), r#""object""#);
   assert_eq!(f.host.calls(), vec![format!("{OP_RUNNABLE}|0||I1")]);
-  assert_eq!(error_code(&f, "inu.jvm.runnable('not a function')"), "invalid-argument|");
+  assert_eq!(error_code(&f, "inu.jvm.runnable('not a function')"), "TypeError|");
 
   f.host.answers("Einternal: no runnable for you");
   assert_eq!(error_code(&f, "inu.jvm.runnable(() => {})"), "Error|");
@@ -461,10 +461,7 @@ fn define_class_serializes_members_and_registers_synchronous_bodies() {
 fn define_class_cleans_up_callbacks_when_the_host_refuses() {
   let f = setup(&["unsafe.jvm"]);
   f.host.answers("Pinvalid-argument\n\n\n\ninvalid class");
-  assert_eq!(
-    error_code(&f, "inu.jvm.defineClass('plugin.Bad', { methods: { run: self => 42 } })"),
-    "invalid-argument|"
-  );
+  assert_eq!(error_code(&f, "inu.jvm.defineClass('plugin.Bad', { methods: { run: self => 42 } })"), "TypeError|");
   f.ctx.with(|ctx| assert!(f.state.callbacks.restore(&ctx, 1).is_none()));
 }
 
@@ -483,7 +480,7 @@ fn define_class_refuses_malformed_specs() {
     "inu.jvm.defineClass('plugin.Test', { methods: { run: [{ body: () => {} }] } })",
     "inu.jvm.defineClass('plugin.Test', { methods: { run: [() => {}] } })",
   ] {
-    assert_eq!(error_code(&f, code), "invalid-argument|", "{code}");
+    assert_eq!(error_code(&f, code), "TypeError|", "{code}");
   }
   assert!(f.host.calls().is_empty());
 }
@@ -593,20 +590,14 @@ fn a_class_reports_the_name_the_host_settled_on_whether_or_not_it_asked_for_one(
 fn emission_and_load_failures_cancel_preparation_and_callbacks() {
   let f = setup(&["unsafe.jvm"]);
   f.host.answers("S{\"ticket\":\"9000\",\"name\":\"plugin.Bad\",\"superclass\":\"invalid\",\"interfaces\":[],\"fields\":[],\"methods\":[]}");
-  assert_eq!(
-    error_code(&f, "inu.jvm.defineClass('plugin.Bad', { methods: { run: () => {} } })"),
-    "invalid-argument|"
-  );
+  assert_eq!(error_code(&f, "inu.jvm.defineClass('plugin.Bad', { methods: { run: () => {} } })"), "TypeError|");
   assert!(f.host.calls().iter().any(|call| call == "21|9000||"));
   assert!(!f.host.calls().iter().any(|call| call.starts_with("20|")));
   assert!(f.state.callbacks.is_empty());
 
   let f = setup(&["unsafe.jvm"]);
   *f.host.load_answer.borrow_mut() = Some("Pinvalid-argument\n\n\n\nload failed".into());
-  assert_eq!(
-    error_code(&f, "inu.jvm.defineClass('plugin.Bad', { methods: { run: () => {} } })"),
-    "invalid-argument|"
-  );
+  assert_eq!(error_code(&f, "inu.jvm.defineClass('plugin.Bad', { methods: { run: () => {} } })"), "TypeError|");
   assert!(f.host.calls().iter().any(|call| call == "21|9000||"));
   assert!(f.state.callbacks.is_empty());
 }

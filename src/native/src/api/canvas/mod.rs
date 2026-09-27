@@ -928,10 +928,10 @@ fn read_dimensions(ctx: &Ctx<'_>, options: &Object<'_>, what: &str, required: bo
   let mut size = [0; 2];
   for (name, slot) in ["width", "height"].into_iter().zip(&mut size) {
     match options.get::<_, Option<Coerced<f64>>>(name)? {
-      None if required => return PluginErrorCode::InvalidArgument.throw(ctx, &format!("{what}: '{name}' is required")),
+      None if required => return Err(Exception::throw_type(ctx, &format!("{what}: '{name}' is required"))),
       None => {}
       Some(value) if !value.0.is_finite() => {
-        return PluginErrorCode::InvalidArgument.throw(ctx, &format!("{what}: '{name}' must be a number"))
+        return Err(Exception::throw_type(ctx, &format!("{what}: '{name}' must be a number")))
       }
       Some(value) => *slot = value.0.trunc() as i32,
     }
@@ -941,11 +941,10 @@ fn read_dimensions(ctx: &Ctx<'_>, options: &Object<'_>, what: &str, required: bo
 
 fn check_dimensions(ctx: &Ctx<'_>, width: i32, height: i32) -> JsResult<()> {
   if width <= 0 || height <= 0 {
-    return PluginErrorCode::InvalidArgument.throw(ctx, "a canvas needs a positive width and height");
+    return Err(Exception::throw_type(ctx, "a canvas needs a positive width and height"));
   }
   if width > MAX_DIMENSION || height > MAX_DIMENSION {
-    return PluginErrorCode::InvalidArgument
-      .throw(ctx, &format!("a canvas may be at most {MAX_DIMENSION} pixels on a side"));
+    return Err(Exception::throw_type(ctx, &format!("a canvas may be at most {MAX_DIMENSION} pixels on a side")));
   }
   Ok(())
 }
@@ -1018,7 +1017,7 @@ impl CanvasState {
         move |ctx: Ctx<'js>, width: Opt<Coerced<f64>>, height: Opt<Coerced<f64>>| -> JsResult<Value<'js>> {
           let (w, h) = (num(&width), num(&height));
           if !finite(&[w, h]) {
-            return PluginErrorCode::InvalidArgument.throw(&ctx, "a canvas needs a width and a height");
+            return Err(Exception::throw_type(&ctx, "a canvas needs a width and a height"));
           }
           let surface = owned.create_surface(&ctx, w.trunc() as i32, h.trunc() as i32)?;
           Ok(Class::instance(ctx.clone(), CanvasHandle { surface })?.into_value())
@@ -1036,9 +1035,7 @@ impl CanvasState {
             let (family, source) = if is_font {
               let family = match first.0.as_ref().and_then(|v| v.as_string()) {
                 Some(s) => s.to_string()?,
-                None => {
-                  return PluginErrorCode::InvalidArgument.throw(&ctx, "loadFont: the family name must be a string")
-                }
+                None => return Err(Exception::throw_type(&ctx, "loadFont: the family name must be a string")),
               };
               (family, second.0.unwrap_or_else(|| Value::new_undefined(ctx.clone())))
             } else {
@@ -1131,37 +1128,36 @@ impl CanvasState {
         .throw(ctx, &format!("at most {MAX_ENCODERS} encoders may be open at once"));
     }
     let Some(options) = options.0.as_ref().and_then(|v| v.as_object()) else {
-      return PluginErrorCode::InvalidArgument.throw(ctx, "createEncoder: expected a width and a height");
+      return Err(Exception::throw_type(ctx, "createEncoder: expected a width and a height"));
     };
     let mut mime = "video/mp4".to_string();
     if let Some(value) = options.get::<_, Option<Coerced<String>>>("type")? {
       let value = value.0.to_ascii_lowercase();
       if !Self::ENCODINGS_VIDEO.contains(&value.as_str()) {
-        return PluginErrorCode::InvalidArgument
-          .throw(ctx, &format!("'{value}' is not an encoding this canvas writes"));
+        return Err(Exception::throw_type(ctx, &format!("'{value}' is not an encoding this canvas writes")));
       }
       mime = value;
     }
     let [width, height] = read_dimensions(ctx, options, "createEncoder", true)?;
     check_dimensions(ctx, width, height)?;
     if width % 2 != 0 || height % 2 != 0 {
-      return PluginErrorCode::InvalidArgument
-        .throw(ctx, "createEncoder: a video's width and height must both be even");
+      return Err(Exception::throw_type(ctx, "createEncoder: a video's width and height must both be even"));
     }
     let mut fps = DEFAULT_ENCODER_FPS;
     if let Some(value) = options.get::<_, Option<Coerced<f64>>>("fps")? {
       let rounded = if value.0.is_finite() { value.0.trunc() as i32 } else { 0 };
       if !(1..=MAX_FPS).contains(&rounded) {
-        return PluginErrorCode::InvalidArgument
-          .throw(ctx, &format!("createEncoder: 'fps' must be between 1 and {MAX_FPS}"));
+        return Err(Exception::throw_type(ctx, &format!("createEncoder: 'fps' must be between 1 and {MAX_FPS}")));
       }
       fps = rounded;
     }
     let mut bitrate = 0i64;
     if let Some(value) = options.get::<_, Option<Coerced<f64>>>("bitrate")? {
       if !value.0.is_finite() || value.0 < 1.0 || value.0 > MAX_ENCODER_BITRATE as f64 {
-        return PluginErrorCode::InvalidArgument
-          .throw(ctx, &format!("createEncoder: 'bitrate' must be between 1 and {MAX_ENCODER_BITRATE}"));
+        return Err(Exception::throw_type(
+          ctx,
+          &format!("createEncoder: 'bitrate' must be between 1 and {MAX_ENCODER_BITRATE}"),
+        ));
       }
       bitrate = value.0.trunc() as i64;
     }
@@ -1197,7 +1193,7 @@ impl CanvasState {
     source: &Value<'js>,
   ) -> JsResult<Value<'js>> {
     if is_font && family.is_empty() {
-      return PluginErrorCode::InvalidArgument.throw(ctx, "loadFont: the family name is empty");
+      return Err(Exception::throw_type(ctx, "loadFont: the family name is empty"));
     }
     let StagedSource { path, owned } = self.sources.stage(ctx, source)?;
     let (kind, op, id) = if is_font {
@@ -1265,8 +1261,7 @@ impl CanvasState {
       if let Some(value) = options.get::<_, Option<Coerced<String>>>("type")? {
         let value = value.0.to_ascii_lowercase();
         if !Self::ENCODINGS.contains(&value.as_str()) {
-          return PluginErrorCode::InvalidArgument
-            .throw(ctx, &format!("'{value}' is not an encoding this canvas writes"));
+          return Err(Exception::throw_type(ctx, &format!("'{value}' is not an encoding this canvas writes")));
         }
         mime = value;
       }
@@ -1357,7 +1352,7 @@ impl CanvasState {
         // refused by the host with an error wire, so `end` on one is a malformed answer
         if object.get::<_, Option<bool>>("end")?.unwrap_or(false) {
           if !*sequential {
-            return PluginErrorCode::InvalidArgument.throw(ctx, "frame: the host ended an indexed read");
+            return Err(Exception::throw_type(ctx, "frame: the host ended an indexed read"));
           }
           return Ok(iteration(ctx, Value::new_undefined(ctx.clone()), true)?.into_value());
         }

@@ -514,7 +514,7 @@ fn settle(f: &Fixture, expr: &str) -> String {
         globalThis.__out = 'pending';
         Promise.resolve().then(() => {expr}).then(
           v => {{ globalThis.__out = 'ok:' + (v && v.constructor ? v.constructor.name : v) }},
-          e => {{ globalThis.__out = `${{e.code}}:${{e.message}}` }},
+          e => {{ globalThis.__out = `${{(e.code ?? e.name)}}:${{e.message}}` }},
         );
       "#,
     ),
@@ -587,7 +587,7 @@ fn a_canvas_is_refused_before_it_is_allocated_rather_than_after() {
     ("inu.canvas.create(99999, 10)", "at most"),
   ] {
     let message = refusal(&f, call);
-    assert!(message.starts_with("invalid-argument:"), "{call} answered {message}");
+    assert!(message.starts_with("TypeError:"), "{call} answered {message}");
     assert!(message.contains(what), "{call} answered {message}");
   }
   assert!(f.host.log.borrow().canvases.is_empty(), "a refused canvas was still allocated");
@@ -1102,7 +1102,7 @@ fn disposing_an_image_flushes_the_buffers_that_named_it_rather_than_stranding_th
 fn a_decode_the_host_refused_settles_as_a_rejection_and_leaves_nothing_charged() {
   let f = setup("decode-refused");
   *f.host.fail.borrow_mut() = Some((OP_DECODE, "Pinvalid-argument\n\n\n\nnot an image".to_string()));
-  assert_eq!(settle(&f, "inu.canvas.decode(new Uint8Array([1,2,3]))"), "invalid-argument:not an image",);
+  assert_eq!(settle(&f, "inu.canvas.decode(new Uint8Array([1,2,3]))"), "TypeError:not an image",);
   assert!(f.state.pending.is_empty());
 }
 
@@ -1150,10 +1150,10 @@ fn naming_a_file_without_the_fs_grant_is_refused_by_name() {
 #[test]
 fn a_source_that_is_none_of_the_three_shapes_is_refused() {
   let f = setup("load-shape");
-  assert!(refusal(&f, "inu.canvas.decode(42)").starts_with("invalid-argument:"));
-  assert!(refusal(&f, "inu.canvas.loadFont('Fam', 42)").starts_with("invalid-argument:"));
-  assert!(refusal(&f, "inu.canvas.loadFont(42, new Uint8Array([1]))").starts_with("invalid-argument:"));
-  assert!(refusal(&f, "inu.canvas.loadFont('', new Uint8Array([1]))").starts_with("invalid-argument:"));
+  assert!(refusal(&f, "inu.canvas.decode(42)").starts_with("TypeError:"));
+  assert!(refusal(&f, "inu.canvas.loadFont('Fam', 42)").starts_with("TypeError:"));
+  assert!(refusal(&f, "inu.canvas.loadFont(42, new Uint8Array([1]))").starts_with("TypeError:"));
+  assert!(refusal(&f, "inu.canvas.loadFont('', new Uint8Array([1]))").starts_with("TypeError:"));
 }
 
 #[test]
@@ -1203,7 +1203,7 @@ fn convert_to_blob_flushes_and_answers_a_blob_over_the_file_the_host_wrote() {
 fn convert_to_blob_refuses_an_encoding_it_does_not_write() {
   let f = setup("encode-type");
   run(&f, "globalThis.c = inu.canvas.create(4, 4)");
-  assert!(refusal(&f, "c.convertToBlob({ type: 'image/gif' })").starts_with("invalid-argument:"));
+  assert!(refusal(&f, "c.convertToBlob({ type: 'image/gif' })").starts_with("TypeError:"));
   let calls = f.host.log.borrow().calls.clone();
   assert!(!calls.iter().any(|(op, ..)| *op == OP_ENCODE), "the host was asked anyway");
 }
@@ -1282,7 +1282,10 @@ fn disposing_a_canvas_lets_its_bitmap_go_and_expires_what_was_drawing_on_it() {
   run(&f, "c.dispose()");
   assert_eq!(count_calls(&f, OP_DESTROY), 1, "a second dispose destroyed it twice");
   assert_eq!(
-    eval(&f, "(() => { try { x.fillRect(0,0,1,1); return 'drew' } catch (e) { return e.code } })()"),
+    eval(
+      &f,
+      "(() => { try { x.fillRect(0,0,1,1); return 'drew' } catch (e) { return (e.code ?? e.name) } })()"
+    ),
     "handle-expired"
   );
 }
@@ -1470,7 +1473,7 @@ fn a_frame_outside_the_animation_is_refused_without_asking_the_host() {
   let f = setup("animation-range");
   open_animation(&f, "gif", GIF_SHAPE);
   for index in ["-1", "24", "1e9"] {
-    assert!(refusal(&f, &format!("a.frame({index})")).starts_with("invalid-argument:"), "frame({index})");
+    assert!(refusal(&f, &format!("a.frame({index})")).starts_with("TypeError:"), "frame({index})");
   }
   let calls = f.host.log.borrow().calls.clone();
   assert!(!calls.iter().any(|(op, ..)| *op == OP_ANIMATION_FRAME), "the host was asked anyway");
@@ -1507,7 +1510,7 @@ fn an_animation_the_host_could_not_open_deletes_what_it_staged() {
   run(&f, "globalThis.p = inu.canvas.decodeAnimation(new Uint8Array([1,2,3,4]))");
   let arg = last_call(&f, OP_DECODE_ANIMATION);
   let path = arg.split(FIELD).nth(3).unwrap().to_string();
-  assert_eq!(settle(&f, "p"), "invalid-argument:not an animation");
+  assert_eq!(settle(&f, "p"), "TypeError:not an animation");
   assert!(std::fs::metadata(&path).is_err(), "the staged copy outlived the failed open");
 }
 
@@ -1525,9 +1528,7 @@ fn a_decode_size_is_passed_along_and_defaults_to_the_sources_own() {
     .collect();
   assert_eq!((asked[0][1], asked[0][2]), ("0", "0"));
   assert_eq!((asked[1][1], asked[1][2]), ("128", "96"));
-  assert!(
-    refusal(&f, "inu.canvas.decodeAnimation(new Uint8Array([1]), { width: 128 })").starts_with("invalid-argument:")
-  );
+  assert!(refusal(&f, "inu.canvas.decodeAnimation(new Uint8Array([1]), { width: 128 })").starts_with("TypeError:"));
 }
 
 #[test]
@@ -1585,7 +1586,7 @@ fn an_encoder_refuses_what_a_device_encoder_cannot_take() {
     "{ width: 320, height: 240, bitrate: 3e9 }",
   ] {
     assert!(
-      refusal(&f, &format!("inu.canvas.createEncoder({options})")).starts_with("invalid-argument:"),
+      refusal(&f, &format!("inu.canvas.createEncoder({options})")).starts_with("TypeError:"),
       "createEncoder({options})",
     );
   }
@@ -1652,7 +1653,7 @@ fn finishing_answers_a_blob_over_the_file_the_host_wrote_and_spends_the_encoder(
 fn an_encoder_with_no_frames_has_nothing_to_finish() {
   let f = setup("encoder-empty");
   open_encoder(&f, "{ width: 320, height: 240 }");
-  assert!(refusal(&f, "e.finish()").starts_with("invalid-argument:"));
+  assert!(refusal(&f, "e.finish()").starts_with("TypeError:"));
   let calls = f.host.log.borrow().calls.clone();
   assert!(!calls.iter().any(|(op, ..)| *op == OP_ENCODER_FINISH), "the host was asked anyway");
 }

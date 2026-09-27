@@ -11,7 +11,7 @@ use std::rc::Rc;
 use jni::objects::{JObject, JObjectArray};
 use jni::sys::jobjectArray;
 use rquickjs::function::Opt;
-use rquickjs::{Class, Context, Ctx, Function, Object, Persistent, Result as JsResult, Value};
+use rquickjs::{Class, Context, Ctx, Exception, Function, Object, Persistent, Result as JsResult, Value};
 
 use crate::api::error::PluginErrorCode;
 use crate::api::platform::jvm::JvmState;
@@ -162,7 +162,7 @@ impl XposedState {
   fn require_handle<'js>(&self, ctx: &Ctx<'js>, value: &Value<'js>, what: &str) -> JsResult<i64> {
     match self.jvm.handle_id(value) {
       Some(id) => Ok(id),
-      None => PluginErrorCode::InvalidArgument.throw(ctx, &format!("xposed: {what} expected a java class or method")),
+      None => Err(Exception::throw_type(ctx, &format!("xposed: {what} expected a java class or method"))),
     }
   }
 }
@@ -217,27 +217,30 @@ fn read_hook_callbacks<'js>(
         callbacks.after = Some(callback.clone());
       }
     } else {
-      return PluginErrorCode::InvalidArgument
-        .throw(ctx, &format!("{what}: {phase} must be a function, Java Runnable or Consumer"));
+      return Err(Exception::throw_type(
+        ctx,
+        &format!("{what}: {phase} must be a function, Java Runnable or Consumer"),
+      ));
     }
   }
   if has_native {
     if callbacks.before.is_some() || callbacks.after.is_some() {
-      return PluginErrorCode::InvalidArgument
-        .throw(ctx, "xposed: cannot mix native phases and JS callbacks in one hook");
+      return Err(Exception::throw_type(ctx, "xposed: cannot mix native phases and JS callbacks in one hook"));
     }
     callbacks.native_phases = Some(wires);
   } else if callbacks.before.is_none() && callbacks.after.is_none() {
-    return PluginErrorCode::InvalidArgument.throw(ctx, "xposed: a hook needs a before or an after callback");
+    return Err(Exception::throw_type(ctx, "xposed: a hook needs a before or an after callback"));
   }
   let filter: Value = hook.get("filter")?;
   if !filter.is_undefined() && !filter.is_null() {
     if has_native {
-      return PluginErrorCode::InvalidArgument
-        .throw(ctx, "xposed: a native hook already runs on the hooked thread, so a filter would only cost it");
+      return Err(Exception::throw_type(
+        ctx,
+        "xposed: a native hook already runs on the hooked thread, so a filter would only cost it",
+      ));
     }
     let Some(id) = jvm.handle_id(&filter) else {
-      return PluginErrorCode::InvalidArgument.throw(ctx, &format!("{what}: filter must be an inu.jvm.routine"));
+      return Err(Exception::throw_type(ctx, &format!("{what}: filter must be an inu.jvm.routine")));
     };
     callbacks.filter = Some(format!("G{id}"));
   }
@@ -313,7 +316,7 @@ impl XposedState {
   ) -> JsResult<Function<'js>> {
     self.grants.check_grant(ctx, GRANT, None, MATCH_NAMESPACE)?;
     let Some(hook) = hook.as_object() else {
-      return PluginErrorCode::InvalidArgument.throw(ctx, &format!("{what}: expected a hook object"));
+      return Err(Exception::throw_type(ctx, &format!("{what}: expected a hook object")));
     };
     let callbacks = read_hook_callbacks(ctx, &self.jvm, hook, what)?;
     if self.lifecycle.is_unloading() {
@@ -342,7 +345,7 @@ impl XposedState {
       None => Vec::new(),
       Some(args) => {
         let Some(args) = args.as_array() else {
-          return PluginErrorCode::InvalidArgument.throw(ctx, "callOriginalMethod: expected an array of arguments");
+          return Err(Exception::throw_type(ctx, "callOriginalMethod: expected an array of arguments"));
         };
         array_values(ctx, args, "callOriginalMethod")?
       }
@@ -413,7 +416,7 @@ pub fn install_xposed<'js>(
             .and_then(|name| name.as_string().and_then(|name| name.to_string().ok()))
             .filter(|name| !name.is_empty())
           else {
-            return PluginErrorCode::InvalidArgument.throw(&ctx, "hookAllOverloads: expected a method name");
+            return Err(Exception::throw_type(&ctx, "hookAllOverloads: expected a method name"));
           };
           state.js_hook(
             &ctx,

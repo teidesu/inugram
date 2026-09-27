@@ -55,7 +55,7 @@ const pending = inu.account().invokeRpc({ _: 'help.getConfig' })
 check('invokeRpc through an account answers a promise', pending instanceof Promise)
 pending.catch(() => {})
 const detached = inu.account().invokeRpc
-expectThrow('a torn-off invokeRpc names no account', 'invalid-argument', () => detached({ _: 'help.getConfig' }))
+expectThrow('a torn-off invokeRpc names no account', TypeError, () => detached({ _: 'help.getConfig' }))
 
 let setups = 0
 const torn = []

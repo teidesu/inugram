@@ -617,7 +617,7 @@ fn read_method_name<'js>(ctx: &Ctx<'js>, obj: &Value<'js>) -> JsResult<String> {
   };
   match name.as_string().and_then(|s| s.to_string().ok()) {
     Some(name) => Ok(name),
-    None => PluginErrorCode::InvalidArgument.throw(ctx, "invokeRpc: the request must carry its method name in '_'"),
+    None => Err(Exception::throw_type(ctx, "invokeRpc: the request must carry its method name in '_'")),
   }
 }
 
@@ -629,10 +629,7 @@ fn takeout_options_json<'js>(ctx: &Ctx<'js>, options: Option<Value<'js>>) -> JsR
   let file_max_size: i64 = match options.get::<_, Value>("fileMaxSize") {
     Ok(value) if !value.is_undefined() && !value.is_null() => match value.as_number() {
       Some(size) if size.fract() == 0.0 && size > 0.0 => size as i64,
-      _ => {
-        return PluginErrorCode::InvalidArgument
-          .throw(ctx, "initTakeoutSession: fileMaxSize must be a positive integer")
-      }
+      _ => return Err(Exception::throw_type(ctx, "initTakeoutSession: fileMaxSize must be a positive integer")),
     },
     _ => 0,
   };
@@ -661,7 +658,7 @@ impl RpcState {
       .ok()
       .and_then(|array| qjs_read_typed_bytes(&array, <[u8]>::to_vec))
     else {
-      return PluginErrorCode::InvalidArgument.throw(ctx, "invokeRaw: expected the serialized method as a Uint8Array");
+      return Err(Exception::throw_type(ctx, "invokeRaw: expected the serialized method as a Uint8Array"));
     };
     Ok(
       self
@@ -991,7 +988,7 @@ impl RpcState {
           return abandon.code().throw(&ctx, &format!("next(): {}", abandon.message()));
         }
         if dstate.settled.get() {
-          return PluginErrorCode::InvalidArgument.throw(&ctx, "next(): this dispatch already settled");
+          return Err(Exception::throw_type(&ctx, "next(): this dispatch already settled"));
         }
         if dstate.called.replace(true) {
           return Err(Exception::throw_type(&ctx, "next() may only be called once"));
@@ -1000,7 +997,7 @@ impl RpcState {
           Some(req) => req,
           None => match dstate.request.borrow().clone() {
             Some(request) => request.restore(&ctx)?,
-            None => return PluginErrorCode::InvalidArgument.throw(&ctx, "next(): this dispatch already settled"),
+            None => return Err(Exception::throw_type(&ctx, "next(): this dispatch already settled")),
           },
         };
         let wire = proxy::js_value_to_wire(&ctx, req)?;

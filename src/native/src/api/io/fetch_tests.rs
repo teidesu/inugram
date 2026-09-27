@@ -163,7 +163,7 @@ fn start(f: &Fixture, call: &str) {
         globalThis.__res = null
         ;{call}.then(
           r => {{ globalThis.__res = r; globalThis.__out = 'ok' }},
-          e => {{ globalThis.__out = `${{e.name}}|${{e.code}}|${{e.message}}` }},
+          e => {{ globalThis.__out = `${{e.name}}|${{e.code ?? ''}}|${{e.message}}` }},
         )
       "#,
     ),
@@ -189,7 +189,7 @@ fn a_refused_request_never_crosses() {
   let mut cases: Vec<(Option<&str>, String, &str)> = vec![
     (Some("fetch(example.com)"), "fetch('https://evil.com/x')".into(), "PluginError|not-granted|missing grant: fetch(evil.com)"),
     (None, "fetch('https://example.com/x')".into(), "PluginError|not-granted|missing grant: fetch(example.com)"),
-    (Some("fetch"), "fetch('https://example.com/x', { method: 'GET /x HTTP/1.1' })".into(), "PluginError|invalid-argument|"),
+    (Some("fetch"), "fetch('https://example.com/x', { method: 'GET /x HTTP/1.1' })".into(), "TypeError||"),
     (
       Some("fetch"),
       "(() => { const b = new Blob(['x']); b.dispose(); return fetch('https://example.com/x', { body: b, method: 'POST' }) })()".into(),
@@ -209,13 +209,13 @@ fn a_refused_request_never_crosses() {
     "notaurl",
     "https:///x",
   ] {
-    cases.push((Some("fetch"), format!("fetch({url:?})"), "PluginError|invalid-argument|"));
+    cases.push((Some("fetch"), format!("fetch({url:?})"), "TypeError||"));
   }
   for header in ["Host", "content-length", "Transfer-Encoding", "connection"] {
     cases.push((
       Some("fetch"),
       format!("fetch('https://example.com/x', {{ headers: {{ {header:?}: 'x' }} }})"),
-      "PluginError|invalid-argument|",
+      "TypeError||",
     ));
   }
   for init in [
@@ -229,7 +229,7 @@ fn a_refused_request_never_crosses() {
     r#"{ headers: [['x-one']] }"#,
     r#"{ headers: [['x-one', 'a', 'b']] }"#,
   ] {
-    cases.push((Some("fetch"), format!("fetch('https://example.com/x', {init})"), "TypeError|"));
+    cases.push((Some("fetch"), format!("fetch('https://example.com/x', {init})"), "TypeError||"));
   }
   for (grant, call, prefix) in cases {
     let f = setup(grant);
@@ -349,7 +349,7 @@ fn a_forged_headers_list_is_refused_on_the_send_path() {
       })()
     "#,
   );
-  assert!(out(&f).starts_with("PluginError|invalid-argument|"), "{}", out(&f));
+  assert!(out(&f).starts_with("TypeError||"), "{}", out(&f));
   assert!(f.host.sent.borrow().is_empty());
 }
 

@@ -1,7 +1,5 @@
-use rquickjs::{Array, Ctx, Function, Object, Result as JsResult, Value};
+use rquickjs::{Array, Ctx, Exception, Function, Object, Result as JsResult, Value};
 use tgtext::{DateFormat, Entity, EntityKind, Sub, TextWithEntities};
-
-use crate::api::error::PluginErrorCode;
 
 const KIND_MARKDOWN: i32 = 0;
 const KIND_HTML: i32 = 1;
@@ -22,7 +20,7 @@ pub fn install_text<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
           KIND_MARKDOWN => tgtext::markdown::parse(&borrowed, &subs),
           KIND_HTML => tgtext::html::parse(false, &borrowed, &subs),
           KIND_HTML_RAW => tgtext::html::parse(true, &borrowed, &subs),
-          _ => return PluginErrorCode::InvalidArgument.throw(&ctx, "parse: unknown format"),
+          _ => return Err(Exception::throw_type(&ctx, "parse: unknown format")),
         };
         text_to_js(&ctx, &parsed)
       },
@@ -37,7 +35,7 @@ pub fn install_text<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
         KIND_MARKDOWN => tgtext::markdown::unparse(&text, &entities),
         KIND_HTML => tgtext::html::unparse(false, &text, &entities),
         KIND_HTML_RAW => tgtext::html::unparse(true, &text, &entities),
-        _ => return PluginErrorCode::InvalidArgument.throw(&ctx, "unparse: unknown format"),
+        _ => return Err(Exception::throw_type(&ctx, "unparse: unknown format")),
       })
     })?,
   )?;
@@ -48,7 +46,7 @@ pub fn install_text<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
       Ok(match kind {
         KIND_MARKDOWN => tgtext::markdown::escape(&text),
         KIND_HTML | KIND_HTML_RAW => tgtext::html::escape(&text, quote),
-        _ => return PluginErrorCode::InvalidArgument.throw(&ctx, "escape: unknown format"),
+        _ => return Err(Exception::throw_type(&ctx, "escape: unknown format")),
       })
     })?,
   )?;
@@ -58,13 +56,13 @@ pub fn install_text<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
 
 fn read_parts<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<Vec<String>> {
   let Some(array) = value.as_array() else {
-    return PluginErrorCode::InvalidArgument.throw(ctx, "parse: expected template parts");
+    return Err(Exception::throw_type(ctx, "parse: expected template parts"));
   };
   let mut parts = Vec::with_capacity(array.len());
   for item in array.iter::<Value>() {
     let item = item?;
     let Some(text) = item.as_string() else {
-      return PluginErrorCode::InvalidArgument.throw(ctx, "parse: template parts must be strings");
+      return Err(Exception::throw_type(ctx, "parse: template parts must be strings"));
     };
     parts.push(text.to_string()?);
   }
@@ -73,7 +71,7 @@ fn read_parts<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<Vec<String>> 
 
 fn read_subs<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<Vec<Sub>> {
   let Some(array) = value.as_array() else {
-    return PluginErrorCode::InvalidArgument.throw(ctx, "parse: expected interpolated values");
+    return Err(Exception::throw_type(ctx, "parse: expected interpolated values"));
   };
   let mut subs = Vec::with_capacity(array.len());
   for item in array.iter::<Value>() {
@@ -87,11 +85,11 @@ fn read_subs<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<Vec<Sub>> {
       continue;
     }
     let Some(object) = item.as_object() else {
-      return PluginErrorCode::InvalidArgument.throw(ctx, "parse: expected a string or { text, entities }");
+      return Err(Exception::throw_type(ctx, "parse: expected a string or { text, entities }"));
     };
     let text: Value = object.get("text")?;
     let Some(text) = text.as_string() else {
-      return PluginErrorCode::InvalidArgument.throw(ctx, "parse: expected a string or { text, entities }");
+      return Err(Exception::throw_type(ctx, "parse: expected a string or { text, entities }"));
     };
     let entities = read_entities(ctx, &object.get("entities")?)?;
     subs.push(Sub::Rich(TextWithEntities { text: text.to_string()?, entities }));
@@ -104,7 +102,7 @@ fn read_entities<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<Vec<Entity
     return Ok(Vec::new());
   }
   let Some(array) = value.as_array() else {
-    return PluginErrorCode::InvalidArgument.throw(ctx, "entities must be an array");
+    return Err(Exception::throw_type(ctx, "entities must be an array"));
   };
   let mut entities = Vec::with_capacity(array.len());
   for item in array.iter::<Value>() {
@@ -115,11 +113,11 @@ fn read_entities<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<Vec<Entity
 
 fn read_entity<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<Entity> {
   let Some(object) = value.as_object() else {
-    return PluginErrorCode::InvalidArgument.throw(ctx, "entities: expected message entity objects");
+    return Err(Exception::throw_type(ctx, "entities: expected message entity objects"));
   };
   let name: Value = object.get("_")?;
   let Some(name) = name.as_string() else {
-    return PluginErrorCode::InvalidArgument.throw(ctx, "entities: an entity needs its constructor name");
+    return Err(Exception::throw_type(ctx, "entities: an entity needs its constructor name"));
   };
   let name = name.to_string()?;
   let offset = get_number_field(ctx, object, "offset")?;
@@ -235,7 +233,7 @@ fn get_number_field<'js>(ctx: &Ctx<'js>, object: &Object<'js>, name: &str) -> Js
   let value: Value = object.get(name)?;
   match value.as_number() {
     Some(value) if value.is_finite() && value.fract() == 0.0 => Ok(value as i64),
-    _ => PluginErrorCode::InvalidArgument.throw(ctx, &format!("entities: {name} must be an integer")),
+    _ => Err(Exception::throw_type(ctx, &format!("entities: {name} must be an integer"))),
   }
 }
 

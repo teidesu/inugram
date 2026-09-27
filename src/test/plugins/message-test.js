@@ -149,9 +149,9 @@ try {
 check('raw cannot be swapped out from under the wrapper', live.text === 'rewritten', `${swapped}, text = ${live.text}`)
 
 // @ts-expect-error
-expectThrow('a wrapper needs something to wrap', 'invalid-argument', () => new inu.Message(null))
+expectThrow('a wrapper needs something to wrap', TypeError, () => new inu.Message(null))
 // @ts-expect-error
-expectThrow('and it has to be an object', 'invalid-argument', () => new inu.Message('a message'))
+expectThrow('and it has to be an object', TypeError, () => new inu.Message('a message'))
 
 if (typeof inu.invokeRpc !== 'function') {
   console.log('SKIP the live half: no invokeRpc in this context')

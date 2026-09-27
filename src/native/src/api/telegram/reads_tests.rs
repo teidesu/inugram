@@ -592,7 +592,7 @@ fn naming_yourself_takes_the_self_scope_on_top_of_the_reads_own() {
     without_self,
     r#"
       const a = inu.account();
-      const push = (label) => (e) => __out.push(`${label}:${e.code}:${e.grant}`);
+      const push = (label) => (e) => __out.push(`${label}:${(e.code ?? e.name)}:${e.grant}`);
       a.getHistory('me').catch(push('history'));
       a.getUserFull('me').catch(push('userFull'));
       a.getTopics('me').catch(push('topics'));
@@ -668,7 +668,7 @@ fn a_drafts_topic_id_reaches_the_host() {
   assert_eq!(host.reads.borrow().last().unwrap().2, "S\n0");
   assert_eq!(
     catch_json(&ctx, "inu.account().getDraft('me', { topicId: -1 })"),
-    r#"[true,"invalid-argument",null,"getDraft: topicId must be a non-negative 32-bit integer"]"#,
+    r#"[false,"TypeError",null,"getDraft: topicId must be a non-negative 32-bit integer"]"#,
   );
 }
 
@@ -701,7 +701,7 @@ fn the_message_reads_take_one_id_or_a_list_of_them() {
       a.getMessages('me', 7).then((m) => __out.push(m === null ? 'null' : `one:${m.id}`));
       a.getMessages('me', [7, 8]).then((list) => __out.push(`many:${list.map((m) => m && m.id).join(',')}`));
       a.getMessages(0, 7).then((m) => __out.push(`box:${m && m.id}`));
-      a.getMessages(4242, [7]).catch((e) => __out.push(e.code));
+      a.getMessages(4242, [7]).catch((e) => __out.push(e.code ?? e.name));
     "#,
   );
   assert_eq!(out, r#"["box:7","many:7,","not-found","one:7"]"#);
@@ -779,7 +779,7 @@ fn every_async_read_gates_on_its_own_account_read_scope() {
     &["account.read(messages)"],
     r#"
       const a = inu.account();
-      const push = (label) => (e) => __out.push(`${label}:${e.code}:${e.grant}`);
+      const push = (label) => (e) => __out.push(`${label}:${(e.code ?? e.name)}:${e.grant}`);
       a.getHistory('me').catch(push('history'));
       a.getDialogs().catch(push('dialogs'));
       a.getTopics('me').catch(push('topics'));
@@ -815,8 +815,8 @@ fn get_user_full_on_yourself_needs_only_the_self_scope() {
     &["account.read(self)"],
     r#"
       const a = inu.account();
-      a.getUserFull('me').then((u) => __out.push(u.about), (e) => __out.push(`me:${e.code}`));
-      a.getUserFull(222).catch((e) => __out.push(`other:${e.code}`));
+      a.getUserFull('me').then((u) => __out.push(u.about), (e) => __out.push(`me:${(e.code ?? e.name)}`));
+      a.getUserFull(222).catch((e) => __out.push(`other:${(e.code ?? e.name)}`));
     "#,
   );
   assert_eq!(out, r#"["bio","other:not-granted"]"#);
@@ -832,7 +832,7 @@ fn history_comes_back_wrapped_and_an_empty_one_is_an_empty_array() {
         __out.push(Array.isArray(page), page.length, page[0] instanceof inu.Message, page[0].id)
       });
       a.getHistory('me', { limit: 0 }).then((page) => __out.push(page.length));
-      a.getHistory(4242).catch((e) => __out.push(e.code));
+      a.getHistory(4242).catch((e) => __out.push(e.code ?? e.name));
     "#,
   );
   assert_eq!(out, r#"[0,100,2,"not-found",true,true]"#);
@@ -894,9 +894,9 @@ fn a_cursor_that_did_not_come_from_this_list_never_crosses() {
           globalThis.__out = [];
           const a = inu.account();
           a.getDialogs({ limit: 2 }).then((page) => {
-            a.getTopics('me', { cursor: page.next }).catch((e) => __out.push(`brand:${e.code}`))
-            a.getDialogs({ cursor: page.next + 'x' }).catch((e) => __out.push(`forged:${e.code}`))
-            a.getDialogs({ cursor: 'not-a-cursor' }).catch((e) => __out.push(`invented:${e.code}`))
+            a.getTopics('me', { cursor: page.next }).catch((e) => __out.push(`brand:${(e.code ?? e.name)}`))
+            a.getDialogs({ cursor: page.next + 'x' }).catch((e) => __out.push(`forged:${(e.code ?? e.name)}`))
+            a.getDialogs({ cursor: 'not-a-cursor' }).catch((e) => __out.push(`invented:${(e.code ?? e.name)}`))
           })
         "#,
       )
@@ -905,7 +905,7 @@ fn a_cursor_that_did_not_come_from_this_list_never_crosses() {
   settle(&rt, &ctx, &state, &host);
   assert_eq!(
     eval_json(&ctx, "__out.slice().sort()"),
-    r#"["brand:invalid-argument","forged:invalid-argument","invented:invalid-argument"]"#,
+    r#"["brand:TypeError","forged:TypeError","invented:TypeError"]"#,
   );
   // one crossing, the one that minted the cursor: the three refusals were decided in-engine
   assert_eq!(host.fetch_log.borrow().len(), 1);
@@ -998,7 +998,7 @@ fn an_iterator_rejects_on_its_first_step_and_never_at_the_call() {
     &["account.read(peers,dialogs)"],
     r#"
       const a = inu.account();
-      const push = (label) => (e) => __out.push(`${label}:${e.code}`);
+      const push = (label) => (e) => __out.push(`${label}:${(e.code ?? e.name)}`);
       const bad = a.iterDialogs('main');
       const ungranted = a.iterHistory('me');
       const detached = (0, a.iterTopics)('me');
@@ -1013,7 +1013,7 @@ fn an_iterator_rejects_on_its_first_step_and_never_at_the_call() {
   );
   assert_eq!(
     out,
-    r#"["function","function","function","options:invalid-argument","grant:not-granted","detached:invalid-argument","topics:invalid-argument"]"#,
+    r#"["function","function","function","options:TypeError","grant:not-granted","detached:TypeError","topics:TypeError"]"#,
   );
   assert_eq!(asked.len(), 1, "only the forum check reached the host at all");
 }
@@ -1031,12 +1031,12 @@ fn an_iterator_whose_cursor_was_evicted_ends_with_invalid_argument() {
           const it = a.iterDialogs({{ batchSize: 2 }});
           __out.push((await it.next()).value._, (await it.next()).value._);
           for (let i = 0; i < {CURSOR_LIMIT}; i++) await a.getDialogs({{ limit: 2 }});
-          try {{ await it.next(); __out.push('no-throw') }} catch (e) {{ __out.push(e.code) }}
+          try {{ await it.next(); __out.push('no-throw') }} catch (e) {{ __out.push(e.code ?? e.name) }}
         }})()
       "#
     ),
   );
-  assert_eq!(out, r#"["dialog","dialog","invalid-argument"]"#);
+  assert_eq!(out, r#"["dialog","dialog","TypeError"]"#);
 }
 
 #[test]
@@ -1063,7 +1063,7 @@ fn resolve_peer_many_fails_the_batch_for_a_missing_grant_or_a_non_peer() {
     &[],
     r#"
       const a = inu.account();
-      const push = (label) => (e) => __out.push(`${label}:${e.code}:${e.grant ?? ''}`);
+      const push = (label) => (e) => __out.push(`${label}:${(e.code ?? e.name)}:${e.grant ?? ''}`);
       a.resolvePeerMany([222]).catch(push('list'));
       a.resolvePeerMany([]).catch(push('empty'));
     "#,
@@ -1075,12 +1075,12 @@ fn resolve_peer_many_fails_the_batch_for_a_missing_grant_or_a_non_peer() {
     ASYNC_GRANTS,
     r#"
       const a = inu.account();
-      a.resolvePeerMany('me').catch((e) => __out.push(`notlist:${e.code}`));
-      a.resolvePeerMany([222, null]).catch((e) => __out.push(`nonpeer:${e.code}`));
+      a.resolvePeerMany('me').catch((e) => __out.push(`notlist:${(e.code ?? e.name)}`));
+      a.resolvePeerMany([222, null]).catch((e) => __out.push(`nonpeer:${(e.code ?? e.name)}`));
       a.resolvePeerMany([]).then((peers) => __out.push(peers.length));
     "#,
   );
-  assert_eq!(out, r#"["notlist:invalid-argument","nonpeer:invalid-argument",0]"#);
+  assert_eq!(out, r#"["notlist:TypeError","nonpeer:TypeError",0]"#);
 }
 
 /// `null` in place means "there is no such peer" and nothing else, so an element that failed
@@ -1093,7 +1093,7 @@ fn a_resolve_that_fails_for_anything_but_not_found_fails_the_batch() {
       inu.account()
         .resolvePeerMany(['telegram', 'boom', 'nosuch'])
         .then((peers) => __out.push(peers.map((p) => (p === null ? null : p._))))
-        .catch((e) => __out.push(`batch:${e.code}`))
+        .catch((e) => __out.push(`batch:${(e.code ?? e.name)}`))
     "#,
   );
   assert_eq!(out, r#"["batch:forbidden"]"#);
@@ -1254,13 +1254,13 @@ fn refused_dialogs_cached_options_never_reach_the_host() {
         { fields: ['a,b'] }, { fields: ['a\nb'] }, { fields: [''] }, { fields: [7] }, { fields: 'top_message' },
         { fields: [{}] },
       ]) {
-        inu.account().getDialogsCached(options).catch(e => __out.push(e.code))
+        inu.account().getDialogsCached(options).catch(e => __out.push(e.code ?? e.name))
       }
     "#,
   );
   settle(&rt, &ctx, &state, &host);
   assert_eq!(eval_json(&ctx, "new Set(__out).size === 1 && __out.length"), "12");
-  assert_eq!(eval_json(&ctx, "__out[0]"), r#""invalid-argument""#);
+  assert_eq!(eval_json(&ctx, "__out[0]"), r#""TypeError""#);
   assert!(host.fetch_log.borrow().is_empty());
 }
 
@@ -1271,7 +1271,7 @@ fn an_integer_past_int32_never_reaches_the_host() {
     &ctx,
     r#"
       globalThis.__out = [];
-      const push = e => __out.push(e.code);
+      const push = e => __out.push(e.code ?? e.name);
       const a = inu.account();
       a.getHistory('me', { limit: 2 ** 31 }).catch(push);
       a.getHistory('me', { offsetId: 1e21 }).catch(push);
@@ -1281,10 +1281,7 @@ fn an_integer_past_int32_never_reaches_the_host() {
     "#,
   );
   settle(&rt, &ctx, &state, &host);
-  assert_eq!(
-    eval_json(&ctx, "__out"),
-    r#"["invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument"]"#
-  );
+  assert_eq!(eval_json(&ctx, "__out"), r#"["TypeError","TypeError","TypeError","TypeError","TypeError"]"#);
   assert!(host.fetch_log.borrow().is_empty());
   assert!(host.reads.borrow().is_empty());
 }

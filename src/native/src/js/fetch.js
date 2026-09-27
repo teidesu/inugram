@@ -202,7 +202,7 @@
 
   const readInit = (init) => {
     if (init === undefined || init === null) return {}
-    if (typeof init !== 'object') throw new PluginError('invalid-argument', 'fetch: the second argument must be an options object')
+    if (typeof init !== 'object') throw new TypeError('fetch: the second argument must be an options object')
     return init
   }
 
@@ -210,7 +210,7 @@
     const raw = init.timeout
     if (raw === undefined || raw === null) return undefined
     if (typeof raw !== 'number' || !Number.isFinite(raw) || raw <= 0) {
-      throw new PluginError('invalid-argument', 'fetch: timeout must be a positive number of milliseconds')
+      throw new TypeError('fetch: timeout must be a positive number of milliseconds')
     }
     return raw
   }
@@ -219,7 +219,7 @@
     const signal = init.signal
     if (signal === undefined || signal === null) return undefined
     if (typeof signal.addEventListener !== 'function' || typeof signal.aborted !== 'boolean') {
-      throw new PluginError('invalid-argument', 'fetch: signal must be an AbortSignal')
+      throw new TypeError('fetch: signal must be an AbortSignal')
     }
     return signal
   }

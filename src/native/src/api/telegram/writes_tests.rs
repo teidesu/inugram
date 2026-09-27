@@ -371,7 +371,9 @@ fn a_missing_scope_rejects_with_the_grant_it_needs_and_never_crosses() {
   let code: String = calls
     .iter()
     .map(|(_, call)| {
-      format!("inu.account().{call}.then(() => __out.push('ok'), (e) => __out.push(`${{e.code}}:${{e.grant}}`));")
+      format!(
+        "inu.account().{call}.then(() => __out.push('ok'), (e) => __out.push(`${{(e.code ?? e.name)}}:${{e.grant}}`));"
+      )
     })
     .collect();
   let (out, host) = run_async(&["account.write(send)"], &code);
@@ -389,7 +391,7 @@ fn a_peer_crosses_as_a_spec_and_the_options_as_scalars() {
         .sendMessage('@Durov', { text: 'hi', entities: [] }, {
           replyToMessageId: 5, topicId: 9, silent: true, scheduleDate: 100, sendAs: -1001,
         })
-        .then(() => __out.push('sent'), (e) => __out.push(e.code))
+        .then(() => __out.push('sent'), (e) => __out.push(e.code ?? e.name))
     "#,
   );
   let calls = host.calls.borrow();
@@ -413,8 +415,8 @@ fn the_void_members_resolve_with_undefined_rather_than_the_hosts_null() {
     r#"
       const a = inu.account()
       const push = (label) => (v) => __out.push(`${label}:${v === undefined}`)
-      a.setReaction(111, 1, ['x']).then(push('react'), (e) => __out.push(`react:${e.code}`))
-      a.readHistory(111).then(push('read'), (e) => __out.push(`read:${e.code}`))
+      a.setReaction(111, 1, ['x']).then(push('react'), (e) => __out.push(`react:${(e.code ?? e.name)}`))
+      a.readHistory(111).then(push('read'), (e) => __out.push(`read:${(e.code ?? e.name)}`))
     "#,
   );
   assert_eq!(out, r#"["react:true","read:true"]"#);
@@ -431,7 +433,7 @@ fn a_blob_reaches_the_host_as_a_file_and_the_staged_copy_does_not_outlive_the_ca
           const f = new File([new Uint8Array([1,2,3,4])], 'payload.bin', { type: 'application/octet-stream' })
           inu.account().uploadFile(f).then(
             (input) => __out.push(`${input._}:${input.name}:${input.parts}`),
-            (e) => __out.push(e.code),
+            (e) => __out.push(e.code ?? e.name),
           )
         "#,
       )
@@ -465,7 +467,7 @@ fn the_plugins_prototype_cannot_rewrite_the_file_the_host_is_handed() {
       const sent = inu.account().uploadFile(new File([new Uint8Array([1])], 'payload.bin'))
       delete Object.prototype.toJSON
       delete Object.prototype.mime
-      sent.then(() => __out.push('ok'), (e) => __out.push(e.code))
+      sent.then(() => __out.push('ok'), (e) => __out.push(e.code ?? e.name))
     "#,
   );
   assert_eq!(out, r#"["ok"]"#);
@@ -478,7 +480,7 @@ fn the_plugins_prototype_cannot_rewrite_the_file_the_host_is_handed() {
 
 /// what a test reads back out of a rejected transfer: the code, and the two numbers
 /// `common.d.ts` promises a `quota-exceeded` carries
-const REPORT_QUOTA: &str = "(e) => __out.push(`${e.code}:${e.usage}:${e.quota}`)";
+const REPORT_QUOTA: &str = "(e) => __out.push(`${(e.code ?? e.name)}:${e.usage}:${e.quota}`)";
 
 #[test]
 fn a_transfer_past_the_staging_cap_is_refused_before_a_byte_is_written() {
@@ -527,7 +529,7 @@ fn a_path_is_read_through_inu_fs_and_its_grants() {
   let (out, host) = run_async(
     ALL_WRITES,
     r#"
-      inu.account().uploadFile({ path: 'own.bin' }).then(() => __out.push('ok'), (e) => __out.push(`${e.code}:${e.grant}`))
+      inu.account().uploadFile({ path: 'own.bin' }).then(() => __out.push('ok'), (e) => __out.push(`${(e.code ?? e.name)}:${e.grant}`))
     "#,
   );
   assert_eq!(out, r#"["not-granted:fs"]"#);
@@ -538,9 +540,9 @@ fn a_path_is_read_through_inu_fs_and_its_grants() {
     r#"
       inu.fs.write('own.bin', new Uint8Array([1, 2, 3]))
       const a = inu.account()
-      a.uploadFile({ path: '/etc/hosts' }).then(() => __out.push('ok'), (e) => __out.push(`${e.code}:${e.grant}`))
-      a.uploadFile({ path: '../escape.bin' }).then(() => __out.push('ok'), (e) => __out.push(`${e.code}:${e.grant}`))
-      a.uploadFile({ path: 'own.bin' }).then(() => __out.push('ok'), (e) => __out.push(e.code))
+      a.uploadFile({ path: '/etc/hosts' }).then(() => __out.push('ok'), (e) => __out.push(`${(e.code ?? e.name)}:${e.grant}`))
+      a.uploadFile({ path: '../escape.bin' }).then(() => __out.push('ok'), (e) => __out.push(`${(e.code ?? e.name)}:${e.grant}`))
+      a.uploadFile({ path: 'own.bin' }).then(() => __out.push('ok'), (e) => __out.push(e.code ?? e.name))
     "#,
   );
   assert_eq!(out, r#"["not-granted:unsafe.fs","not-granted:unsafe.fs","ok"]"#);
@@ -568,7 +570,7 @@ fn a_failed_transfer_ends_on_the_last_numbers_it_managed_to_report() {
             .downloadMedia({ _: 'message', id: 1, media: { _: 'messageMediaDocument' } }, {
               onProgress: (loaded, total) => __seen.push([loaded, total]),
             })
-            .then(() => __out.push('ok'), (e) => __out.push(e.code))
+            .then(() => __out.push('ok'), (e) => __out.push(e.code ?? e.name))
         "#,
       )
       .unwrap();
@@ -707,7 +709,7 @@ fn retargeting_at_a_peer_the_app_has_never_seen_is_not_found_and_leaves_the_send
   let fixture = setup_send(&["interceptSendMessage", "account.read(peers)"]);
   let next = run_one_send(
     &fixture,
-    "({ message: m }) => { try { m.peer = 4242424242 } catch (e) { __out.push([e.code, m.peer]) } return 'send' }",
+    "({ message: m }) => { try { m.peer = 4242424242 } catch (e) { __out.push([(e.code ?? e.name), m.peer]) } return 'send' }",
   )
   .expect("the send never went out");
   assert_eq!(
@@ -723,7 +725,7 @@ fn retargeting_needs_the_read_grant_on_top_of_the_apis_own() {
   let fixture = setup_send(&["interceptSendMessage"]);
   let next = run_one_send(
     &fixture,
-    "({ message: m }) => { try { m.peer = 111 } catch (e) { __out.push([e.code, e.grant]) } return 'send' }",
+    "({ message: m }) => { try { m.peer = 111 } catch (e) { __out.push([(e.code ?? e.name), e.grant]) } return 'send' }",
   )
   .expect("the send never went out");
   assert_eq!(read_out_json(&fixture.1), r#"[["not-granted","account.read(peers)"]]"#);
@@ -738,17 +740,14 @@ fn what_a_retarget_refuses_outright() {
     r#"
       ({ message: m }) => {
         for (const bad of [0, null, undefined, 'me', {}]) {
-          try { m.peer = bad; __out.push('accepted') } catch (e) { __out.push(e.code) }
+          try { m.peer = bad; __out.push('accepted') } catch (e) { __out.push(e.code ?? e.name) }
         }
         return 'send'
       }
     "#,
   );
   // a dialog id, never an `InputPeerLike`: the getter answers one, so the setter takes one
-  assert_eq!(
-    read_out_json(&fixture.1),
-    r#"["invalid-argument","invalid-argument","invalid-argument","invalid-argument","invalid-argument"]"#,
-  );
+  assert_eq!(read_out_json(&fixture.1), r#"["TypeError","TypeError","TypeError","TypeError","TypeError"]"#,);
 }
 
 fn run_bundled_oracle(source: &str, done: &str, count: usize) {

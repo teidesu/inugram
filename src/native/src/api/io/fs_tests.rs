@@ -57,7 +57,7 @@ fn the_app_directories_answer_what_the_host_gave() {
   );
   assert_eq!(
     caught(&fixture, "inu.android.getMediaDir('downloads')"),
-    "invalid-argument|getMediaDir: 'downloads' is not one of files, images, videos, audios, documents",
+    "TypeError|getMediaDir: 'downloads' is not one of files, images, videos, audios, documents",
   );
 }
 
@@ -72,7 +72,7 @@ fn caught(fixture: &Fixture, code: &str) -> String {
       r#"
         (() => {{
           try {{ {code}; return 'no-throw' }}
-          catch (e) {{ return `${{e.code}}|${{e.message}}` }}
+          catch (e) {{ return `${{(e.code ?? e.name)}}|${{e.message}}` }}
         }})()
       "#,
     ),
@@ -156,7 +156,7 @@ fn a_symlink_cycle_terminates() {
   let f = scoped("symlink-cycle");
   std::os::unix::fs::symlink("b", f.dir.path().join("a")).unwrap();
   std::os::unix::fs::symlink("a", f.dir.path().join("b")).unwrap();
-  assert_eq!(catch_error_code(&f, "inu.fs.read('a')"), "invalid-argument");
+  assert_eq!(catch_error_code(&f, "inu.fs.read('a')"), "TypeError");
 }
 
 #[test]
@@ -269,9 +269,9 @@ fn writing_an_app_file_blob_whose_file_is_gone_is_an_expired_handle() {
 fn a_directory_is_not_a_file() {
   let f = scoped("dir-read");
   eval(&f, "inu.fs.mkdir('d'); 'ok'");
-  assert_eq!(catch_error_code(&f, "inu.fs.read('d')"), "invalid-argument");
-  assert_eq!(catch_error_code(&f, "inu.fs.copy('d', 'e')"), "invalid-argument");
-  assert_eq!(catch_error_code(&f, "inu.fs.write('d', new Uint8Array([1]))"), "invalid-argument");
+  assert_eq!(catch_error_code(&f, "inu.fs.read('d')"), "TypeError");
+  assert_eq!(catch_error_code(&f, "inu.fs.copy('d', 'e')"), "TypeError");
+  assert_eq!(catch_error_code(&f, "inu.fs.write('d', new Uint8Array([1]))"), "TypeError");
 }
 
 #[test]
@@ -361,7 +361,9 @@ fn an_engine_without_a_directory_fails_every_call_rather_than_landing_elsewhere(
     install_fs(&ctx, grants, Path::new(""), DEFAULT_QUOTA_BYTES, false, TEST_ANDROID_DIRS, &inu).unwrap();
     for call in ["inu.fs.write('a', new Uint8Array([1]))", "inu.fs.read('a')", "inu.fs.usage()"] {
       let got: String = ctx
-        .eval(format!(r#"(() => {{ try {{ {call}; return 'no-throw' }} catch (e) {{ return e.code }} }})()"#,))
+        .eval(format!(
+          r#"(() => {{ try {{ {call}; return 'no-throw' }} catch (e) {{ return (e.code ?? e.name) }} }})()"#,
+        ))
         .unwrap();
       assert_eq!(got, "internal", "'{call}'");
     }

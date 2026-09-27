@@ -283,7 +283,7 @@ fn a_write_past_the_quota_is_refused_as_a_dom_exception_and_lands_nowhere() {
   let file = TempPath::default();
   let ls = open(&file.0);
   let outcome = ls.eval(&format!(
-    "try {{ localStorage.setItem('big', 'x'.repeat({})); 'no-throw' }} catch (e) {{ JSON.stringify([e instanceof DOMException, e.name, e.code]) }}",
+    "try {{ localStorage.setItem('big', 'x'.repeat({})); 'no-throw' }} catch (e) {{ JSON.stringify([e instanceof DOMException, e.name, (e.code ?? e.name)]) }}",
     Q + 1
   ));
   assert_eq!(outcome, r#"[true,"QuotaExceededError",22]"#);

@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use rquickjs::function::Opt;
 use rquickjs::object::Property;
-use rquickjs::{Array, Ctx, Function, Object, Persistent, Result as JsResult, Value};
+use rquickjs::{Array, Ctx, Exception, Function, Object, Persistent, Result as JsResult, Value};
 
 use crate::api::error::{call_callback, describe_js_error, PluginErrorCode};
 use crate::runtime::enter_js;
@@ -119,8 +119,8 @@ impl AccountState {
       Some(id) if id.is_undefined() || id.is_null() => None,
       Some(id) => match id.as_number() {
         Some(n) if n.fract() == 0.0 && n >= i32::MIN as f64 && n <= i32::MAX as f64 => Some(n as i32),
-        Some(_) => return PluginErrorCode::InvalidArgument.throw(ctx, "account: 'id' must be an integer slot index"),
-        None => return PluginErrorCode::InvalidArgument.throw(ctx, "account: 'id' must be a number"),
+        Some(_) => return Err(Exception::throw_type(ctx, "account: 'id' must be an integer slot index")),
+        None => return Err(Exception::throw_type(ctx, "account: 'id' must be a number")),
       },
     };
 
@@ -339,7 +339,7 @@ pub(crate) fn account_slot<'js>(
     Some(slot) => Ok(slot),
     None => {
       let message: &str = &format!("{what}: not called on an account handle; use inu.account().{what}(...)");
-      PluginErrorCode::InvalidArgument.throw(ctx, message)
+      Err(Exception::throw_type(ctx, message))
     }
   }
 }

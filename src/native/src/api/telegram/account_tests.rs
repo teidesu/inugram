@@ -96,7 +96,7 @@ fn account_with_no_login_and_a_non_numeric_id_both_throw() {
   for id in ["'0'", "true", "{}", "[]", "() => 0"] {
     assert_eq!(
       catch_json(&ctx, &format!("inu.account({id})")),
-      r#"[true,"invalid-argument",null,"account: 'id' must be a number"]"#,
+      r#"[false,"TypeError",null,"account: 'id' must be a number"]"#,
       "id: {id}",
     );
   }
@@ -109,7 +109,7 @@ fn a_non_integral_id_is_refused_rather_than_coerced() {
   for id in ["NaN", "Infinity", "-Infinity", "1.5", "-0.5", "1e12", "-1e12"] {
     assert_eq!(
       catch_json(&ctx, &format!("inu.account({id})")),
-      r#"[true,"invalid-argument",null,"account: 'id' must be an integer slot index"]"#,
+      r#"[false,"TypeError",null,"account: 'id' must be an integer slot index"]"#,
       "id: {id}",
     );
   }

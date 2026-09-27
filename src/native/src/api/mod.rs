@@ -37,6 +37,7 @@ pub(crate) struct ReflectFns<'js> {
 pub(crate) struct Globals<'js> {
   pub(crate) inu: Object<'js>,
   pub(crate) plugin_error: Constructor<'js>,
+  pub(crate) type_error: Constructor<'js>,
   pub(crate) reflect: ReflectFns<'js>,
   message: Rc<RefCell<Option<Constructor<'js>>>>,
   rpc_error: Rc<RefCell<Option<Constructor<'js>>>>,
@@ -51,6 +52,7 @@ impl<'js> Globals<'js> {
     ctx.store_userdata(Self {
       inu,
       plugin_error,
+      type_error: ctx.globals().get("TypeError")?,
       reflect: ReflectFns {
         get: reflect.get("get")?,
         set: reflect.get("set")?,

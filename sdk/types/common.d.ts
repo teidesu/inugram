@@ -82,7 +82,7 @@ declare namespace inu {
     text: string
   }
 
-  /** A plugin error, thrown by plugin APIs */
+  /** A plugin error, thrown by plugin APIs. An invalid argument (a wrong type or value) is a plain `TypeError` instead */
   class PluginError extends Error {
     /**
      *  Error code:
@@ -91,7 +91,6 @@ declare namespace inu {
      * - `quota-exceeded`: You are trying to use more resources than the quota allows (fs, timers, native memory, actions, etc.)
      * - `handle-expired`: You are trying to read data from an expired/disposed handle.
      * - `unknown-constructor`: You are trying to use an unknown TL constructor
-     * - `invalid-argument`: You passed an invalid argument (type or something else)
      * - `not-found`: You are trying to access something that doesn't exist
      * - `unsupported`: You are trying to use an unsupported API
      * - `timed-out`: Your operation has timed out
@@ -105,7 +104,6 @@ declare namespace inu {
       | 'quota-exceeded'
       | 'handle-expired'
       | 'unknown-constructor'
-      | 'invalid-argument'
       | 'not-found'
       | 'unsupported'
       | 'timed-out'
@@ -495,7 +493,7 @@ declare namespace inu {
      *
      * `archive` selects the main list (`'exclude'`, the default), the archive (`'only'`), or both
      * (`'keep'`). `chatFolderId` selects a folder from {@link getChatFoldersCached} instead.
-     * Specifying both options throws `invalid-argument`; folders have their own archive rules.
+     * Specifying both options throws a `TypeError`; folders have their own archive rules.
      *
      * `fields` preloads selected fields for faster reads. Other fields remain readable.
      *

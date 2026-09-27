@@ -130,7 +130,6 @@ pub(crate) fn report_rejections(ctx: &Ctx<'_>) {
 
 #[derive(Clone, Copy)]
 pub enum PluginErrorCode<'a> {
-  InvalidArgument,
   NotFound,
   NotGranted(&'a str),
   Forbidden,
@@ -145,7 +144,6 @@ pub enum PluginErrorCode<'a> {
 impl<'a> PluginErrorCode<'a> {
   pub(crate) fn name(self) -> &'static str {
     match self {
-      Self::InvalidArgument => "invalid-argument",
       Self::NotFound => "not-found",
       Self::NotGranted(_) => "not-granted",
       Self::Forbidden => "forbidden",
@@ -207,6 +205,9 @@ pub fn make_plugin_error<'js>(
   Ok(obj.into_value())
 }
 
+/// the host's code for a bad argument, which a plugin sees as a `TypeError`
+const INVALID_ARGUMENT_CODE: &str = "invalid-argument";
+
 struct PluginErrorWire<'a> {
   code: &'a str,
   grant: Option<&'a str>,
@@ -246,6 +247,9 @@ fn structured_error_to_js<'js>(ctx: &Ctx<'js>, wire: &str) -> Option<JsResult<Va
     return Some(Globals::get(ctx).and_then(|globals| globals.get_rpc_error(ctx)?.construct((code, text))));
   }
   let parsed = parse_plugin_error(wire.strip_prefix('P')?)?;
+  if parsed.code == INVALID_ARGUMENT_CODE {
+    return Some(Globals::get(ctx).and_then(|globals| globals.type_error.construct((parsed.message,))));
+  }
   Some(make_plugin_error(ctx, parsed.code, parsed.message, parsed.grant, parsed.usage, parsed.quota))
 }
 

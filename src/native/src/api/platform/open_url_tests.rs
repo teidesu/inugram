@@ -9,11 +9,11 @@ fn open_url_takes_any_case_of_scheme_an_ipv6_host_but_not_a_bare_tg() {
     r#"
       ['HTTP://Example.COM', 'http://[2001:db8::1]:8080/x', 'tg://'].map((url) => {
         try { inu.openUrl(url); return 'opened' }
-        catch (e) { return e instanceof inu.PluginError ? e.code : 'Error' }
+        catch (e) { return e instanceof inu.PluginError ? (e.code ?? e.name) : e.name }
       })
     "#,
   );
-  assert_eq!(outcomes, r#"["opened","opened","invalid-argument"]"#);
+  assert_eq!(outcomes, r#"["opened","opened","TypeError"]"#);
   assert_eq!(
     *host.opened.borrow(),
     vec!["HTTP://Example.COM".to_string(), "http://[2001:db8::1]:8080/x".to_string()]
@@ -31,7 +31,7 @@ fn open_url_and_the_two_clipboard_halves_are_three_separate_grants() {
           const out = [];
           const attempt = f => {
             try { out.push(f() ?? 'ok'); }
-            catch (e) { out.push(e.code + '/' + e.grant); }
+            catch (e) { out.push((e.code ?? e.name) + '/' + e.grant); }
           };
           attempt(() => inu.clipboard.read());
           attempt(() => inu.openUrl('https://example.com'));

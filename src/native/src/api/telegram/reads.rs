@@ -3,9 +3,9 @@ use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
 use std::rc::Rc;
 
-use rquickjs::{Ctx, IntoJs, Object, Result as JsResult, Value};
+use rquickjs::{Ctx, Exception, IntoJs, Object, Result as JsResult, Value};
 
-use crate::api::error::{throw_wire_error, PluginErrorCode};
+use crate::api::error::throw_wire_error;
 use crate::api::telegram::account::AccountState;
 use crate::api::tl::proxy::{TlViews, ViewLife};
 use crate::runtime::{enter_js, Parked, PendingTable};
@@ -137,7 +137,7 @@ impl ReadsState {
       return Ok(());
     }
     let Some(scope) = get_op_scope(op) else {
-      return PluginErrorCode::InvalidArgument.throw(ctx, "unknown account read");
+      return Err(Exception::throw_type(ctx, "unknown account read"));
     };
     self.grants.check_grant(ctx, "account.read", Some(scope), MATCH_EXACT)?;
     self.check_self_grant(ctx, arg)
@@ -234,8 +234,10 @@ pub fn install_reads<'js>(
       {
         Some(payload) => payload,
         None => {
-          return PluginErrorCode::InvalidArgument
-            .throw(&ctx, "this cursor did not come from this list, or is too old to page from")
+          return Err(Exception::throw_type(
+            &ctx,
+            "this cursor did not come from this list, or is too old to page from",
+          ))
         }
       },
       _ => String::new(),

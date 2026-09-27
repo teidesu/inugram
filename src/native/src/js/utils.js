@@ -1,4 +1,4 @@
-(utils, PluginError, text) => {
+(utils, text) => {
 
   const toSub = (value) => {
     if (typeof value === 'boolean' || !value) return null
@@ -16,17 +16,17 @@
   const makeFormatter = (format) => {
     const parse = (strings, ...values) => {
       if (typeof strings === 'string') return text.parse(format, [strings], [])
-      if (!Array.isArray(strings)) throw new PluginError('invalid-argument', 'expected a string or a template literal')
+      if (!Array.isArray(strings)) throw new TypeError('expected a string or a template literal')
       return text.parse(format, [...strings], values.map(toSub))
     }
     parse.escape = (value, quote = false) => {
-      if (typeof value !== 'string') throw new PluginError('invalid-argument', 'escape: expected a string')
+      if (typeof value !== 'string') throw new TypeError('escape: expected a string')
       return text.escape(format, value, quote === true)
     }
     parse.unparse = (input) => {
       if (typeof input === 'string') return text.unparse(format, input, [])
       if (input === null || typeof input !== 'object' || typeof input.text !== 'string') {
-        throw new PluginError('invalid-argument', 'unparse: expected a string or { text, entities }')
+        throw new TypeError('unparse: expected a string or { text, entities }')
       }
       return text.unparse(format, input.text, input.entities)
     }
@@ -42,15 +42,15 @@
     if (value !== null && typeof value === 'object' && typeof value.text === 'string') {
       const entities = value.entities
       if (entities !== undefined && entities !== null && !Array.isArray(entities)) {
-        throw new PluginError('invalid-argument', `${what}: entities must be an array`)
+        throw new TypeError(`${what}: entities must be an array`)
       }
       return { text: value.text, entities: entities ?? null }
     }
-    throw new PluginError('invalid-argument', `${what}: expected a string or { text, entities }`)
+    throw new TypeError(`${what}: expected a string or { text, entities }`)
   }
 
   utils.joinTextWithEntities = (parts, delim = '') => {
-    if (!Array.isArray(parts)) throw new PluginError('invalid-argument', 'joinTextWithEntities: expected an array of texts')
+    if (!Array.isArray(parts)) throw new TypeError('joinTextWithEntities: expected an array of texts')
     const separator = toTextPart(delim, 'joinTextWithEntities')
     const texts = []
     const entities = []
@@ -151,7 +151,7 @@
 
   const toSpec = (peer) => {
     if (typeof peer === 'number') {
-      if (!Number.isInteger(peer)) throw new PluginError('invalid-argument', `not a marked peer id: ${peer}`)
+      if (!Number.isInteger(peer)) throw new TypeError(`not a marked peer id: ${peer}`)
       return `D${peer}`
     }
     if (typeof peer === 'string') {
@@ -160,7 +160,7 @@
       // one path where an id could arrive past 2^53 (int64 fields are strings on a TL snapshot)
       if (DIGITS.test(peer)) return `D${peer}`
       const username = peer.charCodeAt(0) === 64 ? peer.slice(1) : peer
-      if (!USERNAME.test(username)) throw new PluginError('invalid-argument', `not a username: ${peer}`)
+      if (!USERNAME.test(username)) throw new TypeError(`not a username: ${peer}`)
       return `U${username.toLowerCase()}`
     }
     if (peer !== null && typeof peer === 'object') {
@@ -170,11 +170,11 @@
       const id = getMarkedPeerId(peer)
       if (id !== null && id !== 0) return `D${id}`
     }
-    throw new PluginError('invalid-argument', `not a peer: ${describe(peer)}`)
+    throw new TypeError(`not a peer: ${describe(peer)}`)
   }
 
   const toSpecList = (peers, what) => {
-    if (!Array.isArray(peers)) throw new PluginError('invalid-argument', `${what}: expected an array of peers`)
+    if (!Array.isArray(peers)) throw new TypeError(`${what}: expected an array of peers`)
     return peers.map(peer => toSpec(peer)).join(SEPARATOR)
   }
 
@@ -184,13 +184,13 @@
   const toMessageId = (id, what) => {
     const value = toNumber(id)
     if (value === null || !Number.isInteger(value) || Math.abs(value) > INT32_MAX) {
-      throw new PluginError('invalid-argument', `${what}: message id must be a 32-bit integer`)
+      throw new TypeError(`${what}: message id must be a 32-bit integer`)
     }
     return value
   }
 
   const toMessageIds = (ids, what) => {
-    if (!Array.isArray(ids)) throw new PluginError('invalid-argument', `${what}: expected an array of message ids`)
+    if (!Array.isArray(ids)) throw new TypeError(`${what}: expected an array of message ids`)
     return ids.map(id => toMessageId(id, what))
   }
 
@@ -200,10 +200,10 @@
 
   const toFieldNames = (value, what) => {
     if (value === undefined || value === null) return null
-    if (!Array.isArray(value)) throw new PluginError('invalid-argument', `${what}: fields must be an array of field names`)
+    if (!Array.isArray(value)) throw new TypeError(`${what}: fields must be an array of field names`)
     for (const name of value) {
-      if (typeof name !== 'string') throw new PluginError('invalid-argument', `${what}: fields must be strings`)
-      if (!FIELD_NAME.test(name)) throw new PluginError('invalid-argument', `${what}: not a field name: ${name}`)
+      if (typeof name !== 'string') throw new TypeError(`${what}: fields must be strings`)
+      if (!FIELD_NAME.test(name)) throw new TypeError(`${what}: not a field name: ${name}`)
     }
     return [...value]
   }
@@ -212,7 +212,7 @@
 
   const toOptions = (options, what) => {
     if (options === undefined || options === null) return NO_OPTIONS
-    if (typeof options !== 'object') throw new PluginError('invalid-argument', `${what}: options must be an object`)
+    if (typeof options !== 'object') throw new TypeError(`${what}: options must be an object`)
     return options
   }
 
@@ -222,7 +222,7 @@
     if (value === undefined || value === null) return 0
     const count = toNumber(value)
     if (count === null || !Number.isInteger(count) || count < 0 || count > INT32_MAX) {
-      throw new PluginError('invalid-argument', `${what}: ${field} must be a non-negative 32-bit integer`)
+      throw new TypeError(`${what}: ${field} must be a non-negative 32-bit integer`)
     }
     return count
   }
@@ -232,7 +232,7 @@
   const readAccountSlot = (account, what) => {
     const id = account === null || account === undefined ? undefined : account.id
     if (typeof id !== 'number' || !Number.isInteger(id)) {
-      throw new PluginError('invalid-argument', `${what}: not called on an account handle; use inu.account().${what}(...)`)
+      throw new TypeError(`${what}: not called on an account handle; use inu.account().${what}(...)`)
     }
     return id
   }
@@ -240,13 +240,13 @@
   utils.peers = Object.freeze({
     getMarkedPeerId(peer) {
       const id = getMarkedPeerId(peer)
-      if (id === null) throw new PluginError('invalid-argument', `getMarkedPeerId: not a peer: ${baseName(peer) || typeof peer}`)
+      if (id === null) throw new TypeError(`getMarkedPeerId: not a peer: ${baseName(peer) || typeof peer}`)
       return id
     },
 
     parseMarkedPeerId(id) {
       const value = toNumber(id)
-      if (value === null || value === 0) throw new PluginError('invalid-argument', `parseMarkedPeerId: not a marked peer id: ${id}`)
+      if (value === null || value === 0) throw new TypeError(`parseMarkedPeerId: not a marked peer id: ${id}`)
       if (value > 0) return { type: 'user', id: value }
       if (value < ZERO_CHANNEL_ID) return { type: 'channel', id: ZERO_CHANNEL_ID - value }
       return { type: 'chat', id: -value }
@@ -256,7 +256,7 @@
       const name = baseName(userOrChat)
       if (name === 'user' && userOrChat.self === true) return { _: 'inputPeerSelf' }
       if (!ENTITIES.has(name) || describePeer(userOrChat) === null) {
-        throw new PluginError('invalid-argument', `toInputPeer: expected a user or a chat: ${name || typeof userOrChat}`)
+        throw new TypeError(`toInputPeer: expected a user or a chat: ${name || typeof userOrChat}`)
       }
       const id = userOrChat.id
       const hash = userOrChat.access_hash ?? '0'
@@ -268,7 +268,7 @@
     toSimpleDialogId(peer) {
       const value = typeof peer === 'number' ? peer : getMarkedPeerId(peer)
       if (value === null || !Number.isInteger(value) || value === 0) {
-        throw new PluginError('invalid-argument', `toSimpleDialogId: not a peer: ${baseName(peer) || peer}`)
+        throw new TypeError(`toSimpleDialogId: not a peer: ${baseName(peer) || peer}`)
       }
       return value < ZERO_CHANNEL_ID ? value - ZERO_CHANNEL_ID : value
     },

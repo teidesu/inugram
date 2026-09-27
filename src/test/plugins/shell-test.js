@@ -37,7 +37,7 @@ for (const url of [
   'javascript:alert(1)',
   'telegram.org',
 ]) {
-  expectThrow(`openUrl refuses ${url}`, 'invalid-argument', () => inu.openUrl(url))
+  expectThrow(`openUrl refuses ${url}`, TypeError, () => inu.openUrl(url))
 }
 
 for (const url of [
@@ -47,7 +47,7 @@ for (const url of [
   'https://telegram.org/a\nb',
   'https:///nohost',
 ]) {
-  expectThrow(`openUrl refuses ${JSON.stringify(url)}`, 'invalid-argument', () => inu.openUrl(url))
+  expectThrow(`openUrl refuses ${JSON.stringify(url)}`, TypeError, () => inu.openUrl(url))
 }
 
 expectThrow('chooser refuses an empty item list', null, () => {

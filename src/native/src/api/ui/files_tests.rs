@@ -70,7 +70,7 @@ fn refusal(f: &Fixture, code: &str) -> String {
   eval(
     f,
     &format!(
-      r#"(() => {{ try {{ {code}; return 'no error' }} catch (e) {{ return `${{e.code}}:${{e.message}}` }} }})()"#
+      r#"(() => {{ try {{ {code}; return 'no error' }} catch (e) {{ return `${{(e.code ?? e.name)}}:${{e.message}}` }} }})()"#
     ),
   )
 }
@@ -105,7 +105,7 @@ fn pick(f: &Fixture, options: &str) -> i64 {
         globalThis.out = 'pending'
         inu.ui.pickFile({options}).then(
           v => {{ globalThis.picked = v; globalThis.out = Array.isArray(v) ? `[${{v.length}}]` : (v && v.name) }},
-          e => {{ globalThis.out = `${{e.code}}:${{e.message}}` }},
+          e => {{ globalThis.out = `${{(e.code ?? e.name)}}:${{e.message}}` }},
         )
       "#
     ),
@@ -183,7 +183,7 @@ fn an_answer_this_cannot_read_rejects_rather_than_leaving_the_promise_hanging() 
   let f = setup("pick-garbage", &[]);
   let request = pick(&f, "{}");
   answer(&f, request, "not json at all");
-  assert!(settled(&f).starts_with("undefined:"), "a malformed answer did not reject");
+  assert!(settled(&f).starts_with("Error:"), "a malformed answer did not reject");
 
   let request = pick(&f, "{}");
   let gone = f.dir.path().join("gone.bin");
@@ -216,11 +216,11 @@ fn accept_takes_media_types_and_only_so_many_of_them() {
   let f = setup("pick-accept", &[]);
   assert_eq!(
     refusal(&f, "inu.ui.pickFile({ accept: 'font/ttf' })"),
-    "undefined:pickFile: 'accept' must be an array"
+    "TypeError:pickFile: 'accept' must be an array"
   );
-  assert!(refusal(&f, "inu.ui.pickFile({ accept: [42] })").starts_with("invalid-argument:"));
+  assert!(refusal(&f, "inu.ui.pickFile({ accept: [42] })").starts_with("TypeError:"));
   let many = (0..40).map(|n| format!("'a/{n}'")).collect::<Vec<_>>().join(",");
-  assert!(refusal(&f, &format!("inu.ui.pickFile({{ accept: [{many}] }})")).starts_with("invalid-argument:"));
+  assert!(refusal(&f, &format!("inu.ui.pickFile({{ accept: [{many}] }})")).starts_with("TypeError:"));
 }
 
 fn save(f: &Fixture, content: &str, options: &str) -> i64 {
@@ -231,7 +231,7 @@ fn save(f: &Fixture, content: &str, options: &str) -> i64 {
         globalThis.out = 'pending'
         inu.ui.saveFile({content}, {options}).then(
           v => {{ globalThis.out = String(v) }},
-          e => {{ globalThis.out = `${{e.code}}:${{e.message}}` }},
+          e => {{ globalThis.out = `${{(e.code ?? e.name)}}:${{e.message}}` }},
         )
       "#
     ),
@@ -286,6 +286,6 @@ fn a_named_file_is_saved_from_where_it_is_rather_than_copied_first() {
 #[test]
 fn saving_something_that_is_not_a_file_at_all_is_refused() {
   let f = setup("save-shape", &[]);
-  assert!(refusal(&f, "inu.ui.saveFile(42)").starts_with("invalid-argument:"));
-  assert!(refusal(&f, "inu.ui.saveFile()").starts_with("invalid-argument:"));
+  assert!(refusal(&f, "inu.ui.saveFile(42)").starts_with("TypeError:"));
+  assert!(refusal(&f, "inu.ui.saveFile()").starts_with("TypeError:"));
 }

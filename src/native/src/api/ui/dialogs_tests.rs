@@ -171,7 +171,7 @@ fn dialog_body_is_refused_rather_than_silently_dropped() {
               inu.ui.dialog({ title: 'T', body: { __inuUi: 'button' } });
               return 'did not throw';
             } catch (e) {
-              return `${e instanceof inu.PluginError}:${e.code}`;
+              return `${e instanceof inu.PluginError}:${(e.code ?? e.name)}`;
             }
           })()
         "#,

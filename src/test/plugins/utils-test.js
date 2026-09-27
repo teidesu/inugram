@@ -16,9 +16,9 @@ equals('fromHex takes uppercase too', Array.from(utils.fromHex('DEADBEEF')), [22
 equals('the empty cases are empty', [utils.toHex(new Uint8Array(0)), utils.fromBase64('').length], ['', 0])
 equals('fromBase64 takes unpadded input', Array.from(utils.fromBase64('aGk')), [104, 105])
 
-expectThrow('fromBase64 refuses what is not base64', 'invalid-argument', () => utils.fromBase64('!!!!'))
-expectThrow('fromHex refuses an odd digit count', 'invalid-argument', () => utils.fromHex('abc'))
-expectThrow('fromHex refuses non-hex digits', 'invalid-argument', () => utils.fromHex('zz'))
+expectThrow('fromBase64 refuses what is not base64', TypeError, () => utils.fromBase64('!!!!'))
+expectThrow('fromHex refuses an odd digit count', TypeError, () => utils.fromHex('abc'))
+expectThrow('fromHex refuses non-hex digits', TypeError, () => utils.fromHex('zz'))
 
 // @ts-expect-error
 expectThrow('a codec handed something that is not bytes throws a TypeError', TypeError, () => utils.toHex([1, 2, 3]))
@@ -49,13 +49,13 @@ check('formatFileSize uses Telegram text', utils.formatFileSize(4404019).length 
 check('formatDuration uses Telegram text', utils.formatDuration(3764).length > 0)
 
 // @ts-expect-error
-expectThrow('formatDate refuses a non-number', 'invalid-argument', () => utils.formatDate('yesterday'))
+expectThrow('formatDate refuses a non-number', TypeError, () => utils.formatDate('yesterday'))
 // @ts-expect-error
-expectThrow('formatDate refuses an unknown style', 'invalid-argument', () => utils.formatDate(unix, 'fuzzy'))
+expectThrow('formatDate refuses an unknown style', TypeError, () => utils.formatDate(unix, 'fuzzy'))
 // @ts-expect-error
-expectThrow('formatNumber refuses a non-number', 'invalid-argument', () => utils.formatNumber('lots'))
-expectThrow('formatNumber refuses a fraction', 'invalid-argument', () => utils.formatNumber(1.5))
-expectThrow('formatDuration refuses a negative', 'invalid-argument', () => utils.formatDuration(-1))
+expectThrow('formatNumber refuses a non-number', TypeError, () => utils.formatNumber('lots'))
+expectThrow('formatNumber refuses a fraction', TypeError, () => utils.formatNumber(1.5))
+expectThrow('formatDuration refuses a negative', TypeError, () => utils.formatDuration(-1))
 
 // every one of these has a Number() and would otherwise format something plausible
 /** @type {[string, (value: any) => string][]} */
@@ -67,7 +67,7 @@ const formatters = [
 ]
 for (const [what, format] of formatters) {
   for (const bad of [null, undefined, true, '42', [], {}, NaN, Infinity]) {
-    expectThrow(`${what} refuses ${JSON.stringify(bad) ?? String(bad)}`, 'invalid-argument', () => format(bad))
+    expectThrow(`${what} refuses ${JSON.stringify(bad) ?? String(bad)}`, TypeError, () => format(bad))
   }
 }
 
@@ -123,15 +123,15 @@ for (const [peer, type, id] of roundTrip) {
   equals(`${peer._} parses back to its own kind`, peers.parseMarkedPeerId(peers.getMarkedPeerId(peer)), { type, id })
 }
 
-expectThrow('getMarkedPeerId refuses inputPeerSelf, which names no id', 'invalid-argument', () => peers.getMarkedPeerId({ _: 'inputPeerSelf' }))
+expectThrow('getMarkedPeerId refuses inputPeerSelf, which names no id', TypeError, () => peers.getMarkedPeerId({ _: 'inputPeerSelf' }))
 // @ts-expect-error
-expectThrow('getMarkedPeerId refuses a plain number', 'invalid-argument', () => peers.getMarkedPeerId(42))
-expectThrow('parseMarkedPeerId refuses a username', 'invalid-argument', () => peers.parseMarkedPeerId('me'))
+expectThrow('getMarkedPeerId refuses a plain number', TypeError, () => peers.getMarkedPeerId(42))
+expectThrow('parseMarkedPeerId refuses a username', TypeError, () => peers.parseMarkedPeerId('me'))
 // @ts-expect-error
-expectThrow('toInputPeer refuses a Peer, which carries no access_hash', 'invalid-argument', () => peers.toInputPeer({ _: 'peerUser', user_id: 1 }))
+expectThrow('toInputPeer refuses a Peer, which carries no access_hash', TypeError, () => peers.toInputPeer({ _: 'peerUser', user_id: 1 }))
 
 // @ts-expect-error
-expectThrow('a constructor named "constructor" is not a peer', 'invalid-argument', () => peers.getMarkedPeerId({ _: 'constructor' }))
+expectThrow('a constructor named "constructor" is not a peer', TypeError, () => peers.getMarkedPeerId({ _: 'constructor' }))
 
 /** @type {tl.TypeMessageEntity[]} */
 const BOLD_HI = [{ _: 'messageEntityBold', offset: 0, length: 2 }]
@@ -154,7 +154,7 @@ equals('html collapses whitespace and thtml keeps it', [utils.html`a  b`.text, u
 equals('md.unparse writes entities back out', utils.md.unparse({ text: 'hi there', entities: BOLD_HI }), '**hi** there')
 equals('html.escape escapes markup', utils.html.escape('<a>'), '&lt;a&gt;')
 // @ts-expect-error
-expectThrow('a format refuses what is not a string', 'invalid-argument', () => utils.md(42))
+expectThrow('a format refuses what is not a string', TypeError, () => utils.md(42))
 
 equals('joinTextWithEntities shifts each part into place', utils.joinTextWithEntities([utils.md`**hi**`, 'x'], ', '), {
   text: 'hi, x',
@@ -162,6 +162,6 @@ equals('joinTextWithEntities shifts each part into place', utils.joinTextWithEnt
 })
 equals('joinTextWithEntities defaults to no delimiter', utils.joinTextWithEntities(['a', 'b']).text, 'ab')
 // @ts-expect-error
-expectThrow('joinTextWithEntities refuses a part that is not a text', 'invalid-argument', () => utils.joinTextWithEntities([7]))
+expectThrow('joinTextWithEntities refuses a part that is not a text', TypeError, () => utils.joinTextWithEntities([7]))
 
 console.log('utils test done')

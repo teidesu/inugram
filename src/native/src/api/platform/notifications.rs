@@ -6,7 +6,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use rquickjs::function::Args;
-use rquickjs::{Ctx, Function, Persistent, Result as JsResult, Value};
+use rquickjs::{Ctx, Exception, Function, Persistent, Result as JsResult, Value};
 
 use crate::api::error::format_exception;
 use crate::api::error::{host_error_to_js, report_callback_error, PluginErrorCode};
@@ -146,8 +146,7 @@ impl NotificationState {
     }
 
     let Some(handlers) = handlers.as_object() else {
-      return PluginErrorCode::InvalidArgument
-        .throw(ctx, "addNotificationCenterDelegate: expected an object of handlers");
+      return Err(Exception::throw_type(ctx, "addNotificationCenterDelegate: expected an object of handlers"));
     };
     let mut entries: Vec<(String, Function<'js>)> = Vec::new();
     for key in handlers.keys::<String>() {
@@ -156,13 +155,13 @@ impl NotificationState {
       let Some(callback) = value.as_function() else {
         return {
           let message: &str = &format!("addNotificationCenterDelegate: '{name}' is not a function");
-          PluginErrorCode::InvalidArgument.throw(ctx, message)
+          Err(Exception::throw_type(ctx, message))
         };
       };
       entries.push((name, callback.clone()));
     }
     if entries.is_empty() {
-      return PluginErrorCode::InvalidArgument.throw(ctx, "addNotificationCenterDelegate: no handlers");
+      return Err(Exception::throw_type(ctx, "addNotificationCenterDelegate: no handlers"));
     }
 
     let names: Vec<String> = entries.iter().map(|(name, _)| name.clone()).collect();

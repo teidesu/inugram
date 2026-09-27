@@ -67,7 +67,7 @@ Rules to keep in mind:
 - A number is never truncated. Passing `300` where a `byte` is expected does not match that
   parameter, and passing `1.5` to an `int` does not either.
 - Plain objects, JS arrays, functions and symbols cannot be passed. They throw
-  `invalid-argument`. Build a Java collection, or use `inu.android.bundle` for a `Bundle`.
+  a `TypeError`. Build a Java collection, or use `inu.android.bundle` for a `Bundle`.
 - A string or `byte[]` over 1 MB is refused with `quota-exceeded`, in either direction.
 - Because `long` comes back as a `number` when small, check with `typeof x === 'bigint'` only
   if the value can really be large, or normalize with `BigInt(x)`.
@@ -78,7 +78,7 @@ Normally a call picks an overload from the **runtime** values you pass.
 There is no static type information.
 
 The overload is resolved using the number of passed arguments, and their types.
-If zero or multiple overloads match, the call throws `invalid-argument` and lists a few descriptors.
+If zero or multiple overloads match, the call throws a `TypeError` and lists a few descriptors.
 
 To use an exact overload, use the Dalvik descriptor:
 
@@ -95,16 +95,16 @@ add.invoke(sized, 'x')
 
 - `getDeclaredMethod(name)` works without a descriptor only when the name is not overloaded.
 - `getDeclaredConstructor` always takes a descriptor, such as `(I)V`.
-- A pinned member still checks your arguments. It throws `invalid-argument` if they do not fit.
+- A pinned member still checks your arguments. It throws a `TypeError` if they do not fit.
 - Lookups are cached per class, so repeated calls are cheap.
 
 ## Errors
 
-Two kinds of errors reach your code:
+Three kinds of errors reach your code:
 
+- Arguments that do not fit, or an ambiguous overload, throw a `TypeError`.
 - A bridge refusal is an `inu.PluginError` with a `code`:
   - `not-found` (no such class or member)
-  - `invalid-argument` (arguments do not fit, ambiguous overload)
   - `forbidden` (trying to access plugin engine internals)
   - `handle-expired`
   - `quota-exceeded`.

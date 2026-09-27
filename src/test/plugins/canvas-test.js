@@ -10,10 +10,10 @@ const ctx = canvas.getContext('2d')
 check('getContext answers the same context every time', ctx === canvas.getContext('2d'))
 check('a context points back at its canvas', ctx.canvas === canvas)
 
-expectThrow('an impossible size is refused', 'invalid-argument', () => inu.canvas.create(0, 10))
-expectThrow('a canvas past the ceiling is refused', 'invalid-argument', () => inu.canvas.create(99999, 1))
+expectThrow('an impossible size is refused', TypeError, () => inu.canvas.create(0, 10))
+expectThrow('a canvas past the ceiling is refused', TypeError, () => inu.canvas.create(99999, 1))
 // @ts-expect-error deliberately not the one context id there is
-expectThrow('only 2d exists', 'invalid-argument', () => canvas.getContext('webgl'))
+expectThrow('only 2d exists', TypeError, () => canvas.getContext('webgl'))
 
 check('the initial fill is opaque black', ctx.fillStyle === '#000000', ctx.fillStyle)
 check('the initial line width is 1', ctx.lineWidth === 1)
@@ -154,7 +154,7 @@ const average = ctx.getAverageColor()
 check('getAverageColor answers four channels', ['r', 'g', 'b', 'a'].every((k) => typeof average[k] === 'number'), JSON.stringify(average))
 ctx.getAverageColor(0, 0, 10, 10)
 pass('getAverageColor takes a region')
-expectThrow('a non-finite region is refused', 'invalid-argument', () => ctx.getAverageColor(NaN, 0, 1, 1))
+expectThrow('a non-finite region is refused', TypeError, () => ctx.getAverageColor(NaN, 0, 1, 1))
 
 // @ts-expect-error deliberately not an image
 expectThrow('drawImage refuses something that is not an image', TypeError, () => ctx.drawImage({}, 0, 0))
@@ -168,10 +168,10 @@ ctx.drawImage(tile, 0, 0, 8, 8, 0, 0, 16, 16)
 pass('drawImage takes all three overloads')
 
 // @ts-expect-error deliberately not an encoding this canvas writes
-expectThrow('convertToBlob refuses an encoding it does not write', 'invalid-argument', () => canvas.convertToBlob({ type: 'image/gif' }))
+expectThrow('convertToBlob refuses an encoding it does not write', TypeError, () => canvas.convertToBlob({ type: 'image/gif' }))
 // @ts-expect-error deliberately none of the shapes a source may take
-expectThrow('decode refuses a source that is none of the three shapes', 'invalid-argument', () => inu.canvas.decode(42))
-expectThrow('loadFont needs a family name', 'invalid-argument', () => inu.canvas.loadFont('', new Uint8Array([1])))
+expectThrow('decode refuses a source that is none of the three shapes', TypeError, () => inu.canvas.decode(42))
+expectThrow('loadFont needs a family name', TypeError, () => inu.canvas.loadFont('', new Uint8Array([1])))
 expectThrow('naming a file without the fs grant is refused', 'not-granted', () => inu.canvas.load({ path: 'a.png' }))
 
 ;(async () => {
@@ -192,7 +192,7 @@ expectThrow('naming a file without the fs grant is refused', 'not-granted', () =
   expectThrow('a pattern over a disposed image fails where it is painted', 'handle-expired', () => ctx.fillRect(0, 0, 1, 1))
   ctx.fillStyle = '#000000'
 
-  await expectReject('a decode the host refuses rejects', 'invalid-argument', inu.canvas.decode(new Uint8Array([0])))
+  await expectReject('a decode the host refuses rejects', TypeError, inu.canvas.decode(new Uint8Array([0])))
 
   console.log('canvas test done')
 })()

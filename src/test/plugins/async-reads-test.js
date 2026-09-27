@@ -26,27 +26,27 @@ const SERVICE_PEER = 777000
   }
 
   // @ts-expect-error
-  await expectReject('getHistory of a non-peer', 'invalid-argument', () => acc.getHistory(null))
+  await expectReject('getHistory of a non-peer', TypeError, () => acc.getHistory(null))
   await expectReject('getHistory of dialog 0 is a miss', 'not-found', () => acc.getHistory(0))
-  await expectReject('a negative limit', 'invalid-argument', () => acc.getHistory('me', { limit: -1 }))
-  await expectReject('a fractional offsetId', 'invalid-argument', () => acc.getHistory('me', { offsetId: 1.5 }))
+  await expectReject('a negative limit', TypeError, () => acc.getHistory('me', { limit: -1 }))
+  await expectReject('a fractional offsetId', TypeError, () => acc.getHistory('me', { offsetId: 1.5 }))
   // @ts-expect-error
-  await expectReject('getDialogs wants an options object', 'invalid-argument', () => acc.getDialogs('main'))
+  await expectReject('getDialogs wants an options object', TypeError, () => acc.getDialogs('main'))
   // @ts-expect-error
-  await expectReject('getUserFull of a non-peer', 'invalid-argument', () => acc.getUserFull(null))
+  await expectReject('getUserFull of a non-peer', TypeError, () => acc.getUserFull(null))
 
   // @ts-expect-error
-  expectThrow('getDraft of a non-peer', 'invalid-argument', () => acc.getDraft(null))
+  expectThrow('getDraft of a non-peer', TypeError, () => acc.getDraft(null))
   check('getDraft of dialog 0 is a miss', acc.getDraft(0) === null)
 
-  await expectReject('getTopics of something that is not a forum', 'invalid-argument', () => acc.getTopics('me'))
-  await expectReject('getChatFull of yourself', 'invalid-argument', () => acc.getChatFull('me'))
+  await expectReject('getTopics of something that is not a forum', TypeError, () => acc.getTopics('me'))
+  await expectReject('getChatFull of yourself', TypeError, () => acc.getChatFull('me'))
   await expectReject('history of an uncached id', 'not-found', () => acc.getHistory(NOBODY))
 
   // @ts-expect-error
-  await expectReject('an invented cursor', 'invalid-argument', () => acc.getDialogs({ cursor: 'not-a-cursor' }), 'cursor')
+  await expectReject('an invented cursor', TypeError, () => acc.getDialogs({ cursor: 'not-a-cursor' }), 'cursor')
   // @ts-expect-error
-  await expectReject('a cursor that is not a string', 'invalid-argument', () => acc.getDialogs({ cursor: 42 }))
+  await expectReject('a cursor that is not a string', TypeError, () => acc.getDialogs({ cursor: 42 }))
 
   const history = await acc.getHistory('me', { limit: 3 })
   check('getHistory is an array', Array.isArray(history), `${history.length} messages`)
@@ -98,9 +98,9 @@ const SERVICE_PEER = 777000
     const second = await acc.getDialogs({ limit: 2, cursor: page.next })
     check('a cursor pages the same list', Array.isArray(second), `${second.length} more`)
     // @ts-expect-error
-    await expectReject('a dialogs cursor is refused by getTopics', 'invalid-argument', () => acc.getTopics('me', { cursor: page.next }), 'cursor')
+    await expectReject('a dialogs cursor is refused by getTopics', TypeError, () => acc.getTopics('me', { cursor: page.next }), 'cursor')
     // @ts-expect-error
-    await expectReject('a tampered cursor is refused', 'invalid-argument', () => acc.getDialogs({ cursor: `${page.next}x` }), 'cursor')
+    await expectReject('a tampered cursor is refused', TypeError, () => acc.getDialogs({ cursor: `${page.next}x` }), 'cursor')
   }
 
   // getTopics needs a forum, which only a device has
@@ -118,8 +118,8 @@ const SERVICE_PEER = 777000
   // @ts-expect-error
   const badOptions = acc.iterDialogs('main')
   check('iterDialogs does not throw at the call', typeof badOptions.next === 'function')
-  await expectReject('a bad option rejects on the first step', 'invalid-argument', () => badOptions.next())
-  await expectReject('iterTopics of something that is not a forum', 'invalid-argument', () => acc.iterTopics('me').next())
+  await expectReject('a bad option rejects on the first step', TypeError, () => badOptions.next())
+  await expectReject('iterTopics of something that is not a forum', TypeError, () => acc.iterTopics('me').next())
 
   const walked = []
   for await (const dialog of acc.iterDialogs({ limit: 3, batchSize: 2 })) walked.push(dialog)
@@ -145,7 +145,7 @@ const SERVICE_PEER = 777000
   const none = await acc.resolvePeerMany([])
   check('an empty batch is an empty list', Array.isArray(none) && none.length === 0)
   // @ts-expect-error
-  await expectReject('a non-peer fails the whole batch', 'invalid-argument', () => acc.resolvePeerMany('me'))
+  await expectReject('a non-peer fails the whole batch', TypeError, () => acc.resolvePeerMany('me'))
 
   const me = await acc.getUserFull('me')
   check('getUserFull answers with an object or null', me === null || typeof me === 'object', me && me._)

@@ -4,7 +4,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use rquickjs::{Ctx, Result as JsResult, TypedArray, Value};
+use rquickjs::{Ctx, Exception, Result as JsResult, TypedArray, Value};
 
 use crate::api::error::PluginErrorCode;
 use crate::api::io::blob::BlobHandle;
@@ -59,7 +59,7 @@ impl SourceStager {
         self.write(ctx, |file| file.write_all(bytes))
       });
       let Some(written) = written else {
-        return PluginErrorCode::InvalidArgument.throw(ctx, "this Uint8Array is detached");
+        return Err(Exception::throw_type(ctx, "this Uint8Array is detached"));
       };
       return Ok(StagedSource { path: written?, owned: true });
     }
@@ -74,7 +74,7 @@ impl SourceStager {
         });
       }
     }
-    PluginErrorCode::InvalidArgument.throw(ctx, "expected a Blob, a Uint8Array or { path }")
+    Err(Exception::throw_type(ctx, "expected a Blob, a Uint8Array or { path }"))
   }
 
   /// a `{ path }` the plugin names, through `inu.fs` and its grants

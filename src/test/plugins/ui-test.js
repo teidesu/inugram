@@ -264,7 +264,7 @@ expectThrow('slider refuses max <= min', null, () => {
   inu.ui.slider({ min: 10, max: 10, step: 1, value: 10, onChange: () => {} })
 })
 // the strip is precomputed, so a label past the step cap is refused rather than silently dropped
-expectThrow('slider refuses a label strip past the step cap', 'invalid-argument', () => {
+expectThrow('slider refuses a label strip past the step cap', TypeError, () => {
   inu.ui.slider({ min: 0, max: 2000, step: 1, value: 0, label: (v) => v + ' MB', onChange: () => {} })
 })
 check(

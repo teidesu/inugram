@@ -112,7 +112,7 @@ fn validate_spec<'js>(ctx: &Ctx<'js>, what: &str, spec: &str) -> JsResult<()> {
   if valid {
     return Ok(());
   }
-  PluginErrorCode::InvalidArgument.throw(ctx, &format!("{what}: 'icon' is not an icon inu.icons handed out"))
+  Err(Exception::throw_type(ctx, &format!("{what}: 'icon' is not an icon inu.icons handed out")))
 }
 
 pub fn opt_icon<'js>(
@@ -173,7 +173,7 @@ fn as_str<'js>(ctx: &Ctx<'js>, what: &str, value: &Value<'js>) -> JsResult<Strin
 fn js_common<'js>(ctx: &Ctx<'js>, host: &Rc<dyn IconHost>, name: Value<'js>) -> JsResult<Object<'js>> {
   let name = as_str(ctx, "icons.common", &name)?;
   let Some(resource) = host.common_icon(&name).filter(|r| is_resource_name(r)) else {
-    return PluginErrorCode::InvalidArgument.throw(ctx, &format!("icons.common: unknown icon '{name}'"));
+    return Err(Exception::throw_type(ctx, &format!("icons.common: unknown icon '{name}'")));
   };
   if !host.icon_resolves(KIND_RESOURCE, &resource) {
     return PluginErrorCode::NotFound.throw(ctx, &format!("icons.common: this app ships no '{resource}' for '{name}'"));
@@ -184,8 +184,7 @@ fn js_common<'js>(ctx: &Ctx<'js>, host: &Rc<dyn IconHost>, name: Value<'js>) -> 
 fn js_resource_icon<'js>(ctx: &Ctx<'js>, host: &Rc<dyn IconHost>, name: Value<'js>) -> JsResult<Object<'js>> {
   let name = as_str(ctx, "android.resourceIcon", &name)?;
   if !is_resource_name(&name) {
-    return PluginErrorCode::InvalidArgument
-      .throw(ctx, &format!("android.resourceIcon: '{name}' is not a drawable name"));
+    return Err(Exception::throw_type(ctx, &format!("android.resourceIcon: '{name}' is not a drawable name")));
   }
   if !host.icon_resolves(KIND_RESOURCE, &name) {
     return PluginErrorCode::NotFound.throw(ctx, &format!("android.resourceIcon: no drawable named '{name}'"));
@@ -202,15 +201,14 @@ fn js_svg<'js>(ctx: &Ctx<'js>, host: &Rc<dyn IconHost>, source: Value<'js>) -> J
         .throw(ctx, &format!("icons.svg: {size} bytes of source, the limit is {SVG_LIMIT_BYTES}"));
     }
     Err(SvgReject::NotSvg) => {
-      return PluginErrorCode::InvalidArgument.throw(ctx, "icons.svg: the source carries no <svg> element");
+      return Err(Exception::throw_type(ctx, "icons.svg: the source carries no <svg> element"));
     }
     Err(SvgReject::Markup) => {
-      return PluginErrorCode::InvalidArgument
-        .throw(ctx, "icons.svg: a doctype or other markup declaration is not allowed");
+      return Err(Exception::throw_type(ctx, "icons.svg: a doctype or other markup declaration is not allowed"));
     }
   }
   if !host.icon_resolves(KIND_SVG, &source) {
-    return PluginErrorCode::InvalidArgument.throw(ctx, "icons.svg: the source did not parse");
+    return Err(Exception::throw_type(ctx, "icons.svg: the source did not parse"));
   }
   new_icon(ctx, format!("s{source}"))
 }
@@ -263,8 +261,10 @@ fn read_animation_mode<'js>(
     }
   } else if let Some(repeats) = loop_value.as_number() {
     if !repeats.is_finite() || repeats.fract() != 0.0 || !(0.0..=f64::from(u16::MAX)).contains(&repeats) {
-      return PluginErrorCode::InvalidArgument
-        .throw(ctx, &format!("{what}: options.loop must be an integer from 0 to {}", u16::MAX));
+      return Err(Exception::throw_type(
+        ctx,
+        &format!("{what}: options.loop must be an integer from 0 to {}", u16::MAX),
+      ));
     }
     if repeats == 0.0 {
       AnimationMode::Once
@@ -282,8 +282,7 @@ fn read_animation_mode<'js>(
       .ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: options.static must be a boolean")))?
   };
   if loop_is_explicit && !matches!(mode, AnimationMode::Once) && static_animation {
-    return PluginErrorCode::InvalidArgument
-      .throw(ctx, &format!("{what}: options.loop and options.static cannot both be true"));
+    return Err(Exception::throw_type(ctx, &format!("{what}: options.loop and options.static cannot both be true")));
   }
   Ok(if static_animation { AnimationMode::Static } else { mode })
 }
@@ -298,7 +297,7 @@ fn js_raw_animation<'js>(
 ) -> JsResult<Object<'js>> {
   let name = as_str(ctx, what, &name)?;
   if !is_resource_name(&name) {
-    return PluginErrorCode::InvalidArgument.throw(ctx, &format!("{what}: '{name}' is not a raw resource name"));
+    return Err(Exception::throw_type(ctx, &format!("{what}: '{name}' is not a raw resource name")));
   }
   if !host.icon_resolves(KIND_RAW_ANIMATION, &name) {
     return PluginErrorCode::NotFound.throw(ctx, &format!("{what}: no animation named '{name}'"));
@@ -314,7 +313,7 @@ fn js_animation<'js>(ctx: &Ctx<'js>, host: &Rc<dyn IconHost>, name: Value<'js>) 
     "error" => "error",
     "info" => "info",
     "loading" => "timer_3",
-    _ => return PluginErrorCode::InvalidArgument.throw(ctx, &format!("icons.animation: unknown preset '{preset}'")),
+    _ => return Err(Exception::throw_type(ctx, &format!("icons.animation: unknown preset '{preset}'"))),
   };
   js_raw_animation(ctx, host, resource.into_js(ctx)?, Opt(None), "icons.animation", false)
 }
@@ -322,7 +321,7 @@ fn js_animation<'js>(ctx: &Ctx<'js>, host: &Rc<dyn IconHost>, name: Value<'js>) 
 fn js_custom_emoji<'js>(ctx: &Ctx<'js>, id: Value<'js>, options: Opt<Value<'js>>) -> JsResult<Object<'js>> {
   let id = as_str(ctx, "icons.customEmoji", &id)?;
   if !is_positive_id(&id) {
-    return PluginErrorCode::InvalidArgument.throw(ctx, "icons.customEmoji: expected a positive int64 string");
+    return Err(Exception::throw_type(ctx, "icons.customEmoji: expected a positive int64 string"));
   }
   let mode = read_animation_mode(ctx, options, "icons.customEmoji", true)?;
   new_icon(ctx, format!("e{}{id}", mode.wire()))
@@ -336,7 +335,7 @@ fn js_sticker<'js>(ctx: &Ctx<'js>, options: Value<'js>) -> JsResult<Object<'js>>
     .get("slug")
     .map_err(|_| Exception::throw_type(ctx, "icons.sticker: 'slug' must be a string"))?;
   if !is_bare_name(&slug, STICKER_SLUG_LIMIT) {
-    return PluginErrorCode::InvalidArgument.throw(ctx, "icons.sticker: invalid sticker-set slug");
+    return Err(Exception::throw_type(ctx, "icons.sticker: invalid sticker-set slug"));
   }
   let index: Value = options.get("index")?;
   let emoji: Value = options.get("emoji")?;
@@ -346,24 +345,23 @@ fn js_sticker<'js>(ctx: &Ctx<'js>, options: Value<'js>) -> JsResult<Object<'js>>
     .filter(|selected| *selected)
     .count();
   if count != 1 {
-    return PluginErrorCode::InvalidArgument
-      .throw(ctx, "icons.sticker: provide exactly one of 'index', 'emoji', or 'id'");
+    return Err(Exception::throw_type(ctx, "icons.sticker: provide exactly one of 'index', 'emoji', or 'id'"));
   }
   let selector = if !index.is_undefined() {
     let Some(index) = index.as_int().filter(|index| *index >= 0 && *index <= u16::MAX as i32) else {
-      return PluginErrorCode::InvalidArgument.throw(ctx, "icons.sticker: 'index' must be an integer from 0 to 65535");
+      return Err(Exception::throw_type(ctx, "icons.sticker: 'index' must be an integer from 0 to 65535"));
     };
     format!("i{index}")
   } else if !emoji.is_undefined() {
     let emoji = as_str(ctx, "icons.sticker", &emoji)?;
     if emoji.is_empty() || emoji.len() > STICKER_EMOJI_LIMIT {
-      return PluginErrorCode::InvalidArgument.throw(ctx, "icons.sticker: 'emoji' must be 1 to 64 UTF-8 bytes");
+      return Err(Exception::throw_type(ctx, "icons.sticker: 'emoji' must be 1 to 64 UTF-8 bytes"));
     }
     format!("e{}", URL_SAFE_NO_PAD.encode(emoji))
   } else {
     let id = as_str(ctx, "icons.sticker", &id)?;
     if !is_positive_id(&id) {
-      return PluginErrorCode::InvalidArgument.throw(ctx, "icons.sticker: 'id' must be a positive int64 string");
+      return Err(Exception::throw_type(ctx, "icons.sticker: 'id' must be a positive int64 string"));
     }
     format!("d{id}")
   };
