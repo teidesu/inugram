@@ -3,7 +3,7 @@ use crate::runtime::Dispose;
 use crate::runtime::{
   pump_jobs, SETTLE_CANVAS, SETTLE_FETCH, SETTLE_FILES, SETTLE_INVOKE, SETTLE_MODAL, SETTLE_READS, SETTLE_WRITES,
 };
-use crate::sandbox::limits::fit_stack_limit;
+use crate::sandbox::limits::{arm, fit_stack_limit, ENTRY_DEADLINE_MS};
 use std::cell::{Cell, RefCell};
 use std::ops::Deref;
 use std::rc::Rc;
@@ -150,6 +150,7 @@ impl Drop for EngineLease {
       }
     } else if !self.lease.is_borrowed() && LENDING.with(|depth| depth.get()) == 0 && PUMP_OWED.with(|owed| owed.take())
     {
+      let _deadline = arm(ENTRY_DEADLINE_MS);
       self.lease.pump();
     }
   }
