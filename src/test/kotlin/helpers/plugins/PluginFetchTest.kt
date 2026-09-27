@@ -40,6 +40,8 @@ class PluginFetchTest {
 
         val urls = ArrayList<String>()
 
+        val headers = ArrayList<Set<String>>()
+
         var whileServing: ((String) -> Unit)? = null
 
         override fun exchange(
@@ -49,6 +51,7 @@ class PluginFetchTest {
             body: ByteArray?,
         ): PluginFetch.Hop {
             urls.add("$method $url" + if (body == null) "" else " +body")
+            this.headers.add(headers.keys)
             whileServing?.invoke(url)
             return script[url] ?: okHop()
         }
@@ -122,6 +125,34 @@ class PluginFetchTest {
             exchange(grants("fetch"), "https://example.com/post", transport, method = "POST", body = byteArrayOf(1, 2, 3))
             assertEquals(listOf("POST https://example.com/post +body", second), transport.urls, "$status")
         }
+    }
+
+    @Test
+    fun credentials_stay_with_their_origin_and_body_headers_with_their_body() {
+        val transport = Recorder(
+            mapOf(
+                "https://example.com/a" to hop(307, "https://example.com/b"),
+                "https://example.com/b" to hop(303, "https://cdn.example.com/c"),
+            ),
+        )
+        val sent = mapOf("Authorization" to listOf("secret"), "content-type" to listOf("text/plain"), "x-kept" to listOf("1"))
+        PluginFetch.runExchange(
+            grants("fetch(example.com)"),
+            "https://example.com/a",
+            PluginFetch.Spec("POST", sent, "follow"),
+            ByteArray(1),
+            transport,
+            PluginFetch.Flight(),
+        )
+
+        assertEquals(
+            listOf(
+                setOf("Authorization", "content-type", "x-kept"),
+                setOf("Authorization", "content-type", "x-kept"),
+                setOf("x-kept"),
+            ),
+            transport.headers,
+        )
     }
 
     @Test

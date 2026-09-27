@@ -30,6 +30,9 @@ object PluginFetch : SessionResource {
 
     private const val BODIES_DIR = "fetch"
 
+    private val CREDENTIAL_HEADERS = setOf("authorization", "cookie", "proxy-authorization")
+    private val BODY_HEADERS = setOf("content-encoding", "content-language", "content-location", "content-type", "content-length")
+
     private val transfers by lazy {
         Executors.newFixedThreadPool(4, ThreadFactory { r ->
             Thread(r, "inuPluginFetch").apply { isDaemon = true }
@@ -167,7 +170,10 @@ object PluginFetch : SessionResource {
         class Refused(val wire: String) : Outcome()
     }
 
-    /** method and body are dropped where every client drops them, so a `POST` body never reaches an unnamed host */
+    /**
+     * method and body are dropped where every client drops them, so a `POST` body never reaches an unnamed host.
+     * Credentials stay with their origin and body headers with their body, as the fetch spec does.
+     */
     fun runExchange(
         permissions: PluginPermissions,
         startUrl: String,
@@ -179,11 +185,12 @@ object PluginFetch : SessionResource {
         var url = startUrl
         var method = spec.method
         var payload = body
+        var headers = spec.headers
         var hops = 0
         while (true) {
             if (flight.cancelled) return aborted()
             EgressPolicy.screenHop(permissions, url)?.let { return Outcome.Refused(it) }
-            val hop = transport.exchange(url, method, spec.headers, payload)
+            val hop = transport.exchange(url, method, headers, payload)
             val location = hop.location
             if (hop.status !in 300..399 || location == null || spec.redirect == "manual") {
                 return Outcome.Answer(hop, url)
@@ -203,9 +210,16 @@ object PluginFetch : SessionResource {
             if (hop.status == 303 || (hop.status in 301..302 && method != "GET" && method != "HEAD")) {
                 method = "GET"
                 payload = null
+                headers = headers.filterKeys { it.lowercase() !in BODY_HEADERS }
             }
+            if (getOrigin(url) != getOrigin(next)) headers = headers.filterKeys { it.lowercase() !in CREDENTIAL_HEADERS }
             url = next
         }
+    }
+
+    private fun getOrigin(url: String): Triple<String, String, Int> {
+        val parsed = URI(url).toURL()
+        return Triple(parsed.protocol.lowercase(), parsed.host.lowercase(), parsed.port.takeIf { it != -1 } ?: parsed.defaultPort)
     }
 
     private fun aborted(): Outcome.Refused = Outcome.Refused(refuse("aborted", "fetch: the request was aborted"))
