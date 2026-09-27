@@ -3,6 +3,8 @@ package desu.inugram.helpers.plugins
 import desu.inugram.core.plugins.PluginWire
 import desu.inugram.helpers.plugins.telegram.PeerSpecs
 import desu.inugram.helpers.plugins.telegram.PluginReads
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
 import kotlin.test.assertFalse
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -13,6 +15,7 @@ import org.json.JSONObject
 import org.junit.Before
 import org.junit.Test
 import org.telegram.messenger.MessagesController
+import org.telegram.messenger.MessagesStorage
 import org.telegram.tgnet.TLRPC
 
 class PluginReadsTest {
@@ -140,6 +143,19 @@ class PluginReadsTest {
 
     private fun cacheMessage(dialogId: Long, message: TLRPC.Message) =
         TestApp.cacheDialogMessage(0, dialogId, message)
+
+    @Test
+    fun a_message_read_on_the_storage_queue_itself_does_not_wait_on_its_own_queue() {
+        val plugin = granted()
+        cacheMessage(self, TLRPC.TL_message().apply { id = 7; message = "hi" }.synced())
+        val answer = CompletableFuture<String>()
+        MessagesStorage.getInstance(0).storageQueue.postRunnable {
+            answer.complete(read(plugin, PluginReads.OP_MESSAGES, "S\n7\n8"))
+        }
+        val wires = answer.get(5, TimeUnit.SECONDS).split("\n")
+        assertEquals("hi", decodeString(readTlField(plugin, wires[0], "message")))
+        assertEquals("N", wires[1])
+    }
 
     @Test
     fun a_dialog_and_its_cached_message_read_back() {

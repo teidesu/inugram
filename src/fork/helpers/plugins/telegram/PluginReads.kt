@@ -17,6 +17,7 @@ import desu.inugram.helpers.security.ParanoiaHelper
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.ChatObject
@@ -42,6 +43,8 @@ import org.telegram.ui.Components.URLSpanNoUnderlineBold
  */
 object PluginReads {
     // keep in sync with rust `reads::OP_*`
+    private const val STORAGE_WAIT_MILLIS = 1_000L
+
     const val OP_ME = 0
     const val OP_USER = 1
     const val OP_CHAT = 2
@@ -313,9 +316,10 @@ object PluginReads {
         return onStorageQueue(accountId) { readStoredMessages(accountId, dialogId, listOf(messageId)) }[messageId]
     }
 
-    /** never call from `storageQueue` itself: it would wait on its own thread */
+    /** an xposed or jvm hook can read from `storageQueue` itself, or from a thread `storageQueue` waits on */
     private fun <T> onStorageQueue(accountId: Int, read: () -> T): T {
         val storage = MessagesStorage.getInstance(accountId)
+        if (Thread.currentThread() === storage.storageQueue) return read()
         val latch = CountDownLatch(1)
         val answer = AtomicReference<T>()
         storage.storageQueue.postRunnable {
@@ -325,7 +329,9 @@ object PluginReads {
                 latch.countDown()
             }
         }
-        latch.await()
+        if (!latch.await(STORAGE_WAIT_MILLIS, TimeUnit.MILLISECONDS)) {
+            refuse("timed-out", "message read: the app database stayed busy for ${STORAGE_WAIT_MILLIS}ms")
+        }
         return answer.get()
     }
 
