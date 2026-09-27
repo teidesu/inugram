@@ -1,5 +1,8 @@
 package desu.inugram.helpers.plugins
 
+import android.app.ActivityManager
+import android.app.ApplicationExitInfo
+import android.os.Build
 import android.os.SystemClock
 import java.io.File
 import org.telegram.messenger.ApplicationLoader
@@ -9,15 +12,19 @@ import org.telegram.messenger.ApplicationLoader
  * rewrites and syncs all settings:
  * - [STARTING] exists while one plugin's top-level code runs; dying with it present means that code hung or crashed.
  * - [CRASHES] counts consecutive processes crashing within [CRASH_WINDOW_MILLIS] of their first plugin start.
+ * - [WINDOW] holds the wall-clock first plugin start while that window is open. Native crashes and ANRs never
+ *   reach the uncaught-exception handler, so the next process counts them from the exit reason instead.
  *
  * Guarded per plugin: a process-wide or whole-pass guard would misread normal headless startup and
  * termination (push, widget, `BOOT_COMPLETED`, or past [BootCohort.EARLY_BUDGET_MILLIS]) as a crash.
- * Only uncaught exceptions count, so a reaped process never does. Writes are unsynced: the kernel keeps a
+ * Only crashes and ANRs count, so a reaped process never does. Writes are unsynced: the kernel keeps a
  * dead process's writes.
  */
 class BootGuard(
     private val dir: File = File(ApplicationLoader.applicationContext.filesDir, DIR),
     private val uptimeMillis: () -> Long = SystemClock::uptimeMillis,
+    private val wallMillis: () -> Long = System::currentTimeMillis,
+    private val diedOfNativeCrashSince: (Long) -> Boolean = ::readDiedOfNativeCrashSince,
 ) {
     enum class Reason { FORCED, CRASHED, CRASH_LOOP }
 
@@ -38,6 +45,9 @@ class BootGuard(
     fun startPass(): Boolean {
         if (decided) return reason == null
         decided = true
+        val windowStart = runCatching { File(dir, WINDOW).readText().trim().toLong() }.getOrNull()
+        File(dir, WINDOW).delete()
+        if (windowStart != null && diedOfNativeCrashSince(windowStart)) write(CRASHES, (readCrashes() + 1).toString())
         reason = when {
             File(dir, FORCED).exists() -> Reason.FORCED
             File(dir, STARTING).exists() -> Reason.CRASHED
@@ -49,7 +59,10 @@ class BootGuard(
     }
 
     fun guardPlugin(body: () -> Unit) {
-        if (firstStartAt == 0L) firstStartAt = uptimeMillis()
+        if (firstStartAt == 0L) {
+            firstStartAt = uptimeMillis()
+            write(WINDOW, wallMillis().toString())
+        }
         write(STARTING, "")
         try {
             body()
@@ -72,6 +85,7 @@ class BootGuard(
 
     fun survivedWindow() {
         File(dir, CRASHES).delete()
+        File(dir, WINDOW).delete()
     }
 
     private fun readCrashes(): Int =
@@ -95,5 +109,17 @@ class BootGuard(
         const val STARTING = "starting"
         const val FORCED = "forced"
         const val CRASHES = "crashes"
+        const val WINDOW = "window"
+
+        private fun readDiedOfNativeCrashSince(since: Long): Boolean {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return false
+            val context = ApplicationLoader.applicationContext
+            val exit = context.getSystemService(ActivityManager::class.java)
+                ?.getHistoricalProcessExitReasons(null, 0, 0)
+                ?.firstOrNull { it.processName == context.packageName }
+                ?: return false
+            return exit.timestamp >= since &&
+                (exit.reason == ApplicationExitInfo.REASON_CRASH_NATIVE || exit.reason == ApplicationExitInfo.REASON_ANR)
+        }
     }
 }

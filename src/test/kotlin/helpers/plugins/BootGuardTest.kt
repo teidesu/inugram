@@ -13,6 +13,7 @@ import org.junit.Test
 class BootGuardTest {
     private lateinit var dir: File
     private var now = 1_000L
+    private var nativeCrashAt: Long? = null
 
     @Before
     fun setUp() {
@@ -25,7 +26,12 @@ class BootGuardTest {
         dir.deleteRecursively()
     }
 
-    private fun restart() = BootGuard(dir) { now }
+    private fun restart() = BootGuard(
+        dir,
+        uptimeMillis = { now },
+        wallMillis = { now },
+        diedOfNativeCrashSince = { since -> nativeCrashAt?.let { it >= since } ?: false },
+    )
 
     private fun armed(): Boolean = File(dir, BootGuard.STARTING).exists()
 
@@ -140,5 +146,33 @@ class BootGuardTest {
         assertFalse(next.startPass())
         assertEquals(BootGuard.Reason.FORCED, next.reason)
         assertTrue(restart().startPass(), "both flags have to be cleared, or the next start is safe too")
+    }
+
+    @Test
+    fun two_native_crashes_soon_after_the_plugins_started_are_a_loop() {
+        repeat(BootGuard.CRASH_LIMIT) {
+            val guard = restart()
+            assertTrue(guard.startPass())
+            guard.guardPlugin {}
+            now += 1_000
+            nativeCrashAt = now
+        }
+
+        val next = restart()
+        assertFalse(next.startPass())
+        assertEquals(BootGuard.Reason.CRASH_LOOP, next.reason)
+    }
+
+    @Test
+    fun a_native_crash_after_the_window_closed_is_not_counted() {
+        repeat(BootGuard.CRASH_LIMIT) {
+            val guard = restart()
+            assertTrue(guard.startPass())
+            guard.guardPlugin {}
+            guard.survivedWindow()
+            now += BootGuard.CRASH_WINDOW_MILLIS
+            nativeCrashAt = now
+        }
+        assertTrue(restart().startPass())
     }
 }
