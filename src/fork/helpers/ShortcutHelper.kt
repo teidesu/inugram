@@ -7,6 +7,7 @@ import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
 import desu.inugram.InuConfig
+import desu.inugram.helpers.plugins.PluginManager
 import desu.inugram.helpers.security.ParanoiaHelper
 import desu.inugram.helpers.security.PasscodeHelper
 import desu.inugram.ui.AccountPickerActivity
@@ -29,6 +30,7 @@ object ShortcutHelper {
         val id: String,
         val action: String,
         val labelRes: Int,
+        val longLabelRes: Int = labelRes,
         val iconRes: Int,
         val rank: Int,
         val target: Class<out Activity> = LaunchActivity::class.java,
@@ -62,6 +64,16 @@ object ShortcutHelper {
             shouldShow = { InuConfig.ACCOUNT_SWITCH_SHORTCUT.value && countSelectableAccounts() > 1 },
             onClick = { activity -> showAccountPicker(activity) },
         ),
+        Entry(
+            id = "inu_plugins_safe_mode",
+            action = PluginManager.SAFE_MODE_ACTION,
+            labelRes = R.string.InuPluginsSafeMode,
+            longLabelRes = R.string.InuPluginsSafeModeShortcut,
+            iconRes = R.drawable.msg_settings,
+            rank = 2,
+            shouldShow = PluginManager::isEngineEnabled,
+            onClick = { PluginManager.requestSafeMode() },
+        ),
     )
 
     @JvmStatic
@@ -71,7 +83,7 @@ object ShortcutHelper {
                 val intent = Intent(context, entry.target).setAction(entry.action)
                 val shortcut = ShortcutInfoCompat.Builder(context, entry.id)
                     .setShortLabel(getString(entry.labelRes))
-                    .setLongLabel(getString(entry.labelRes))
+                    .setLongLabel(getString(entry.longLabelRes))
                     .setIcon(IconCompat.createWithResource(context, entry.iconRes))
                     .setRank(entry.rank)
                     .setIntent(intent)
@@ -87,6 +99,7 @@ object ShortcutHelper {
     fun handleAction(activity: LaunchActivity, intent: Intent?): Boolean {
         val action = intent?.action ?: return false
         val entry = entries.firstOrNull { it.action == action } ?: return false
+        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return true
         // returning false lets stock stash the intent and replay handleIntent() once unlocked,
         // instead of us drawing over the passcode screen.
         if (entry.requiresUnlocked && (AndroidUtilities.needShowPasscode() || SharedConfig.isWaitingForPasscodeEnter)) {

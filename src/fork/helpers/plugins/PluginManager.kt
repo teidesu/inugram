@@ -1,10 +1,6 @@
 package desu.inugram.helpers.plugins
 
 import android.content.Context
-import android.content.Intent
-import android.content.pm.ShortcutInfo
-import android.content.pm.ShortcutManager
-import android.graphics.drawable.Icon
 import android.os.SystemClock
 import desu.inugram.InuConfig
 import desu.inugram.core.plugins.FsQuota
@@ -15,6 +11,7 @@ import desu.inugram.core.plugins.PluginManifest
 import desu.inugram.core.plugins.PluginManifestParser
 import desu.inugram.core.plugins.PluginPermissions
 import desu.inugram.core.plugins.TlTables
+import desu.inugram.helpers.ShortcutHelper
 import desu.inugram.helpers.plugins.io.PluginBlobs
 import desu.inugram.helpers.plugins.io.PluginFetch
 import desu.inugram.helpers.plugins.io.PluginFs
@@ -58,7 +55,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 /** Engine ops run on [EngineDispatch.scheduler]; structural list/flag mutations on the ui thread. */
 object PluginManager {
     const val SAFE_MODE_ACTION = "desu.inugram.action.SAFE_MODE"
-    private const val SAFE_MODE_SHORTCUT_ID = "inu_safe_mode"
     const val PLUGIN_API_VERSION = GrantCatalog.PLUGIN_API
     private const val PLATFORM = "android"
 
@@ -82,7 +78,6 @@ object PluginManager {
 
     private var booted = false
     private var lateLoaded = false
-    private var lateInited = false
     private var loaded = false
     private var hosting = false
 
@@ -166,12 +161,7 @@ object PluginManager {
         loaded.await(BootCohort.EARLY_BUDGET_MILLIS, TimeUnit.MILLISECONDS)
     }
 
-    /** the safe-mode shortcut needs LocaleController, so it cannot be registered at [init] */
     fun onAppInteractive() {
-        if (!lateInited) {
-            lateInited = true
-            registerSafeModeShortcut()
-        }
         if (lateLoaded) return
         lateLoaded = true
         if (!isEngineEnabled()) return
@@ -216,6 +206,7 @@ object PluginManager {
 
     fun toggleEngine(): Boolean {
         val enabled = InuConfig.PLUGINS_ENABLED.toggle()
+        ApplicationLoader.applicationContext?.let { ShortcutHelper.sync(it) }
         if (enabled) ApplicationLoader.applicationContext?.let { startHosting(it) }
         if (enabled && !safeMode) {
             for (plugin in plugins) if (plugin.enabled) {
@@ -644,21 +635,5 @@ object PluginManager {
     /** anything mutating a [Plugin] field owes a call */
     fun notifyChanged() {
         AndroidUtilities.runOnUIThread { for (listener in changeListeners) listener() }
-    }
-
-    private fun registerSafeModeShortcut() {
-        try {
-            val manager = ApplicationLoader.applicationContext.getSystemService(ShortcutManager::class.java) ?: return
-            val intent = Intent(ApplicationLoader.applicationContext, LaunchActivity::class.java).setAction(SAFE_MODE_ACTION)
-            val shortcut = ShortcutInfo.Builder(ApplicationLoader.applicationContext, SAFE_MODE_SHORTCUT_ID)
-                .setShortLabel(getString(R.string.InuPluginsSafeMode))
-                .setLongLabel(getString(R.string.InuPluginsSafeModeShortcut))
-                .setIcon(Icon.createWithResource(ApplicationLoader.applicationContext, R.drawable.msg_settings))
-                .setIntent(intent)
-                .build()
-            manager.addDynamicShortcuts(listOf(shortcut))
-        } catch (e: Exception) {
-            PluginLog.HOST.e("manager", "safe-mode shortcut failed", e)
-        }
     }
 }

@@ -145,10 +145,6 @@ object InuHooks {
         ProxyVpnHelper.reconcile()
         DrawerHelper.refreshUpdateState()
         MediaSendDebugHelper.startWatchingCache()
-        if (launchActivity.intent?.action == PluginManager.SAFE_MODE_ACTION) {
-            PluginManager.requestSafeMode()
-            return
-        }
         PluginManager.onAppInteractive()
     }
 
