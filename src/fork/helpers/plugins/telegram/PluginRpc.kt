@@ -55,7 +55,7 @@ object PluginRpc : SessionResource {
         val filter: SendFilter?,
     )
 
-    private class SendFilter(val text: Pattern?, val textIsSticky: Boolean, val isEdit: Boolean?) {
+    private class SendFilter(val log: PluginLog, val text: Pattern?, val textIsSticky: Boolean, val isEdit: Boolean?) {
         fun matches(method: String, request: TLObject): Boolean {
             if (isEdit != null && isEdit != (method == "messages.editMessage")) return false
             return matchesText(collectTexts(request)?.firstOrNull()?.text)
@@ -66,8 +66,18 @@ object PluginRpc : SessionResource {
         private fun matchesText(value: String?): Boolean {
             if (text == null) return true
             value ?: return false
-            val matcher = text.matcher(value)
-            return if (textIsSticky) matcher.lookingAt() else matcher.find()
+            // android runs java.util.regex on icu natively: no deadline can reach it, and its backtracking
+            // stack overflows as a RuntimeException
+            return try {
+                val matcher = text.matcher(value)
+                if (textIsSticky) matcher.lookingAt() else matcher.find()
+            } catch (e: RuntimeException) {
+                log.w("rpc", "send filter /${text.pattern()}/ failed, letting the message through to the interceptor", e)
+                true
+            } catch (e: StackOverflowError) {
+                log.w("rpc", "send filter /${text.pattern()}/ overflowed the stack, letting the message through to the interceptor")
+                true
+            }
         }
     }
 
@@ -156,6 +166,7 @@ object PluginRpc : SessionResource {
 
     private const val SEND_SCOPE = "interceptSendMessage"
     private val SEND_METHODS = arrayOf("messages.sendMessage", "messages.sendMedia", "messages.sendMultiMedia")
+    private val NESTED_QUANTIFIER = Regex("""(?<!\\)[+*}]\)+[+*{]""")
     private const val RAW_GRANT = "unsafe.invokeRaw"
     private const val TAKEOUT_GRANT = "takeout"
     private const val RPC_CHAIN_BUDGET_MS = 10_000L
@@ -601,8 +612,16 @@ object PluginRpc : SessionResource {
             if ('m' in flags) patternFlags = patternFlags or Pattern.MULTILINE
             if ('s' in flags) patternFlags = patternFlags or Pattern.DOTALL
             if ('u' in flags) patternFlags = patternFlags or Pattern.UNICODE_CHARACTER_CLASS
+            val source = regex?.getString("source")
+            if (source != null && NESTED_QUANTIFIER.containsMatchIn(source)) {
+                session.log.w(
+                    "rpc",
+                    "send filter /$source/ nests quantifiers and can backtrack catastrophically, freezing every send; rewrite it without a repeated group that ends in + or *",
+                )
+            }
             SendFilter(
-                regex?.getString("source")?.let { Pattern.compile(it, patternFlags) },
+                session.log,
+                source?.let { Pattern.compile(it, patternFlags) },
                 'y' in flags,
                 json.optBoolean("isEdit").takeIf { json.has("isEdit") },
             )

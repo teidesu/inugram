@@ -1550,6 +1550,7 @@ declare namespace inu {
      * Regex the message is supposed to match for the hook to fire
      *
      * Compiled by Android's `java.util.regex.Pattern`; unsupported syntax throws.
+     * Runs on the send path with no time limit: avoid nested quantifiers like `(a+)+`.
      */
     text?: RegExp
     /**

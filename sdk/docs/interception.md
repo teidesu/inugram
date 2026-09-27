@@ -106,6 +106,9 @@ never reach JS:
 
 - `text` is a `RegExp`. It is compiled by Java's regex engine, so syntax Java does not support
   throws when you register.
+  It runs on the app's send path with no time limit, so keep it cheap: a nested quantifier
+  like `(a+)+` can backtrack for seconds and freeze every send. Registering one logs a warning.
+  If matching fails, the message goes to your middleware as if it matched.
 - `isEdit: true` matches only edits, `false` only new messages. Leave it out for both.
 
 For an album, the filter reads the caption of the first item.
