@@ -5,7 +5,7 @@ Plugin lifecycle follows its grants. Network hooks can run with no activity afte
 
 Unknown grant names give no access. Unknown grant scopes reject installation.
 
-Sensitive plugin data is filtered. Takeover RPC methods are refused: `auth.*`, plus some `account.* methods, and `messages.{requestUrlAuth,acceptUrlAuth}`.
+Sensitive plugin data is filtered. Takeover RPC methods are refused: `auth.*`, plus some `account.*` methods, and `messages.{requestUrlAuth,acceptUrlAuth}`.
 
 A plugin runs one JavaScript turn at a time. A callback has a time and memory limit.
 */
@@ -252,7 +252,6 @@ declare namespace inu {
     toJSON(): tl.TypeMessage
   }
 
-  /** Information about an account in the app */
   /** A chat folder as shown in the folder tabs. */
   interface ChatFolder {
     /** `0` is the "All chats" tab, which every account has and which cannot be edited. */
@@ -290,6 +289,10 @@ declare namespace inu {
    */
   function withCurrentAccount(callback: (account: Account) => (() => void) | Disposable | void): Disposer
 
+  /**
+   * The account in slot `id` ({@link Account.id}), or the current account when `id` is omitted.
+   * Throws `not-found` when no account is logged in there.
+   */
   function account(id?: number): Account
 
   /**
@@ -302,6 +305,7 @@ declare namespace inu {
   /** Wrapper for paginated list return types */
   type Paged<T, List extends string> = T[] & { next: Cursor<List> | null }
 
+  /** Information about an account in the app */
   interface Account {
     /** opaque slot of the account */
     readonly id: number
@@ -394,7 +398,7 @@ declare namespace inu {
     getUsers(peers: InputPeerLike[]): (tl.TypeUser | null)[]
     /**
      * get one or more chats (cached, this method never does a network call, and returns `null` on miss)
-     * @needs-grant account.read(peers
+     * @needs-grant account.read(peers)
      */
     getChats(peers: InputPeerLike[]): (tl.TypeChat | null)[]
 
@@ -403,8 +407,8 @@ declare namespace inu {
      * May block on a database read; use {@link getHistory} to read a range instead of looping.
      *
      * @needs-grant account.read(messages)
-     * @peer the dialog, or `0` for the common message box (DMs, legacy groups)
-     * @messageId the message to get
+     * @param peer the dialog, or `0` for the common message box (DMs, legacy groups)
+     * @param messageId the message to get
      */
     getMessagesCached(peer: InputPeerLike, messageId: number): Message | null
     getMessagesCached(peer: InputPeerLike, messageIds: number[]): (Message | null)[]
@@ -413,8 +417,8 @@ declare namespace inu {
      * get one or more messages, *always* fetching them from the server
      *
      * @needs-grant account.read(messages)
-     * @peer the dialog, or `0` for the common message box (dms, legacy groups)
-     * @messageId the message to get
+     * @param peer the dialog, or `0` for the common message box (DMs, legacy groups)
+     * @param messageId the message to get
      */
     getMessages(peer: InputPeerLike, messageId: number): Promise<Message | null>
     getMessages(peer: InputPeerLike, messageIds: number[]): Promise<(Message | null)[]>

@@ -43,7 +43,7 @@ export default defineConfig({
         // - `tg://addstickers?set={slug}`, where `{slug}` is a stickerset slug. The thumb of the set is used
         // - `tg://addstickers?set={slug}&idx={idx}`, where `{slug}` is a stickerset slug,
         //   and `{idx}` is the 0-based index of the sticker to use from the pack
-        // - `tg://addstickers?set={slug}&id={idd}`, where `{slug}` is a stickerset slug,
+        // - `tg://addstickers?set={slug}&id={id}`, where `{slug}` is a stickerset slug,
         //   and `{id}` is the sticker document ID
         icon: 'inu://mute',
         // list of grants the plugin requests
