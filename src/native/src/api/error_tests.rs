@@ -149,3 +149,21 @@ fn a_rejection_made_on_another_thread_is_reported_by_the_next_pump() {
   crate::runtime::pump_jobs(&ctx, log.as_ref());
   assert!(logs.borrow().iter().any(|line| line.contains("elsewhere")), "got: {:?}", logs.borrow());
 }
+
+#[test]
+fn an_ungranted_namespace_exists_and_every_member_throws_not_granted() {
+  let (_rt, ctx) = setup();
+  let got: String = ctx.with(|ctx| {
+    crate::api::Globals::get(&ctx).unwrap().install_ungranted_namespace(&ctx, "fs", "fs").unwrap();
+    ctx
+      .eval(
+        r#"
+          let thrown
+          try { inu.fs.read('a') } catch (e) { thrown = e }
+          JSON.stringify([typeof inu.fs, thrown instanceof inu.PluginError, thrown.code, thrown.grant, String(inu.fs.then)])
+        "#,
+      )
+      .unwrap()
+  });
+  assert_eq!(got, r#"["object",true,"not-granted","fs","undefined"]"#);
+}

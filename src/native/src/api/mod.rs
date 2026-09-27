@@ -4,6 +4,8 @@ use std::rc::Rc;
 use rquickjs::function::Constructor;
 use rquickjs::{Ctx, Exception, Function, JsLifetime, Object, Result as JsResult};
 
+use crate::api::error::PluginErrorCode;
+
 pub(crate) mod canvas;
 pub(crate) mod error;
 pub(crate) mod globals;
@@ -83,6 +85,25 @@ impl<'js> Globals<'js> {
     self.inu.set("Message", message.clone())?;
     *self.message.borrow_mut() = Some(message);
     Ok(())
+  }
+
+  /// `inu.<name>` for a plugin without `grant`: reading any member throws `not-granted`, so a
+  /// missing grant fails the same way on every api instead of as a `TypeError` on `undefined`
+  pub(crate) fn install_ungranted_namespace(
+    &self,
+    ctx: &Ctx<'js>,
+    name: &'static str,
+    grant: &'static str,
+  ) -> JsResult<()> {
+    let deny = Function::new(ctx.clone(), move |ctx: Ctx<'js>, key: String| -> JsResult<()> {
+      PluginErrorCode::NotGranted(grant).throw(&ctx, &format!("inu.{name}.{key}: missing grant: {grant}"))
+    })?;
+    let create: Function = ctx.eval(
+      "(deny) => new Proxy(Object.freeze(Object.create(null)), {
+        get: (_, key) => typeof key === 'symbol' || key === 'then' ? undefined : deny(key),
+      })",
+    )?;
+    self.inu.set(name, create.call::<_, Object>((deny,))?)
   }
 
   pub(crate) fn get_message(&self, ctx: &Ctx<'js>) -> JsResult<Constructor<'js>> {

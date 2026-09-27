@@ -44,11 +44,10 @@ higher-level `inu.onNewMessage`, `inu.onMessageEdited` and `inu.onMessageDeleted
 - **Checks fail closed.** A call your grants do not cover throws or rejects with
   `inu.PluginError` code `not-granted`. `error.grant` holds the exact token to add to your
   manifest.
-- **Some namespaces only exist with their grant.** Without `fs` or `unsafe.fs`, `inu.fs` is
-  `undefined`. The same holds for `inu.jvm` without `unsafe.jvm`, and `inu.xposed` without
-  `unsafe.xposed`. Feature-test before you use them.
-- **`unsafe.xposed` also needs `unsafe.jvm`.** Hooks work in terms of JVM handles, so without
-  `unsafe.jvm` the `inu.xposed` namespace is not installed at all.
+- **Namespaces exist without their grant.** Without `fs` or `unsafe.fs`, reading any member of
+  `inu.fs` throws `not-granted`. The same holds for `inu.jvm` without `unsafe.jvm`, and
+  `inu.xposed` without `unsafe.xposed`.
+- **`unsafe.xposed` also needs `unsafe.jvm`.** Hooks work in terms of JVM handles.
 - **An unknown grant name is ignored.** The app installs the plugin and the name gives no access.
   This keeps a plugin written for a newer app installable on an older one. `inu check` warns
   about it, because a typo silently costs you the API.

@@ -112,10 +112,18 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
           jvm::install_jvm(&ctx, host, Some(reflect), grants.clone(), lifecycle.clone(), log.clone(), views, &globals)
         })?)
       } else {
+        install_part(&ctx, "inu.jvm", log.as_ref(), |ctx, globals| {
+          globals.install_ungranted_namespace(&ctx, "jvm", "unsafe.jvm")
+        })?;
         None
       };
       let xposed = match (install_xposed, jvm.clone()) {
-        (false, _) => None,
+        (false, _) => {
+          install_part(&ctx, "inu.xposed", log.as_ref(), |ctx, globals| {
+            globals.install_ungranted_namespace(&ctx, "xposed", "unsafe.xposed")
+          })?;
+          None
+        }
         (true, None) => {
           log("inu.xposed needs inu.jvm, which is not installed");
           return None;
@@ -238,6 +246,10 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
         })?;
         canvas.attach_fs(fs.clone());
         files.attach_fs(fs);
+      } else {
+        install_part(&ctx, "inu.fs", log.as_ref(), |ctx, globals| {
+          globals.install_ungranted_namespace(&ctx, "fs", "fs")
+        })?;
       }
       let rpc = install_part(&ctx, "inu.interceptRpc/onUpdate", log.as_ref(), |ctx, globals| {
         let host: Rc<dyn RpcHost> = bridge.clone();
