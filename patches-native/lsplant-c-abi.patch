@@ -1,0 +1,165 @@
+diff --git a/lsplant/src/main/jni/CMakeLists.txt b/lsplant/src/main/jni/CMakeLists.txt
+index d96d317..f874d43 100644
+--- a/lsplant/src/main/jni/CMakeLists.txt
++++ b/lsplant/src/main/jni/CMakeLists.txt
+@@ -15,7 +15,7 @@ if (LSPLANT_STANDALONE)
+     link_libraries(cxx::cxx)
+ endif()
+ 
+-set(SOURCES lsplant.cc)
++set(SOURCES lsplant.cc lsplant_c.cc)
+ file(GLOB_RECURSE MODULE_SOURCES CONFIGURE_DEPENDS "*.cxx")
+ file(GLOB_RECURSE MODULE_INTERFACES CONFIGURE_DEPENDS "*.ixx")
+ list(FILTER MODULE_SOURCES EXCLUDE REGEX "${PROJECT_SOURCE_DIR}.external.+")
+diff --git a/lsplant/src/main/jni/include/lsplant_c.h b/lsplant/src/main/jni/include/lsplant_c.h
+new file mode 100644
+index 0000000..ee06445
+--- /dev/null
++++ b/lsplant/src/main/jni/include/lsplant_c.h
+@@ -0,0 +1,71 @@
++#pragma once
++
++#include <jni.h>
++
++#include <stdbool.h>
++#include <stddef.h>
++
++// The entire surface of libinu_lsplant.so, and the only C++ in the fork.
++//
++// It exists because lsplant's interface is C++ linkage and `lsplant::Init` takes a struct of
++// std::function, which has no C representation: something has to construct those four. Every entry
++// point below mirrors one in `lsplant::` with the same arguments and the same return value, so the
++// engine can `dlopen` this and call through function pointers instead of linking C++.
++//
++// Nothing here is a JNI entry point. There is no `Java_..._hook0`, so no java class declares a
++// `native` method that installs a hook and reflection has nothing to find. The one java method
++// involved is the callback lsplant requires (it swaps ArtMethod entry points, so the replacement
++// *is* a java method); it is passed in from rust, the only caller of LSPlantHookC.
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#define LSPLANT_C_EXPORT __attribute__((visibility("default")))
++
++/// Returns the backup function pointing at the previous target, or null if the hook failed.
++typedef void *(*LSPlantInlineHooker)(void *target, void *hooker);
++
++typedef bool (*LSPlantInlineUnhooker)(void *func);
++
++/// `name` is NOT NUL-terminated; `length` is authoritative.
++typedef void *(*LSPlantSymbolResolver)(const char *name, size_t length);
++
++typedef struct {
++    /// Must not be null.
++    LSPlantInlineHooker inline_hooker;
++    /// Must not be null.
++    LSPlantInlineUnhooker inline_unhooker;
++    /// Must not be null.
++    LSPlantSymbolResolver art_symbol_resolver;
++    /// Must not be null.
++    LSPlantSymbolResolver art_symbol_prefix_resolver;
++
++    /// Each may be null to keep lsplant's own default. A non-null string must outlive the call.
++    const char *generated_class_name;
++    const char *generated_source_name;
++    const char *generated_field_name;
++    const char *generated_method_name;
++} LSPlantInitInfoC;
++
++/// False if any required member of `info` is null, and otherwise whatever lsplant::Init returned.
++LSPLANT_C_EXPORT bool LSPlantInitC(JNIEnv *env, const LSPlantInitInfoC *info);
++
++LSPLANT_C_EXPORT jobject LSPlantHookC(JNIEnv *env, jobject target_method, jobject hooker_object,
++                                      jobject callback_method);
++
++LSPLANT_C_EXPORT bool LSPlantUnHookC(JNIEnv *env, jobject target_method);
++
++LSPLANT_C_EXPORT bool LSPlantIsHookedC(JNIEnv *env, jobject method);
++
++LSPLANT_C_EXPORT bool LSPlantDeoptimizeC(JNIEnv *env, jobject method);
++
++LSPLANT_C_EXPORT void *LSPlantGetNativeFunctionC(JNIEnv *env, jobject method);
++
++LSPLANT_C_EXPORT bool LSPlantMakeClassInheritableC(JNIEnv *env, jclass target);
++
++LSPLANT_C_EXPORT bool LSPlantMakeDexFileTrustedC(JNIEnv *env, jobject cookie);
++
++#ifdef __cplusplus
++}
++#endif
+diff --git a/lsplant/src/main/jni/lsplant_c.cc b/lsplant/src/main/jni/lsplant_c.cc
+new file mode 100644
+index 0000000..9702d35
+--- /dev/null
++++ b/lsplant/src/main/jni/lsplant_c.cc
+@@ -0,0 +1,69 @@
++#include "include/lsplant_c.h"
++
++#include <string_view>
++
++#include "include/lsplant.hpp"
++
++namespace {
++
++// captured by value: `info` belongs to the caller and Init stores the resolvers past its return
++struct Resolver {
++    LSPlantSymbolResolver resolve;
++
++    void *operator()(std::string_view name) const { return resolve(name.data(), name.size()); }
++};
++
++}  // namespace
++
++bool LSPlantInitC(JNIEnv *env, const LSPlantInitInfoC *info) {
++    if (env == nullptr || info == nullptr) return false;
++    if (info->inline_hooker == nullptr || info->inline_unhooker == nullptr ||
++        info->art_symbol_resolver == nullptr || info->art_symbol_prefix_resolver == nullptr) {
++        return false;
++    }
++
++    lsplant::InitInfo native{
++        .inline_hooker = info->inline_hooker,
++        .inline_unhooker = info->inline_unhooker,
++        .art_symbol_resolver = Resolver{info->art_symbol_resolver},
++        .art_symbol_prefix_resolver = Resolver{info->art_symbol_prefix_resolver},
++    };
++    if (info->generated_class_name != nullptr) {
++        native.generated_class_name = info->generated_class_name;
++    }
++    if (info->generated_source_name != nullptr) {
++        native.generated_source_name = info->generated_source_name;
++    }
++    if (info->generated_field_name != nullptr) {
++        native.generated_field_name = info->generated_field_name;
++    }
++    if (info->generated_method_name != nullptr) {
++        native.generated_method_name = info->generated_method_name;
++    }
++    return lsplant::Init(env, native);
++}
++
++jobject LSPlantHookC(JNIEnv *env, jobject target_method, jobject hooker_object,
++                     jobject callback_method) {
++    return lsplant::Hook(env, target_method, hooker_object, callback_method);
++}
++
++bool LSPlantUnHookC(JNIEnv *env, jobject target_method) {
++    return lsplant::UnHook(env, target_method);
++}
++
++bool LSPlantIsHookedC(JNIEnv *env, jobject method) { return lsplant::IsHooked(env, method); }
++
++bool LSPlantDeoptimizeC(JNIEnv *env, jobject method) { return lsplant::Deoptimize(env, method); }
++
++void *LSPlantGetNativeFunctionC(JNIEnv *env, jobject method) {
++    return lsplant::GetNativeFunction(env, method);
++}
++
++bool LSPlantMakeClassInheritableC(JNIEnv *env, jclass target) {
++    return lsplant::MakeClassInheritable(env, target);
++}
++
++bool LSPlantMakeDexFileTrustedC(JNIEnv *env, jobject cookie) {
++    return lsplant::MakeDexFileTrusted(env, cookie);
++}

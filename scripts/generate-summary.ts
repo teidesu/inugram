@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { patchesDir, rootDir, seriesFile } from './config.js'
 import { success } from './lib.js'
 
-const kotlinDir = join(rootDir, 'src/kotlin')
+const forkDir = join(rootDir, 'src/fork')
 const resDir = join(rootDir, 'src/res')
 
 interface PatchInfo {
@@ -63,7 +63,7 @@ function escapeMarkdownCell(value: string) {
 }
 
 function formatSize(added: number, removed: number) {
-  return `\${\\color{green}+${added}}$\u00a0\${\\color{red}-${removed}}$`
+  return `\${\\color{green}+${added}}$\u00A0\${\\color{red}-${removed}}$`
 }
 
 function formatTable(patches: PatchInfo[]) {
@@ -90,7 +90,7 @@ async function walk(dir: string): Promise<string[]> {
 }
 
 async function countKotlinSloc() {
-  const files = (await walk(kotlinDir)).filter(f => f.endsWith('.kt'))
+  const files = (await walk(forkDir)).filter(f => f.endsWith('.kt'))
   let sloc = 0
   for (const file of files) {
     const content = await fs.readFile(file, 'utf8')

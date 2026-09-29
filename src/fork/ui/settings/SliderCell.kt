@@ -1,0 +1,234 @@
+package desu.inugram.ui.settings
+
+import android.annotation.SuppressLint
+import android.content.Context
+import android.graphics.Canvas
+import android.view.Gravity
+import android.view.MotionEvent
+import android.view.View
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
+import android.util.TypedValue
+import org.telegram.messenger.AndroidUtilities
+import org.telegram.messenger.R
+import org.telegram.ui.ActionBar.Theme
+import org.telegram.ui.Components.LayoutHelper
+import org.telegram.ui.Components.SeekBar
+
+@SuppressLint("ViewConstructor")
+class SliderCell(
+    context: Context,
+    private val min: Float,
+    private val max: Float,
+    private val defaultValue: Float,
+    initialValue: Float = defaultValue,
+    private val step: Float? = null,
+    title: CharSequence? = null,
+    private val format: (Float) -> String,
+    private val onChanged: (Float) -> Unit,
+    private val onReleased: ((Float) -> Unit)? = null,
+) : LinearLayout(context) {
+
+    var value: Float = snap(initialValue)
+        private set
+
+    private val seekBarView = SeekBarWrapper(
+        context,
+        snapProgress = step?.let { s -> { p -> snapProgress(p, s) } },
+    ).apply {
+        onProgressChanged = {
+            setValue(min + it * (max - min), syncSlider = false)
+        }
+        onFinished = { onReleased?.invoke(value) }
+        setProgress((value - min) / (max - min))
+    }
+
+    /** external state sync: repositions the slider without firing [onChanged]/[onReleased] */
+    fun updateValue(newValue: Float) {
+        value = snap(newValue)
+        seekBarView.setProgress((value - min) / (max - min))
+        refresh()
+    }
+
+    private fun snap(v: Float): Float {
+        val s = step ?: return v
+        return min + Math.round((v - min) / s) * s
+    }
+
+    private fun snapProgress(p: Float, stepVal: Float): Float {
+        val range = max - min
+        if (range <= 0f) return p
+        val snapped = Math.round(p * range / stepVal) * stepVal / range
+        return snapped.coerceIn(0f, 1f)
+    }
+
+    private val valueLabel = TextView(context).apply {
+        setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14f)
+        setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteValueText))
+        gravity = Gravity.CENTER
+        minWidth = AndroidUtilities.dp(34f)
+    }
+
+    private val titleView = title?.let {
+        TextView(context).apply {
+            text = it
+            setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15f)
+            setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueHeader))
+            typeface = AndroidUtilities.bold()
+        }
+    }
+
+    private val resetButton = ImageView(context).apply {
+        setImageResource(R.drawable.msg_reset)
+        setColorFilter(Theme.getColor(Theme.key_windowBackgroundWhiteGrayIcon))
+        background = Theme.createSelectorDrawable(
+            Theme.getColor(Theme.key_listSelector),
+            Theme.RIPPLE_MASK_CIRCLE_20DP,
+        )
+        scaleType = ImageView.ScaleType.CENTER_INSIDE
+        setOnClickListener {
+            if (value != defaultValue) {
+                setValue(defaultValue, syncSlider = true)
+                onReleased?.invoke(value)
+            }
+        }
+    }
+
+    init {
+        if (titleView != null) {
+            orientation = VERTICAL
+            addView(
+                titleView,
+                LayoutHelper.createLinear(
+                    LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT,
+                    20f, 12f, 16f, 4f,
+                )
+            )
+            val row = LinearLayout(context).apply {
+                orientation = HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            row.addView(seekBarView, LayoutHelper.createLinear(0, 38, 1f, 6, 0, 0, 0))
+            row.addView(
+                valueLabel,
+                LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, 8f, 0f, 4f, 0f)
+            )
+            row.addView(resetButton, LayoutHelper.createLinear(40, 40, 0f, 0f, 4f, 0f))
+            addView(row, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48))
+        } else {
+            orientation = HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+
+            addView(seekBarView, LayoutHelper.createLinear(0, 38, 1f, 6, 0, 0, 0))
+            addView(
+                valueLabel,
+                LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, 8f, 0f, 4f, 0f)
+            )
+            addView(resetButton, LayoutHelper.createLinear(40, 40, 0f, 0f, 4f, 0f))
+        }
+        refresh()
+    }
+
+    private fun setValue(newValue: Float, syncSlider: Boolean) {
+        value = newValue
+        if (syncSlider) seekBarView.setProgress((newValue - min) / (max - min))
+        refresh()
+        onChanged(newValue)
+    }
+
+    private fun refresh() {
+        valueLabel.text = format(value)
+        resetButton.alpha = if (value == defaultValue) 0.35f else 1f
+    }
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val exactWidth = MeasureSpec.makeMeasureSpec(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.EXACTLY)
+        if (titleView != null) {
+            super.onMeasure(exactWidth, heightMeasureSpec)
+        } else {
+            super.onMeasure(
+                exactWidth,
+                MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(48f), MeasureSpec.EXACTLY),
+            )
+        }
+    }
+
+    // lower-level SeekBar is used instead of SeekBarView so we avoid the step-change haptic.
+    private class SeekBarWrapper(
+        context: Context,
+        private val snapProgress: ((Float) -> Float)? = null,
+    ) : View(context) {
+        var onProgressChanged: ((Float) -> Unit)? = null
+        var onFinished: (() -> Unit)? = null
+        private val seekBar = SeekBar(this)
+
+        init {
+            seekBar.setColors(
+                Theme.getColor(Theme.key_player_progressBackground),
+                Theme.getColor(Theme.key_player_progressCachedBackground),
+                Theme.getColor(Theme.key_player_progress),
+                Theme.getColor(Theme.key_player_progress),
+                Theme.getColor(Theme.key_player_progressBackground),
+            )
+            seekBar.setDelegate(object : SeekBar.SeekBarDelegate {
+                override fun onSeekBarDrag(progress: Float) = onDrag(progress)
+                override fun onSeekBarContinuousDrag(progress: Float) = onDrag(progress)
+            })
+        }
+
+        private fun onDrag(progress: Float) {
+            onProgressChanged?.invoke(progress)
+            invalidate()
+        }
+
+        fun setProgress(progress: Float) {
+            seekBar.setProgress(progress)
+            invalidate()
+        }
+
+        override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+            super.onSizeChanged(w, h, oldw, oldh)
+            seekBar.setSize(w, h)
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+            seekBar.draw(canvas)
+        }
+
+        override fun onTouchEvent(event: MotionEvent): Boolean {
+            if (snapProgress == null) {
+                if (event.action == MotionEvent.ACTION_DOWN) {
+                    parent?.requestDisallowInterceptTouchEvent(true)
+                }
+                val handled = seekBar.onTouch(event.action, event.x, event.y)
+                if (handled) invalidate()
+                if (handled && (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL)) {
+                    onFinished?.invoke()
+                }
+                return handled
+            }
+            when (event.action) {
+                MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE,
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    if (event.action == MotionEvent.ACTION_DOWN) {
+                        parent?.requestDisallowInterceptTouchEvent(true)
+                    }
+                    val thumbWidth = AndroidUtilities.dp(24f)
+                    val denom = (width - thumbWidth).coerceAtLeast(1).toFloat()
+                    val raw = ((event.x - thumbWidth / 2f) / denom).coerceIn(0f, 1f)
+                    val snapped = snapProgress.invoke(raw)
+                    seekBar.setProgress(snapped)
+                    onProgressChanged?.invoke(snapped)
+                    invalidate()
+                    if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) {
+                        onFinished?.invoke()
+                    }
+                    return true
+                }
+                else -> return false
+            }
+        }
+    }
+}

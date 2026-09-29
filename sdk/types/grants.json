@@ -1,0 +1,248 @@
+{
+  "$comment": "The grant catalogue: the single source of truth for what a manifest may ask for. `pnpm run generate-grants` renders it into InuCore's GrantCatalog.kt; the cli reads this file as it is, alongside tl-names.txt for the rpc method and update vocabularies. `title`, `info` and `icon` name android resources, resolved by PluginInfoActivity; `description` is english-only and read by the cli alone.",
+  "pluginApi": 1,
+  "patterns": {
+    "domain": "[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*",
+    "fsSize": "(\\d+)(kb|mb|gb)"
+  },
+  "takeoverMethods": {
+    "$comment": "refused in invokeRpc/interceptRpc under every grant but unsafe.disableApiFiltering, because holding them is a complete account takeover.",
+    "prefixes": [
+      "auth."
+    ],
+    "names": [
+      "account.getPasskeys",
+      "account.deletePasskey",
+      "account.registerPasskey",
+      "account.initPasskeyRegistration",
+      "account.registerDevice",
+      "account.unregisterDevice",
+      "account.deleteAccount",
+      "account.changePhone",
+      "account.getAuthorizations",
+      "account.resetAuthorization",
+      "account.acceptAuthorization",
+      "account.verifyPhone",
+      "account.verifyEmail",
+      "account.resetPassword",
+      "account.updatePasswordSettings",
+      "messages.requestUrlAuth",
+      "messages.acceptUrlAuth"
+    ]
+  },
+  "undeliverableUpdates": {
+    "$comment": "never delivered without unsafe.disableApiFiltering, so a grant naming one narrows to nothing",
+    "names": [
+      "updateServiceNotification"
+    ]
+  },
+  "grants": [
+    {
+      "name": "fs",
+      "scopes": "fsSize",
+      "tier": "neutral",
+      "title": "InuPluginGrantFs",
+      "icon": "files_storage",
+      "description": "a private directory on disk; a scope such as fs(200mb) raises the default 50mb quota"
+    },
+    {
+      "name": "clipboard.write",
+      "scopes": "none",
+      "tier": "neutral",
+      "title": "InuPluginGrantClipboardWrite",
+      "icon": "msg_copy",
+      "description": "put text on the system clipboard"
+    },
+    {
+      "name": "clipboard.read",
+      "scopes": "none",
+      "tier": "caution",
+      "title": "InuPluginGrantClipboardRead",
+      "icon": "msg_copy",
+      "description": "read whatever is on the system clipboard"
+    },
+    {
+      "name": "openUrl",
+      "scopes": "none",
+      "tier": "neutral",
+      "title": "InuPluginGrantOpenUrl",
+      "icon": "msg_link",
+      "description": "hand a link to the app to open"
+    },
+    {
+      "name": "onAppVisibilityChange",
+      "scopes": "none",
+      "tier": "neutral",
+      "title": "InuPluginGrantAppVisibility",
+      "icon": "menu_hide_gift",
+      "description": "be told when the app goes to the foreground or background"
+    },
+    {
+      "name": "notifications.suppress",
+      "scopes": "none",
+      "tier": "neutral",
+      "title": "InuPluginGrantNotificationsSuppress",
+      "info": "InuPluginGrantNotificationsSuppressInfo",
+      "icon": "msg_mute",
+      "description": "hold back the notifications the app posts itself while the plugin runs"
+    },
+    {
+      "name": "fetch",
+      "scopes": "domain",
+      "tier": "neutral",
+      "tierWhenUnscoped": "caution",
+      "title": "InuPluginGrantFetch",
+      "icon": "msg_language",
+      "description": "http requests; every scope is a host, and a bare fetch reaches anywhere"
+    },
+    {
+      "name": "account.read",
+      "scopes": "list",
+      "values": [
+        "self",
+        "peers",
+        "messages",
+        "dialogs",
+        "history",
+        "draft"
+      ],
+      "tier": "neutral",
+      "tierWhenUnscoped": "caution",
+      "title": "InuPluginGrantAccountRead",
+      "icon": "msg_contacts",
+      "description": "read the signed-in account: profile, peers, messages, dialogs, history, drafts"
+    },
+    {
+      "name": "account.write",
+      "scopes": "list",
+      "values": [
+        "send",
+        "edit",
+        "delete",
+        "forward",
+        "react",
+        "read",
+        "typing",
+        "draft"
+      ],
+      "tier": "caution",
+      "title": "InuPluginGrantAccountWrite",
+      "icon": "msg_send",
+      "description": "act as the account: send, edit, delete, forward, react, mark read, type, draft"
+    },
+    {
+      "name": "onUpdate",
+      "scopes": "updateType",
+      "extraValues": [
+        "new_message",
+        "edit_message",
+        "delete_message"
+      ],
+      "tier": "neutral",
+      "tierWhenUnscoped": "caution",
+      "title": "InuPluginGrantOnUpdate",
+      "icon": "msg_message",
+      "description": "watch updates as they arrive, without being able to change them"
+    },
+    {
+      "name": "interceptUpdate",
+      "scopes": "updateType",
+      "tier": "neutral",
+      "tierWhenUnscoped": "caution",
+      "title": "InuPluginGrantInterceptUpdate",
+      "icon": "msg_download",
+      "description": "see updates before the app applies them, and drop them"
+    },
+    {
+      "name": "interceptSendMessage",
+      "scopes": "none",
+      "tier": "caution",
+      "title": "InuPluginGrantInterceptSend",
+      "icon": "msg_edit",
+      "description": "see outgoing messages before they are sent, and rewrite or drop them"
+    },
+    {
+      "name": "invokeRpc",
+      "scopes": "rpcMethod",
+      "refusesTakeover": true,
+      "tier": "neutral",
+      "tierWhenUnscoped": "caution",
+      "title": "InuPluginGrantInvokeRpc",
+      "icon": "msg_bot",
+      "description": "call telegram api methods directly; each scope is a method name"
+    },
+    {
+      "name": "interceptRpc",
+      "scopes": "rpcMethod",
+      "refusesTakeover": true,
+      "tier": "neutral",
+      "tierWhenUnscoped": "caution",
+      "title": "InuPluginGrantInterceptRpc",
+      "icon": "msg_log",
+      "description": "sit in front of the app's own api requests; each scope is a method name"
+    },
+    {
+      "name": "takeout",
+      "scopes": "none",
+      "tier": "caution",
+      "title": "InuPluginGrantTakeout",
+      "info": "InuPluginGrantTakeoutInfo",
+      "icon": "msg_download",
+      "description": "open a data-export session, which the user approves"
+    },
+    {
+      "name": "unsafe.fs",
+      "scopes": "none",
+      "tier": "dangerous",
+      "title": "InuPluginGrantUnsafeFs",
+      "info": "InuPluginGrantUnsafeFsInfo",
+      "icon": "files_storage",
+      "description": "read and write any file the app can reach, with no quota"
+    },
+    {
+      "name": "unsafe.invokeRaw",
+      "scopes": "none",
+      "tier": "dangerous",
+      "title": "InuPluginGrantUnsafeInvokeRaw",
+      "info": "InuPluginGrantUnsafeInvokeRawInfo",
+      "icon": "msg_bot",
+      "description": "send any api request, bypassing the method filter"
+    },
+    {
+      "name": "unsafe.jvm",
+      "scopes": "none",
+      "tier": "dangerous",
+      "title": "InuPluginGrantUnsafeJvm",
+      "info": "InuPluginGrantUnsafeJvmInfo",
+      "icon": "inu_tabler_code",
+      "description": "reach the jvm directly, unsandboxed"
+    },
+    {
+      "name": "unsafe.xposed",
+      "scopes": "none",
+      "tier": "dangerous",
+      "title": "InuPluginGrantUnsafeXposed",
+      "info": "InuPluginGrantUnsafeXposedInfo",
+      "icon": "msg_replace",
+      "description": "replace methods of the app, changing how any part of it behaves"
+    },
+    {
+      "name": "unsafe.notificationCenter",
+      "scopes": "none",
+      "tier": "dangerous",
+      "title": "InuPluginGrantUnsafeNotificationCenter",
+      "info": "InuPluginGrantUnsafeNotificationCenterInfo",
+      "icon": "msg_notifications",
+      "description": "watch and post the app's internal events"
+    },
+    {
+      "name": "unsafe.disableApiFiltering",
+      "scopes": "none",
+      "tier": "dangerous",
+      "title": "InuPluginGrantUnsafeDisableApiFiltering",
+      "info": "InuPluginGrantUnsafeDisableApiFilteringInfo",
+      "icon": "msg_block",
+      "description": "lift the account-takeover filter, allowing account-critical api calls"
+    }
+  ]
+}

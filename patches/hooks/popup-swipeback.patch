@@ -4,11 +4,28 @@ Date: Wed, 13 May 2026 18:49:11 +0200
 Subject: Expose foreground translation and unified touch coords on swipeback popup
 
 ---
+ .../ui/ActionBar/ActionBarMenuItem.java       |  5 ++++
  .../ui/ActionBar/ActionBarPopupWindow.java    |  5 +++-
  .../ChatScrimPopupContainerLayout.java        |  3 +-
  .../ui/Components/PopupSwipeBackLayout.java   | 29 +++++++++++++++++--
- 3 files changed, 33 insertions(+), 4 deletions(-)
+ 4 files changed, 38 insertions(+), 4 deletions(-)
 
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java
+@@ -2609,6 +2609,11 @@ public class ActionBarMenuItem extends FrameLayout {
+     public Item lazilyAddSwipeBackItem(int icon, Drawable iconDrawable, String text, View viewToSwipeBack) {
+         return putLazyItem(Item.asSwipeBackItem(icon, iconDrawable, text, viewToSwipeBack));
+     }
++    public Item inu_lazilyAddSwipeBackItem(int id, int icon, Drawable iconDrawable, String text, View viewToSwipeBack) {
++        Item item = Item.asSwipeBackItem(icon, iconDrawable, text, viewToSwipeBack);
++        item.id = id;
++        return putLazyItem(item);
++    }
+     public Item lazilyAddSubItem(int id, int icon, CharSequence text) {
+         return lazilyAddSubItem(id, icon, null, text, true, false);
+     }
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarPopupWindow.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarPopupWindow.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarPopupWindow.java

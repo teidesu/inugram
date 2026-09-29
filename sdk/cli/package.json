@@ -1,0 +1,63 @@
+{
+  "name": "@inugram/cli",
+  "type": "module",
+  "version": "0.0.0",
+  "description": "build, check and live-reload Inugram plugins",
+  "author": "alina sireneva",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/teidesu/inugram.git",
+    "directory": "sdk/cli"
+  },
+  "keywords": [
+    "inugram",
+    "telegram",
+    "plugins"
+  ],
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "bin": {
+    "inu": "./src/cli.ts"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "vite build",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@inugram/plugin-types": "*",
+    "typescript": ">=5"
+  },
+  "peerDependenciesMeta": {
+    "@inugram/plugin-types": {
+      "optional": true
+    },
+    "typescript": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@fuman/utils": "^0.0.19",
+    "@oxc-project/types": "^0.150.0",
+    "citty": "^0.2.2",
+    "esbuild": "^0.25.0",
+    "oxc-parser": "^0.150.0",
+    "picocolors": "^1.1.1",
+    "valibot": "^1.5.0"
+  },
+  "devDependencies": {
+    "@fuman/build": "^0.0.21",
+    "@inugram/plugin-types": "workspace:*",
+    "@types/node": "^24.6.1",
+    "rollup-plugin-node-externals": "^9.0.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.6",
+    "vite-plugin-dts": "^5.1.0",
+    "vitest": "^5.0.1"
+  }
+}

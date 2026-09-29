@@ -9,12 +9,12 @@ class RleTest {
     private fun decode(hex: String) = encodeHex(decodeTelegramRle(decodeHex(hex)))
 
     @Test
-    fun encodeKeepsInputWithoutZeroes() {
+    fun encode_keeps_input_without_zeroes() {
         assertEquals("aaeeff", encode("aaeeff"))
     }
 
     @Test
-    fun encodeCollapsesConsecutiveZeroes() {
+    fun encode_collapses_consecutive_zeroes() {
         assertEquals("0004aa", encode("00000000aa"))
         assertEquals("0004aa0003aa", encode("00000000aa000000aa"))
         assertEquals("0004aa0002", encode("00000000aa0000"))
@@ -22,12 +22,12 @@ class RleTest {
     }
 
     @Test
-    fun decodeKeepsInputWithoutZeroes() {
+    fun decode_keeps_input_without_zeroes() {
         assertEquals("aaeeff", decode("aaeeff"))
     }
 
     @Test
-    fun decodeExpandsZeroRuns() {
+    fun decode_expands_zero_runs() {
         assertEquals("00000000aa", decode("0004aa"))
         assertEquals("00000000aa", decode("0004aa0000"))
         assertEquals("00000000aa000000aa", decode("0004aa0003aa"))

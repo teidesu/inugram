@@ -29,6 +29,7 @@ feature/call-confirmation.patch
 feature/double-tap-delay.patch
 feature/mutual-contact-icon.patch
 hooks/chat-activity.patch
+hooks/send-preview.patch
 feature/message-menu.patch
 debloat/disable-pull-to-next.patch
 debloat/always-show-go-to-down.patch
@@ -319,3 +320,5 @@ feature/instant-camera-mode.patch
 feature/minimize-attach-panel.patch
 bugfix/link-scrim-offset.patch
 bugfix/scrim-touch-lock.patch
+feature/plugins.patch
+bugfix/settings-activity-bulletin.patch
