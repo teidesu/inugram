@@ -8,6 +8,8 @@ import desu.inugram.core.plugins.PluginManifest
  * `@inugram/cli` reads these tags (`device.ts`), so keep the two in step.
  */
 class PluginLog private constructor(val tag: String) {
+    private val chunkBytes = 4000 - tag.toByteArray().size
+
     fun d(area: String, message: String, error: Throwable? = null) {
         Log.d(tag, "[$area] $message", error)
     }
@@ -21,11 +23,37 @@ class PluginLog private constructor(val tag: String) {
     }
 
     fun console(level: Int, message: String) {
-        when (level) {
-            2 -> Log.w(tag, message)
-            3, QuickJs.LEVEL_FAULT -> Log.e(tag, message)
-            else -> Log.d(tag, message)
+        val priority = when (level) {
+            2 -> Log.WARN
+            3, QuickJs.LEVEL_FAULT -> Log.ERROR
+            else -> Log.DEBUG
         }
+        var start = 0
+        do {
+            val end = findChunkEnd(message, start)
+            Log.println(priority, tag, message.substring(start, end))
+            start = if (end < message.length && message[end] == '\n') end + 1 else end
+        } while (start < message.length)
+    }
+
+    private fun findChunkEnd(message: String, start: Int): Int {
+        var bytes = 0
+        var lastNewline = -1
+        var i = start
+        while (i < message.length) {
+            val codePoint = message.codePointAt(i)
+            val size = when {
+                codePoint < 0x80 -> 1
+                codePoint < 0x800 -> 2
+                codePoint < 0x10000 -> 3
+                else -> 4
+            }
+            if (bytes + size > chunkBytes) return if (lastNewline > start) lastNewline else i
+            if (codePoint == '\n'.code) lastNewline = i
+            bytes += size
+            i += Character.charCount(codePoint)
+        }
+        return message.length
     }
 
     companion object {
