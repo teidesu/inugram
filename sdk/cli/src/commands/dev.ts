@@ -76,6 +76,7 @@ export const devCmd = defineCommand({
       if (id !== null) channels.set(PLUGIN_LOG_TAG_PREFIX + id, plugin.slug)
     }
     const queue = new AsyncLock()
+    const logsSince = args.logs ? await device.getLogTime() : null
 
     const push = async (outcome: BuildOutcome) => {
       const file = outcome.plugin.outFile
@@ -109,9 +110,9 @@ export const devCmd = defineCommand({
     })
 
     const aborter = new AbortController()
-    if (args.logs) {
+    if (logsSince !== null) {
       device
-        .tailLogs((level, tag, message) => {
+        .tailLogs(logsSince, (level, tag, message) => {
           const label = tag === HOST_LOG_TAG ? (HOST_LEVELS.has(level) ? 'app' : undefined) : channels.get(tag)
           if (label === undefined) return
           console.log(`${(LEVEL_COLOR[level] ?? color.gray)(label)} ${message}`)

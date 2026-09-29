@@ -176,11 +176,20 @@ export class Device {
     return this.send({ cmd: 'ping' }, PingSchema)
   }
 
+  /** Device clock in logcat's epoch `-T` format. */
+  async getLogTime(): Promise<string> {
+    const out = await this.adb(['shell', 'date', '+%s.%N'])
+    // older toybox date has no %N
+    const match = /^(\d+)\.(\d{3})?/.exec(out.stdout.trim())
+    if (!match) throw new CliError(`unexpected device time: ${out.stdout.trim()}`)
+    return `${match[1]}.${match[2] ?? '000'}`
+  }
+
   /**
    * Logcat only supports exact tag filters, so read the whole process and let [onLine] filter.
    * Resolve the PID again when the stream ends to handle app restarts.
    */
-  async tailLogs(onLine: (level: string, tag: string, message: string) => void, signal: AbortSignal) {
+  async tailLogs(since: string, onLine: (level: string, tag: string, message: string) => void, signal: AbortSignal) {
     while (!signal.aborted) {
       const pid = await this.pid()
       if (!pid) {
@@ -188,7 +197,7 @@ export class Device {
         continue
       }
       await new Promise<void>((resolve) => {
-        const child = spawn('adb', [...this.serial, 'logcat', '-v', 'brief', '--pid', pid], { stdio: ['ignore', 'pipe', 'ignore'] })
+        const child = spawn('adb', [...this.serial, 'logcat', '-v', 'brief', '-T', since, '--pid', pid], { stdio: ['ignore', 'pipe', 'ignore'] })
         const stop = () => child.kill()
         signal.addEventListener('abort', stop, { once: true })
         createInterface({ input: child.stdout }).on('line', (line) => {
