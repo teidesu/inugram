@@ -4,6 +4,7 @@ pub(crate) const OP_CHOOSER: i32 = 2;
 pub(crate) const OP_BULLETIN: i32 = 3;
 pub(crate) const OP_PICK_FILE: i32 = 4;
 pub(crate) const OP_SAVE_FILE: i32 = 5;
+pub(crate) const OP_SELECT_PEERS: i32 = 6;
 
 pub(crate) mod actions;
 pub(crate) mod dialogs;

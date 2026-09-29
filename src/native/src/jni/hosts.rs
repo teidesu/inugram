@@ -232,6 +232,10 @@ impl DialogHost for JniBridge {
     self.ui_modal(OP_CHOOSER, request_id, options_json)
   }
 
+  fn select_peers(&self, request_id: i64, options_json: &str) -> Option<String> {
+    self.ui_modal(crate::api::ui::OP_SELECT_PEERS, request_id, options_json)
+  }
+
   fn prompt(&self, request_id: i64, options_json: &str) -> Option<String> {
     self.ui_modal(OP_PROMPT, request_id, options_json)
   }

@@ -360,12 +360,71 @@ fn dispose_with_every_modal_open_releases_roots() {
     ctx
       .eval::<(), _>(
         "inu.onUnload(() => {}); inu.onAppVisibilityChange(() => {}); \
-         inu.ui.dialog({}); inu.ui.prompt({ title: 'stuck' }); inu.ui.chooser({ items: ['a'] });",
+         inu.ui.dialog({}); inu.ui.prompt({ title: 'stuck' }); inu.ui.chooser({ items: ['a'] }); inu.ui.selectPeers({});",
       )
       .unwrap();
   });
   assert_eq!((host.dialogs.borrow().len(), host.prompts.borrow().len(), host.choosers.borrow().len()), (1, 1, 1));
-  assert_eq!(state.pending.len(), 3);
+  assert_eq!(host.peer_pickers.borrow().len(), 1);
+  assert_eq!(state.pending.len(), 4);
   state.dispose(&ctx);
   assert!(state.pending.is_empty());
+}
+
+#[test]
+fn select_peers_validates_and_deduplicates_prefill_before_opening() {
+  let (_rt, ctx, host, _lifecycle, _state, _logs) = setup(&[]);
+  ctx.with(|ctx| {
+    ctx.eval::<(), _>("inu.ui.selectPeers({ title: 'Pick', account: 2, selected: [42, -1000000000123, 42], limit: 2, allowEmpty: false }); inu.ui.selectPeers({});").unwrap();
+    for bad in [
+      "{ limit: 0 }", "{ limit: -1 }", "{ limit: 1.5 }", "{ limit: 2147483648 }",
+      "{ selected: [1, 2], limit: 1 }", "{ selected: 'me' }", "{ selected: [0] }",
+      "{ selected: [1.5] }", "{ selected: [NaN] }", "{ selected: [Infinity] }",
+      "{ selected: [9007199254740992] }", "{ selected: ['42'] }", "{ selected: [,] }",
+      "{ account: -1 }", "{ account: 1.5 }", "{ allowEmpty: 1 }", "{ title: 1 }",
+    ] {
+      let caught = ctx.eval::<String, _>(format!("(() => {{ try {{ inu.ui.selectPeers({bad}); return 'no-throw'; }} catch (e) {{ return e.name; }} }})()" )).unwrap();
+      assert_eq!(caught, "TypeError", "{bad}");
+    }
+  });
+  let requests = host.peer_pickers.borrow();
+  assert_eq!(requests.len(), 2);
+  assert_eq!(
+    requests[0].1,
+    r#"{"title":"Pick","account":2,"limit":2,"allowEmpty":false,"peerType":7,"selected":[42,-1000000000123]}"#
+  );
+  assert_eq!(requests[1].1, r#"{"allowEmpty":true,"peerType":7,"selected":[]}"#);
+}
+
+#[test]
+fn select_peers_resolves_peer_ids_empty_selection_or_cancellation_once() {
+  let (_rt, ctx, host, _lifecycle, state, _logs) = setup(&[]);
+  ctx.with(|ctx| {
+    ctx.eval::<(), _>("globalThis.__results = []; for (let i = 0; i < 3; i++) inu.ui.selectPeers({ allowEmpty: true }).then(r => __results.push(r));").unwrap();
+  });
+  let ids: Vec<i64> = host.peer_pickers.borrow().iter().map(|(id, _)| *id).collect();
+  state.settle(&ctx, ids[0], "J[42,-1000000000123]");
+  state.settle(&ctx, ids[1], "J[]");
+  state.settle(&ctx, ids[2], "N");
+  state.settle(&ctx, ids[0], "J[7]");
+  assert_eq!(crate::testing::harness::eval_json(&ctx, "__results"), "[[42,-1000000000123],[],null]");
+  assert!(state.pending.is_empty());
+}
+
+#[test]
+fn select_peers_normalizes_type_filters_and_rejects_invalid_types() {
+  let (_rt, ctx, host, _lifecycle, _state, _logs) = setup(&[]);
+  ctx.with(|ctx| {
+    ctx.eval::<(), _>("for (const peerType of [['user'], ['group'], ['broadcast'], ['group', 'broadcast'], ['group', 'user', 'broadcast', 'group']]) inu.ui.selectPeers({ peerType });").unwrap();
+    for bad in ["[]", "'group'", "['channel']", "[1]", "[null]", "[,]", "['user', 'bot']"] {
+      let caught = ctx.eval::<String, _>(format!("(() => {{ try {{ inu.ui.selectPeers({{ peerType: {bad} }}); return 'no-throw'; }} catch (e) {{ return e.name; }} }})()" )).unwrap();
+      assert_eq!(caught, "TypeError", "{bad}");
+    }
+  });
+  let requests = host.peer_pickers.borrow();
+  let masks: Vec<i64> = requests
+    .iter()
+    .map(|(_, json)| serde_json::from_str::<serde_json::Value>(json).unwrap()["peerType"].as_i64().unwrap())
+    .collect();
+  assert_eq!(masks, vec![1, 2, 4, 6, 7]);
 }

@@ -9,8 +9,9 @@ Subject: Add the QuickJS plugin engine (hooks, action rows)
  .../telegram/tgnet/ConnectionsManager.java    |   8 +-
  .../java/org/telegram/ui/Cells/TextCell.java  |   2 +-
  .../java/org/telegram/ui/ChatActivity.java    |   8 +-
+ .../org/telegram/ui/GroupCreateActivity.java  |  33 +++--
  .../java/org/telegram/ui/LaunchActivity.java  |   1 +
- 6 files changed, 100 insertions(+), 63 deletions(-)
+ 7 files changed, 125 insertions(+), 71 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 index 0000000..0000000 100644
@@ -359,6 +360,117 @@ index 0000000..0000000 100644
              }
              chatListView.stopScroll();
              chatLayoutManager.setCanScrollVertically(false);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/GroupCreateActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/GroupCreateActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/GroupCreateActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/GroupCreateActivity.java
+@@ -145,6 +145,9 @@ public class GroupCreateActivity extends BaseFragment implements NotificationCen
+     private final boolean allowPremium;
+     private final boolean allowMiniApps;
+     private final boolean inu_allowChannels;
++    private final boolean inu_peerPicker;
++    private final int inu_peerTypes;
++    private final boolean inu_allowEmpty;
+     private GroupCreateSpan selectedPremium;
+     private GroupCreateSpan selectedMiniApps;
+     private LongSparseArray<GroupCreateSpan> selectedContacts = new LongSparseArray<>();
+@@ -238,9 +241,14 @@ public class GroupCreateActivity extends BaseFragment implements NotificationCen
+         allowPremium = args.getBoolean("allowPremium", false);
+         allowMiniApps = args.getBoolean("allowMiniapps", false);
+         inu_allowChannels = args.getBoolean("inu_allowChannels", false);
++        inu_peerPicker = args.getBoolean("inu_peerPicker", false);
++        inu_peerTypes = args.getInt("inu_peerTypes", 7);
++        inu_allowEmpty = args.getBoolean("inu_allowEmpty", false);
+         chatId = args.getLong("chatId");
+         channelId = args.getLong("channelId");
+-        if (isAlwaysShare || isNeverShare || addToGroup) {
++        if (inu_peerPicker) {
++            maxCount = args.getInt("inu_limit", 0);
++        } else if (isAlwaysShare || isNeverShare || addToGroup) {
+             maxCount = 0;
+         } else if (isCall) {
+             maxCount = getMessagesController().conferenceCallSizeLimit - 1;
+@@ -302,7 +310,7 @@ public class GroupCreateActivity extends BaseFragment implements NotificationCen
+         if (chatType == ChatObject.CHAT_TYPE_CHANNEL) {
+             doneButtonVisible = true;
+         } else {
+-            doneButtonVisible = !addToGroup;
++            doneButtonVisible = inu_peerPicker ? inu_allowEmpty : !addToGroup;
+         }
+ 
+         actionBar.setBackgroundColor(0);
+@@ -578,10 +586,10 @@ public class GroupCreateActivity extends BaseFragment implements NotificationCen
+                 if (selectedSpan != null) {
+                     spansContainer.removeSpan(selectedSpan);
+                 } else {
+-                    if (maxCount != 0 && selectedContacts.size() == maxCount) {
++                    if (maxCount != 0 && (inu_peerPicker ? selectedContacts.size() >= maxCount : selectedContacts.size() == maxCount)) {
+                         return;
+                     }
+-                    if (chatType == ChatObject.CHAT_TYPE_CHAT && selectedContacts.size() == getMessagesController().maxGroupCount) {
++                    if (!inu_peerPicker && chatType == ChatObject.CHAT_TYPE_CHAT && selectedContacts.size() == getMessagesController().maxGroupCount) {
+                         AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
+                         builder.setTitle(getString(R.string.AppName));
+                         builder.setMessage(getString(R.string.SoftUserLimitAlert));
+@@ -789,6 +797,7 @@ public class GroupCreateActivity extends BaseFragment implements NotificationCen
+     }
+ 
+     private void updateButtonsVisibility() {
++        if (inu_peerPicker && floatingButton != null) updateHint();
+         if (buttonsContainer == null) return;
+         final boolean show = !selectedContacts.isEmpty();
+         animatorCallButtonsVisible.setValue(show, true);
+@@ -1002,6 +1011,9 @@ public class GroupCreateActivity extends BaseFragment implements NotificationCen
+     }
+ 
+     private boolean onDonePressed(boolean alert) {
++        if (inu_peerPicker && !inu_allowEmpty && selectedContacts.isEmpty()) {
++            return false;
++        }
+         if (selectedContacts.isEmpty() && (chatType != ChatObject.CHAT_TYPE_CHANNEL && addToGroup)) {
+             return false;
+         }
+@@ -1129,7 +1141,7 @@ public class GroupCreateActivity extends BaseFragment implements NotificationCen
+                 }
+             }
+         }
+-        if (chatType != ChatObject.CHAT_TYPE_CHANNEL && addToGroup) {
++        if (chatType != ChatObject.CHAT_TYPE_CHANNEL && (addToGroup || inu_peerPicker && !inu_allowEmpty)) {
+             if (doneButtonVisible && allSpans.isEmpty()) {
+                 floatingButton.setButtonVisible(false, true);
+                 doneButtonVisible = false;
+@@ -1197,7 +1209,7 @@ public class GroupCreateActivity extends BaseFragment implements NotificationCen
+             ArrayList<TLRPC.TL_contact> arrayList = getContactsController().contacts;
+             for (int a = 0; a < arrayList.size(); a++) {
+                 TLRPC.User user = getMessagesController().getUser(arrayList.get(a).user_id);
+-                if (user == null || user.self || user.deleted) {
++                if (user == null || user.self || user.deleted || inu_peerPicker && !desu.inugram.helpers.plugins.ui.PluginUi.canSelectPeer(user, inu_peerTypes)) {
+                     continue;
+                 }
+                 contacts.add(user);
+@@ -1225,7 +1237,7 @@ public class GroupCreateActivity extends BaseFragment implements NotificationCen
+                             continue;
+                         }
+                         TLRPC.Chat chat = getMessagesController().getChat(-dialog.id);
+-                        if (chat == null || chat.migrated_to != null || ChatObject.isChannel(chat) && !chat.megagroup && !inu_allowChannels) {
++                        if (chat == null || chat.migrated_to != null || ChatObject.isChannel(chat) && !chat.megagroup && !inu_allowChannels || inu_peerPicker && !desu.inugram.helpers.plugins.ui.PluginUi.canSelectPeer(chat, inu_peerTypes)) {
+                             continue;
+                         }
+                         contacts.add(chat);
+@@ -1242,7 +1254,12 @@ public class GroupCreateActivity extends BaseFragment implements NotificationCen
+                 }
+             }
+ 
+-            searchAdapterHelper = new SearchAdapterHelper(false);
++            searchAdapterHelper = inu_peerPicker ? new SearchAdapterHelper(false) {
++                @Override
++                protected boolean filter(TLObject obj) {
++                    return super.filter(obj) && desu.inugram.helpers.plugins.ui.PluginUi.canSelectPeer(obj, inu_peerTypes);
++                }
++            } : new SearchAdapterHelper(false);
+             searchAdapterHelper.setDelegate((searchId) -> {
+                 showItemsAnimated(currentItemsCount);
+                 if (searchRunnable == null && !searchAdapterHelper.isSearchInProgress() && getItemCount() == 0) {
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java

@@ -1127,6 +1127,21 @@ declare namespace inu {
       multiple: true
     }): Promise<number[] | null>
 
+    /** Select users, groups or channels. Resolves to marked peer IDs, or null on cancellation. */
+    function selectPeers(options: {
+      title?: string
+      /** Account slot; defaults to the currently selected account. */
+      account?: number
+      /** Pre-filled marked peer IDs. Peers must be cached in the chosen account. */
+      selected?: number[]
+      /** Allowed peer types; defaults to all. Groups include basic groups and supergroups. Must not be empty; pre-fill must match. */
+      peerType?: ('group' | 'broadcast' | 'user')[]
+      /** Positive maximum selection size. Omitted means unlimited. Pre-fill must fit. */
+      limit?: number
+      /** Allow submitting an empty selection. Defaults to true. */
+      allowEmpty?: boolean
+    }): Promise<number[] | null>
+
     /** Info about the currently visible screen */
     interface CurrentScreen {
       type: 'chat' | 'profile' | 'dialogs' | 'settings' | 'other'

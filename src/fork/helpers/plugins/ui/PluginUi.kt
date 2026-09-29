@@ -31,16 +31,19 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.ApplicationLoader
+import org.telegram.messenger.ChatObject
 import org.telegram.messenger.DialogObject
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.MessagesController
 import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.R
 import org.telegram.messenger.UserConfig
+import org.telegram.tgnet.TLRPC
 import org.telegram.tgnet.TLObject
 import org.telegram.ui.ActionBar.AlertDialog
 import org.telegram.ui.ActionBar.BaseFragment
 import org.telegram.ui.ActionBar.Theme
+import org.telegram.ui.GroupCreateActivity
 import org.telegram.ui.ChatActivity
 import org.telegram.ui.Cells.CheckBoxCell
 import org.telegram.ui.Cells.RadioColorCell
@@ -68,6 +71,7 @@ object PluginUi : SessionResource {
     const val OP_BULLETIN = 3
     const val OP_PICK_FILE = 4
     const val OP_SAVE_FILE = 5
+    const val OP_SELECT_PEERS = 6
 
     private const val MAX_OPEN_MODALS = 3
 
@@ -87,6 +91,7 @@ object PluginUi : SessionResource {
 
     // keyed per engine so page ids can't cross plugins. ui thread only
     private data class PageKey(val session: PluginSession, val pageId: Long)
+    private val openPeerPickers = HashMap<PluginSession, MutableSet<GroupCreateActivity>>()
     private val openPages = HashMap<PageKey, MutableList<PluginSettingsActivity>>()
 
     fun listenerFor(session: PluginSession): UiListener = object : UiListener {
@@ -158,6 +163,7 @@ object PluginUi : SessionResource {
     /** the key goes before the fragment, so teardown does not notify the closed engine */
     override fun detach(session: PluginSession) {
         AndroidUtilities.runOnUIThread {
+            openPeerPickers.remove(session)?.toList()?.forEach { it.removeSelfFromStack() }
             val mine = openPages.filterKeys { it.session === session }
             for ((key, list) in mine) {
                 openPages.remove(key)
@@ -480,6 +486,49 @@ object PluginUi : SessionResource {
                 prepare = { ChooserSpec(JSONObject(optionsJson)) },
             ) { spec, settle -> showChooser(spec, settle) }
 
+            OP_SELECT_PEERS -> showModal<Bundle, List<Long>?>(
+                session,
+                "selectPeers",
+                dismissed = null,
+                resolve = { picked ->
+                    val wire = picked?.let { PluginWire.encodeJson(JSONArray(it).toString()) } ?: PluginWire.encodeNull()
+                    session.engine.settle(QuickJs.SETTLE_MODAL, requestId, wire)
+                },
+                prepare = {
+                    val options = JSONObject(optionsJson)
+                    val account = options.optInt("account", UserConfig.selectedAccount)
+                    val controller = PeerSpecs.controllerFor(account)
+                        ?: refuse("not-found", "selectPeers: account #$account is not logged in")
+                    val peerTypes = options.getInt("peerType")
+                    val selected = ArrayList<Long>()
+                    val ids = options.getJSONArray("selected")
+                    for (i in 0 until ids.length()) {
+                        val id = PeerSpecs.toSimpleDialogId(ids.getLong(i))
+                        if (DialogObject.isEncryptedDialog(id)) {
+                            refuse("forbidden", "selectPeers: secret chats are not available to plugins")
+                        }
+                        val peer = controller.getUserOrChat(id)
+                            ?: refuse("not-found", "selectPeers: peer '${ids.getLong(i)}' is not cached")
+                        if (!canSelectPeer(peer, peerTypes)) {
+                            refuse("invalid-argument", "selectPeers: peer '${ids.getLong(i)}' is excluded by 'peerType'")
+                        }
+                        if (id !in selected) selected.add(id)
+                    }
+                    Bundle().apply {
+                        putInt("account", account)
+                        putString("title", options.text("title") ?: LocaleController.getString(R.string.SelectChats))
+                        putLongArray("selected", selected.toLongArray())
+                        putBoolean("isNeverShare", true)
+                        putInt("chatAddType", 2)
+                        putBoolean("inu_allowChannels", true)
+                        putBoolean("inu_peerPicker", true)
+                        putInt("inu_peerTypes", peerTypes)
+                        putInt("inu_limit", options.optInt("limit", 0))
+                        putBoolean("inu_allowEmpty", options.optBoolean("allowEmpty", true))
+                    }
+                },
+            ) { args, settle -> showPeerPicker(session, args, settle) }
+
             OP_PICK_FILE -> PluginFilePicker.pick(session, requestId, optionsJson)
 
             OP_SAVE_FILE -> PluginFilePicker.save(session, requestId, optionsJson)
@@ -575,6 +624,45 @@ object PluginUi : SessionResource {
             settle(null)
         } else {
             dialog.setOnDismissListener { settle(null) }
+        }
+    }
+
+    @JvmStatic
+    fun canSelectPeer(peer: TLObject?, peerTypes: Int): Boolean = when (peer) {
+        is TLRPC.User -> peerTypes and 1 != 0
+        is TLRPC.Chat -> peerTypes and (if (ChatObject.isChannel(peer) && !peer.megagroup) 4 else 2) != 0
+        else -> false
+    }
+
+    private fun showPeerPicker(session: PluginSession, args: Bundle, settle: (List<Long>?) -> Unit) {
+        val current = LaunchActivity.getSafeLastFragment()
+        if (!session.isCurrent() || current == null) {
+            settle(null)
+            return
+        }
+        val picker = object : GroupCreateActivity(args) {
+            override fun onFragmentDestroy() {
+                super.onFragmentDestroy()
+                openPeerPickers[session]?.let { pickers ->
+                    pickers.remove(this)
+                    if (pickers.isEmpty()) openPeerPickers.remove(session)
+                }
+                settle(null)
+            }
+        }
+        picker.setCurrentAccount(args.getInt("account"))
+        picker.setTitle(args.getString("title"))
+        picker.select(ArrayList(args.getLongArray("selected")?.toList().orEmpty()), false, false)
+        picker.setDelegate { _, _, ids ->
+            settle(ids.map { PeerSpecs.toMarkedPeerId(picker.messagesController, it) })
+        }
+        openPeerPickers.getOrPut(session) { mutableSetOf() }.add(picker)
+        if (!current.presentFragment(picker)) {
+            openPeerPickers[session]?.let { pickers ->
+                pickers.remove(picker)
+                if (pickers.isEmpty()) openPeerPickers.remove(session)
+            }
+            settle(null)
         }
     }
 

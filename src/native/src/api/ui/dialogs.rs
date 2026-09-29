@@ -16,6 +16,7 @@ pub trait DialogHost {
   fn dialog(&self, request_id: i64, options_json: &str) -> Option<String>;
   fn chooser(&self, request_id: i64, options_json: &str) -> Option<String>;
   fn prompt(&self, request_id: i64, options_json: &str) -> Option<String>;
+  fn select_peers(&self, request_id: i64, options_json: &str) -> Option<String>;
 }
 
 enum Modal {
@@ -23,6 +24,7 @@ enum Modal {
   Prompt,
   Chooser { multiple: bool },
   Bulletin,
+  SelectPeers,
 }
 
 impl Parked for Modal {}
@@ -257,6 +259,87 @@ impl DialogState {
     Ok(self.pending.park(ctx, modal, |request_id| self.host.chooser(request_id, &json))?.into_value())
   }
 
+  fn js_select_peers<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, opts: Object<'js>) -> JsResult<Value<'js>> {
+    let out = Object::new(ctx.clone())?;
+    if let Some(title) = opt_str(ctx, &opts, "selectPeers", "title")? {
+      out.set("title", title)?;
+    }
+    for (key, min) in [("account", 0.0), ("limit", 1.0)] {
+      if let Some(value) = arguments::opt_num(ctx, &opts, "selectPeers", key)? {
+        if !value.is_finite() || value.fract() != 0.0 || !(min..=i32::MAX as f64).contains(&value) {
+          return Err(Exception::throw_type(
+            ctx,
+            &format!("selectPeers: '{key}' must be a whole number between {min} and {}", i32::MAX),
+          ));
+        }
+        out.set(key, value as i32)?;
+      }
+    }
+    let limit: Option<i32> = out.get("limit")?;
+    out.set("allowEmpty", opt_bool(ctx, &opts, "selectPeers", "allowEmpty")?.unwrap_or(true))?;
+    let peer_type = arguments::field(ctx, &opts, "selectPeers", "peerType")?;
+    let mut peer_types = 7;
+    if !peer_type.is_undefined() && !peer_type.is_null() {
+      let list = peer_type
+        .as_array()
+        .ok_or_else(|| Exception::throw_type(ctx, "selectPeers: 'peerType' must be an array"))?;
+      peer_types = 0;
+      for value in arguments::array_values(ctx, list, "selectPeers: 'peerType'")? {
+        let name = value
+          .as_string()
+          .ok_or_else(|| {
+            Exception::throw_type(ctx, "selectPeers: 'peerType' must contain 'user', 'group' or 'broadcast'")
+          })?
+          .to_string()?;
+        peer_types |= match name.as_str() {
+          "user" => 1,
+          "group" => 2,
+          "broadcast" => 4,
+          _ => {
+            return Err(Exception::throw_type(
+              ctx,
+              "selectPeers: 'peerType' must contain 'user', 'group' or 'broadcast'",
+            ))
+          }
+        };
+      }
+      if peer_types == 0 {
+        return Err(Exception::throw_type(ctx, "selectPeers: 'peerType' must not be empty"));
+      }
+    }
+    out.set("peerType", peer_types)?;
+    let selected = arguments::field(ctx, &opts, "selectPeers", "selected")?;
+    let picked = rquickjs::Array::new(ctx.clone())?;
+    if !selected.is_undefined() && !selected.is_null() {
+      let list = selected
+        .as_array()
+        .ok_or_else(|| Exception::throw_type(ctx, "selectPeers: 'selected' must be an array"))?;
+      let mut ids = std::collections::HashSet::new();
+      for value in arguments::array_values(ctx, list, "selectPeers: 'selected'")? {
+        let id = value
+          .as_number()
+          .filter(|id| id.is_finite() && id.fract() == 0.0 && id.abs() <= 9_007_199_254_740_991.0 && *id != 0.0)
+          .ok_or_else(|| {
+            Exception::throw_type(ctx, "selectPeers: 'selected' must contain nonzero safe integer peer IDs")
+          })? as i64;
+        if ids.insert(id) {
+          picked.set(picked.len(), id)?;
+        }
+      }
+    }
+    if limit.is_some_and(|limit| picked.len() > limit as usize) {
+      return Err(Exception::throw_type(ctx, "selectPeers: 'selected' exceeds 'limit'"));
+    }
+    out.set("selected", picked)?;
+    let json = stringify_json(ctx, out.into_value(), "selectPeers: serialization failed")?;
+    Ok(
+      self
+        .pending
+        .park(ctx, Modal::SelectPeers, |request_id| self.host.select_peers(request_id, &json))?
+        .into_value(),
+    )
+  }
+
   fn js_prompt<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, opts: Object<'js>) -> JsResult<Value<'js>> {
     let out = Object::new(ctx.clone())?;
     out.set("title", req_str(ctx, &opts, "prompt", "title")?)?;
@@ -321,6 +404,11 @@ pub fn install_dialogs<'js>(
   ui.set(
     "prompt",
     Function::new(ctx.clone(), move |ctx: Ctx<'js>, options: Object<'js>| state2.js_prompt(&ctx, options))?,
+  )?;
+  let state2 = state.clone();
+  ui.set(
+    "selectPeers",
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>, options: Object<'js>| state2.js_select_peers(&ctx, options))?,
   )?;
   globals.inu.set("ui", ui)?;
   Ok(state)

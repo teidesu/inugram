@@ -292,6 +292,7 @@ pub(crate) struct RecordingHost {
   pub(crate) writes: RefCell<Vec<String>>,
   pub(crate) choosers: RefCell<Vec<(i64, String)>>,
   pub(crate) fail_chooser: RefCell<Option<String>>,
+  pub(crate) peer_pickers: RefCell<Vec<(i64, String)>>,
   pub(crate) prompts: RefCell<Vec<(i64, String)>>,
 }
 
@@ -318,6 +319,11 @@ impl DialogHost for RecordingHost {
       return Some(err.clone());
     }
     self.choosers.borrow_mut().push((request_id, options_json.to_string()));
+    None
+  }
+
+  fn select_peers(&self, request_id: i64, options_json: &str) -> Option<String> {
+    self.peer_pickers.borrow_mut().push((request_id, options_json.to_string()));
     None
   }
 
