@@ -74,7 +74,12 @@ The CLI turns the manifest from the config into a userscript-style header, somet
 // ==/InuPlugin==
 ```
 
-`@plugin-api` is currently purely for future-proofing and is always `1`.
+`@plugin-api` is currently `1`.
+
+It is bumped only for major breaking changes to the API. Pure additions
+(new methods, options, events) don't bump it, so check that a newer api exists before using it.
+
+Apps are expected to only support the latest `@plugin-api`, i.e. plugins written for the old API **will not** work under the new versions.
 
 ### Build options
 
