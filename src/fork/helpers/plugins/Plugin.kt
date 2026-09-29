@@ -37,6 +37,9 @@ class Plugin(
     /** from the dev server: skipped the trust sheet. ui-thread owned */
     @Volatile var dev: Boolean = false
 
+    /** grants the user consented to at install/update; null was never reviewed. ui-thread owned */
+    @Volatile var grants: List<String>? = null
+
     @Volatile var failure: PluginFailure? = null
 
     /** written on the plugin queue, read on the ui thread by `PluginActions.render` */

@@ -142,20 +142,12 @@ class PluginTakeoutTest {
     }
 
     @Test
-    fun raw_needs_its_own_grant_and_refuses_a_takeover_method() {
+    fun raw_needs_its_own_grant() {
         val ungranted = startPlugin("no-raw", "invokeRpc")
         assertEquals(
             "unsafe.invokeRaw",
             (PluginWire.decode(assertNotNull(rpc(ungranted).onInvokeRaw(1L, 0, ByteArray(4)))) as PluginWire.Value.PluginErr).grant,
         )
-
-        val plugin = granted()
-        // auth.exportLoginToken#b7e085fe, a takeover method the filter refuses by its constructor alone
-        val takeover = byteArrayOf(0xfe.toByte(), 0x85.toByte(), 0xe0.toByte(), 0xb7.toByte())
-        val refusal = rpc(plugin).onInvokeRaw(2L, 0, takeover)
-        assertEquals("forbidden", (PluginWire.decode(assertNotNull(refusal)) as PluginWire.Value.PluginErr).code)
-        drain()
-        assertNull(connections().lastSent())
     }
 
     @Test

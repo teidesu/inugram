@@ -35,6 +35,8 @@ import desu.inugram.helpers.plugins.ui.PluginFilePicker
 import desu.inugram.helpers.plugins.ui.PluginUi
 import desu.inugram.helpers.update.UpdateHelper
 import desu.inugram.ui.settings.PluginInfoActivity
+import desu.inugram.ui.settings.findGrantsBeyond
+import desu.inugram.ui.settings.sortedGrants
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.BuildVars
@@ -288,6 +290,7 @@ object PluginManager {
             .apply {
                 this.enabled = enabled
                 this.dev = dev
+                this.grants = manifest.grants
             }
         val reversible = reclaimed == null
         plugins.add(plugin)
@@ -304,6 +307,7 @@ object PluginManager {
         incompatibility(manifest)?.let { return it }
         if (!PluginStore.writeSource(plugin.file, source)) return getString(R.string.InuPluginsErrorWrite)
         plugin.dev = dev
+        plugin.grants = manifest.grants
         if (dev && !plugin.enabled && plugin.failure?.disables == true) plugin.enabled = true
         reload(plugin)
         PluginStore.persist(plugins)
@@ -362,6 +366,18 @@ object PluginManager {
         return badGrants(manifest)
     }
 
+    /**
+     * The source is the plugin's to rewrite (`unsafe.fs` reaches the store), so grants run from what
+     * the user consented to, never from the file alone.
+     */
+    private fun unconsentedGrants(plugin: Plugin): String? {
+        val consented = plugin.grants
+        val beyond = if (consented == null) sortedGrants(plugin.manifest.grants) else findGrantsBeyond(consented, plugin.manifest.grants)
+        if (beyond.isEmpty()) return null
+        val listed = beyond.joinToString(", ") { (name, scopes) -> if (scopes == null) name else "$name(${scopes.joinToString(",")})" }
+        return formatString(R.string.InuPluginsErrorUnconsentedGrants, listed)
+    }
+
     /** an unknown scope is a typo that narrowing would hide. unknown grant names stay ignored */
     private fun badGrants(manifest: PluginManifest): String? {
         val problems = GrantValidator.validateGrants(manifest.grants)
@@ -397,6 +413,10 @@ object PluginManager {
         if (!mayRun(plugin)) return
         warmTlTables()
         incompatibility(plugin.manifest)?.let {
+            fail(plugin, PluginFailure.Site.REFUSED, it)
+            return
+        }
+        unconsentedGrants(plugin)?.let {
             fail(plugin, PluginFailure.Site.REFUSED, it)
             return
         }

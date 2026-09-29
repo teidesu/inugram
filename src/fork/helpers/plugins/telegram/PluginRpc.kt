@@ -15,7 +15,6 @@ import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.RpcListener
 import desu.inugram.helpers.plugins.tl.TlHandles
 import desu.inugram.helpers.plugins.tl.TlNames
-import desu.inugram.core.plugins.TlTables
 import java.util.IdentityHashMap
 import java.util.concurrent.ConcurrentHashMap
 import java.util.regex.Pattern
@@ -1112,10 +1111,6 @@ object PluginRpc : SessionResource {
         return account
     }
 
-    /**
-     * only the leading constructor is checked, for the takeover refusal. An unknown constructor is sent as
-     * written: reaching a method stock has no class for is the point of the api.
-     */
     private fun invokeRaw(
         session: PluginSession,
         slot: Int,
@@ -1124,11 +1119,10 @@ object PluginRpc : SessionResource {
         method: ByteArray,
     ): String? {
         if (!session.permissions.has(RAW_GRANT)) return PluginWire.encodeNotGranted(RAW_GRANT)
+        if (method.size < Int.SIZE_BYTES) {
+            return PluginWire.encodePluginError("invalid-argument", "invokeRaw: a method is at least its 4-byte constructor id")
+        }
         val request = RawTlRequest(method)
-        val constructor = request.constructorId()
-            ?: return PluginWire.encodePluginError("invalid-argument", "invokeRaw: a method is at least its 4-byte constructor id")
-        // every name for the id is checked: a legacy variant can share it
-        for (named in TlTables.getConstructorNames(constructor)) takeoverRefusal(session.permissions, named)?.let { return it }
         val account = try {
             invokeAccountOrRefusal("invokeRaw", slot, startedOn)
         } catch (e: Exception) {

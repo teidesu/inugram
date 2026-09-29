@@ -9,6 +9,8 @@ data class PluginInstall(
     val enabled: Boolean,
     val pluginId: String? = null,
     val dev: Boolean = false,
+    /** list of consented grants */
+    val grants: List<String>? = null,
 ) {
     val file: String get() = PluginInstalls.fileName(id)
 }

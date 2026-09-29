@@ -22,14 +22,6 @@ class RawTlRequest(private val payload: ByteArray) : TLObject() {
         return RawTlResponse(bytes)
     }
 
-    fun constructorId(): Int? {
-        if (payload.size < Int.SIZE_BYTES) return null
-        return (payload[0].toInt() and 0xFF) or
-            ((payload[1].toInt() and 0xFF) shl 8) or
-            ((payload[2].toInt() and 0xFF) shl 16) or
-            ((payload[3].toInt() and 0xFF) shl 24)
-    }
-
     override fun toString(): String = "invokeRaw(${payload.size} bytes)"
 }
 

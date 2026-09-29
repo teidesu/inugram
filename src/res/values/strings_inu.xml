@@ -895,6 +895,7 @@
     <string name="InuPluginsErrorApiVersion">Needs a newer Inugram (plugin API %1$d, this app has %2$d)</string>
     <string name="InuPluginsErrorPlatform">Not made for this platform (needs %1$s)</string>
     <string name="InuPluginsErrorBadGrant">Invalid permissions requested (%1$s)</string>
+    <string name="InuPluginsErrorUnconsentedGrants">Requests permissions that weren\'t reviewed at install (%1$s); update the plugin to review them</string>
     <string name="InuPluginsFailedAtLoad">Load error</string>
     <string name="InuPluginsFailedAtRuntime">Runtime error</string>
     <string name="InuPluginsFailedAtUnload">Unload error</string>

@@ -220,6 +220,7 @@ const config = await inu.invokeRpc({ _: 'help.getConfig' })
 
 Additionally, there's an `invokeRaw` method that allows sending raw TL bytes and gives raw bytes back.
 It needs `unsafe.invokeRaw` and exists primarily for methods newer than the app's layer.
+Raw bytes are sent as written: the takeover filter does not apply to them.
 
 A response from a newer layer can break the connection state (the server might think we're on a higher layer,
 and start sending updates the app won't understand), so avoid it if `invokeRpc` works.

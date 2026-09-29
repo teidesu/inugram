@@ -48,6 +48,7 @@ object PluginStore {
                 Plugin(install.id, file, source, manifest).apply {
                     enabled = install.enabled
                     dev = install.dev
+                    grants = install.grants
                 }
             )
         }
@@ -62,17 +63,18 @@ object PluginStore {
     fun persist(plugins: List<Plugin>) {
         val arr = JSONArray()
         for (p in plugins) {
-            arr.put(record(p.id, p.enabled, p.manifest.id, p.dev))
+            arr.put(record(p.id, p.enabled, p.manifest.id, p.dev, p.grants))
         }
         for (install in unloaded) {
-            arr.put(record(install.id, install.enabled, install.pluginId, install.dev))
+            arr.put(record(install.id, install.enabled, install.pluginId, install.dev, install.grants))
         }
         InuConfig.PLUGINS_STATE.value = arr.toString()
     }
 
-    private fun record(id: String, enabled: Boolean, pluginId: String?, dev: Boolean): JSONObject =
+    private fun record(id: String, enabled: Boolean, pluginId: String?, dev: Boolean, grants: List<String>?): JSONObject =
         JSONObject().put("id", id).put("enabled", enabled).putOpt("pluginId", pluginId)
             .apply { if (dev) put("dev", true) }
+            .putOpt("grants", grants?.let { JSONArray(it) })
 
     /** kept until the caller finishes the import and calls [dropUnloaded], so a failed import does not lose it */
     fun findUnloaded(pluginId: String): PluginInstall? = unloaded.firstOrNull { it.pluginId == pluginId }
@@ -126,6 +128,7 @@ object PluginStore {
                 o.optBoolean("enabled", true),
                 o.optString("pluginId").takeIf { it.isNotEmpty() },
                 o.optBoolean("dev", false),
+                o.optJSONArray("grants")?.let { arr -> (0 until arr.length()).map { arr.getString(it) } },
             )
         }
     }
