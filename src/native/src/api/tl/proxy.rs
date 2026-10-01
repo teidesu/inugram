@@ -448,6 +448,7 @@ pub(crate) fn plain_wire_to_js<'js>(ctx: &Ctx<'js>, wire: &str) -> JsResult<Valu
 pub(crate) fn scalar_wire_to_js<'js>(ctx: &Ctx<'js>, tag: char, payload: &str) -> Option<JsResult<Value<'js>>> {
   Some(match tag {
     'N' => Ok(Value::new_null(ctx.clone())),
+    'U' => Ok(Value::new_undefined(ctx.clone())),
     'S' => payload.into_js(ctx),
     'I' => payload
       .parse::<i64>()
@@ -631,8 +632,12 @@ impl<'js> HandleBox<'js> {
     if let Some(value) = self.cached(&has_key)? {
       return Ok(value.as_bool().unwrap_or(false));
     }
-    // a cached value proves the field is there; a cached null does not say which way the bit went
+    // a cached value proves the field is there, a cached undefined that it is not; a cached null
+    // does not say which way the bit went
     if let Some(value) = self.cached(key)? {
+      if value.is_undefined() {
+        return Ok(false);
+      }
       if !value.is_null() {
         return Ok(true);
       }

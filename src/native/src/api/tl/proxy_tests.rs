@@ -136,7 +136,7 @@ fn wire_to_test_json(wire: &str) -> String {
   let tag = chars.next().unwrap_or('N');
   let payload = chars.as_str();
   match tag {
-    'N' => "null".to_string(),
+    'N' | 'U' => "null".to_string(),
     'S' => format!("\"{payload}\""),
     'I' | 'D' | 'J' => payload.to_string(),
     'B' => if payload == "1" { "true" } else { "false" }.to_string(),
@@ -206,7 +206,7 @@ impl TlHost for FakeTlHost {
           "N".to_string()
         } else {
           match fields.get(key) {
-            None => encode_error(&format!("no such field '{key}'")),
+            None => "U".to_string(),
             Some(value) => fake_value_to_wire(self, value, read_only),
           }
         }
@@ -981,7 +981,7 @@ fn the_caches_own_names_are_not_fields() {
         "##,
       )
       .unwrap();
-    assert_eq!(answers, r##"["no such field '#x'","no such field '@keys'",false,false]"##);
+    assert_eq!(answers, r##"["undefined","undefined",false,false]"##);
   });
 }
 
@@ -1227,17 +1227,33 @@ fn second_enumeration_costs_no_upcalls() {
   assert_eq!(host.get_count(), 3);
 }
 
+/// a union's members differ in fields, so reading one another member has is ordinary code
 #[test]
-fn errors_and_expiry_are_never_cached() {
+fn a_field_the_constructor_lacks_reads_as_undefined_and_is_cached() {
   let (_rt, ctx, host, views) = fixture();
   let id = host.mint(object_entry("foo", &[("x", "I1")]));
 
   ctx.with(|ctx| {
     bind_object(&ctx, &views, "obj", ViewLife::Plugin, id);
+    let answers: String = ctx
+      .eval("JSON.stringify([obj.missing === undefined, obj.missing ?? 'fallback', 'missing' in obj])")
+      .unwrap();
+    assert_eq!(answers, r#"[true,"fallback",false]"#);
+  });
+  assert_eq!(host.count_key_gets("missing"), 1);
+}
+
+#[test]
+fn errors_and_expiry_are_never_cached() {
+  let (_rt, ctx, host, views) = fixture();
+  let id = host.mint(object_entry("foo", &[("x", "I1"), ("broken", "Eboom")]));
+
+  ctx.with(|ctx| {
+    bind_object(&ctx, &views, "obj", ViewLife::Plugin, id);
     assert!(ctx.eval::<bool, _>("'x' in obj").unwrap());
-    assert!(ctx.eval::<Value, _>("obj.missing").is_err());
-    assert!(ctx.eval::<Value, _>("obj.missing").is_err());
-    assert_eq!(host.count_key_gets("missing"), 2);
+    assert!(ctx.eval::<Value, _>("obj.broken").is_err());
+    assert!(ctx.eval::<Value, _>("obj.broken").is_err());
+    assert_eq!(host.count_key_gets("broken"), 2);
 
     host.tl_release(id);
     host.reset_counts();
@@ -1259,13 +1275,13 @@ fn cache_never_answers_with_a_prototype_member() {
     bind_object(&ctx, &views, "obj", ViewLife::Plugin, id);
     let probe = r#"
       (() => JSON.stringify([
-        (() => { try { return obj.constructor } catch (e) { return e.message } })(),
-        (() => { try { return obj.toString } catch (e) { return e.message } })(),
-        (() => { try { return obj.__proto__ } catch (e) { return e.message } })(),
+        (() => { try { return obj.constructor ?? null } catch (e) { return e.message } })(),
+        (() => { try { return obj.toString ?? null } catch (e) { return e.message } })(),
+        (() => { try { return obj.__proto__ ?? null } catch (e) { return e.message } })(),
         'constructor' in obj,
       ]))()
     "#;
-    let expected = r#"["no such field 'constructor'","no such field 'toString'","no such field '__proto__'",false]"#;
+    let expected = r#"[null,null,null,false]"#;
     assert_eq!(ctx.eval::<String, _>(probe).unwrap(), expected);
     ctx.eval::<Value, _>("({...obj})").unwrap();
     assert_eq!(ctx.eval::<String, _>(probe).unwrap(), expected);

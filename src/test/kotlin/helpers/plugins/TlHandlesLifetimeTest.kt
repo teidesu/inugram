@@ -67,6 +67,15 @@ class TlHandlesLifetimeTest {
     }
 
     @Test
+    fun a_field_the_constructor_lacks_reads_as_undefined_but_refuses_a_write() {
+        val handles = TlHandles(UNFILTERED)
+        val root = handles.mintForPlugin(message(), readOnly = false)
+
+        assertEquals(PluginWire.encodeUndefined(), handles.tlGet(root, "channel_id"))
+        assertPluginError("invalid-argument", handles.tlSet(root, "channel_id", PluginWire.encodeJson("1")))
+    }
+
+    @Test
     fun a_read_only_view_refuses_writes_and_hands_out_read_only_children() {
         val handles = TlHandles(UNFILTERED)
         val target = message()

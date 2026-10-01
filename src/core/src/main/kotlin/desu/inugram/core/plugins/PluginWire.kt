@@ -27,6 +27,7 @@ object PluginWire {
     const val HANDLE_EXPIRED_MESSAGE = "TL handle expired. Copy fields you need before returning/await-ing"
 
     fun encodeNull(): String = "N"
+    fun encodeUndefined(): String = "U"
     fun encodeString(value: String): String = "S$value"
     fun encodeLongAsString(value: Long): String = "S$value"
     fun encodeInt(value: Long): String = "I$value"

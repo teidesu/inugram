@@ -365,8 +365,8 @@ class TlHandles(val policy: TlFilter.Policy) : TlListener {
     private fun getObjectField(entry: HandleEntry, target: TLObject, key: String): String {
         val cls = target.javaClass
         if (key == "_") return PluginWire.encodeString(TlNames.classNameToTlName(cls))
-        val info = TlReflect.fieldInfos(cls)[key]
-            ?: return PluginWire.encodeError("no such field '$key' on '${TlNames.classNameToTlName(cls)}'")
+        // a field another constructor of the union has reads like on a plain object; writes still refuse it
+        val info = TlReflect.fieldInfos(cls)[key] ?: return PluginWire.encodeUndefined()
         if (!isVisibleField(target, info)) return PluginWire.encodeNull()
         val value = try {
             info.field.get(target)
