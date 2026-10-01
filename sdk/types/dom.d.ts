@@ -31,9 +31,10 @@ declare class DOMException extends Error {
  *
  * @param callback function to call
  * @param ms timeout in milliseconds
+ * @param args passed to `callback`
  * @returns identifier of the timeout
  */
-declare function setTimeout(callback: () => void, ms?: number): number
+declare function setTimeout<A extends unknown[]>(callback: (...args: A) => void, ms?: number, ...args: A): number
 /** Cancel a timer previously set by {@link setTimeout} */
 declare function clearTimeout(id?: number): void
 /**
@@ -41,7 +42,7 @@ declare function clearTimeout(id?: number): void
  *
  * **Limits: 4 ms minimum interval; counts toward the shared timer limit (512).**
  */
-declare function setInterval(callback: () => void, ms?: number): number
+declare function setInterval<A extends unknown[]>(callback: (...args: A) => void, ms?: number, ...args: A): number
 /** Cancel a timer previously set by {@link setInterval} */
 declare function clearInterval(id?: number): void
 /** Queue a `callback` to be invoked after the current job */

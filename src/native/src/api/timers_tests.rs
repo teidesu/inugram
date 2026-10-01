@@ -66,6 +66,20 @@ fn a_timeout_fires_once_its_delay_has_passed() {
 }
 
 #[test]
+fn extra_arguments_reach_the_callback_on_every_firing() {
+  let (_rt, ctx, host, _lifecycle, state, _logs) = setup();
+  run(
+    &ctx,
+    "globalThis.__fired = []; setTimeout((a, b) => __fired.push([a, b]), 10, 'x', { n: 1 }); const i = setInterval((a) => { __fired.push(a); if (__fired.length > 2) clearInterval(i) }, 10, 'y');",
+  );
+  for now in [10, 20] {
+    host.now.set(now);
+    state.run_due(&ctx);
+  }
+  assert_eq!(eval(&ctx, "JSON.stringify(__fired)"), r#"[["x",{"n":1}],"y","y"]"#);
+}
+
+#[test]
 fn due_timers_fire_by_deadline_then_by_arming_order() {
   let (_rt, ctx, host, _lifecycle, state, _logs) = setup();
   run(

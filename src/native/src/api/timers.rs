@@ -4,8 +4,8 @@ use std::rc::Rc;
 use std::sync::OnceLock;
 use std::time::Instant;
 
-use rquickjs::function::Opt;
-use rquickjs::{Coerced, Ctx, Exception, Function, Persistent, Result as JsResult, Value};
+use rquickjs::function::{Opt, Rest};
+use rquickjs::{Array, Coerced, Ctx, Exception, Function, Persistent, Result as JsResult, Value};
 
 use crate::api::error::{call_callback, PluginErrorCode};
 use crate::runtime::enter_js;
@@ -41,6 +41,7 @@ pub(crate) fn monotonic_now_ms() -> u64 {
 struct Timer {
   id: u32,
   callback: RefCell<Option<Persistent<Function<'static>>>>,
+  args: RefCell<Option<Persistent<Array<'static>>>>,
   interval_ms: Option<u64>,
   due: Cell<u64>,
   seq: Cell<u64>,
@@ -49,6 +50,9 @@ struct Timer {
 impl Timer {
   fn release(&self, ctx: &Ctx<'_>) {
     if let Some(persistent) = self.callback.borrow_mut().take() {
+      let _ = persistent.restore(ctx);
+    }
+    if let Some(persistent) = self.args.borrow_mut().take() {
       let _ = persistent.restore(ctx);
     }
   }
@@ -97,9 +101,12 @@ pub fn install_timers<'js>(
     let state2 = state.clone();
     globals.set(
       name,
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, callback: Value<'js>, delay: Opt<Coerced<f64>>| {
-        state2.arm_timer(&ctx, name, callback, delay.0.map(|d| d.0), repeats)
-      })?,
+      Function::new(
+        ctx.clone(),
+        move |ctx: Ctx<'js>, callback: Value<'js>, delay: Opt<Coerced<f64>>, args: Rest<Value<'js>>| {
+          state2.arm_timer(&ctx, name, callback, delay.0.map(|d| d.0), args.0, repeats)
+        },
+      )?,
     )?;
   }
   for name in ["clearTimeout", "clearInterval"] {
@@ -129,6 +136,7 @@ impl TimerState {
     what: &str,
     callback: Value<'js>,
     delay: Option<f64>,
+    args: Vec<Value<'js>>,
     repeats: bool,
   ) -> JsResult<u32> {
     let Some(callback) = callback.into_function() else {
@@ -144,6 +152,15 @@ impl TimerState {
     }
 
     let delay = clamp_delay(delay);
+    let args = if args.is_empty() {
+      None
+    } else {
+      let array = Array::new(ctx.clone())?;
+      for (i, arg) in args.into_iter().enumerate() {
+        array.set(i, arg)?;
+      }
+      Some(Persistent::save(ctx, array))
+    };
     let id = self.timers.alloc();
     self.timers.insert(
       id,
@@ -151,6 +168,7 @@ impl TimerState {
       Rc::new(Timer {
         id,
         callback: RefCell::new(Some(Persistent::save(ctx, callback))),
+        args: RefCell::new(args),
         interval_ms: repeats.then(|| delay.max(MIN_INTERVAL_MS)),
         due: Cell::new(self.host.now_ms().saturating_add(delay)),
         seq: Cell::new(self.next_seq()),
@@ -240,6 +258,7 @@ impl TimerState {
           continue;
         }
         let saved = timer.callback.borrow().clone();
+        let args = timer.args.borrow().clone();
         match timer.interval_ms {
           Some(period) => {
             timer.due.set(now.saturating_add(period));
@@ -253,7 +272,12 @@ impl TimerState {
         let Some(callback) = saved.and_then(|p| p.restore(&ctx).ok()) else {
           continue;
         };
-        call_callback(&ctx, &self.log, "timer callback", &callback, ());
+        let args = match args.map(|p| p.restore(&ctx).and_then(|array| array.iter::<Value>().collect::<JsResult<Vec<_>>>())) {
+          Some(Ok(args)) => args,
+          Some(Err(_)) => continue,
+          None => Vec::new(),
+        };
+        call_callback(&ctx, &self.log, "timer callback", &callback, (Rest(args),));
       }
     });
     self.sync_wake();
