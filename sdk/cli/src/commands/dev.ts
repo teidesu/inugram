@@ -28,6 +28,9 @@ function reportInstall(install: DevInstall) {
 /** host lines explain why a plugin is not running (a failed read, safe mode); its debug chatter does not */
 const HOST_LEVELS = new Set(['W', 'E', 'F'])
 
+/** the app's uncaught exceptions, from the crash buffer logcat reads by default */
+const CRASH_TAG = 'AndroidRuntime'
+
 const LEVEL_COLOR: Record<string, (text: string) => string> = {
   E: color.red,
   W: color.yellow,
@@ -123,9 +126,13 @@ export const devCmd = defineCommand({
     if (logsSince !== null) {
       device
         .tailLogs(logsSince, (level, tag, message) => {
-          const label = tag === HOST_LOG_TAG ? (HOST_LEVELS.has(level) ? 'app' : undefined) : channels.get(tag)
+          const label = tag === HOST_LOG_TAG
+            ? (HOST_LEVELS.has(level) ? 'app' : undefined)
+            : tag === CRASH_TAG ? (level === 'E' ? 'crash' : undefined) : channels.get(tag)
           if (label === undefined) return
           console.log(`${(LEVEL_COLOR[level] ?? color.gray)(label)} ${message}`)
+        }, (reason) => {
+          console.log(color.gray(`logcat stopped (${reason}), reconnecting`))
         }, aborter.signal)
         .catch((error: Error) => fail(error.message))
     }

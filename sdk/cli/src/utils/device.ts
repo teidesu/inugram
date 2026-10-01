@@ -11,6 +11,7 @@ const run = promisify(execFile)
 
 export const RELEASE_APP_ID = 'desu.inugram'
 
+const PID_POLL_MS = 2000
 const DROP_DIR_NAME = 'plugin-dev'
 const DEV_ACTION = 'desu.inugram.plugins.DEV'
 /** `PluginLog` tags: one channel per plugin, keyed by manifest id (install id without one), and one for the host */
@@ -187,9 +188,22 @@ export class Device {
 
   /**
    * Logcat only supports exact tag filters, so read the whole process and let [onLine] filter.
-   * Resolve the PID again when the stream ends to handle app restarts.
+   * The stream ends when logd drops a reader, and is ended here when the app restarts, since
+   * `logcat --pid` keeps waiting on a dead process. [onEnd] gets the reason, then the PID is resolved
+   * again and reading resumes after the last line seen, never replaying one.
    */
-  async tailLogs(since: string, onLine: (level: string, tag: string, message: string) => void, signal: AbortSignal) {
+  async tailLogs(
+    since: string,
+    onLine: (level: string, tag: string, message: string) => void,
+    onEnd: (reason: string) => void,
+    signal: AbortSignal,
+  ) {
+    // epoch microseconds of the last line printed, and how many were printed at it: one crash logs its
+    // whole stack under one timestamp, and `-T` resumes at that millisecond, so a reconnect skips
+    // exactly what was already printed
+    let lastTime = 0
+    let printedAtLast = 0
+    let from = since
     while (!signal.aborted) {
       const pid = await this.pid()
       if (!pid) {
@@ -197,24 +211,51 @@ export class Device {
         continue
       }
       await new Promise<void>((resolve) => {
-        const child = spawn('adb', [...this.serial, 'logcat', '-v', 'brief', '-T', since, '--pid', pid], { stdio: ['ignore', 'pipe', 'ignore'] })
+        const child = spawn('adb', [...this.serial, 'logcat', '-v', 'epoch,usec', '-T', from, '--pid', pid], { stdio: ['ignore', 'pipe', 'pipe'] })
         const stop = () => child.kill()
         signal.addEventListener('abort', stop, { once: true })
+        let stderr = ''
+        let restarted = false
+        let skipAtLast = printedAtLast
+        const watch = setInterval(() => {
+          void this.pid().then((current) => {
+            if (current === pid) return
+            restarted = true
+            child.kill()
+          }, () => {})
+        }, PID_POLL_MS)
+        child.stderr.on('data', (chunk: Buffer) => {
+          stderr += chunk.toString()
+        })
         createInterface({ input: child.stdout }).on('line', (line) => {
-          // brief format: "D/InuPlugin/name(  pid): message"
-          const match = /^([VDIWEF])\/([^(]+)\(\s*\d+\):\s?(.*)$/.exec(line)
+          // epoch format: "  1790813149.881343  pid  tid D tag: message"
+          const match = /^\s*(\d+)\.(\d{6})\s+\d+\s+\d+\s+([VDIWEF]) ([^:]*): ?(.*)$/.exec(line)
           if (!match) return
-          const [, level, tag, message] = match
-          onLine(level, tag.trim(), message)
+          const [, seconds, micros, level, paddedTag, message] = match
+          const tag = paddedTag.trim()
+          const time = Number(seconds) * 1_000_000 + Number(micros)
+          if (time < lastTime) return
+          if (time === lastTime && skipAtLast > 0) {
+            skipAtLast--
+            return
+          }
+          if (time === lastTime) {
+            printedAtLast++
+          } else {
+            lastTime = time
+            printedAtLast = 1
+            from = `${seconds}.${micros.slice(0, 3)}`
+          }
+          onLine(level, tag, message)
         })
-        child.on('close', () => {
+        const finish = (reason: string) => {
+          clearInterval(watch)
           signal.removeEventListener('abort', stop)
+          if (!signal.aborted) onEnd(reason)
           resolve()
-        })
-        child.on('error', () => {
-          signal.removeEventListener('abort', stop)
-          resolve()
-        })
+        }
+        child.on('close', code => finish(restarted ? 'the app restarted' : stderr.trim() || `logcat exited with ${code}`))
+        child.on('error', error => finish(error.message))
       })
     }
   }
