@@ -4,19 +4,29 @@ Date: Wed, 2 Sep 2026 05:51:47 +0400
 Subject: Add the QuickJS plugin engine (hooks, action rows)
 
 ---
- .../messenger/MessagesController.java         | 122 ++++++++++--------
- .../messenger/SendMessagesHelper.java         |  22 +++-
+ .../messenger/MessagesController.java         | 124 ++++++++++--------
+ .../messenger/SendMessageChatArguments.java   |   7 +
+ .../messenger/SendMessagesHelper.java         |  29 +++-
  .../telegram/tgnet/ConnectionsManager.java    |   8 +-
  .../java/org/telegram/ui/Cells/TextCell.java  |   2 +-
- .../java/org/telegram/ui/ChatActivity.java    |   8 +-
+ .../java/org/telegram/ui/ChatActivity.java    |  12 +-
  .../org/telegram/ui/GroupCreateActivity.java  |  33 +++--
  .../java/org/telegram/ui/LaunchActivity.java  |   1 +
- 7 files changed, 125 insertions(+), 71 deletions(-)
+ 8 files changed, 145 insertions(+), 71 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
+@@ -8188,7 +8188,7 @@ public class MessagesController extends BaseController implements NotificationCe
+         }));
+     }
+ 
+-    protected void processNewChannelDifferenceParams(int pts, int pts_count, long channelId) {
++    public void processNewChannelDifferenceParams(int pts, int pts_count, long channelId) {
+         if (BuildVars.LOGS_ENABLED) {
+             FileLog.d("processNewChannelDifferenceParams pts = " + pts + " pts_count = " + pts_count + " channeldId = " + channelId);
+         }
 @@ -16800,7 +16800,10 @@ public class MessagesController extends BaseController implements NotificationCe
                          }
                      }
@@ -190,6 +200,42 @@ index 0000000..0000000 100644
              if (baseUpdate instanceof TL_update.TL_updateNewMessage || baseUpdate instanceof TL_update.TL_updateNewChannelMessage || baseUpdate instanceof TL_update.TL_updateNewScheduledMessage) {
                  TLRPC.Message message;
                  if (baseUpdate instanceof TL_update.TL_updateNewMessage) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessageChatArguments.java b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessageChatArguments.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessageChatArguments.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessageChatArguments.java
+@@ -6,17 +6,20 @@ public class SendMessageChatArguments {
+     public final long welcomeMessageChatId;
+     public final String quickReplyShortcut;
+     public final int quickReplyShortcutId;
++    public final boolean inu_composed;
+ 
+     private SendMessageChatArguments(Builder builder) {
+         this.welcomeMessageChatId = builder.welcomeMessageChatId;
+         this.quickReplyShortcut = builder.quickReplyShortcut;
+         this.quickReplyShortcutId = builder.quickReplyShortcutId;
++        this.inu_composed = builder.inu_composed;
+     }
+ 
+     public static class Builder {
+         private long welcomeMessageChatId;
+         private String quickReplyShortcut;
+         private int quickReplyShortcutId;
++        private boolean inu_composed;
+ 
+         public void setWelcomeMessageChatId(long welcomeMessageChatId) {
+             this.welcomeMessageChatId = welcomeMessageChatId;
+@@ -27,6 +30,10 @@ public class SendMessageChatArguments {
+             this.quickReplyShortcutId = quickReplyShortcutId;
+         }
+ 
++        public void inu_setComposed(boolean composed) {
++            this.inu_composed = composed;
++        }
++
+         public SendMessageChatArguments build() {
+             return new SendMessageChatArguments(this);
+         }
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
@@ -203,19 +249,25 @@ index 0000000..0000000 100644
          int prevSize = unsentMessages.size();
          unsentMessages.remove(id);
          if (prevSize != 0 && unsentMessages.size() == 0) {
-@@ -5187,10 +5187,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
-                     mode = 0;
-                 }
-                 MessagesStorage.getInstance(currentAccount).putMessages(arr, false, true, false, 0, mode, threadMessageId);
--                MessagesController.getInstance(currentAccount).updateInterfaceWithMessages(peer, objArr, mode);
--                if (scheduleDate == 0) {
--                    NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.dialogsNeedReload);
--                }
-+                desu.inugram.helpers.plugins.telegram.PluginSendHold.draw(currentAccount, peer, objArr, mode, scheduleDate);
-             } else {
-                 String key = "group_" + groupId;
-                 ArrayList<DelayedMessage> arrayList = delayedMessages.get(key);
-@@ -7434,7 +7431,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -2083,6 +2083,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+         if (messages == null || messages.isEmpty()) {
+             return 0;
+         }
++        if (desu.inugram.helpers.plugins.telegram.PluginCompose.interceptForward(this, currentAccount, messages, peer, forwardFromMyName, hideCaption, notify, scheduleDate, scheduleRepeatPeriod, replyToTopMsg, video_timestamp, payStars, monoForumPeerId, suggestionParams)) {
++            return 0;
++        }
+         int sendResult = 0;
+         long myId = getUserConfig().getClientUserId();
+         boolean isChannel = false;
+@@ -4274,6 +4277,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+     }
+ 
+     public void sendMessage(SendMessageParams sendMessageParams) {
++        if (desu.inugram.helpers.plugins.telegram.PluginCompose.interceptParams(this, currentAccount, sendMessageParams)) return;
+         final SendMessageChatArguments sendMessageChatArguments = sendMessageParams.sendMessageChatArguments != null ?
+                 sendMessageParams.sendMessageChatArguments : SendMessageChatArguments.EMPTY;
+         String message = sendMessageParams.message;
+@@ -7434,7 +7438,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
          }
      }
  
@@ -224,7 +276,7 @@ index 0000000..0000000 100644
          TLRPC.Message message;
          if (mid > 0) {
              message = editingMessages.get(mid);
-@@ -7565,6 +7562,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -7565,6 +7569,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
              return;
          }
  
@@ -232,7 +284,7 @@ index 0000000..0000000 100644
          int reqId = getConnectionsManager().sendRequest(request, (response, error) -> {
              if (error != null && FileRefController.isFileRefError(error.text)) {
                  final int fileRefIndex = FileRefController.getFileRefErrorIndex(error.text);
-@@ -7835,6 +7833,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -7835,6 +7840,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                      }
                      Utilities.stageQueue.postRunnable(() -> getMessagesController().processUpdates(updates, false));
                  } else {
@@ -242,7 +294,7 @@ index 0000000..0000000 100644
                      AlertsCreator.processError(currentAccount, error, null, request);
                      isSentError = true;
                  }
-@@ -7959,6 +7960,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -7959,6 +7967,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
              return;
          }
  
@@ -250,19 +302,7 @@ index 0000000..0000000 100644
          newMsgObj.reqId = getConnectionsManager().sendRequest(req, (response, error) -> {
              if (error != null && (req instanceof TLRPC.TL_messages_sendMedia || req instanceof TL_ephemeral.TL_sendMessage || req instanceof TLRPC.TL_messages_editMessage || req instanceof TLRPC.TL_messages_addPollAnswer) && FileRefController.isFileRefError(error.text)) {
                  if (FileRefController.isFileRefErrorCover(error.text)) {
-@@ -8077,6 +8079,11 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
-                         });
- 
-                     } else {
-+                        if (desu.inugram.helpers.plugins.telegram.PluginRpc.handleDroppedEdit(currentAccount, newMsgObj.id)) {
-+                            removeFromSendingMessages(newMsgObj.id, scheduled);
-+                            revertEditingMessageObject(msgObj);
-+                            return;
-+                        }
-                         AlertsCreator.processError(currentAccount, error, null, req);
-                         removeFromSendingMessages(newMsgObj.id, scheduled);
-                         revertEditingMessageObject(msgObj);
-@@ -8380,6 +8387,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -8380,6 +8389,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                              }
                          }
                      } else {
@@ -272,6 +312,40 @@ index 0000000..0000000 100644
                          AlertsCreator.processError(currentAccount, error, null, req);
                          isSentError = true;
                      }
+@@ -8488,7 +8500,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+         return false;
+     }
+ 
+-    private void updateMediaPaths(MessageObject newMsgObj, TLRPC.Message sentMessage, int newMsgId, String originalPath, boolean post, HashMap<String, String> params) {
++    public void updateMediaPaths(MessageObject newMsgObj, TLRPC.Message sentMessage, int newMsgId, String originalPath, boolean post, HashMap<String, String> params) {
+         updateMediaPaths(newMsgObj, sentMessage, newMsgId, Collections.singletonList(originalPath), post, -1, params);
+     }
+ 
+@@ -9965,6 +9977,11 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+         if (paths == null && originalPaths == null && uris == null || paths != null && originalPaths != null && paths.size() != originalPaths.size()) {
+             return;
+         }
++        if (desu.inugram.helpers.plugins.telegram.PluginCompose.composeDocuments(accountInstance, paths, originalPaths, uris, caption, captionEntities, dialogId, replyToMsg, replyToTopMsg, quote, notify, scheduleDate, sendMessageChatArguments,
++                editingMessageObject != null || storyItem != null || pollSendParams != null,
++                (p, op, u, c, e, did, reply, top, q, n, date, args) -> prepareSendingDocuments(accountInstance, p, op, u, c, e, mime, did, reply, top, storyItem, q, editingMessageObject, n, date, scheduleRepeatPeriod, inputContent, args, effectId, invertMedia, payStars, monoForumPeerId, suggestionParams, pollSendParams, pollSendIndexes, pollSendUriIndexes, forcedPollDoNotSendFinal))) {
++            return;
++        }
+         Utilities.globalQueue.postRunnable(() -> {
+             int error = 0;
+             long[] groupId = new long[1];
+@@ -10691,6 +10708,12 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+         if (media.isEmpty()) {
+             return;
+         }
++        final boolean inu_groupMedia = groupMedia;
++        if (desu.inugram.helpers.plugins.telegram.PluginCompose.composeMedia(accountInstance, media, dialogId, replyToMsg, replyToTopMsg, quote, forceDocument, notify, scheduleDate, sendMessageChatArguments,
++                editingMessageObject != null || storyItem != null || pollToAddOptionMessageObject != null || pollSendParams != null,
++                (m, did, reply, top, q, n, date, args) -> prepareSendingMedia(accountInstance, m, did, reply, top, storyItem, q, forceDocument, inu_groupMedia, editingMessageObject, pollToAddOptionMessageObject, n, date, scheduleRepeatPeriod, mode, updateStikcersOrder, inputContent, args, effectId, invertMedia, payStars, monoForumPeerId, suggestionParams, pollSendParams, forcedPollDoNotSendFinal))) {
++            return;
++        }
+         for (int a = 0, N = media.size(); a < N; a++) {
+             if (media.get(a).ttl > 0) {
+                 groupMedia = false;
 diff --git a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java b/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
@@ -338,6 +412,17 @@ index 0000000..0000000 100644
      private ChatActivityEnterTopView chatActivityEnterTopView;
      private ChatReplyContainer replyLayout;
      private int chatActivityEnterViewAnimateFromTop;
+@@ -1135,8 +1135,8 @@ public class ChatActivity extends BaseFragment implements
+     public static Pattern publicMsgUrlPattern;
+     public static Pattern voiceChatUrlPattern;
+     public static Pattern privateMsgUrlPattern;
+-    private boolean waitingForSendingMessageLoad;
+-    private ValueAnimator changeBoundAnimator;
++    public boolean waitingForSendingMessageLoad;
++    public ValueAnimator changeBoundAnimator;
+     private Animator messageEditTextAnimator;
+ 
+     private boolean openImport;
 @@ -32205,6 +32205,7 @@ public class ChatActivity extends BaseFragment implements
                          }
                      }

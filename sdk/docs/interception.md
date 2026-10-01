@@ -29,7 +29,7 @@ Avoid using interceptors to listen for events, as they slightly slow down the ap
 | Interceptor | Budget | When it runs out |
 | --- | --- | --- |
 | `interceptRpc` | 10 s per request | the app gets the real response if it was already sent, otherwise a timeout error |
-| `interceptSendMessage` | 60 s per send | the message is sent as-is |
+| `interceptSendMessage` | 60 s per send | the send fails and nothing is sent |
 | `interceptUpdate` | 2 s per batch of updates | updates are delivered as-is |
 
 In addition to the object being intercepter, you also get a `context.signal` AbortSignal,
@@ -87,9 +87,9 @@ to what all of them return. For methods with different response types, register 
 
 ## interceptSendMessage
 
-`interceptSendMessage` runs when the user sends or edits a message. It covers text messages,
-single media, albums and edits. It hands you an `OutgoingMessage` with the fields you usually
-care about, and you answer `'send'` or `'drop'`.
+`interceptSendMessage` runs when the user sends a message: text, files and albums, stickers, gifs,
+locations, contacts and forwards. It hands you an `OutgoingMessage` with the fields you usually care
+about, and you answer `'send'` or `'drop'`.
 
 ```ts
 inu.interceptSendMessage({ text: /^\/shrug\b/ }, ({ message }) => {
@@ -98,6 +98,9 @@ inu.interceptSendMessage({ text: /^\/shrug\b/ }, ({ message }) => {
   return 'send'
 })
 ```
+
+It does not see edits, polls, games, invoices, stories, quick replies, scheduled messages sent now,
+secret chats, or messages plugins send.
 
 ### Filter first
 
@@ -109,36 +112,59 @@ never reach JS:
   It runs on the app's send path with no time limit, so keep it cheap: a nested quantifier
   like `(a+)+` can backtrack for seconds and freeze every send. Registering one logs a warning.
   If matching fails, the message goes to your middleware as if it matched.
-- `isEdit: true` matches only edits, `false` only new messages. Leave it out for both.
+- `stage` picks when the hook runs, see [Stages](#stages).
 
-For an album, the filter reads the caption of the first item.
+For an album, the filter reads its caption. A forward without a comment has no text, so a `text`
+filter never matches it. Each stage's filter reads the text as the stages before it left it.
+
+### Stages
+
+By default a hook runs at the `compose` stage: as soon as the user sends, before the app draws the
+message, processes its files or uploads anything. The app draws nothing until every compose stage
+has answered, and later sends to the same chat wait behind it, so they still arrive in order.
+
+`{ stage: 'uploaded' }` runs for messages with media, once it is uploaded, right before the message
+goes out, after every compose stage. The message is already drawn by then.
 
 ### What you can change
 
+`message` is a plain snapshot of the send. Edit it in place or assign to it; your edits are applied
+when you return `'send'`. An edit that cannot be applied fails the send, after your middleware has
+returned.
+
+At the compose stage:
+
 | Field | Notes |
 | --- | --- |
-| `text` | a string or `TextWithEntities`. For media it is the caption; for an album, the first item's caption |
-| `peer` | a marked peer id. The new peer must be cached, or it throws `not-found` |
-| `replyToMessageId`, `topicId` | not available on edits |
-| `scheduleDate`, `silent` | `silent` not available on edits |
-| `media` | replace the media array with a raw `InputMedia` |
-| `setMedia(file)` | replaces the media of a text or single-media send, with the upload shown in the bubble |
+| `text` | a string or `TextWithEntities`. For media it is the caption |
+| `peer` | a marked peer id. The chat must be one the account knows, or the send fails with `not-found` |
+| `reply` | a `PendingReply`: message id, the chat it is in when that is another chat, and a quote |
+| `forward` | a `PendingForward`: source chat, message ids and mode. Set it to `null` to send no forward. Setting `text` or `media` on a forward sent alone adds a comment, which goes first |
+| `topicId` | the topic the message goes to |
+| `scheduleDate`, `silent` | |
+| `media` | a file on the device is a `LocalMedia`: reorder, cut, or add to them with `account.createLocalMedia(file)`. Media already on the server, such as a sticker or a location, is its `InputMedia`, which you can replace with any other or put in an album with LocalMedia, up to 10 items. With no media left, the text goes alone |
+
+The app sends what you left as if the user had sent it. LocalMedia is drawn and uploaded like a
+file the user picked; other `InputMedia` is shown once the server has it.
+
+At the uploaded stage only `text`, `media` and `silent` may change. `media` holds the uploaded `InputMedia`:
+reorder, cut, or add to it, and a single file can become an album. With no media left, the text
+goes alone. A `LocalMedia` is refused. In a chat that charges per message, the number of items
+cannot change.
 
 ### Verdicts
 
-THe interceptor can return one of:
+The interceptor can return one of:
 
-- `'send'` - send the message normally, including any applied edits.
-- `'drop'` - cancel sending the message
+- `'send'` - send the message, with your edits.
+- `'drop'` - cancel sending the message.
 
-If you plan to `drop`, it is recommended to return it ASAP (within 100ms of invocation),
-so that the "sending" bubble is never actually shown.
+A throw, a rejection or running out of budget fails the send.
 
 ### Mixing with interceptRpc
 
-`interceptSendMessage` runs in the same chain as `interceptRpc` middleware for the send methods.
-An outer `interceptRpc` stage can catch a failed `next()` and retry or answer, but it cannot undo
-a drop.
+`interceptSendMessage` runs before any `interceptRpc` middleware sees the request the app makes for
+the message.
 
 ## interceptUpdate
 

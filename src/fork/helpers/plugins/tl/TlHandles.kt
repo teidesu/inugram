@@ -405,7 +405,7 @@ class TlHandles(val policy: TlFilter.Policy) : TlListener {
         return try {
             info.field.set(target, resolved.value)
             // only this bit: untouched fields of a live object may hold placeholders a full recompute would flag
-            TlReflect.syncFlagBit(target, key)
+            TlReflect.syncFlagBit(target, key, written = (source as? SetSource.Wire)?.decoded !is PluginWire.Value.Null)
             null
         } catch (e: Exception) {
             PluginWire.encodePluginError("internal", e.message ?: "reflection set failed")

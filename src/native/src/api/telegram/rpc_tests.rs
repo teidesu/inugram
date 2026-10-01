@@ -7,9 +7,12 @@ use rquickjs::{Context, Runtime};
 
 #[derive(Default)]
 pub(crate) struct TestHost {
-  pub(crate) registered: RefCell<Vec<(Vec<String>, u32, String, bool, String)>>,
+  pub(crate) registered: RefCell<Vec<(Vec<String>, u32, bool)>>,
   pub(crate) unregistered: RefCell<Vec<u32>>,
   pub(crate) next_calls: RefCell<Vec<(i64, String)>>,
+  pub(crate) send_registered: RefCell<Vec<(u32, String)>>,
+  pub(crate) send_unregistered: RefCell<Vec<u32>>,
+  pub(crate) send_verdicts: RefCell<Vec<(i64, String)>>,
   pub(crate) invoke_calls: RefCell<Vec<(i64, i32, String)>>,
   pub(crate) raw_calls: RefCell<Vec<(i64, i32, Vec<u8>)>>,
   pub(crate) takeout_calls: RefCell<Vec<(i64, i32, i32, String, String)>>,
@@ -28,21 +31,8 @@ pub(crate) struct TestHost {
 }
 
 impl RpcHost for TestHost {
-  fn on_register(
-    &self,
-    methods: &[String],
-    callback_id: u32,
-    scope: &str,
-    strict: bool,
-    filter_json: &str,
-  ) -> Option<String> {
-    self.registered.borrow_mut().push((
-      methods.to_vec(),
-      callback_id,
-      scope.to_string(),
-      strict,
-      filter_json.to_string(),
-    ));
+  fn on_register(&self, methods: &[String], callback_id: u32, strict: bool) -> Option<String> {
+    self.registered.borrow_mut().push((methods.to_vec(), callback_id, strict));
     self.register_err.borrow().clone()
   }
   fn on_unregister(&self, callback_id: u32) {
@@ -83,6 +73,16 @@ impl RpcHost for TestHost {
   }
   fn on_update_verdict(&self, dispatch_id: i64, deliver: bool) {
     self.verdicts.borrow_mut().push((dispatch_id, deliver));
+  }
+  fn on_send_register(&self, callback_id: u32, filter_json: &str) -> Option<String> {
+    self.send_registered.borrow_mut().push((callback_id, filter_json.to_string()));
+    self.register_err.borrow().clone()
+  }
+  fn on_send_unregister(&self, callback_id: u32) {
+    self.send_unregistered.borrow_mut().push(callback_id);
+  }
+  fn on_send_verdict(&self, dispatch_id: i64, verdict: &str) {
+    self.send_verdicts.borrow_mut().push((dispatch_id, verdict.to_string()));
   }
 }
 
@@ -471,6 +471,7 @@ fn a_refused_registration_or_call_never_reaches_the_host() {
     let (_rt, ctx, host, state, _logs) = setup(&grants.split(' ').collect::<Vec<_>>());
     assert_eq!(catch_json(&ctx, code), thrown, "{code}");
     let reached = !host.registered.borrow().is_empty()
+      || !host.send_registered.borrow().is_empty()
       || !host.update_registered.borrow().is_empty()
       || !host.intercept_update_registered.borrow().is_empty()
       || !host.invoke_calls.borrow().is_empty()
@@ -569,8 +570,8 @@ fn an_intercept_registration_reaches_the_host_and_drops_its_callback_when_refuse
     "inu.interceptRpc('users.getUsers', () => {}); inu.interceptRpc('users.getUsers', () => {}, { strict: true });",
   );
   assert_eq!(host.registered.borrow()[0].0, vec!["users.getUsers".to_string()]);
-  assert!(!host.registered.borrow()[0].3);
-  assert!(host.registered.borrow()[1].3);
+  assert!(!host.registered.borrow()[0].2);
+  assert!(host.registered.borrow()[1].2);
 
   *host.register_err.borrow_mut() = Some("not granted".to_string());
   assert!(ctx.with(|ctx| ctx.eval::<(), _>("inu.interceptRpc('users.getUsers', () => {})").is_err()));
@@ -651,7 +652,7 @@ fn a_plugin_throw_faults_where_a_host_failure_does_not() {
       inu.onUpdate('updateBar', async () => { throw new Error('unawaited'); });
     "#,
   );
-  let ids: Vec<u32> = host.registered.borrow().iter().map(|(_, id, _, _, _)| *id).collect();
+  let ids: Vec<u32> = host.registered.borrow().iter().map(|(_, id, _)| *id).collect();
 
   state.dispatch(&ctx, ids[0], 700, "foo.bar", 0, r#"J{"_":"foo.bar"}"#);
   state.dispatch(&ctx, ids[1], 701, "foo.baz", 0, r#"J{"_":"foo.baz"}"#);
@@ -839,7 +840,7 @@ fn registering_after_unload_began_is_a_no_op_returning_a_no_op_disposer() {
     "#,
   );
   assert_eq!(eval_json(&ctx, "__shapes"), r#"["function","function","function","function","function"]"#);
-  assert!(host.registered.borrow().is_empty(), "the host must not hear about it either");
+  assert!(host.registered.borrow().is_empty() && host.send_registered.borrow().is_empty(), "the host must not hear about it either");
   assert!(host.update_registered.borrow().is_empty());
   assert!(host.intercept_update_registered.borrow().is_empty());
   assert!(state.update_fns.is_empty());
@@ -1034,117 +1035,66 @@ fn an_interceptor_disposing_itself_mid_dispatch_still_finishes_that_dispatch() {
   assert_eq!(completes[0], (982, r#"J{"_":"foo.bar","finished":true}"#.to_string()));
 }
 
-const SEND_TEXT: &str = r#"{"_":"messages.sendMessage","peer":{"_":"inputPeerUser","user_id":"7","access_hash":"3"},"message":"hi","random_id":"1"}"#;
-const SEND_MEDIA: &str = r#"{"_":"messages.sendMedia","peer":{"_":"inputPeerChannel","channel_id":"9","access_hash":"3"},"message":"cap","media":{"_":"inputMediaEmpty"},"random_id":"1","silent":true}"#;
-const SEND_ALBUM: &str = r#"{"_":"messages.sendMultiMedia","peer":{"_":"inputPeerChat","chat_id":"5"},"multi_media":[{"_":"inputSingleMedia","media":{"_":"inputMediaEmpty"},"message":"one","random_id":"1"},{"_":"inputSingleMedia","media":{"_":"inputMediaEmpty"},"message":"two","random_id":"2"}]}"#;
-const EDIT: &str = r#"{"_":"messages.editMessage","peer":{"_":"inputPeerUser","user_id":"7","access_hash":"3"},"id":42,"message":"fixed","media":{"_":"inputMediaEmpty"}}"#;
+const SEND_TEXT: &str = r#"{"peer":7,"text":{"text":"hi","entities":[]},"reply":null,"forward":null,"topicId":null,"scheduleDate":null,"silent":false,"media":[]}"#;
+const SEND_ALBUM: &str = r#"{"peer":-5,"text":{"text":"two","entities":[]},"reply":{"messageId":3,"peer":null,"quote":null},"forward":null,"topicId":null,"scheduleDate":null,"silent":false,"media":[{"_":"localMedia","id":"11","kind":"photo","name":"a.jpg","mimeType":"image/jpeg","spoiler":false},{"_":"inputMediaDocument","id":{"_":"inputDocument","id":"4","access_hash":"5","file_reference":""}}]}"#;
+const SEND_FORWARD: &str = r#"{"peer":7,"text":{"text":"look","entities":[]},"reply":null,"forward":{"peer":9,"messageIds":[5,6],"mode":"normal"},"topicId":null,"scheduleDate":null,"silent":false,"media":[]}"#;
+const SEND_DROP: &str = r#"{"peer":7,"text":{"text":"drop me","entities":[]},"reply":null,"forward":null,"topicId":null,"scheduleDate":null,"silent":false,"media":[]}"#;
 
 /// the one live registration. Chaining is the host's job, so these tests dispatch a single
 /// stage; a fixture that registered twice would silently exercise only one of them.
 fn send_callback_id(host: &Rc<TestHost>) -> u32 {
-  let registered = host.registered.borrow();
-  let disposed = host.unregistered.borrow();
-  let live: Vec<_> = registered.iter().filter(|e| !disposed.contains(&e.1)).collect();
+  let registered = host.send_registered.borrow();
+  let disposed = host.send_unregistered.borrow();
+  let live: Vec<_> = registered.iter().filter(|e| !disposed.contains(&e.0)).collect();
   assert_eq!(live.len(), 1, "expected exactly one live interceptSendMessage registration");
-  let entry = live[0];
-  assert_eq!(entry.2, "interceptSendMessage", "the api's own grant, not the four methods'");
-  assert_eq!(
-    entry.0,
-    vec![
-      "messages.sendMessage".to_string(),
-      "messages.sendMedia".to_string(),
-      "messages.sendMultiMedia".to_string(),
-      "messages.editMessage".to_string(),
-    ],
-  );
-  entry.1
+  live[0].0
 }
 
-fn run_send(
-  ctx: &Context,
-  state: &Rc<RpcState>,
-  host: &Rc<TestHost>,
-  method: &str,
-  json: &str,
-) -> (Option<String>, Option<String>) {
+/// the verdict the host was handed for this send
+fn run_send(ctx: &Context, state: &Rc<RpcState>, host: &Rc<TestHost>, json: &str) -> String {
   let callback_id = send_callback_id(host);
-  let before_next = host.next_calls.borrow().len();
-  let before_complete = host.completes.borrow().len();
-  // every send ends in exactly one of the two, so this is a fresh id per call - and it has to
-  // be, since a dispatch that parked in `next()` still holds its resolvers until dispose
-  let dispatch_id = (before_next + before_complete + 1) as i64;
-  state.dispatch(ctx, callback_id, dispatch_id, method, 0, &format!("J{json}"));
-  let next = host.next_calls.borrow().get(before_next).map(|(_, wire)| wire.clone());
-  let complete = host.completes.borrow().get(before_complete).map(|(_, wire)| wire.clone());
-  (next, complete)
-}
-
-#[test]
-fn a_rewrite_reaches_the_request_that_actually_goes_out() {
-  let (_rt, ctx, host, state, _logs) = setup(&["interceptSendMessage"]);
-  eval(
-    &ctx,
-    r#"
-      inu.interceptSendMessage(async ({ message: m }) => {
-        await Promise.resolve();
-        m.text = { text: 'rewritten', entities: [{ _: 'messageEntityBold', offset: 0, length: 2 }] };
-        m.silent = true;
-        m.replyToMessageId = 11;
-        m.scheduleDate = 1700000000;
-        return 'send';
-      });
-    "#,
-  );
-  let (next, complete) = run_send(&ctx, &state, &host, "messages.sendMessage", SEND_TEXT);
-  assert_eq!(complete, None, "a 'send' verdict settles from next(), not from the stage");
-  let next = next.expect("the send never went out");
-  assert!(next.contains(r#""message":"rewritten""#), "{next}");
-  assert!(next.contains(r#""_":"messageEntityBold""#), "{next}");
-  assert!(next.contains(r#""silent":true"#), "{next}");
-  assert!(next.contains(r#""reply_to_msg_id":11"#), "{next}");
-  assert!(next.contains(r#""schedule_date":1700000000"#), "{next}");
+  let dispatch_id = host.send_verdicts.borrow().len() as i64 + 1;
+  state.dispatch_send(ctx, callback_id, dispatch_id, 0, json);
+  let verdicts = host.send_verdicts.borrow();
+  let (id, verdict) = verdicts.last().cloned().expect("no verdict");
+  assert_eq!(id, dispatch_id);
+  verdict
 }
 
 #[test]
 fn a_send_goes_out_only_on_a_send_verdict() {
-  for (middleware, prefix, text, fault) in [
-    ("() => 'drop'", "R-1000:MESSAGE_DROPPED_BY_PLUGIN", "", false),
-    ("async () => 'drop'", "R-1000:MESSAGE_DROPPED_BY_PLUGIN", "", false),
-    ("() => { throw new Error('boom') }", "E", "boom", true),
-    ("() => {}", "E", "expected 'send' or 'drop'", true),
+  for (middleware, prefix, fault) in [
+    ("async ({ message: m }) => { await Promise.resolve(); m.text = 'rewritten'; return 'send' }", r#"S{"peer":7,"text":{"text":"rewritten","entities":[]}"#, false),
+    ("() => 'drop'", "D", false),
+    ("async () => 'drop'", "D", false),
+    ("() => { throw new Error('boom') }", "Eboom", true),
+    ("() => {}", "E", true),
   ] {
     let (_rt, ctx, host, state, logs) = setup(&["interceptSendMessage"]);
     eval(&ctx, &format!("inu.interceptSendMessage({middleware});"));
-    let (next, complete) = run_send(&ctx, &state, &host, "messages.sendMessage", SEND_TEXT);
-    assert_eq!(next, None, "{middleware}");
-    let complete = complete.unwrap_or_default();
-    assert!(complete.starts_with(prefix) && complete.contains(text), "{middleware}: {complete}");
-    let faulted = levels(&logs).iter().any(|(level, _)| *level == crate::LEVEL_FAULT);
-    assert_eq!(faulted, fault, "{middleware}: {:?}", levels(&logs));
+    let verdict = run_send(&ctx, &state, &host, SEND_TEXT);
+    assert!(verdict.starts_with(prefix), "{middleware}: {verdict}");
+    let faults: Vec<_> = levels(&logs).into_iter().filter(|(level, _)| *level == crate::LEVEL_FAULT).collect();
+    assert_eq!(!faults.is_empty(), fault, "{middleware}: {faults:?}");
+    assert!(faults.iter().all(|(_, message)| message.contains("interceptSendMessage callback")), "{faults:?}");
   }
 }
 
-/// a Saved Messages send carries `inputPeerSelf`, the one peer form `peer` cannot read out of the
-/// request, so it resolves through the account's own `userId`; a topic-only reply is not a reply
-/// anyone wrote
 #[test]
-fn the_send_view_reads_the_peer_and_the_reply_the_user_meant() {
-  let (_rt, ctx, host, state, _logs) = setup(&["interceptSendMessage"]);
+fn a_parked_send_aborts_its_signal_when_the_host_gives_up_on_it() {
+  let (_rt, ctx, host, state, _logs) =
+    setup_engine::<TestHost>(&["interceptSendMessage"], true, Some(TestAccountHost::with(TWO_ACCOUNTS)));
   eval(
     &ctx,
     r#"
-      globalThis.__seen = [];
-      inu.interceptSendMessage(({ message: m }) => { __seen.push([m.peer, m.replyToMessageId, m.topicId]); return 'send' });
+      inu.interceptSendMessage(({ signal }) => { globalThis.__signal = signal; return new Promise(() => {}) });
     "#,
   );
-  let to_self = r#"{"_":"messages.sendMessage","peer":{"_":"inputPeerSelf"},"message":"note","random_id":"1"}"#;
-  let in_topic = r#"{"_":"messages.sendMessage","peer":{"_":"inputPeerChannel","channel_id":"9","access_hash":"3"},"message":"hi","random_id":"1","reply_to":{"_":"inputReplyToMessage","reply_to_msg_id":20,"top_msg_id":20}}"#;
-  let replying = r#"{"_":"messages.sendMessage","peer":{"_":"inputPeerChannel","channel_id":"9","access_hash":"3"},"message":"hi","random_id":"1","reply_to":{"_":"inputReplyToMessage","reply_to_msg_id":33,"top_msg_id":20}}"#;
-  for send in [to_self, in_topic, replying] {
-    let (next, _) = run_send(&ctx, &state, &host, "messages.sendMessage", send);
-    assert!(next.is_some(), "the user's message never reached the network: {send}");
-  }
-  assert_eq!(eval_json(&ctx, "__seen"), "[[111,null,null],[-1000000000009,null,20],[-1000000000009,33,20]]");
+  let callback_id = send_callback_id(&host);
+  state.dispatch_send(&ctx, callback_id, 1, 0, SEND_TEXT);
+  state.abandon_send_dispatch(&ctx, 1, "R-1000:INTERCEPTOR_TIMEOUT");
+  assert_eq!(eval_json(&ctx, "[__signal.aborted, __signal.reason.code]"), r#"[true,"timed-out"]"#);
+  assert!(host.send_verdicts.borrow().is_empty(), "an abandoned send still answered");
 }
 
 /// callback syntax does not predict whether a verdict arrives before the draw deadline, so it
@@ -1156,37 +1106,30 @@ fn interceptsendmessage_serializes_its_filter_whatever_the_callback_syntax() {
     &ctx,
     r#"
       inu.interceptSendMessage(async () => 'send');
-      inu.interceptSendMessage({ text: /^\.stats$/i, isEdit: false }, async () => 'send');
+      inu.interceptSendMessage({ text: /^\.stats$/i }, async () => 'send');
       inu.interceptSendMessage(() => 'send');
-      inu.interceptSendMessage({ text: /^\.stats$/i, isEdit: false }, () => 'send');
+      inu.interceptSendMessage({ text: /^\.stats$/i }, () => 'send');
     "#,
   );
-  let filters: Vec<String> = host.registered.borrow().iter().map(|entry| entry.4.clone()).collect();
-  assert_eq!(filters[1], r#"{"isEdit":false,"text":{"source":"^\\.stats$","flags":"i"}}"#);
+  let filters: Vec<String> = host.send_registered.borrow().iter().map(|entry| entry.1.clone()).collect();
+  assert_eq!(filters[1], r#"{"text":{"source":"^\\.stats$","flags":"i"}}"#);
   assert_eq!((&filters[0], &filters[1]), (&filters[2], &filters[3]));
 }
 
-/// `next()` refuses to rewrite the method the app is already awaiting a response type for, so a
-/// length change is refused where it is decidable rather than at the bridge
+/// the host picks the stage a middleware runs at from its filter, so a bad stage is refused here
 #[test]
-fn media_may_be_replaced_but_not_added_or_removed() {
-  let (_rt, ctx, host, state, _logs) = setup(&["interceptSendMessage"]);
+fn interceptsendmessage_passes_its_stage_and_refuses_an_unknown_one() {
+  let (_rt, ctx, host, _state, _logs) = setup(&["interceptSendMessage"]);
   eval(
     &ctx,
     r#"
-      globalThis.__errors = [];
-      inu.interceptSendMessage(({ message: m }) => {
-        try { m.media = [{ _: 'inputMediaEmpty' }] } catch (e) { __errors.push([(e.code ?? e.name), m.isEdit]) }
-        return 'send';
-      });
+      inu.interceptSendMessage({ stage: 'uploaded' }, () => 'send');
+      try { inu.interceptSendMessage({ stage: 'later' }, () => 'send') } catch (e) { globalThis.__error = e.name }
     "#,
   );
-  run_send(&ctx, &state, &host, "messages.sendMessage", SEND_TEXT);
-  run_send(&ctx, &state, &host, "messages.sendMultiMedia", SEND_ALBUM);
-  assert_eq!(eval_json(&ctx, "__errors"), r#"[["unsupported",false],["unsupported",false]]"#);
-
-  let (next, _) = run_send(&ctx, &state, &host, "messages.sendMedia", SEND_MEDIA);
-  assert!(next.unwrap().contains(r#""media":{"_":"inputMediaEmpty"}"#), "one-for-one is allowed");
+  let filters: Vec<String> = host.send_registered.borrow().iter().map(|entry| entry.1.clone()).collect();
+  assert_eq!(filters, [r#"{"stage":"uploaded"}"#]);
+  assert_eq!(eval_json(&ctx, "__error"), r#""TypeError""#);
 }
 
 #[test]
@@ -1195,28 +1138,12 @@ fn the_bundled_send_intercept_test_plugin_passes() {
   let (_rt, ctx, host, state, _logs) = setup(&crate::testing::harness::manifest_grants(ORACLE));
   let lines = crate::testing::harness::install_capturing_console(&ctx);
   eval(&ctx, ORACLE);
-  for (method, json) in [
-    ("messages.sendMessage", SEND_TEXT),
-    ("messages.sendMedia", SEND_MEDIA),
-    ("messages.sendMultiMedia", SEND_ALBUM),
-    ("messages.editMessage", EDIT),
-    (
-      "messages.sendMessage",
-      r#"{"_":"messages.sendMessage","peer":{"_":"inputPeerUser","user_id":"7","access_hash":"3"},"message":"drop me","random_id":"2"}"#,
-    ),
-  ] {
-    run_send(&ctx, &state, &host, method, json);
-  }
-  let sent: Vec<String> = host
-    .next_calls
-    .borrow()
-    .iter()
-    // the payloads are plain json, so a rust debug string is a valid js string literal
-    .map(|(_, wire)| format!("{:?}", wire.trim_start_matches('J')))
-    .collect();
-  eval(&ctx, &format!("__report([{}])", sent.join(",")));
+  let verdicts: Vec<String> =
+    [SEND_TEXT, SEND_ALBUM, SEND_FORWARD, SEND_DROP].iter().map(|json| format!("{:?}", run_send(&ctx, &state, &host, json))).collect();
+  // the verdicts are json behind a tag, so a rust debug string is a valid js string literal
+  eval(&ctx, &format!("__report([{}])", verdicts.join(",")));
   let lines = lines.borrow();
-  crate::testing::harness::assert_oracle_exact(&lines, "send intercept test done", 27);
+  crate::testing::harness::assert_oracle_exact(&lines, "send intercept test done", 22);
 }
 
 fn update_callback_id(host: &Rc<TestHost>) -> u32 {
@@ -1429,9 +1356,10 @@ mod bundled_oracles {
           if self.hidden.borrow().contains(key) {
             return "N".to_string();
           }
+          // the device host reads a field the object does not carry as undefined
           match fields.iter().find(|(k, _)| k == key) {
             Some((_, value)) => self.value_wire(value, read_only, key),
-            None => proxy::encode_error(&format!("no such field '{key}'")),
+            None => "U".to_string(),
           }
         }
         Node::Vector(items) => {
@@ -1468,16 +1396,39 @@ mod bundled_oracles {
       if value_wire.starts_with("HOR") || value_wire.starts_with("HVR") {
         return Some(plugin_error("forbidden", "this TL view is read-only"));
       }
+      // `TlHandles` stores the object a handle names, which outlives the handle
+      let value = match value_wire.strip_prefix("HOW").or_else(|| value_wire.strip_prefix("HVW")) {
+        Some(rest) => {
+          let id = rest[..rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len())].parse().unwrap();
+          match self.lookup(id) {
+            Some((target, _)) => Val::Ref(target),
+            None => return Some(plugin_error("handle-expired", "no such handle")),
+          }
+        }
+        None => Val::Wire(value_wire.to_string()),
+      };
       let result = match &mut *node.borrow_mut() {
         Node::Object { fields, .. } => {
-          let value = Val::Wire(value_wire.to_string());
           match fields.iter_mut().find(|(k, _)| k == key) {
             Some(slot) => slot.1 = value,
             None => fields.push((key.to_string(), value)),
           }
           None
         }
-        Node::Vector(_) => Some(plugin_error("forbidden", "a vector view is read-only")),
+        Node::Vector(items) => {
+          if key == "length" {
+            let length: usize = value_wire.trim_start_matches(|c: char| !c.is_ascii_digit()).parse().unwrap();
+            items.truncate(length);
+            return None;
+          }
+          let index: usize = key.parse().unwrap();
+          if index == items.len() {
+            items.push(value);
+          } else {
+            items[index] = value;
+          }
+          None
+        }
       };
       result
     }
@@ -1552,14 +1503,7 @@ mod bundled_oracles {
   }
 
   impl RpcHost for OracleHost {
-    fn on_register(
-      &self,
-      methods: &[String],
-      callback_id: u32,
-      _scope: &str,
-      _strict: bool,
-      _filter_json: &str,
-    ) -> Option<String> {
+    fn on_register(&self, methods: &[String], callback_id: u32, _strict: bool) -> Option<String> {
       for method in methods {
         if self.refused.borrow().contains(method) {
           return Some(plugin_error("forbidden", &format!("'{method}' is not interceptable")));
@@ -1604,6 +1548,11 @@ mod bundled_oracles {
     }
     fn on_intercept_update_unregister(&self, _callback_id: u32) {}
     fn on_update_verdict(&self, _dispatch_id: i64, _deliver: bool) {}
+    fn on_send_register(&self, _callback_id: u32, _filter_json: &str) -> Option<String> {
+      None
+    }
+    fn on_send_unregister(&self, _callback_id: u32) {}
+    fn on_send_verdict(&self, _dispatch_id: i64, _verdict: &str) {}
   }
 
   type Disposing = crate::testing::harness::DisposeOnDrop<RpcState>;

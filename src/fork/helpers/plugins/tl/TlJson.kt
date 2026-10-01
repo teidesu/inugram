@@ -72,6 +72,7 @@ object TlJson {
             throw IllegalArgumentException("TlJson.fromJson: cannot instantiate '$tlName': ${e.message}", e)
         }
         val fields = TlReflect.publicFields(cls)
+        val written = HashSet<String>()
         val keys = json.keys()
         while (keys.hasNext()) {
             val key = keys.next()
@@ -86,8 +87,9 @@ object TlJson {
             val jsonValue = json.get(key)
             val converted = jsonToValue(field.genericType, jsonValue, "$tlName.$key")
             field.set(instance, converted)
+            written.add(key)
         }
-        TlReflect.syncFlags(instance)
+        TlReflect.syncFlags(instance, written)
         return instance
     }
 

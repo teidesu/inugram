@@ -1,6 +1,6 @@
 // ==InuPlugin==
 // @name         send intercept test
-// @description  asserts inu.interceptSendMessage normalizes all four send methods into one OutgoingMessage, that a rewrite lands on the request that goes out and that a drop is total
+// @description  asserts inu.interceptSendMessage hands a middleware the message as plain values, that what it hands back names the media it kept, and that a drop is total
 // @grant        interceptSendMessage
 // ==/InuPlugin==
 
@@ -15,94 +15,65 @@ pass('disposing twice is a no-op')
 let neverRan = 0
 inu.interceptSendMessage(() => { neverRan += 1; return 'drop' })()
 
-// the harness sends one of each send method plus a sendMessage asking to be dropped, then hands
-// `__report` what the host was asked to send: rewrites and drops are checked against that
+// the harness sends a text, an album of a picked file and a sticker, a forward and a text asking to
+// be dropped, then hands `__report` the verdicts: rewrites and drops are checked against those
 
 const seen = []
-const refusals = []
-const silentRefusals = []
 
 inu.interceptSendMessage(({ message: m, account }) => {
   seen.push({
     peer: m.peer,
     text: m.text.text,
-    media: m.media.length,
-    silent: m.silent,
-    isEdit: m.isEdit,
-    editMessageId: m.editMessageId,
-    replyToMessageId: m.replyToMessageId,
-    topicId: m.topicId,
-    scheduleDate: m.scheduleDate,
+    media: m.media.map(item => [item._, 'kind' in item ? item.kind : null, 'spoiler' in item ? item.spoiler ?? null : null]),
+    reply: m.reply,
+    forward: m.forward,
+    sealed: Object.isSealed(m),
     account: typeof account === 'object' && account !== null && typeof account.id === 'number',
   })
 
   if (m.text.text === 'drop me') return 'drop'
 
-  // a shape change is refused rather than swapping the method the app awaits a response type for
-  try {
-    m.media = m.media.concat([{ _: 'inputMediaEmpty' }])
-    refusals.push('no-throw')
-  } catch (e) {
-    refusals.push(e.code)
+  if (m.media.length > 1) {
+    m.media.reverse()
+    m.media[1].spoiler = true
+    m.media.push({ _: 'inputMediaDice', emoticon: '🎲' })
   }
-
-  m.text = { text: `[${m.text.text}]`, entities: [] }
-  // a flag-clear field is omitted from reads too, so the shape is read off the method, not probed
-  try {
-    m.silent = true
-    silentRefusals.push('no-throw')
-  } catch (e) {
-    silentRefusals.push(e.code)
-  }
+  if (m.forward !== null) m.forward.mode = 'hide-sender'
+  m.text = `[${m.text.text}]`
+  m.silent = true
   return 'send'
 })
 
-globalThis.__report = (sent) => {
+globalThis.__report = (verdicts) => {
   check('the disposed middleware never ran', neverRan === 0, String(neverRan))
-  check('every send reached the middleware', seen.length === 5, String(seen.length))
+  check('every send reached the middleware', seen.length === 4, String(seen.length))
 
-  const [text, media, album, edit, dropped] = seen
+  const [text, album, forward, dropped] = seen
 
-  check('a text send carries no media', text.media === 0 && text.text === 'hi', JSON.stringify(text))
-  check('a dialog id is what a peer reads as', text.peer === 7, String(text.peer))
-  check('a channel send reads as a negative dialog id', media.peer === -1000000000009, String(media.peer))
-  check('a basic group send reads as a negative dialog id', album.peer === -5, String(album.peer))
-
-  check('a media send carries exactly one', media.media === 1, String(media.media))
-  check('a media send carries its caption as the text', media.text === 'cap', media.text)
-  check('silent is read off the request', media.silent === true && text.silent === false)
-
-  check('an album carries one media per item', album.media === 2, String(album.media))
-  check("an album's caption is its first item's", album.text === 'one', album.text)
-
-  check('an edit says so', edit.isEdit === true && edit.editMessageId === 42, JSON.stringify(edit))
-  check('a send is not an edit', text.isEdit === false && text.editMessageId === null)
-
-  check('an unset reply reads as null', text.replyToMessageId === null && text.topicId === null)
-  check('an unscheduled send reads as null', text.scheduleDate === null)
+  check('the peer is what the host said', text.peer === 7, String(text.peer))
+  check('the message cannot grow fields', text.sealed)
+  check('a picked file reads as a LocalMedia', JSON.stringify(album.media[0]) === '["localMedia","photo",false]', JSON.stringify(album.media))
+  check('anything else reads as the TL it is', album.media[1][0] === 'inputMediaDocument', JSON.stringify(album.media))
+  check('a reply reads as the host gave it', album.reply?.messageId === 3 && album.reply.quote === null, JSON.stringify(album.reply))
+  check('a forward reads as the host gave it', forward.forward?.messageIds.join() === '5,6', JSON.stringify(forward.forward))
   check('the account handle comes with it', seen.every(s => s.account))
   check('the dropped send was seen before it was dropped', dropped.text === 'drop me', dropped.text)
 
+  check('a drop is its own verdict', verdicts[3] === 'D', verdicts[3])
+  const messages = verdicts.slice(0, 3).map(v => JSON.parse(v.slice(1)))
   check(
-    'only an edit refuses to be sent silently',
-    silentRefusals.join(',') === 'no-throw,no-throw,no-throw,unsupported',
-    silentRefusals.join(','),
+    'the rewritten text is what goes back',
+    messages.map(m => m.text.text).join(',') === '[hi],[two],[look]',
+    messages.map(m => m.text.text).join(','),
   )
-  check(
-    'attaching media is refused rather than swapping the method',
-    refusals.length === 4 && refusals.every(code => code === 'unsupported'),
-    JSON.stringify(refusals),
-  )
-
-  check('a dropped send never reaches the network', sent.length === 4, String(sent.length))
-  check(
-    'the rewritten text is what goes out',
-    sent.map(s => JSON.parse(s).message).join(',') === '[hi],[cap],,[fixed]',
-    sent.map(s => JSON.parse(s).message).join(','),
-  )
-  check("an album's caption is rewritten on its first item", JSON.parse(sent[2]).multi_media[0].message === '[one]', sent[2])
-  check('a flag written by a middleware goes out', JSON.parse(sent[0]).silent === true, sent[0])
-  check('nothing that went out says "drop me"', sent.every(s => !s.includes('drop me')))
+  check('a string assigned as the text goes back without entities', messages[0].text.entities.length === 0)
+  check('a flag written by a middleware goes back', messages[0].silent === true)
+  const media = messages[1].media
+  check('kept media goes back named by where it was', JSON.stringify(media.map(item => item.kept)) === '[1,0,-1]', JSON.stringify(media))
+  check('a kept LocalMedia goes back with its id and spoiler', media[1].local?.id === '11' && media[1].local.spoiler === true, JSON.stringify(media[1]))
+  check('an added item goes back as the TL it is', media[2].tl?._ === 'inputMediaDice', JSON.stringify(media[2]))
+  check('a forward edit goes back', messages[2].forward.mode === 'hide-sender', JSON.stringify(messages[2].forward))
+  check('nothing that went back says "drop me"', verdicts.every(v => !v.includes('drop me')))
 
   console.log('send intercept test done')
 }

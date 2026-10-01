@@ -33,5 +33,6 @@ export default antfu({
   rules: {
     'no-undef': 'off',
     'no-unused-expressions': 'off',
+    'no-use-before-define': 'off',
   },
 })

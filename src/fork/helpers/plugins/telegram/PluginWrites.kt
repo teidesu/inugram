@@ -37,7 +37,7 @@ object PluginWrites {
     const val OP_DOWNLOAD_MEDIA = 10
     const val OP_DOWNLOAD_MEDIA_TO_FILE = 11
     const val OP_UPLOAD_FILE = 12
-    const val OP_SET_SEND_MEDIA = 13
+    const val OP_CREATE_LOCAL_MEDIA = 13
 
     fun listenerFor(session: PluginSession): WritesListener =
         object : WritesListener {
@@ -79,7 +79,7 @@ object PluginWrites {
                 OP_DOWNLOAD_MEDIA -> PluginMedia.download(call, toFile = false)
                 OP_DOWNLOAD_MEDIA_TO_FILE -> PluginMedia.download(call, toFile = true)
                 OP_UPLOAD_FILE -> PluginMedia.uploadFile(call)
-                OP_SET_SEND_MEDIA -> PluginSendMorph.setMedia(call)
+                OP_CREATE_LOCAL_MEDIA -> PluginCompose.createLocalMedia(call)
                 else -> PluginWire.encodePluginError("internal", "account write: unknown op $op")
             }
         }

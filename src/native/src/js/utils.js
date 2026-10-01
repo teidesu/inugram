@@ -1,5 +1,4 @@
 (utils, text) => {
-
   const toSub = (value) => {
     if (typeof value === 'boolean' || !value) return null
     if (typeof value === 'string') return value
@@ -274,6 +273,32 @@
     },
   })
 
+  const LOCAL_KINDS = ['photo', 'video', 'gif', 'audio', 'voice', 'round', 'document']
+
+  // the host's id for a LocalMedia, which only it can resolve to a file; never on the object itself
+  const localMediaIds = new WeakMap()
+
+  const createLocalMediaObject = ({ id, kind, name, mimeType }, spoiler) => {
+    if (!LOCAL_KINDS.includes(kind)) throw new TypeError(`unknown local media kind: ${kind}`)
+    let hidden = spoiler === true
+    const media = Object.freeze({
+      _: 'localMedia',
+      kind,
+      name: name === '' ? null : name,
+      mimeType,
+      get spoiler() {
+        return hidden
+      },
+      set spoiler(value) {
+        hidden = !!value
+      },
+    })
+    localMediaIds.set(media, String(id))
+    return media
+  }
+
+  const readLocalMediaId = media => (media !== null && typeof media === 'object' ? localMediaIds.get(media) : undefined)
+
   Object.freeze(utils)
 
   return {
@@ -291,5 +316,7 @@
     toCount,
     toFieldNames,
     readAccountSlot,
+    createLocalMediaObject,
+    readLocalMediaId,
   }
 }

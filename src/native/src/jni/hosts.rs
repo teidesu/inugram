@@ -30,18 +30,11 @@ use jni::signature::ReturnType;
 use jni::Env;
 
 impl RpcHost for JniBridge {
-  fn on_register(
-    &self,
-    methods: &[String],
-    callback_id: u32,
-    scope: &str,
-    strict: bool,
-    filter_json: &str,
-  ) -> Option<String> {
+  fn on_register(&self, methods: &[String], callback_id: u32, strict: bool) -> Option<String> {
     self.call_refusal(
       "interceptRpc",
       self.on_rpc_register,
-      &[Arg::Strs(methods), Arg::Int(callback_id as i32), Arg::Str(scope), Arg::Bool(strict), Arg::Str(filter_json)],
+      &[Arg::Strs(methods), Arg::Int(callback_id as i32), Arg::Bool(strict)],
     )
   }
 
@@ -103,6 +96,22 @@ impl RpcHost for JniBridge {
 
   fn on_update_verdict(&self, dispatch_id: i64, deliver: bool) {
     self.call_void("interceptUpdate", self.on_update_verdict, &[Arg::Long(dispatch_id), Arg::Bool(deliver)]);
+  }
+
+  fn on_send_register(&self, callback_id: u32, filter_json: &str) -> Option<String> {
+    self.call_refusal(
+      "interceptSendMessage",
+      self.on_send_register,
+      &[Arg::Int(callback_id as i32), Arg::Str(filter_json)],
+    )
+  }
+
+  fn on_send_unregister(&self, callback_id: u32) {
+    self.call_void("interceptSendMessage", self.on_send_unregister, &[Arg::Int(callback_id as i32)]);
+  }
+
+  fn on_send_verdict(&self, dispatch_id: i64, verdict: &str) {
+    self.call_void("interceptSendMessage", self.on_send_verdict, &[Arg::Long(dispatch_id), Arg::Str(verdict)]);
   }
 }
 

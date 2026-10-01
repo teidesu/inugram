@@ -70,6 +70,7 @@ object PluginOptimisticSend : SessionResource {
                 null,
                 false,
             )
+            params.sendMessageChatArguments = PluginCompose.COMPOSED
             SendMessagesHelper.getInstance(call.accountId).sendMessage(params)
         }
     }
@@ -113,56 +114,65 @@ object PluginOptimisticSend : SessionResource {
         val caption = call.text()
         val entities = PluginWrites.readEntities(call.json).takeIf { it.isNotEmpty() }
         onUi(token) {
-            val helper = SendMessagesHelper.getInstance(call.accountId)
-            val photo = if (asPhoto(mime, asDocument)) helper.generatePhotoSizes(path.absolutePath, null) else null
-            val params = if (photo != null) {
-                SendMessagesHelper.SendMessageParams.of(
-                    photo,
-                    path.absolutePath,
-                    dialogId,
-                    replyTo,
-                    replyToTop,
-                    caption,
-                    entities,
-                    null,
-                    hashMapOf(TOKEN_KEY to token),
-                    !call.flag("silent"),
-                    call.int("scheduleDate"),
-                    0,
-                    0,
-                    null,
-                    false,
-                )
-            } else {
-                SendMessagesHelper.SendMessageParams.of(
-                    buildLocalDocument(call.accountId, path, name, mime, described),
-                    null,
-                    path.absolutePath,
-                    dialogId,
-                    replyTo,
-                    replyToTop,
-                    caption,
-                    entities,
-                    null,
-                    hashMapOf(TOKEN_KEY to token),
-                    !call.flag("silent"),
-                    call.int("scheduleDate"),
-                    0,
-                    0,
-                    null,
-                    null,
-                    false,
-                )
-            }
-            helper.sendMessage(params)
+            val params = createMediaParams(
+                call.accountId, path, name, mime, asDocument, described, dialogId, replyTo, replyToTop, caption, entities,
+                hashMapOf(TOKEN_KEY to token), !call.flag("silent"), call.int("scheduleDate"),
+            )
+            params.sendMessageChatArguments = PluginCompose.COMPOSED
+            SendMessagesHelper.getInstance(call.accountId).sendMessage(params)
         }
+    }
+
+    /** ui thread */
+    internal fun createMediaParams(
+        accountId: Int,
+        path: File,
+        name: String,
+        mime: String,
+        asDocument: Boolean,
+        described: PluginMedia.LocalDescription,
+        dialogId: Long,
+        replyTo: MessageObject?,
+        replyToTop: MessageObject?,
+        caption: String,
+        entities: ArrayList<TLRPC.MessageEntity>?,
+        params: HashMap<String, String>,
+        notify: Boolean,
+        scheduleDate: Int,
+    ): SendMessagesHelper.SendMessageParams {
+        val helper = SendMessagesHelper.getInstance(accountId)
+        val photo = if (asPhoto(mime, asDocument)) helper.generatePhotoSizes(path.absolutePath, null) else null
+        if (photo != null) {
+            return SendMessagesHelper.SendMessageParams.of(
+                photo, path.absolutePath, dialogId, replyTo, replyToTop, caption, entities, null, params, notify, scheduleDate, 0, 0, null, false,
+            )
+        }
+        return SendMessagesHelper.SendMessageParams.of(
+            buildLocalDocument(accountId, path, name, mime, described),
+            null,
+            path.absolutePath,
+            dialogId,
+            replyTo,
+            replyToTop,
+            caption,
+            entities,
+            null,
+            params,
+            notify,
+            scheduleDate,
+            0,
+            0,
+            null,
+            null,
+            false,
+        )
     }
 
     /** stock's rule: webp stays a document, a sticker being one however it looks */
     internal fun asPhoto(mime: String, asDocument: Boolean): Boolean =
         !asDocument && mime.startsWith("image/") && mime != "image/webp"
 
-    internal fun buildLocalDocument(
+    private fun buildLocalDocument(
         accountId: Int,
         path: File,
         name: String,

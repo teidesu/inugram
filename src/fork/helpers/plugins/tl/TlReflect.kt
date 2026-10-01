@@ -183,26 +183,31 @@ object TlReflect {
 
     fun findTlClass(tlName: String): Class<out TLObject>? = classesByTlName[tlName]
 
-    /** the other fields of a live object must stay exactly as the app had them */
-    fun syncFlagBit(obj: TLObject, fieldName: String) {
+    /** the other fields of a live object must stay exactly as the app had them; [written] is a plugin's non-null write */
+    fun syncFlagBit(obj: TLObject, fieldName: String, written: Boolean = false) {
         val cls = obj.javaClass
         val gate = TlFlags.findGate(cls, fieldName) ?: return
         val fields = publicFields(cls)
         val wordField = fields[TlFlags.wordName(gate.word) ?: return] ?: return
-        val present = TlFlags.isBitPresent(cls, gate) { TlFlags.isPresent(fields[it]?.get(obj)) }
+        val present = TlFlags.isBitPresent(cls, gate) { name ->
+            val value = fields[name]?.get(obj)
+            if (written && name == fieldName) TlFlags.isWritten(value) else TlFlags.isPresent(value)
+        }
         val mask = 1 shl gate.bit
         val current = wordField.getInt(obj)
         wordField.setInt(obj, if (present) current or mask else current and mask.inv())
     }
 
-    fun syncFlags(obj: TLObject) {
+    /** [written] are the fields a plugin set */
+    fun syncFlags(obj: TLObject, written: Set<String> = emptySet()) {
         val cls = obj.javaClass
         val fields = publicFields(cls)
         for (word in TlFlags.getFlagWords(cls)) {
             val name = TlFlags.wordName(word) ?: continue
             val target = fields[name] ?: continue
             target.setInt(obj, TlFlags.computeWord(cls, word) { field ->
-                TlFlags.isPresent(fields[field]?.get(obj))
+                val value = fields[field]?.get(obj)
+                if (field in written) TlFlags.isWritten(value) else TlFlags.isPresent(value)
             })
         }
     }

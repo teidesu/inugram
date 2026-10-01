@@ -3,6 +3,7 @@ package desu.inugram.helpers.plugins
 /** [start] skips `nativeCreate`, so any member not overridden here throws on `ptr == 0` */
 class RecordingQuickJs : QuickJs() {
     class Dispatch(val callbackId: Int, val dispatchId: Long, val method: String, val accountId: Int, val requestWire: String)
+    class SendDispatch(val callbackId: Int, val dispatchId: Long, val accountId: Int, val messageJson: String)
     class Completion(val dispatchId: Long, val resultWire: String)
     class Abandon(val dispatchId: Long, val reasonWire: String)
     class Update(val typeName: String, val accountId: Int, val updateWire: String)
@@ -34,6 +35,8 @@ class RecordingQuickJs : QuickJs() {
     val updates = ArrayList<Update>()
     val updateDispatches = ArrayList<UpdateDispatch>()
     val updateAbandons = ArrayList<Long>()
+    val sendDispatches = ArrayList<SendDispatch>()
+    val sendAbandons = ArrayList<Long>()
     val invokes = ArrayList<Invoke>()
     val invokeBytes = ArrayList<InvokeBytes>()
     val settles = ArrayList<Settle>()
@@ -68,6 +71,8 @@ class RecordingQuickJs : QuickJs() {
     var onAbandonDispatch: ((Abandon) -> Unit)? = null
 
     var onDispatchUpdateIntercept: ((UpdateDispatch) -> Unit)? = null
+
+    var onDispatchSend: ((SendDispatch) -> Unit)? = null
 
     var onWriteResult: ((WriteResult) -> Unit)? = null
 
@@ -199,6 +204,16 @@ class RecordingQuickJs : QuickJs() {
 
     override fun abandonUpdateDispatch(dispatchId: Long, reasonWire: String) {
         updateAbandons.add(dispatchId)
+    }
+
+    override fun dispatchSend(callbackId: Int, dispatchId: Long, accountId: Int, messageJson: String) {
+        val dispatch = SendDispatch(callbackId, dispatchId, accountId, messageJson)
+        sendDispatches.add(dispatch)
+        onDispatchSend?.invoke(dispatch)
+    }
+
+    override fun abandonSendDispatch(dispatchId: Long, reasonWire: String) {
+        sendAbandons.add(dispatchId)
     }
 
     override fun renderActions(kind: Int, surfaceJson: String): String? {

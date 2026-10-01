@@ -16,18 +16,11 @@ use crate::runtime::{enter_js, pump_jobs, PendingSettle, PendingTable};
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle, Registry};
 use crate::utils::arguments::{opt_bool, stringify_json};
-use crate::utils::qjs::{qjs_is_regexp, qjs_load_prelude, qjs_object_freeze, qjs_promise_then, qjs_read_typed_bytes};
+use crate::utils::qjs::{qjs_load_prelude, qjs_object_freeze, qjs_promise_then, qjs_read_typed_bytes};
 use crate::Log;
 
 pub trait RpcHost {
-  fn on_register(
-    &self,
-    methods: &[String],
-    callback_id: u32,
-    scope: &str,
-    strict: bool,
-    filter_json: &str,
-  ) -> Option<String>;
+  fn on_register(&self, methods: &[String], callback_id: u32, strict: bool) -> Option<String>;
   fn on_unregister(&self, callback_id: u32);
   fn on_invoke(&self, invoke_id: i64, slot: i32, request_wire: &str) -> Option<String>;
   fn on_invoke_raw(&self, invoke_id: i64, slot: i32, method: &[u8]) -> Option<String>;
@@ -39,6 +32,10 @@ pub trait RpcHost {
   fn on_intercept_update_register(&self, callback_id: u32, types: &[String]) -> Option<String>;
   fn on_intercept_update_unregister(&self, callback_id: u32);
   fn on_update_verdict(&self, dispatch_id: i64, deliver: bool);
+  fn on_send_register(&self, callback_id: u32, filter_json: &str) -> Option<String>;
+  fn on_send_unregister(&self, callback_id: u32);
+  /// `verdict` is `D` for a drop, `S` and the message's json for a send, `E` and a reason for a failure
+  fn on_send_verdict(&self, dispatch_id: i64, verdict: &str);
 }
 
 const CHAIN_TIMEOUT_TEXT: &str = "INTERCEPTOR_TIMEOUT";
@@ -169,14 +166,6 @@ const RAW_GRANT: &str = "unsafe.invokeRaw";
 const TAKEOUT_GRANT: &str = "takeout";
 
 const EVENTS_PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/events.qbc"));
-const SEND_PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/send_message.qbc"));
-
-/// keep in step with `SYNTHETIC_CODE`/`DROPPED_TEXT` in src/fork/helpers/plugins/telegram/PluginRpc.kt
-pub(crate) const DROP_CODE: i32 = -1000;
-pub(crate) const DROP_TEXT: &str = "MESSAGE_DROPPED_BY_PLUGIN";
-
-const SEND_SCOPE: &str = "interceptSendMessage";
-
 #[derive(Default)]
 struct UpdateDispatchState {
   settled: Cell<bool>,
@@ -191,14 +180,15 @@ pub struct RpcState {
   accounts: Option<Rc<AccountState>>,
   pub(crate) log: Log,
   intercept_fns: CallbackRegistry,
+  send_fns: CallbackRegistry,
   update_fns: Registry<UpdateReg>,
   intercept_update_fns: Registry<UpdateReg>,
   demux: RefCell<Option<Persistent<Function<'static>>>>,
   send_wrap: RefCell<Option<Persistent<Function<'static>>>>,
-  send_methods: RefCell<Vec<String>>,
   abort_controller: RefCell<Option<Persistent<Constructor<'static>>>>,
   dispatches: RefCell<HashMap<i64, Rc<DispatchState>>>,
   update_dispatches: RefCell<HashMap<i64, Rc<UpdateDispatchState>>>,
+  send_dispatches: RefCell<HashMap<i64, Rc<UpdateDispatchState>>>,
   invokes: PendingTable<()>,
 }
 
@@ -254,7 +244,7 @@ impl RpcState {
   }
 
   fn sync_blocking(&self) {
-    let count = self.dispatches.borrow().len() + self.update_dispatches.borrow().len();
+    let count = self.dispatches.borrow().len() + self.update_dispatches.borrow().len() + self.send_dispatches.borrow().len();
     self.lifecycle.set_blocking_dispatches(count);
   }
 }
@@ -331,11 +321,11 @@ pub fn install_rpc<'js>(
     accounts,
     log,
     intercept_fns: CallbackRegistry::default(),
+    send_fns: CallbackRegistry::default(),
     update_fns: Registry::default(),
     intercept_update_fns: Registry::default(),
     demux: RefCell::new(None),
     send_wrap: RefCell::new(None),
-    send_methods: RefCell::new(Vec::new()),
     abort_controller: RefCell::new(
       ctx
         .globals()
@@ -344,6 +334,7 @@ pub fn install_rpc<'js>(
     ),
     dispatches: RefCell::new(HashMap::new()),
     update_dispatches: RefCell::new(HashMap::new()),
+    send_dispatches: RefCell::new(HashMap::new()),
     invokes: PendingTable::default(),
   });
 
@@ -381,7 +372,7 @@ pub fn install_rpc<'js>(
             opt_bool(ctx, options, "interceptRpc", "strict")?.unwrap_or_default()
           }
         };
-        state2.register_intercept(ctx, list, "", strict, "", cb)
+        state2.register_intercept(ctx, list, strict, cb)
       },
     )?,
   )?;
@@ -467,82 +458,6 @@ impl RpcState {
     Ok(())
   }
 
-  fn install_send_message<'js>(
-    self: &Rc<Self>,
-    ctx: &Ctx<'js>,
-    globals: &crate::api::Globals<'js>,
-    shared: Object<'js>,
-  ) -> JsResult<()> {
-    let factory = qjs_load_prelude(ctx, SEND_PRELUDE)?;
-    let plugin_error = globals.plugin_error.clone();
-    let rpc_error = globals.get_rpc_error(ctx)?;
-    let built: Object = factory.call((shared, plugin_error, rpc_error, DROP_CODE, DROP_TEXT))?;
-    let build: Function = built.get("wrap")?;
-    *self.send_methods.borrow_mut() = built.get("methods")?;
-    *self.send_wrap.borrow_mut() = Some(Persistent::save(ctx, build));
-
-    let state = self.clone();
-    globals.inu.set(
-      "interceptSendMessage",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, first: Value<'js>, second: Opt<Value<'js>>| {
-        let ctx: &Ctx<'js> = &ctx;
-        if state.lifecycle.is_unloading() {
-          return noop_disposer(ctx);
-        }
-        state.grants.check_grant(ctx, SEND_SCOPE, None, MATCH_EXACT)?;
-        let (filter_json, cb) = match second.0 {
-          Some(callback) => {
-            let Some(callback) = callback.into_function() else {
-              return Err(Exception::throw_type(ctx, "interceptSendMessage: middleware must be a function"));
-            };
-            let Some(filter) = first.as_object() else {
-              return Err(Exception::throw_type(ctx, "interceptSendMessage: filter must be an object"));
-            };
-            let encoded = Object::new(ctx.clone())?;
-            if let Some(is_edit) = opt_bool(ctx, filter, "interceptSendMessage filter", "isEdit")? {
-              encoded.set("isEdit", is_edit)?;
-            }
-            let text: Value = filter.get("text")?;
-            if !text.is_undefined() {
-              let Some(text) = text.as_object() else {
-                return Err(Exception::throw_type(ctx, "interceptSendMessage: filter.text must be a RegExp"));
-              };
-              if !qjs_is_regexp(text) {
-                return Err(Exception::throw_type(ctx, "interceptSendMessage: filter.text must be a RegExp"));
-              }
-              let source: String = text
-                .get("source")
-                .map_err(|_| Exception::throw_type(ctx, "interceptSendMessage: filter.text must be a RegExp"))?;
-              let flags: String = text
-                .get("flags")
-                .map_err(|_| Exception::throw_type(ctx, "interceptSendMessage: filter.text must be a RegExp"))?;
-              let regex = Object::new(ctx.clone())?;
-              regex.set("source", source)?;
-              regex.set("flags", flags)?;
-              encoded.set("text", regex)?;
-            }
-            let json = stringify_json(ctx, encoded.into_value(), "interceptSendMessage: the filter did not serialize")?;
-            (json, callback)
-          }
-          None => {
-            let Some(callback) = first.into_function() else {
-              return Err(Exception::throw_type(ctx, "interceptSendMessage: middleware must be a function"));
-            };
-            (String::new(), callback)
-          }
-        };
-        let build = match state.send_wrap.borrow().as_ref() {
-          Some(build) => build.clone().restore(ctx)?,
-          None => return Err(Exception::throw_type(ctx, "interceptSendMessage is not installed")),
-        };
-        let middleware: Function = build.call((cb,))?;
-        let list = state.send_methods.borrow().clone();
-        state.register_intercept(ctx, list, SEND_SCOPE, true, &filter_json, middleware)
-      })?,
-    )?;
-    Ok(())
-  }
-
   fn install_demuxed_events<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, globals: &crate::api::Globals<'js>) -> JsResult<()> {
     let factory = qjs_load_prelude(ctx, EVENTS_PRELUDE)?;
     let message = globals.get_message(ctx)?;
@@ -590,13 +505,11 @@ impl RpcState {
     self: &Rc<Self>,
     ctx: &Ctx<'js>,
     methods: Vec<String>,
-    scope: &str,
     strict: bool,
-    filter_json: &str,
     middleware: Function<'js>,
   ) -> JsResult<Function<'js>> {
     let callback_id = self.intercept_fns.alloc();
-    if let Some(err) = self.host.on_register(&methods, callback_id, scope, strict, filter_json) {
+    if let Some(err) = self.host.on_register(&methods, callback_id, strict) {
       return Err(ctx.throw(error::host_error_to_js(ctx, &err)?));
     }
     self.intercept_fns.register(ctx, callback_id, middleware);
@@ -1014,10 +927,10 @@ impl RpcState {
 
     let context = Object::new(ctx.clone())?;
     context.set("request", request_value)?;
+    context.set("method", method)?;
     context.set("account", dispatch_account(ctx, &state.accounts, account_id)?)?;
     state.define_signal(&context, &dstate.signal)?;
-    // the third argument is the send prelude's; the raw `interceptRpc` form takes two and ignores it
-    let call_result = middleware.call::<_, Value>((context, next_fn, dispatch_id as f64));
+    let call_result = middleware.call::<_, Value>((context, next_fn));
     let result_value = match call_result {
       Ok(v) => v,
       Err(rquickjs::Error::Exception) => {
@@ -1240,6 +1153,7 @@ impl Dispose for RpcState {
   fn dispose(&self, context: &rquickjs::Context) {
     enter_js(context, |ctx| {
       self.intercept_fns.release_all(&ctx);
+      self.send_fns.release_all(&ctx);
       drop(self.update_fns.remove_matching(|_| true));
       drop(self.intercept_update_fns.remove_matching(|_| true));
       let built = (self.demux.take(), self.send_wrap.take(), self.abort_controller.take());
@@ -1248,6 +1162,7 @@ impl Dispose for RpcState {
         let _ = accounts.take_prototype(&ctx);
       }
       self.drain_update_dispatches(&ctx);
+      self.drain_send_dispatches(&ctx);
       self.invokes.dispose(&ctx);
       for (_, dstate) in self.drain_dispatches() {
         dstate.release(&ctx);
@@ -1255,6 +1170,9 @@ impl Dispose for RpcState {
     });
   }
 }
+
+#[path = "sends.rs"]
+mod sends;
 
 #[cfg(test)]
 #[path = "rpc_tests.rs"]

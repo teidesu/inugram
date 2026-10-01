@@ -166,6 +166,12 @@ open class QuickJs {
     open fun dispatchRpc(callbackId: Int, dispatchId: Long, method: String, accountId: Int, requestWire: String) =
         requireLive { nativeDispatchRpc(it, callbackId, dispatchId, method, accountId, requestWire) }
 
+    /** answered exactly once through [SendsListener.onSendVerdict] */
+    open fun dispatchSend(callbackId: Int, dispatchId: Long, accountId: Int, messageJson: String) =
+        requireLive { nativeDispatchSend(it, callbackId, dispatchId, accountId, messageJson) }
+
+    open fun abandonSendDispatch(dispatchId: Long, reasonWire: String) = requireLive { nativeAbandonSendDispatch(it, dispatchId, reasonWire) }
+
     open fun completeNext(dispatchId: Long, resultWire: String) = requireLive { nativeCompleteNext(it, dispatchId, resultWire) }
 
     /** the host has already answered the app, so no completion comes back */
@@ -269,6 +275,8 @@ open class QuickJs {
     private external fun nativeDispatchNotification(ptr: Long, callbackId: Int, name: String, accountId: Int, args: Array<String>)
     private external fun nativeWriteProgress(ptr: Long, requestId: Long, loaded: Long, total: Long)
     private external fun nativeDispatchRpc(ptr: Long, callbackId: Int, dispatchId: Long, method: String, accountId: Int, requestWire: String)
+    private external fun nativeDispatchSend(ptr: Long, callbackId: Int, dispatchId: Long, accountId: Int, messageJson: String)
+    private external fun nativeAbandonSendDispatch(ptr: Long, dispatchId: Long, reasonWire: String)
     private external fun nativeCompleteNext(ptr: Long, dispatchId: Long, resultWire: String)
     private external fun nativeAbandonDispatch(ptr: Long, dispatchId: Long, reasonWire: String)
     private external fun nativeDispatchUpdate(ptr: Long, typeName: String, accountId: Int, updateWire: String)

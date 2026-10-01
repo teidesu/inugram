@@ -30,7 +30,7 @@ const OP_SET_DRAFT: i32 = 9;
 const OP_DOWNLOAD_MEDIA: i32 = 10;
 const OP_DOWNLOAD_MEDIA_TO_FILE: i32 = 11;
 const OP_UPLOAD_FILE: i32 = 12;
-const OP_SET_SEND_MEDIA: i32 = 13;
+const OP_CREATE_LOCAL_MEDIA: i32 = 13;
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/writes.qbc"));
 
@@ -44,7 +44,7 @@ pub const TRANSFER_LIMIT_BYTES: u64 = 256 * 1024 * 1024;
 
 fn get_op_grant(op: i32) -> Option<(&'static str, &'static str)> {
   Some(match op {
-    OP_SEND_MESSAGE | OP_SEND_MEDIA | OP_SEND_MULTI_MEDIA | OP_UPLOAD_FILE | OP_SET_SEND_MEDIA => {
+    OP_SEND_MESSAGE | OP_SEND_MEDIA | OP_SEND_MULTI_MEDIA | OP_UPLOAD_FILE | OP_CREATE_LOCAL_MEDIA => {
       ("account.write", "send")
     }
     OP_EDIT_MESSAGE => ("account.write", "edit"),
@@ -205,7 +205,7 @@ impl WritesState {
     let mut staged = Vec::new();
     let outcome = (|| -> JsResult<()> {
       for value in crate::utils::arguments::array_values(ctx, &values, "account write")? {
-        let one = if matches!(op, OP_SEND_MEDIA | OP_SEND_MULTI_MEDIA | OP_UPLOAD_FILE | OP_SET_SEND_MEDIA) {
+        let one = if matches!(op, OP_SEND_MEDIA | OP_SEND_MULTI_MEDIA | OP_UPLOAD_FILE | OP_CREATE_LOCAL_MEDIA) {
           self.stage_value(ctx, &value)?
         } else {
           Staged {
@@ -330,7 +330,7 @@ pub(crate) fn install_writes_with_limit<'js>(
     ("downloadMedia", OP_DOWNLOAD_MEDIA),
     ("downloadMediaToFile", OP_DOWNLOAD_MEDIA_TO_FILE),
     ("uploadFile", OP_UPLOAD_FILE),
-    ("setSendMedia", OP_SET_SEND_MEDIA),
+    ("createLocalMedia", OP_CREATE_LOCAL_MEDIA),
   ] {
     ops.set(name, op)?;
   }

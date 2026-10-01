@@ -87,8 +87,8 @@ interface PlatformListener {
 }
 
 interface RpcListener {
-    /** [scope] "" means each method is its own scope. [strict] fails malformed returns instead of skipping the stage */
-    fun onRpcRegister(methods: Array<String>, callbackId: Int, scope: String, strict: Boolean, filterJson: String): String?
+    /** [strict] fails malformed returns instead of skipping the stage */
+    fun onRpcRegister(methods: Array<String>, callbackId: Int, strict: Boolean): String?
 
     fun onRpcUnregister(callbackId: Int)
 
@@ -110,6 +110,16 @@ interface RpcListener {
         const val OP_TAKEOUT_FINISH = 1
         const val OP_TAKEOUT_INVOKE = 2
     }
+}
+
+/** `interceptSendMessage`, a separate table in rust from [RpcListener]'s */
+interface SendsListener {
+    fun onSendRegister(callbackId: Int, filterJson: String): String?
+
+    fun onSendUnregister(callbackId: Int)
+
+    /** called from inside the engine: the host must post. `D` drops, `S` and json sends, `E` and a reason failed */
+    fun onSendVerdict(dispatchId: Long, verdict: String)
 }
 
 /** a separate table in rust from [RpcListener]'s */

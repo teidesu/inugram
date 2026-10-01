@@ -969,9 +969,37 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchR
   with_engine_env(&mut env, ptr, (), |env, engine| {
     let method = jstring_to_string(env, &method);
     let request_wire = jstring_to_string(env, &request_wire);
-    engine
-      .rpc
-      .dispatch(&engine.ctx, callback_id as u32, dispatch_id, &method, account_id, &request_wire);
+    engine.rpc.dispatch(&engine.ctx, callback_id as u32, dispatch_id, &method, account_id, &request_wire);
+  })
+}
+
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchSend(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  callback_id: jint,
+  dispatch_id: jlong,
+  account_id: jint,
+  message_json: JString,
+) {
+  with_engine_env(&mut env, ptr, (), |env, engine| {
+    let message_json = jstring_to_string(env, &message_json);
+    engine.rpc.dispatch_send(&engine.ctx, callback_id as u32, dispatch_id, account_id, &message_json);
+  })
+}
+
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAbandonSendDispatch(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  dispatch_id: jlong,
+  reason_wire: JString,
+) {
+  with_engine_env(&mut env, ptr, (), |env, engine| {
+    let reason_wire = jstring_to_string(env, &reason_wire);
+    engine.rpc.abandon_send_dispatch(&engine.ctx, dispatch_id, &reason_wire);
   })
 }
 

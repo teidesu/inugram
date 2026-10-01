@@ -36,6 +36,9 @@ object TlFlags {
         return TlTables.table.gatesById[id]
     }
 
+    /** a number written on purpose is present even at 0, which stock sends for an offset or an id */
+    fun isWritten(value: Any?): Boolean = value is Number || isPresent(value)
+
     fun isPresent(value: Any?): Boolean = when (value) {
         null -> false
         is Boolean -> value

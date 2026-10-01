@@ -50,7 +50,7 @@ declare type PeerLikeObject
     | tl.TypeUser | tl.TypeChat
 
 /**
- * A peer, represented by one of: 
+ * A peer, represented by one of:
  * - marked peer id (like in Bot API/mtcute)
  * - `'me'`/`'self'`
  * - a username (optionally with `@`)
@@ -61,7 +61,7 @@ declare type PeerLikeObject
  * - a basic group id, negated (e.g. `-123123`)
  * - a channel or supergroup id, subtracted from `-1000000000000` (e.g. `-1000000123123`)
  *
- * Note that the Android app itself follows a simpler schema, 
+ * Note that the Android app itself follows a simpler schema,
  * both chats and channels are simply negated. Use {@link toSimpleDialogId} to convert.
  */
 declare type InputPeerLike = number | PeerLikeObject | 'me' | 'self' | (string & {})
@@ -458,6 +458,25 @@ declare namespace inu {
       fileName?: string
       onProgress?: ProgressCallback
     }): Promise<tl.TypeInputFile>
+
+    /**
+     * Stages a file for an outgoing message's {@link OutgoingMessage.media}, where the app processes
+     * and uploads it like a file the user picked. Expires 10 minutes after it was created if no send
+     * takes it.
+     *
+     * `{ path }` names a file the way {@link fs} does, and needs its grant. Keep it available for
+     * upload and retries after the send.
+     *
+     * **Limits: 256 MB per staged copy, for all write operations.**
+     *
+     * @needs-grant account.write(send)
+     */
+    createLocalMedia(file: Blob | Uint8Array | { path: string }, options?: {
+      /** customize the file name */
+      fileName?: string
+      /** send an image or video as a file rather than recompressing it */
+      asDocument?: boolean
+    }): Promise<LocalMedia>
 
     /** @needs-grant account.read(peers) */
     getUserFull(peer: InputPeerLike): Promise<tl.TypeUserFull | null>
@@ -1519,44 +1538,90 @@ declare namespace inu {
   /** Register a message editor action, shown when long-tapping the send button in the message editor */
   function registerMessageEditorAction(options: ActionOptions<MessageEditorActionContext>): Disposer
 
-  /** Info about an outgoing message, for {@link interceptSendMessage} */
+  /** Quoted part of a replied-to message */
+  interface ReplyQuote extends TextWithEntities {
+    /** Where the quote starts in the replied-to message's text, in UTF-16 code units */
+    offset: number | null
+  }
+
+  /** What an {@link OutgoingMessage} replies to */
+  interface PendingReply {
+    /** ID of the replied-to message */
+    messageId: number
+    /** Marked peer id of the replied-to message's chat, if it is not the chat the message is sent to */
+    peer: number | null
+    /** Quoted part of the replied-to message */
+    quote: ReplyQuote | null
+  }
+
+  /**
+   * How forwarded messages are sent:
+   * - `normal`: with the original sender
+   * - `hide-sender`: as if sent by the user
+   * - `hide-caption`: as if sent by the user, with media captions removed
+   */
+  type ForwardMode = 'normal' | 'hide-sender' | 'hide-caption'
+
+  /** Messages forwarded along with an {@link OutgoingMessage} */
+  interface PendingForward {
+    /** Marked peer id of the chat the messages are forwarded from */
+    peer: number
+    /** IDs of the forwarded messages, in the order they are sent */
+    messageIds: number[]
+    mode: ForwardMode
+  }
+
+  /**
+   * A message the user is sending, for {@link interceptSendMessage}, editable in-place.
+   *
+   * It is a snapshot: edits are applied once the middleware returns `'send'`, and one that
+   * cannot be applied fails the send then.
+   */
   interface OutgoingMessage {
     /** Marked peer id of the message's chat */
     peer: number
-    /** Formatted text of the message */
-    text: TextWithEntities
-    /** If this message is a reply, ID of the replied-to message */
-    replyToMessageId: number | null
+    /**
+     * Formatted text of the message.
+     *
+     * For forwards, this is the "comment" sent before the forwarded messages. Setting it on a
+     * forward sent without one adds a comment
+     */
+    get text(): TextWithEntities
+    set text(value: InputText)
+    /** What this message replies to, possibly in another chat or with a quote */
+    reply: PendingReply | null
+    /**
+     * Information about a pending forwarded message(s), as seen in the composer's "forward" panel.
+     *
+     * When non-null, `text` is the comment that will be sent before the forwarded messages.
+     */
+    forward: PendingForward | null
     /** If this message is in a topic, ID of the topic */
     topicId: number | null
     /** If this message is scheduled, date of the schedule */
     scheduleDate: number | null
     /** Whether this message is sent as "silent" */
     silent: boolean
-    /** Any media attached to the message. */
-    media: tl.TypeInputMedia[]
-    /** Whether this event is an edit of an existing message */
-    readonly isEdit: boolean
-    /** ID of the message being edited, if any */
-    readonly editMessageId: number | null
-
     /**
-     * Replaces an outgoing message's media, updating its bubble and upload progress in place.
-     * Supports text and single-media sends; albums and edits currently throw `unsupported`.
+     * Any media attached to the message. Its caption ({@link text}) is on the first item.
      *
-     * Caption can be edited via `text`.
-     *
-     * Keep a `{ path }` file available for upload and retries after this call resolves.
-     *
-     * @throws if the file cannot be read
+     * At the `compose` stage, items are usually {@link LocalMedia} objects,
+     * representing the user's picked file.
      */
-    setMedia(file: Blob | Uint8Array | { path: string }, options?: {
-      /** customize the file name */
-      fileName?: string
-      /** send an image as a file rather than recompressing it into a photo */
-      asDocument?: boolean
-    }): Promise<void>
+    media: OutgoingMedia[]
   }
+
+  /** A file the app uploads once the send is decided, see {@link OutgoingMessage.media} */
+  interface LocalMedia {
+    readonly _: 'localMedia'
+    readonly kind: 'photo' | 'video' | 'gif' | 'audio' | 'voice' | 'round' | 'document'
+    readonly name: string | null
+    readonly mimeType: string
+    /** Whether the media is hidden behind a spoiler */
+    spoiler: boolean
+  }
+
+  type OutgoingMedia = LocalMedia | tl.TypeInputMedia
 
   interface SendMessageContext {
     message: OutgoingMessage
@@ -1577,22 +1642,17 @@ declare namespace inu {
      */
     text?: RegExp
     /**
-     * Filter for edit events:
-     * - `undefined`/not passed: fires both edits and newly sent messages
-     * - `false`: fires only new messages
-     * - `true`: fires only edits
+     * When the hook runs:
+     * - `'compose'` (default): when the user taps "send", before the app draws the message or uploads its media
+     * - `'uploaded'`: for messages with media, once it is uploaded, right before the message is sent, after every `'compose'` hook
      */
-    isEdit?: boolean
+    stage?: 'compose' | 'uploaded'
   }
 
   /**
-   * Register a hook before the message is sent.
+   * Register an interceptor for the user-initiated message sends.
    *
-   * A drop verdict within ~100 ms suppresses the message before it is drawn. Longer work
-   * shows a pending bubble until the chain settles. This applies to sync and async callbacks.
-   *
-   * Outer `interceptRpc` middleware can catch a rejected `next()` and return a retry or
-   * fallback response, but cannot override a drop verdict.
+   * This overload registers one in the `compose` stage.
    *
    * @needs-grant interceptSendMessage
    */
@@ -1605,8 +1665,7 @@ declare namespace inu {
    * This overload is recommended over the general one because it avoids unnecessary JS
    * jumps for messages that are not matched.
    *
-   * Same timing as the unfiltered form: a verdict within ~100 ms can suppress the bubble;
-   * longer work shows a pending bubble until the chain settles.
+   * Additionally, this overload allows configuring the stage the hook runs on.
    *
    * @needs-grant interceptSendMessage
    */

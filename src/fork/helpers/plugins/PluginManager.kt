@@ -26,6 +26,7 @@ import desu.inugram.helpers.plugins.telegram.PluginAccounts
 import desu.inugram.helpers.plugins.telegram.PluginMedia
 import desu.inugram.helpers.plugins.telegram.PluginOptimisticSend
 import desu.inugram.helpers.plugins.telegram.PluginRpc
+import desu.inugram.helpers.plugins.telegram.PluginSends
 import desu.inugram.helpers.plugins.telegram.PluginUpdates
 import desu.inugram.helpers.plugins.tl.TlReflect
 import desu.inugram.helpers.plugins.ui.PluginActions
@@ -350,6 +351,7 @@ object PluginManager {
     private fun republishOrder() {
         snapshot = plugins.toList()
         PluginRpc.refreshChainOrder()
+        PluginSends.refreshOrder()
         PluginUpdates.refreshOrder()
     }
 
@@ -444,6 +446,7 @@ object PluginManager {
         val bridge = PluginBridge(
             core = core,
             rpc = PluginRpc.listenerFor(session),
+            sends = PluginSends.listenerFor(session),
             updates = PluginUpdates.listenerFor(session),
             tl = tl,
             account = PluginAccounts.listenerFor(session),
@@ -511,7 +514,7 @@ object PluginManager {
         PluginCanvas.wipe(installId)
     }
 
-    private val CHAIN_OWNERS: List<SessionResource> = listOf(PluginRpc, PluginUpdates)
+    private val CHAIN_OWNERS: List<SessionResource> = listOf(PluginRpc, PluginSends, PluginUpdates)
 
     private val SESSION_RESOURCES: List<SessionResource> = listOf(
         PluginMedia,

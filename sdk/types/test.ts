@@ -191,7 +191,6 @@ inu.interceptRpc('help.getPromoData', () => ({
 }))
 
 inu.interceptSendMessage(async ({ message, account }) => {
-  if (message.isEdit) return 'send'
   const text = message.text.text.trim()
   if (text === '/nope') return 'drop'
   if (text.startsWith('.')) {
@@ -199,7 +198,21 @@ inu.interceptSendMessage(async ({ message, account }) => {
     message.peer = account.userId
     message.silent = true
   }
+  if (message.reply?.quote) message.reply = { ...message.reply, quote: { ...message.reply.quote, text: message.reply.quote.text.trim() } }
+  if (message.forward?.mode === 'normal') message.forward = { ...message.forward, mode: 'hide-sender' }
   return 'send'
+})
+
+inu.interceptSendMessage(async ({ message, account }): Promise<'send'> => {
+  const photos = message.media.filter((media): media is inu.LocalMedia => media._ === 'localMedia' && media.kind === 'photo')
+  for (const photo of photos) photo.spoiler = true
+  message.media.push(await account.createLocalMedia(new Uint8Array([1]), { fileName: 'note.txt', asDocument: true }))
+  return 'send'
+})
+
+inu.interceptSendMessage({ stage: 'uploaded' }, ({ message }) => {
+  const ids = message.media.flatMap(media => (media._ === 'inputMediaPhoto' ? [media.id] : []))
+  return ids.length > 10 ? 'drop' : 'send'
 })
 
 inu.interceptUpdate(['updateNewMessage', 'updateNewChannelMessage'], ({ update }) => {

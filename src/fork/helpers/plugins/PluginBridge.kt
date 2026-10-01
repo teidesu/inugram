@@ -19,6 +19,7 @@ import desu.inugram.core.plugins.PluginWire
 class PluginBridge(
     core: CoreListener,
     rpc: RpcListener,
+    sends: SendsListener,
     updates: UpdatesListener,
     val tl: TlListener,
     account: AccountListener,
@@ -31,6 +32,7 @@ class PluginBridge(
     val xposed: XposedListener? = null,
 ) : CoreListener by core,
     RpcListener by rpc,
+    SendsListener by sends,
     UpdatesListener by updates,
     TlListener by tl,
     AccountListener by account,

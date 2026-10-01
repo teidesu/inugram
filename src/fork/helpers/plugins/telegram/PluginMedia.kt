@@ -18,6 +18,7 @@ import desu.inugram.helpers.plugins.tl.TlJson
 import java.io.File
 import java.util.UUID
 import org.json.JSONObject
+import android.net.Uri
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.FileLoader
 import org.telegram.messenger.ImageLocation
@@ -337,12 +338,14 @@ object PluginMedia : SessionResource {
         }
     }
 
-    internal fun takeForUpload(call: Call, source: File, name: String): Upload {
+    /** stock's picked-file paths refuse a file in the app's private storage, so [picked] copies one out of it */
+    internal fun takeForUpload(call: Call, source: File, name: String, picked: Boolean = false): Upload {
         val staged = PluginTransfers.isStaged(call.session.plugin.id, source)
         val extension = name.substringAfterLast('.', "")
         val dir = FileLoader.getDirectory(FileLoader.MEDIA_DIR_CACHE)
             ?: refuse("internal", "there is no cache directory to send this file from")
-        if (!staged && source.extension.equals(extension, ignoreCase = true) && !source.canonicalFile.startsWith(dir.canonicalFile)) {
+        val usable = !picked || !AndroidUtilities.isInternalUri(Uri.fromFile(source))
+        if (!staged && usable && source.extension.equals(extension, ignoreCase = true) && !source.canonicalFile.startsWith(dir.canonicalFile)) {
             return Upload(source, owned = false)
         }
         val target = File(dir, "inu_plugin_send_${UUID.randomUUID()}" + if (extension.isEmpty()) "" else ".$extension")

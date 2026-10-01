@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins
 
+import android.os.Looper
 import desu.inugram.helpers.plugins.telegram.PluginRpc
 import org.telegram.messenger.Utilities
 import org.telegram.tgnet.ConnectionsManager
@@ -82,7 +83,9 @@ class RecordingConnectionsManager : ConnectionsManager {
      */
     override fun sendRequest(request: TLObject, onComplete: RequestDelegate, flags: Int): Int {
         val requestToken = ++lastRequestToken
-        sendRequestInternal(request, onComplete, null, null, null, flags, 0, 0, true, requestToken)
+        val send = Runnable { sendRequestInternal(request, onComplete, null, null, null, flags, 0, 0, true, requestToken) }
+        // a send the app makes on its ui thread, a forward's, keeps stock's hop: the test thread drains it
+        if (Looper.myLooper() == Looper.getMainLooper()) Utilities.stageQueue.postRunnable(send) else send.run()
         return requestToken
     }
 

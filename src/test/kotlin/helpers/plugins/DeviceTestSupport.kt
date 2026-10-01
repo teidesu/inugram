@@ -10,7 +10,8 @@ import desu.inugram.helpers.plugins.platform.PluginNotifications
 import desu.inugram.helpers.plugins.platform.PluginXposed
 import desu.inugram.helpers.plugins.telegram.PluginReads
 import desu.inugram.helpers.plugins.telegram.PluginRpc
-import desu.inugram.helpers.plugins.telegram.PluginSendHold
+import desu.inugram.helpers.plugins.telegram.PluginCompose
+import desu.inugram.helpers.plugins.telegram.PluginSends
 import desu.inugram.helpers.plugins.telegram.PluginUpdates
 import desu.inugram.helpers.plugins.telegram.PluginWrites
 import desu.inugram.helpers.plugins.tl.TlHandles
@@ -86,13 +87,13 @@ private val nextInstallId = java.util.concurrent.atomic.AtomicLong(1)
 fun freshInstallId(): String = "%032x".format(nextInstallId.getAndIncrement() or (System.nanoTime() shl 16))
 
 private fun clearRpcState() {
-    for (owner in listOf(PluginRpc, PluginUpdates, PluginSendHold)) {
+    for (owner in listOf(PluginRpc, PluginUpdates, PluginSends, PluginCompose)) {
         for (field in owner.javaClass.declaredFields) {
             field.isAccessible = true
             when (field.name) {
                 "interceptorsByMethod", "updateListenersByType", "updateInterceptorsByType" ->
                     field.set(owner, emptyMap<String, Any>())
-                "updateRegs", "updateInterceptRegs" -> field.set(owner, emptyList<Any>())
+                "updateRegs", "updateInterceptRegs", "interceptors" -> field.set(owner, emptyList<Any>())
                 "hasInterceptors", "hasUpdateListeners", "hasUpdateInterceptors" -> field.setBoolean(owner, false)
                 else -> when (val value = field.get(owner)) {
                     is MutableMap<*, *> -> value.clear()
@@ -268,6 +269,7 @@ fun attachBridge(
     val bridge = PluginBridge(
         core = core,
         rpc = PluginRpc.listenerFor(session),
+        sends = PluginSends.listenerFor(session),
         updates = PluginUpdates.listenerFor(session),
         tl = tl,
         account = object : AccountListener,
@@ -373,18 +375,30 @@ fun createManifest(name: String, grants: List<String>): PluginManifest = PluginM
 val Plugin.js: RecordingQuickJs get() = engine as RecordingQuickJs
 
 fun Plugin.interceptRpc(vararg methods: String, callbackId: Int = 1, strict: Boolean = false): String? =
-    js.listener!!.onRpcRegister(arrayOf(*methods), callbackId, "", strict, "")
-
-/** mirrors `SEND_METHODS` in `rpc.rs` */
-val SEND_METHODS = arrayOf(
-    "messages.sendMessage",
-    "messages.sendMedia",
-    "messages.sendMultiMedia",
-    "messages.editMessage",
-)
+    js.listener!!.onRpcRegister(arrayOf(*methods), callbackId, strict)
 
 fun Plugin.interceptSendMessage(callbackId: Int = 1, filterJson: String = ""): String? =
-    js.listener!!.onRpcRegister(SEND_METHODS, callbackId, "interceptSendMessage", true, filterJson)
+    js.listener!!.onSendRegister(callbackId, filterJson)
+
+/** [message] is the json the stage hands back with 'send' */
+fun Plugin.sendVerdict(dispatchId: Long, message: String) =
+    js.listener!!.onSendVerdict(dispatchId, "S$message")
+
+/** hands [dispatch]'s message back with 'send', each media item kept where it was unless [edit] gave it a `kept` of its own */
+fun Plugin.passSend(dispatch: RecordingQuickJs.SendDispatch, edit: (JSONObject) -> Unit = {}) {
+    val message = JSONObject(dispatch.messageJson)
+    edit(message)
+    val media = message.getJSONArray("media")
+    for (at in 0 until media.length()) {
+        val item = media.getJSONObject(at)
+        if (item.has("kept")) continue
+        media.put(at, JSONObject().put("kept", at).put(if (item.optString("_") == "localMedia") "local" else "tl", item))
+    }
+    sendVerdict(dispatch.dispatchId, message.toString())
+}
+
+fun Plugin.dropVerdict(dispatchId: Long) =
+    js.listener!!.onSendVerdict(dispatchId, "D")
 
 fun Plugin.interceptUpdate(vararg types: String, callbackId: Int = 1): String? =
     js.listener!!.onInterceptUpdateRegister(callbackId, arrayOf(*types))
