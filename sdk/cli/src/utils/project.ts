@@ -1,3 +1,4 @@
+import type { ResolvedCliConfig, ResolvedPluginConfig } from './config.js'
 import { loadConfig, refuse } from './config.js'
 import { CliError } from './log.js'
 
@@ -12,7 +13,12 @@ export interface ProjectOptions {
   keepRefusedManifests?: boolean
 }
 
-export async function loadProject(args: ProjectArgs, options: ProjectOptions = {}) {
+export interface Project {
+  config: ResolvedCliConfig
+  plugins: ResolvedPluginConfig[]
+}
+
+export async function loadProject(args: ProjectArgs, options: ProjectOptions = {}): Promise<Project> {
   const config = await loadConfig(process.cwd(), args.config)
 
   let plugins = config.plugins

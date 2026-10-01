@@ -1,10 +1,13 @@
 import type { BuildOptions, Plugin as EsbuildPlugin, Message } from 'esbuild'
 import type { ResolvedCliConfig, ResolvedPluginConfig } from '../utils/config.js'
+import type { Project, ProjectArgs } from '../utils/project.js'
 import { relative } from 'node:path'
 import process from 'node:process'
+import { AsyncLock } from '@fuman/utils'
 import * as esbuild from 'esbuild'
 import { compileRoutines } from '../routines/plugin.js'
 import { configArgs, defineCommand } from '../utils/args.js'
+import { watchConfig } from '../utils/config.js'
 import { readFileSize } from '../utils/fs.js'
 import { color, fail, printMessages, step, warn } from '../utils/log.js'
 import { collectManifestWarnings, renderManifestHeader } from '../utils/manifest.js'
@@ -98,20 +101,15 @@ export interface Watcher {
  * Creates one independent esbuild context per plugin. Calls [onBuilt] after every build,
  * including the first, so callers can push only the changed plugin.
  */
-export async function watchPlugins(options: {
-  config: ResolvedCliConfig
-  plugins: ResolvedPluginConfig[]
-  onBuilt: (outcome: BuildOutcome) => void
-}): Promise<Watcher> {
-  const { config, plugins, onBuilt } = options
-
+async function watchPlugins(project: Project, onBuilt: (config: ResolvedCliConfig, outcome: BuildOutcome) => void): Promise<Watcher> {
+  const { config, plugins } = project
   const contexts = await Promise.all(plugins.map(async (plugin) => {
     const warnings = collectManifestWarnings(plugin.manifest, config.vocabulary)
     const notify: EsbuildPlugin = {
       name: 'inu-notify',
       setup(build) {
         build.onEnd(async (result) => {
-          onBuilt({
+          onBuilt(config, {
             plugin,
             ok: result.errors.length === 0,
             bytes: result.errors.length === 0 ? await readFileSize(plugin.outFile) : 0,
@@ -130,6 +128,44 @@ export async function watchPlugins(options: {
   return {
     async dispose() {
       await Promise.all(contexts.map(context => context.dispose()))
+    },
+  }
+}
+
+/**
+ * Watches [project]'s plugins, and reloads it from [args] when its config changes. A config that
+ * fails to load, or that [onReload] throws for, is reported and the previous one keeps building.
+ */
+export async function watchProject(options: {
+  args: ProjectArgs
+  project: Project
+  onReload?: (project: Project) => void
+  onBuilt: (config: ResolvedCliConfig, outcome: BuildOutcome) => void
+}): Promise<Watcher> {
+  const { args, onReload, onBuilt } = options
+  let plugins = await watchPlugins(options.project, onBuilt)
+  const lock = new AsyncLock()
+  const reload = async () => {
+    let project: Project
+    try {
+      project = await loadProject(args)
+      onReload?.(project)
+    } catch (error) {
+      fail(`config not reloaded: ${error instanceof Error ? error.message : String(error)}`)
+      return
+    }
+    await plugins.dispose()
+    plugins = await watchPlugins(project, onBuilt)
+    step(`config reloaded, watching ${project.plugins.map(plugin => plugin.slug).join(', ')}`)
+  }
+  const config = await watchConfig(options.project.config.configFile, () => {
+    lock.with(reload).catch((error: unknown) => { fail(String(error)) })
+  })
+
+  return {
+    async dispose() {
+      await config.dispose()
+      await lock.with(() => plugins.dispose())
     },
   }
 }
@@ -154,13 +190,14 @@ export const buildCmd = defineCommand({
     },
   },
   run: async ({ args }) => {
-    const { config, plugins } = await loadProject(args)
+    const project = await loadProject(args)
+    const { config, plugins } = project
 
     if (args.watch) {
-      const watcher = await watchPlugins({
-        config,
-        plugins,
-        onBuilt: (outcome) => { void reportOutcome(config, outcome) },
+      const watcher = await watchProject({
+        args,
+        project,
+        onBuilt: (config, outcome) => { void reportOutcome(config, outcome) },
       })
       step(`watching ${plugins.map(plugin => plugin.slug).join(', ')} (ctrl-c to stop)`)
       await untilInterrupted()

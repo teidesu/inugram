@@ -1,4 +1,5 @@
 import type { DevInstall, DevPlugin } from '../utils/device.js'
+import type { Project } from '../utils/project.js'
 import type { BuildOutcome } from './build.js'
 import { basename } from 'node:path'
 import { AsyncLock } from '@fuman/utils'
@@ -9,7 +10,7 @@ import { CliError, color, fail, step, success, warn } from '../utils/log.js'
 import { resolveManifestId } from '../utils/manifest.js'
 import { untilInterrupted } from '../utils/process.js'
 import { loadProject } from '../utils/project.js'
-import { reportOutcome, watchPlugins } from './build.js'
+import { reportOutcome, watchProject } from './build.js'
 
 export function reportPluginAction(action: string, plugin: DevPlugin) {
   const failure = plugin.failure ? color.red(` (${plugin.failure})`) : ''
@@ -53,12 +54,14 @@ export const devCmd = defineCommand({
     },
   },
   run: async ({ args }) => {
-    const { config, plugins } = await loadProject(args)
     // a dev session reloads what it pushes, so it is never all of them by accident
-    if (args._.length === 0 && config.plugins.length > 1) {
+    const checkProject = ({ config }: Project) => {
+      if (args._.length > 0 || config.plugins.length <= 1) return
       const known = config.plugins.map(plugin => `- ${color.bold(plugin.slug)}: ${plugin.manifest.name}`)
       throw new CliError(`there's more than one plugin, please specify one with ${color.blue('inu dev <name>')}:\n${known.join('\n')}`)
     }
+    const project = await loadProject(args)
+    checkProject(project)
     const device = new Device(args)
 
     await device.requireRunning()
@@ -71,10 +74,13 @@ export const devCmd = defineCommand({
     // `onLoad` lines are not lost; a plugin with neither id nor author is keyed by its install id,
     // which only the push answers with
     const channels = new Map<string, string>()
-    for (const plugin of plugins) {
-      const id = resolveManifestId(plugin.manifest)
-      if (id !== null) channels.set(PLUGIN_LOG_TAG_PREFIX + id, plugin.slug)
+    const addChannels = ({ plugins }: Project) => {
+      for (const plugin of plugins) {
+        const id = resolveManifestId(plugin.manifest)
+        if (id !== null) channels.set(PLUGIN_LOG_TAG_PREFIX + id, plugin.slug)
+      }
     }
+    addChannels(project)
     const queue = new AsyncLock()
     const logsSince = args.logs ? await device.getLogTime() : null
 
@@ -99,10 +105,14 @@ export const devCmd = defineCommand({
       }
     }
 
-    const watcher = await watchPlugins({
-      config,
-      plugins,
-      onBuilt: (outcome) => {
+    const watcher = await watchProject({
+      args,
+      project,
+      onReload: (next) => {
+        checkProject(next)
+        addChannels(next)
+      },
+      onBuilt: (config, outcome) => {
         void reportOutcome(config, outcome)
         if (!outcome.ok) return
         queue.with(() => push(outcome)).catch((error: unknown) => { fail(String(error)) })
@@ -120,7 +130,7 @@ export const devCmd = defineCommand({
         .catch((error: Error) => fail(error.message))
     }
 
-    step(`watching ${plugins.map(plugin => plugin.slug).join(', ')} (ctrl-c to stop)`)
+    step(`watching ${project.plugins.map(plugin => plugin.slug).join(', ')} (ctrl-c to stop)`)
     await untilInterrupted()
     aborter.abort()
     await watcher.dispose()

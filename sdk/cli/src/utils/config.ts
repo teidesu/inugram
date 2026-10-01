@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs'
 import fs from 'node:fs/promises'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { build } from 'esbuild'
+import { build, context } from 'esbuild'
 import * as v from 'valibot'
 import { loadVocabulary } from './catalog.js'
 import { CliError, color } from './log.js'
@@ -107,11 +107,9 @@ function checkManifest(schema: ReturnType<typeof createManifestSchema>, manifest
  * Keep the bundle inside the project so Node can resolve the config's bare imports,
  * including `@inugram/cli`, relative to it.
  */
-async function importConfig(configFile: string): Promise<InuCliConfig> {
-  const bundled = join(dirname(configFile), `.inu.config.${Date.now()}-${Math.random().toString(36).slice(2)}.mjs`)
-  await build({
+function createConfigBuildOptions(configFile: string): BuildOptions {
+  return {
     entryPoints: [configFile],
-    outfile: bundled,
     bundle: true,
     platform: 'node',
     format: 'esm',
@@ -119,7 +117,12 @@ async function importConfig(configFile: string): Promise<InuCliConfig> {
     packages: 'external',
     sourcemap: false,
     logLevel: 'silent',
-  })
+  }
+}
+
+async function importConfig(configFile: string): Promise<InuCliConfig> {
+  const bundled = join(dirname(configFile), `.inu.config.${Date.now()}-${Math.random().toString(36).slice(2)}.mjs`)
+  await build({ ...createConfigBuildOptions(configFile), outfile: bundled })
   try {
     const loaded = await import(pathToFileURL(bundled).href) as { default?: unknown }
     if (!loaded.default) throw new CliError(`${configFile} has no default export`)
@@ -129,6 +132,26 @@ async function importConfig(configFile: string): Promise<InuCliConfig> {
   } finally {
     await fs.rm(bundled, { force: true })
   }
+}
+
+/** Calls [onChange] whenever the config or a local file it imports changes. */
+export async function watchConfig(configFile: string, onChange: () => void) {
+  let initial = true
+  const watcher = await context({
+    ...createConfigBuildOptions(configFile),
+    write: false,
+    plugins: [{
+      name: 'inu-config-watch',
+      setup(build) {
+        build.onEnd(() => {
+          if (initial) initial = false
+          else onChange()
+        })
+      },
+    }],
+  })
+  await watcher.watch()
+  return watcher
 }
 
 export async function loadConfig(cwd: string, explicit?: string): Promise<ResolvedCliConfig> {
