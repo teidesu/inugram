@@ -1,5 +1,7 @@
 package desu.inugram.helpers.plugins.telegram
 
+import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
 import android.webkit.MimeTypeMap
 import desu.inugram.core.plugins.OwnerRegistry
 import desu.inugram.helpers.plugins.SessionResource
@@ -338,18 +340,28 @@ object PluginMedia : SessionResource {
         }
     }
 
-    /** stock's picked-file paths refuse a file in the app's private storage, so [picked] copies one out of it */
-    internal fun takeForUpload(call: Call, source: File, name: String, picked: Boolean = false): Upload {
+    /**
+     * stock's picked-file paths refuse a file in the app's private storage, so [picked] copies one out of it.
+     * Stock moves a file it uploads out of its cache dir, so one there is copied unless [ownedBySend]: a
+     * file the user picked for this very send, which stock would have moved anyway
+     */
+    internal fun takeForUpload(call: Call, source: File, name: String, picked: Boolean = false, ownedBySend: Boolean = false): Upload {
         val staged = PluginTransfers.isStaged(call.session.plugin.id, source)
         val extension = name.substringAfterLast('.', "")
-        val dir = FileLoader.getDirectory(FileLoader.MEDIA_DIR_CACHE)
-            ?: refuse("internal", "there is no cache directory to send this file from")
         val usable = !picked || !AndroidUtilities.isInternalUri(Uri.fromFile(source))
-        if (!staged && usable && source.extension.equals(extension, ignoreCase = true) && !source.canonicalFile.startsWith(dir.canonicalFile)) {
+        val movable = ownedBySend || !isInCacheDir(source)
+        if (!staged && usable && movable && source.extension.equals(extension, ignoreCase = true)) {
             return Upload(source, owned = false)
         }
-        val target = File(dir, "inu_plugin_send_${UUID.randomUUID()}" + if (extension.isEmpty()) "" else ".$extension")
-        if (staged && source.renameTo(target)) return Upload(target, owned = true)
+        if (staged) {
+            val target = createUploadTarget(extension)
+            if (source.renameTo(target)) return Upload(target, owned = true)
+        }
+        return copyForUpload(source, extension)
+    }
+
+    internal fun copyForUpload(source: File, extension: String): Upload {
+        val target = createUploadTarget(extension)
         try {
             source.copyTo(target, overwrite = true)
         } catch (e: Exception) {
@@ -357,6 +369,47 @@ object PluginMedia : SessionResource {
             refuse("internal", "this file could not be copied: ${e.message ?: e.toString()}")
         }
         return Upload(target, owned = true)
+    }
+
+    internal fun isInCacheDir(file: File): Boolean = file.canonicalFile.startsWith(getCacheDir().canonicalFile)
+
+    private fun getCacheDir(): File =
+        FileLoader.getDirectory(FileLoader.MEDIA_DIR_CACHE) ?: refuse("internal", "there is no cache directory to send this file from")
+
+    private fun createUploadTarget(extension: String): File =
+        File(getCacheDir(), "inu_plugin_send_${UUID.randomUUID()}" + if (extension.isEmpty()) "" else ".$extension")
+
+    /** `LocalMedia`'s width, height and duration in seconds, read off the file by its mime type; null where unknown */
+    internal fun putLocalMetadata(json: JSONObject, file: File, mime: String): JSONObject {
+        var width: Int? = null
+        var height: Int? = null
+        var duration: Double? = null
+        if (mime.startsWith("video/")) {
+            MediaSendHelper.describeVideo(file.absolutePath, isEncrypted = false)?.attribute?.let {
+                width = it.w
+                height = it.h
+                duration = it.duration
+            }
+        } else if (mime.startsWith("image/")) {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(file.absolutePath, bounds)
+            val turned = AndroidUtilities.getImageOrientation(file)?.first.let { it == 90 || it == 270 }
+            width = if (turned) bounds.outHeight else bounds.outWidth
+            height = if (turned) bounds.outWidth else bounds.outHeight
+        } else if (mime.startsWith("audio/")) {
+            val retriever = MediaMetadataRetriever()
+            try {
+                retriever.setDataSource(file.absolutePath)
+                duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()?.div(1000.0)
+            } catch (_: Exception) {
+            } finally {
+                retriever.release()
+            }
+        }
+        return json
+            .put("width", width?.takeIf { it > 0 } ?: JSONObject.NULL)
+            .put("height", height?.takeIf { it > 0 } ?: JSONObject.NULL)
+            .put("duration", duration?.takeIf { it > 0 } ?: JSONObject.NULL)
     }
 
     internal class LocalDescription(

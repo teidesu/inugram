@@ -278,7 +278,7 @@
   // the host's id for a LocalMedia, which only it can resolve to a file; never on the object itself
   const localMediaIds = new WeakMap()
 
-  const createLocalMediaObject = ({ id, kind, name, mimeType }, spoiler) => {
+  const createLocalMediaObject = ({ id, kind, name, mimeType, edited, width, height, duration }, spoiler, slot) => {
     if (!LOCAL_KINDS.includes(kind)) throw new TypeError(`unknown local media kind: ${kind}`)
     let hidden = spoiler === true
     const media = Object.freeze({
@@ -286,11 +286,18 @@
       kind,
       name: name === '' ? null : name,
       mimeType,
+      edited: edited === true,
+      width: width ?? null,
+      height: height ?? null,
+      duration: duration ?? null,
       get spoiler() {
         return hidden
       },
       set spoiler(value) {
         hidden = !!value
+      },
+      blob() {
+        return shared.readLocalMedia(slot, String(id))
       },
     })
     localMediaIds.set(media, String(id))
@@ -301,7 +308,8 @@
 
   Object.freeze(utils)
 
-  return {
+  // `readLocalMedia` is set on it by `writes.rs`, which installs after this
+  const shared = {
     baseName,
     toNumber,
     getMarkedPeerId,
@@ -319,4 +327,5 @@
     createLocalMediaObject,
     readLocalMediaId,
   }
+  return shared
 }

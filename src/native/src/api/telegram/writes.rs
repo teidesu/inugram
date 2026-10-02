@@ -31,6 +31,7 @@ const OP_DOWNLOAD_MEDIA: i32 = 10;
 const OP_DOWNLOAD_MEDIA_TO_FILE: i32 = 11;
 const OP_UPLOAD_FILE: i32 = 12;
 const OP_CREATE_LOCAL_MEDIA: i32 = 13;
+const OP_READ_LOCAL_MEDIA: i32 = 14;
 
 const PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/writes.qbc"));
 
@@ -54,7 +55,7 @@ fn get_op_grant(op: i32) -> Option<(&'static str, &'static str)> {
     OP_READ_HISTORY => ("account.write", "read"),
     OP_SEND_TYPING => ("account.write", "typing"),
     OP_SET_DRAFT => ("account.write", "draft"),
-    OP_DOWNLOAD_MEDIA | OP_DOWNLOAD_MEDIA_TO_FILE => ("account.read", "messages"),
+    OP_DOWNLOAD_MEDIA | OP_DOWNLOAD_MEDIA_TO_FILE | OP_READ_LOCAL_MEDIA => ("account.read", "messages"),
     _ => return None,
   })
 }
@@ -69,7 +70,7 @@ enum Shape {
 fn get_op_shape(op: i32) -> Shape {
   match op {
     OP_SEND_MULTI_MEDIA | OP_FORWARD_MESSAGES => Shape::List,
-    OP_DOWNLOAD_MEDIA => Shape::File,
+    OP_DOWNLOAD_MEDIA | OP_READ_LOCAL_MEDIA => Shape::File,
     _ => Shape::Value,
   }
 }
@@ -163,10 +164,16 @@ impl WritesState {
   }
 
   fn stage_blob<'js>(&self, ctx: &Ctx<'js>, value: &Value<'js>, export: &blob::BlobExport) -> JsResult<Staged> {
-    self.sources.check_limit(ctx, export.len())?;
     let object = value.as_object().cloned();
     let name = object.as_ref().and_then(|o| o.get::<_, Option<String>>("name").ok().flatten()).unwrap_or_default();
     let mime = object.as_ref().and_then(|o| o.get::<_, Option<String>>("type").ok().flatten()).unwrap_or_default();
+    if let Some(path) = export.app_file() {
+      return Ok(Staged {
+        wire: file_wire(ctx, &path.to_string_lossy(), &name, &mime)?,
+        path: None,
+      });
+    }
+    self.sources.check_limit(ctx, export.len())?;
 
     let path = self.sources.write(ctx, |file| {
       export.write_to(file).map_err(|fault| std::io::Error::other(fault.message().to_string()))
@@ -305,6 +312,14 @@ pub(crate) fn install_writes_with_limit<'js>(
       )?,
     )?;
   }
+  set_fn!(shared, "readLocalMedia", ctx, state, move |ctx: Ctx<'js>, slot: i32, id: String| {
+    let arg = Object::new(ctx.clone())?;
+    arg.set("id", id)?;
+    let Some(arg) = ctx.json_stringify(arg)? else {
+      return PluginErrorCode::Internal.throw(&ctx, "LocalMedia.blob: the id did not serialize");
+    };
+    state.js_write(&ctx, slot, OP_READ_LOCAL_MEDIA, &arg.to_string()?, Array::new(ctx.clone())?, None)
+  });
   set_fn!(natives, "messageFile", ctx, state, move |ctx: Ctx<'js>, slot: i32, message: Value<'js>| {
     state.grants.check_grant(&ctx, "account.read", Some("messages"), MATCH_EXACT)?;
     let wire = js_value_to_wire(&ctx, message)?;

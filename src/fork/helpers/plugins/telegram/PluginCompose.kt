@@ -23,6 +23,7 @@ import org.telegram.messenger.FileLoader
 import org.telegram.messenger.MessageObject
 import org.telegram.messenger.MessageSuggestionParams
 import org.telegram.messenger.MessagesController
+import org.telegram.messenger.VideoEditedInfo
 import org.telegram.messenger.SendMessageChatArguments
 import org.telegram.messenger.SendMessagesHelper
 import org.telegram.messenger.SendMessagesHelper.SendMessageParams
@@ -94,12 +95,19 @@ object PluginCompose {
         val asDocument: Boolean,
         /** the composer reads this back on the ui thread */
         val described: PluginMedia.LocalDescription,
+        /** the LocalMedia id of the picked file [upload] is in place of, see [claimUpload] */
+        val pickedId: Long? = null,
     ) {
         val path: File get() = upload.file
     }
 
     /** keyed by a random id, which is all a plugin hands back: another plugin's file cannot be guessed */
     private val created = ConcurrentHashMap<Long, Media>()
+
+    private class Picked(val file: File, val name: String, val mime: String)
+
+    /** the files behind the LocalMedia of sends the stages hold, by LocalMedia id */
+    private val picked = ConcurrentHashMap<Long, Picked>()
 
     private class Document(val path: String?, val originalPath: String?, val uri: Uri?)
 
@@ -139,6 +147,7 @@ object PluginCompose {
         val message: JSONObject,
         val items: List<JSONObject>,
         val kinds: List<String?>,
+        val files: List<File?>,
         val origin: Origin,
         val queued: Queued,
     ) {
@@ -196,7 +205,8 @@ object PluginCompose {
         val target = Target(params.peer, params.replyToMsg, params.replyToTopMsg, params.replyQuote, params.notify, params.scheduleDate)
         val text = params.message ?: params.caption.orEmpty()
         val kinds = listOf(params.document?.let(PluginSends::readDocumentKind))
-        return hold(account, target, text, params.entities, items, kinds, Origin.Params(params), text, null) {
+        val files = listOf(params.path?.let(::File))
+        return hold(account, target, text, params.entities, items, kinds, files, Origin.Params(params), text, null) {
             resending { helper.sendMessage(params) }
         }
     }
@@ -229,7 +239,7 @@ object PluginCompose {
             return true
         }
         val target = Target(peer, null, replyToTopMsg, null, notify, scheduleDate)
-        return hold(account, target, "", null, emptyList(), emptyList(), Origin.Forward, null, forward to call) {
+        return hold(account, target, "", null, emptyList(), emptyList(), emptyList(), Origin.Forward, null, forward to call) {
             resending {
                 helper.sendMessage(messages, peer, forwardFromMyName, hideCaption, notify, scheduleDate, scheduleRepeatPeriod, replyToTopMsg, videoTimestamp, payStars, monoForumPeerId, suggestionParams)
             }
@@ -260,12 +270,13 @@ object PluginCompose {
         val items = media.map { info ->
             val name = getInfoName(info)
             val kind = getInfoKind(info, forceDocument)
-            createLocal(generateId(), kind, name, getMime(kind, name), info.hasMediaSpoilers)
+            createLocal(generateId(), kind, name, getMime(kind, name), info.hasMediaSpoilers, hasEdits(info.videoEditedInfo))
         }
         val target = Target(dialogId, replyToMsg, replyToTopMsg, quote, notify, scheduleDate)
         val first = media.first()
         val text = first.caption?.toString().orEmpty()
-        return hold(accountInstance.currentAccount, target, text, first.entities, items, emptyList(), Origin.Media(media.toList(), resume), text, null) {
+        val files = media.map { info -> info.path?.let(::File) }
+        return hold(accountInstance.currentAccount, target, text, first.entities, items, emptyList(), files, Origin.Media(media.toList(), resume), text, null) {
             resending(again)
         }
     }
@@ -305,7 +316,8 @@ object PluginCompose {
             createLocal(generateId(), "document", name, PluginMedia.guessMimeFromName(name), false)
         }
         val target = Target(dialogId, replyToMsg, replyToTopMsg, quote, notify, scheduleDate)
-        return hold(accountInstance.currentAccount, target, text, captionEntities, items, emptyList(), Origin.Documents(documents, resume), text, null) {
+        val files = documents.map { document -> document.path?.let(::File) }
+        return hold(accountInstance.currentAccount, target, text, captionEntities, items, emptyList(), files, Origin.Documents(documents, resume), text, null) {
             resending(again)
         }
     }
@@ -359,6 +371,7 @@ object PluginCompose {
         entities: List<TLRPC.MessageEntity>?,
         items: List<JSONObject>,
         kinds: List<String?>,
+        files: List<File?>,
         origin: Origin,
         filterText: String?,
         forward: Pair<JSONObject, ForwardCall>?,
@@ -372,7 +385,12 @@ object PluginCompose {
             return true
         }
         val message = createMessage(account, target.dialogId, text, entities, createReplyTo(account, target), target.notify, target.scheduleDate)
-        val send = Send(account, target, message, items, kinds, origin, Queued(account, target.dialogId, null))
+        items.forEachIndexed { at, json ->
+            val file = files.getOrNull(at) ?: return@forEachIndexed
+            val id = json.optString("id").toLongOrNull() ?: return@forEachIndexed
+            picked[id] = Picked(file, json.getString("name"), json.getString("mimeType"))
+        }
+        val send = Send(account, target, message, items, kinds, files, origin, Queued(account, target.dialogId, null))
         forward?.let { (json, call) ->
             message.put("forward", json)
             send.forward = call
@@ -392,7 +410,19 @@ object PluginCompose {
         }
     }
 
+    /** reading a file's metadata opens it, so it runs off the ui thread and only for a send a stage sees */
     private fun start(send: Send) {
+        if (send.files.all { it == null }) return dispatch(send)
+        Utilities.globalQueue.postRunnable {
+            for ((at, file) in send.files.withIndex()) {
+                val json = send.items.getOrNull(at)?.takeIf { it.optString("_") == LOCAL_MEDIA } ?: continue
+                PluginMedia.putLocalMetadata(json, file ?: continue, json.getString("mimeType"))
+            }
+            AndroidUtilities.runOnUIThread { dispatch(send) }
+        }
+    }
+
+    private fun dispatch(send: Send) {
         val started = PluginSends.run(send.account, false, send.message, send.items, send.kinds) { outcome ->
             AndroidUtilities.runOnUIThread { decide(send, outcome) }
         }
@@ -400,6 +430,7 @@ object PluginCompose {
     }
 
     private fun decide(send: Send, outcome: PluginSends.Outcome) {
+        for (json in send.items) json.optString("id").toLongOrNull()?.let(picked::remove)
         when (outcome) {
             PluginSends.Outcome.Dropped -> settle(send) { finishSendTransition(send.account, send.target.dialogId) }
             is PluginSends.Outcome.Failed -> fail(send, outcome.reason)
@@ -522,7 +553,8 @@ object PluginCompose {
         val splice = if (medias.isEmpty()) null else items.map { item -> item.json.takeUnless { it.optString("_") == LOCAL_MEDIA } }
         // stock splits more files than an album holds into several requests
         if (splice != null && items.size > ALBUM_LIMIT) refuse("unsupported", "media: an album holds at most $ALBUM_LIMIT items")
-        val files = locals.map { item -> if (item.from >= 0) null else takeLocal(item.json).also(taken::add) }
+        val claimed = locals.filter { it.from >= 0 }.mapNotNullTo(HashSet()) { it.json.optString("id").toLongOrNull() }
+        val files = locals.map { item -> if (item.from >= 0) null else claimUpload(send, takeLocal(item.json), claimed).also(taken::add) }
         val spoilers = locals.map { it.json.optBoolean("spoiler") }
         when (origin) {
             is Origin.Media -> {
@@ -977,7 +1009,10 @@ object PluginCompose {
             photo != null && (params.path != null || photo.id == 0L) ->
                 return listOf(createLocal(generateId(), "photo", params.path?.let { File(it).name }.orEmpty(), "image/jpeg", params.hasMediaSpoilers))
             document != null && (params.path != null || document.id == 0L) -> return listOf(
-                createLocal(generateId(), PluginSends.readDocumentKind(document), FileLoader.getDocumentFileName(document).orEmpty(), document.mime_type.orEmpty(), params.hasMediaSpoilers),
+                createLocal(
+                    generateId(), PluginSends.readDocumentKind(document), FileLoader.getDocumentFileName(document).orEmpty(), document.mime_type.orEmpty(),
+                    params.hasMediaSpoilers, hasEdits(params.videoEditedInfo),
+                ),
             )
             photo != null -> TLRPC.TL_inputMediaPhoto().apply {
                 id = TLRPC.TL_inputPhoto().apply {
@@ -1039,13 +1074,33 @@ object PluginCompose {
         else -> (a ?: JSONObject.NULL) == (b ?: JSONObject.NULL)
     }
 
-    private fun createLocal(id: Long, kind: String, name: String, mime: String, spoiler: Boolean): JSONObject = JSONObject()
+    private fun createLocal(id: Long, kind: String, name: String, mime: String, spoiler: Boolean, edited: Boolean = false): JSONObject = JSONObject()
         .put("_", LOCAL_MEDIA)
         .put("id", id.toString())
         .put("kind", kind)
         .put("name", name)
         .put("mimeType", mime)
         .put("spoiler", spoiler)
+        .put("edited", edited)
+
+    /** what the user changed in the editor, which stock's converter applies only after the send is decided; not its compression */
+    private fun hasEdits(info: VideoEditedInfo?): Boolean = info != null && (
+        info.muted || info.paintPath != null || info.blurPath != null || info.mediaEntities != null || info.filterState != null ||
+            info.cropState != null || info.mixedSoundInfos.isNotEmpty() || info.startTime > 0 ||
+            info.endTime != -1L && info.endTime != info.originalDuration
+        )
+
+    /**
+     * a picked file uploads in place for the send it was picked for, and stock moves it after: the
+     * send's own item, or another copy of it, then needs a copy
+     */
+    private fun claimUpload(send: Send, media: Media, claimed: MutableSet<Long>): Media {
+        val pickedId = media.pickedId ?: return media
+        val own = send.items.any { it.optString("id").toLongOrNull() == pickedId }
+        if (own && claimed.add(pickedId)) return media
+        val upload = PluginMedia.copyForUpload(media.path, media.name.substringAfterLast('.', ""))
+        return Media(upload, media.name, media.mime, media.asDocument, media.described)
+    }
 
     private fun takeLocal(json: JSONObject): Media =
         json.optString("id").toLongOrNull()?.let(created::remove)
@@ -1056,14 +1111,37 @@ object PluginCompose {
         val source = PluginMedia.stagedFile(call, wire)
         val name = PluginMedia.getFileName(source, call.json.optString("fileName"))
         // rust deletes what it staged when this write answers, long before the composer uploads
-        val upload = PluginMedia.takeForUpload(call, source.path, name, picked = true)
+        val pickedId = picked.entries.firstOrNull { it.value.file == source.path }?.key
+        val upload = PluginMedia.takeForUpload(call, source.path, name, picked = true, ownedBySend = pickedId != null)
         val mime = source.mime.ifEmpty { PluginMedia.guessMimeFromName(name) }
         val asDocument = call.flag("asDocument")
-        val media = Media(upload, name, mime, asDocument, PluginMedia.describeLocalDocument(upload.file, mime, asDocument))
+        val media = Media(upload, name, mime, asDocument, PluginMedia.describeLocalDocument(upload.file, mime, asDocument), pickedId.takeIf { !upload.owned && PluginMedia.isInCacheDir(upload.file) })
         val id = generateId()
         created[id] = media
         EngineDispatch.scheduler.postRunnable({ created.remove(id)?.upload?.discard() }, CREATED_TTL_MILLIS)
-        val described = JSONObject().put("id", id.toString()).put("kind", getKind(media)).put("name", media.name).put("mimeType", media.mime)
+        val described = PluginMedia.putLocalMetadata(
+            JSONObject().put("id", id.toString()).put("kind", getKind(media)).put("name", media.name).put("mimeType", media.mime),
+            upload.file,
+            media.mime,
+        )
+        call.answer { PluginWire.encodeJson(described.toString()) }
+        return null
+    }
+
+    /** a picked file is the one the user picked, not what the app would make of it: stock edits and compresses later */
+    internal fun readLocalMedia(call: Call): String? {
+        val id = call.json.optString("id").toLongOrNull()
+        val source = id?.let(created::get)?.let { Picked(it.path, it.name, it.mime) }
+            ?: id?.let(picked::get)
+            ?: refuse("not-found", "LocalMedia.blob: this media has no file on this device, or was already sent")
+        val file = source.file
+        if (!file.isFile || !file.canRead()) refuse("not-found", "LocalMedia.blob: the file behind this media is gone")
+        val described = JSONObject()
+            .put("path", file.absolutePath)
+            .put("size", file.length())
+            .put("mime", source.mime)
+            .put("name", source.name.ifEmpty { file.name })
+            .put("mtime", file.lastModified())
         call.answer { PluginWire.encodeJson(described.toString()) }
         return null
     }

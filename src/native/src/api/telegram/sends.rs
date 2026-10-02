@@ -18,8 +18,22 @@ const SEND_GRANT: &str = "interceptSendMessage";
 const MAX_SAFE_INTEGER: f64 = 9_007_199_254_740_991.0;
 const PEER_TYPES: &[&str] = &["user", "group", "broadcast"];
 const MEDIA_KINDS: &[&str] = &[
-  "photo", "video", "roundVideo", "voice", "music", "sticker", "gif", "document", "poll", "contact", "location", "venue", "story",
-  "giveaway", "invoice", "other",
+  "photo",
+  "video",
+  "roundVideo",
+  "voice",
+  "music",
+  "sticker",
+  "gif",
+  "document",
+  "poll",
+  "contact",
+  "location",
+  "venue",
+  "story",
+  "giveaway",
+  "invoice",
+  "other",
 ];
 
 impl RpcState {
@@ -123,7 +137,10 @@ impl RpcState {
         if sstate.signal.abandoned.get().is_some() {
           return;
         }
-        (state.log)(&crate::fault(format_args!("interceptSendMessage callback rejected: {}", format_thrown(&ctx, &value))));
+        (state.log)(&crate::fault(format_args!(
+          "interceptSendMessage callback rejected: {}",
+          format_thrown(&ctx, &value)
+        )));
         state.settle_send_verdict(&ctx, &sstate, dispatch_id, &format!("E{}", error_value_to_string(&ctx, &value)));
       })?
     };
@@ -182,7 +199,9 @@ fn read_filter<'js>(ctx: &Ctx<'js>, filter: &Value<'js>) -> JsResult<String> {
     let stage = stage.as_string().and_then(|stage| stage.to_string().ok());
     match stage.as_deref() {
       Some(stage @ ("compose" | "uploaded")) => encoded.set("stage", stage)?,
-      _ => return Err(Exception::throw_type(ctx, "interceptSendMessage: filter.stage must be 'compose' or 'uploaded'")),
+      _ => {
+        return Err(Exception::throw_type(ctx, "interceptSendMessage: filter.stage must be 'compose' or 'uploaded'"))
+      }
     }
   }
   let text: Value = filter.get("text")?;
@@ -207,7 +226,10 @@ fn read_filter<'js>(ctx: &Ctx<'js>, filter: &Value<'js>) -> JsResult<String> {
       match peer.as_number() {
         Some(id) if id.fract() == 0.0 && id.abs() <= MAX_SAFE_INTEGER => ids.push(id),
         _ => types.push(read_name(&peer, PEER_TYPES).ok_or_else(|| {
-          Exception::throw_type(ctx, "interceptSendMessage: filter.peer must hold peer ids, 'user', 'group' or 'broadcast'")
+          Exception::throw_type(
+            ctx,
+            "interceptSendMessage: filter.peer must hold peer ids, 'user', 'group' or 'broadcast'",
+          )
         })?),
       }
     }
@@ -226,7 +248,9 @@ fn read_filter<'js>(ctx: &Ctx<'js>, filter: &Value<'js>) -> JsResult<String> {
       .iter()
       .map(|kind| read_name(kind, MEDIA_KINDS))
       .collect::<Option<Vec<_>>>()
-      .ok_or_else(|| Exception::throw_type(ctx, "interceptSendMessage: filter.media must be a boolean, or one or more media kinds"))?;
+      .ok_or_else(|| {
+        Exception::throw_type(ctx, "interceptSendMessage: filter.media must be a boolean, or one or more media kinds")
+      })?;
     if !kinds.is_empty() {
       encoded.set("media", kinds)?;
     }

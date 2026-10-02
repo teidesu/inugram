@@ -121,7 +121,8 @@ impl TestWritesHost {
       return "Pnetwork\n\n\n\nthe transfer died mid-chunk".to_string();
     }
     match op {
-      OP_DOWNLOAD_MEDIA => {
+      OP_CREATE_LOCAL_MEDIA => r#"J{"id":"5","kind":"document","name":"note.txt","mimeType":"text/plain"}"#.to_string(),
+      OP_DOWNLOAD_MEDIA | OP_READ_LOCAL_MEDIA => {
         let path = self.media_path();
         format!(
           "J{{\"path\":{},\"size\":{},\"mime\":\"text/plain\",\"name\":\"note.txt\",\"mtime\":{}}}",
@@ -522,6 +523,39 @@ fn a_transfer_past_the_staging_cap_is_refused_before_a_byte_is_written() {
     .filter(|e| e.file_name().to_string_lossy().starts_with("transfer-"))
     .collect();
   assert!(written.is_empty(), "a refused transfer left a staged copy behind: {written:?}");
+}
+
+/// the cap is 8 bytes and the file 11, so only a file handed over where it lies gets through
+#[test]
+fn a_local_media_s_own_file_goes_back_to_the_host_where_it_lies_past_the_staging_cap() {
+  let (rt, ctx, host, state, _r, _a, dir) = setup_with_limit(ALL_WRITES, 8);
+  crate::testing::harness::eval_unit(
+    &ctx,
+    r#"
+      globalThis.__out = []
+      const a = inu.account()
+      a.createLocalMedia(new Uint8Array([1]))
+        .then((media) => media.blob())
+        .then(async (file) => {
+          __out.push(file instanceof File, file.name, await file.text())
+          return a.createLocalMedia(file)
+        })
+        .then(() => __out.push('wrapped'), (e) => __out.push(`${e.code ?? e.name}: ${e.message}`))
+    "#,
+  );
+  settle(&rt, &ctx, &state, &host);
+  assert_eq!(crate::testing::harness::eval_json(&ctx, "__out"), r#"[true,"note.txt","hello world","wrapped"]"#);
+  let calls = host.calls.borrow();
+  let (op, arg, _) = &calls[1];
+  assert_eq!((*op, arg.as_str()), (OP_READ_LOCAL_MEDIA, r#"{"id":"5"}"#));
+  let rewrapped = read_json_field(calls[2].2[0].strip_prefix('F').unwrap(), "path");
+  assert_eq!(rewrapped, host.media_path().to_string_lossy(), "the file was staged rather than handed over");
+  let staged = fs::read_dir(dir.path())
+    .unwrap()
+    .filter_map(|e| e.ok())
+    .filter(|e| e.file_name().to_string_lossy().starts_with("transfer-"))
+    .count();
+  assert_eq!(staged, 0);
 }
 
 #[test]

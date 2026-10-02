@@ -1621,6 +1621,27 @@ declare namespace inu {
     readonly mimeType: string
     /** Whether the media is hidden behind a spoiler */
     spoiler: boolean
+    /**
+     * Whether the user edited this video (trimmed, cropped, muted, drew on it, ...) in a way the app
+     * applies only once the send is decided, so {@link blob} does not reflect it
+     */
+    readonly edited: boolean
+    /** Width of a photo or video in pixels, as displayed, if known */
+    readonly width: number | null
+    /** Height of a photo or video in pixels, as displayed, if known */
+    readonly height: number | null
+    /** Duration of a video or audio in seconds, if known */
+    readonly duration: number | null
+    /**
+     * The file behind this media, as the user picked it, before the app compresses it.
+     *
+     * Edited photos are returned with the edits rendered.
+     * An {@link edited} video is the original and unmodified.
+     *
+     * @needs-grant account.read(messages)
+     * @throws {@link Error} if the file is not available
+     */
+    blob(): Promise<File>
   }
 
   type OutgoingMedia = LocalMedia | tl.TypeInputMedia

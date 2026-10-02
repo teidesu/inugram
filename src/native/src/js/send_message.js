@@ -4,7 +4,7 @@
   // the host hands a send over as plain values and takes it back the same way. A LocalMedia carries
   // its id only on the wire, and a kept item is named by where it was, so the host knows it for the app's own
   const wrap = middleware => async (context, raw) => {
-    const media = raw.media.map(item => (item._ === 'localMedia' ? createLocalMediaObject(item, item.spoiler) : item))
+    const media = raw.media.map(item => (item._ === 'localMedia' ? createLocalMediaObject(item, item.spoiler, context.account.id) : item))
     let text = raw.text
     const message = Object.seal({
       peer: raw.peer,

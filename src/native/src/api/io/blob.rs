@@ -763,6 +763,16 @@ impl BlobExport {
     self.end - self.start
   }
 
+  /// the app file this blob is the whole of, unchanged since the blob was made
+  pub fn app_file(&self) -> Option<PathBuf> {
+    let BackingKind::AppFile { path, mtime_ms } = &*self.backing.kind.borrow() else {
+      return None;
+    };
+    let meta = fs::metadata(path).ok()?;
+    let whole = self.start == 0 && self.end == self.backing.len && meta.len() == self.backing.len;
+    (whole && mtime_millis(meta.modified().ok()) == *mtime_ms).then(|| path.clone())
+  }
+
   pub fn read(&self, offset: u64, len: u64) -> Result<Vec<u8>, BlobFault> {
     let end = offset.checked_add(len).filter(|end| *end <= self.len()).ok_or_else(|| {
       BlobFault::Io(format!("this blob is {} bytes; a read of {len} at {offset} is past its end", self.len(),))

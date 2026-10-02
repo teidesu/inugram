@@ -313,7 +313,7 @@
           [toFile(file, 'createLocalMedia')],
           null,
         ]
-      }).then(described => shared.createLocalMediaObject(described, false))
+      }).then(described => shared.createLocalMediaObject(described, false, this.id))
     },
 
     uploadFile(file, options) {

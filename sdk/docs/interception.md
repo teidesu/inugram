@@ -149,7 +149,7 @@ At the compose stage:
 | `forward` | a `PendingForward`: source chat, message ids and mode. Set it to `null` to send no forward. Setting `text` or `media` on a forward sent alone adds a comment, which goes first |
 | `topicId` | the topic the message goes to |
 | `scheduleDate`, `silent` | |
-| `media` | a file on the device is a `LocalMedia`: reorder, cut, or add to them with `account.createLocalMedia(file)`. Media already on the server, such as a sticker or a location, is its `InputMedia`, which you can replace with any other or put in an album with LocalMedia, up to 10 items. With no media left, the text goes alone |
+| `media` | a file on the device is a `LocalMedia`: reorder, cut, or add to them with `account.createLocalMedia(file)`. `media.blob()` reads the picked file, and `createLocalMedia(await media.blob(), { fileName })` re-wraps it without copying, for example under another name. A LocalMedia also carries `width`, `height` and `duration` when the file tells them. An edited photo's blob has its edits; an `edited` video's is the original, which the app trims, crops and filters only after the send is decided. Media already on the server, such as a sticker or a location, is its `InputMedia`, which you can replace with any other or put in an album with LocalMedia, up to 10 items. With no media left, the text goes alone |
 
 The app sends what you left as if the user had sent it. LocalMedia is drawn and uploaded like a
 file the user picked; other `InputMedia` is shown once the server has it.

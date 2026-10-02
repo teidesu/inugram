@@ -1,5 +1,7 @@
 package desu.inugram.helpers.plugins
 
+import android.graphics.Bitmap
+import android.system.Os
 import desu.inugram.helpers.plugins.telegram.PluginRpc
 import desu.inugram.helpers.plugins.telegram.PluginSends
 import desu.inugram.helpers.plugins.telegram.PluginWrites
@@ -16,10 +18,12 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.telegram.messenger.AccountInstance
+import org.telegram.messenger.FileLoader
 import org.telegram.messenger.MessageObject
 import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.SendMessagesHelper
 import org.telegram.messenger.SendMessagesHelper.SendMessageParams
+import org.telegram.messenger.VideoEditedInfo
 import org.telegram.tgnet.TLObject
 import org.telegram.tgnet.TLRPC
 import org.telegram.tgnet.tl.TL_update
@@ -426,6 +430,107 @@ class PluginSendInterceptTest {
 
         assertEquals("look", (sent as TLRPC.TL_messages_sendMessage).message)
         assertTrue(TestApp.fileLoader(0).uploads.isEmpty(), "a file the stage took away was uploaded")
+    }
+
+    @Test
+    fun a_video_trimmed_in_the_editor_reaches_the_stage_as_edited() {
+        val plugin = startPlugin("p", "interceptSendMessage")
+        assertNull(plugin.interceptSendMessage())
+        plugin.js.onDispatchSend = { plugin.dropVerdict(it.dispatchId) }
+        val infos = listOf(VideoEditedInfo().apply { startTime = 1000; endTime = -1 }, null).mapIndexed { at, edited ->
+            SendMessagesHelper.SendingMediaInfo().apply {
+                path = File(scratch, "clip$at.mp4").apply { writeText("clip") }.absolutePath
+                isVideo = true
+                videoEditedInfo = edited
+            }
+        }
+
+        onUi {
+            SendMessagesHelper.prepareSendingMedia(
+                AccountInstance.getInstance(0), ArrayList(infos), alice, null, null, null, null, false, true, null,
+                true, 0, 0, 0, false, null, null, 0, false, 0, 0, null,
+            )
+        }
+        val dispatch = awaitValue("the stage was never asked") { plugin.js.sendDispatches.firstOrNull() }
+
+        val media = JSONObject(dispatch.messageJson).getJSONArray("media")
+        assertEquals(listOf(true, false), (0 until media.length()).map { media.getJSONObject(it).getBoolean("edited") })
+    }
+
+    @Test
+    fun a_picked_image_reaches_the_stage_with_its_size() {
+        val plugin = startPlugin("p", "interceptSendMessage")
+        assertNull(plugin.interceptSendMessage())
+        plugin.js.onDispatchSend = { plugin.dropVerdict(it.dispatchId) }
+        val image = File(scratch, "dot.png")
+        image.outputStream().use { Bitmap.createBitmap(3, 2, Bitmap.Config.ARGB_8888).compress(Bitmap.CompressFormat.PNG, 100, it) }
+
+        onUi {
+            SendMessagesHelper.prepareSendingDocuments(
+                AccountInstance.getInstance(0), arrayListOf(image.absolutePath), arrayListOf(image.absolutePath), null, null, null, alice,
+                null, null, null, null, null, true, 0, null, null, 0, false, 0,
+            )
+        }
+        val dispatch = awaitValue("the stage was never asked") { plugin.js.sendDispatches.firstOrNull() }
+
+        val media = JSONObject(dispatch.messageJson).getJSONArray("media").getJSONObject(0)
+        assertEquals(listOf<Any>(3, 2, JSONObject.NULL), listOf(media.get("width"), media.get("height"), media.get("duration")))
+    }
+
+    private class Rewrapped(val picked: File, val dispatch: RecordingQuickJs.SendDispatch, val id: String)
+
+    /** picks a file out of stock's cache, which stock moves once it is uploaded, and wraps it again from its blob */
+    private fun rewrapPicked(plugin: Plugin): Rewrapped {
+        val picked = File(FileLoader.getDirectory(FileLoader.MEDIA_DIR_CACHE), "picked_${System.nanoTime()}.txt").apply { writeText("hello") }
+        onUi {
+            SendMessagesHelper.prepareSendingDocuments(
+                AccountInstance.getInstance(0), arrayListOf(picked.absolutePath), arrayListOf(picked.absolutePath), null, "look", null, alice,
+                null, null, null, null, null, true, 0, null, null, 0, false, 0,
+            )
+        }
+        val dispatch = awaitValue("the stage was never asked") { plugin.js.sendDispatches.firstOrNull() }
+        val id = JSONObject(dispatch.messageJson).getJSONArray("media").getJSONObject(0).getString("id")
+        assertNull(write(plugin, PluginWrites.OP_READ_LOCAL_MEDIA, JSONObject().put("id", id), emptyArray(), requestId = 1))
+        val read = awaitValue("the file was never read") { plugin.js.writeResults.firstOrNull { it.requestId == 1L }?.resultWire }
+        val file = JSONObject(read.drop(1))
+        assertEquals(picked.absolutePath, file.getString("path"))
+        val wire = "F" + JSONObject().put("path", file.getString("path")).put("name", file.getString("name")).put("mime", file.getString("mime"))
+        assertNull(write(plugin, PluginWrites.OP_CREATE_LOCAL_MEDIA, JSONObject(), arrayOf(wire), requestId = 2))
+        val created = awaitValue("the media was never made") { plugin.js.writeResults.firstOrNull { it.requestId == 2L }?.resultWire }
+        return Rewrapped(picked, dispatch, JSONObject(created.drop(1)).getString("id"))
+    }
+
+    @Test
+    fun a_picked_file_wrapped_again_from_its_blob_is_uploaded_without_a_copy() {
+        val plugin = startPlugin("p", "interceptSendMessage", "account.read(messages)", "account.write(send)")
+        assertNull(plugin.interceptSendMessage())
+        val rewrapped = rewrapPicked(plugin)
+        plugin.passSend(rewrapped.dispatch, commentWith(listOf(rewrapped.id)))
+
+        val upload = awaitValue("the file was never uploaded") { TestApp.fileLoader(0).uploads.singleOrNull() }
+        assertEquals(Os.stat(rewrapped.picked.absolutePath).st_ino, Os.stat(upload).st_ino, "the picked file was copied")
+    }
+
+    @Test
+    fun a_picked_file_sent_alongside_its_own_rewrap_gives_the_rewrap_a_copy() {
+        val plugin = startPlugin("p", "interceptSendMessage", "account.read(messages)", "account.write(send)")
+        assertNull(plugin.interceptSendMessage())
+        val rewrapped = rewrapPicked(plugin)
+        plugin.passSend(rewrapped.dispatch) { message ->
+            val original = message.getJSONArray("media").getJSONObject(0)
+            commentWith(listOf(rewrapped.id))(message)
+            message.put("media", JSONArray().put(JSONObject().put("kept", 0).put("local", original)).put(message.getJSONArray("media").getJSONObject(0)))
+        }
+
+        val uploads = awaitValue("the files were never uploaded") { TestApp.fileLoader(0).uploads.takeIf { it.size == 2 }?.toList() }
+        val inodes = uploads.map { Os.stat(it).st_ino }.toSet()
+        assertEquals(2, inodes.size, "both items upload the one file stock moves after the first")
+        assertTrue(Os.stat(rewrapped.picked.absolutePath).st_ino in inodes)
+        val answered = HashSet<RecordingConnectionsManager.Sent>()
+        awaitValue("the album never went out") {
+            completeUploads(uploads, answered)
+            sentRequests().singleOrNull()
+        }
     }
 
     /** stages [count] files the way `account.createLocalMedia` does, and answers their ids */
