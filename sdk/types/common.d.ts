@@ -187,6 +187,11 @@ declare namespace inu {
     function read(): string
   }
 
+  /** Type of a message's media, see {@link Message.mediaType} */
+  type MediaType
+    = | 'photo' | 'video' | 'roundVideo' | 'voice' | 'music' | 'sticker' | 'gif' | 'document'
+      | 'poll' | 'contact' | 'location' | 'venue' | 'story' | 'giveaway' | 'invoice' | 'other'
+
   /** A high-level wrapper over a TL Message */
   class Message {
     constructor(raw: tl.TypeMessage)
@@ -224,10 +229,7 @@ declare namespace inu {
     get document(): tl.TypeDocument | null
 
     /** Type of the media in the message, if any */
-    get mediaType():
-      | 'photo' | 'video' | 'roundVideo' | 'voice' | 'music' | 'sticker' | 'gif' | 'document'
-      | 'poll' | 'contact' | 'location' | 'venue' | 'story' | 'giveaway' | 'invoice' | 'other'
-      | null
+    get mediaType(): MediaType | null
 
     /** For playable media types, duration of the media */
     get duration(): number | null
@@ -1614,7 +1616,7 @@ declare namespace inu {
   /** A file the app uploads once the send is decided, see {@link OutgoingMessage.media} */
   interface LocalMedia {
     readonly _: 'localMedia'
-    readonly kind: 'photo' | 'video' | 'gif' | 'audio' | 'voice' | 'round' | 'document'
+    readonly kind: 'photo' | 'video' | 'gif' | 'music' | 'voice' | 'roundVideo' | 'sticker' | 'document'
     readonly name: string | null
     readonly mimeType: string
     /** Whether the media is hidden behind a spoiler */
@@ -1633,14 +1635,30 @@ declare namespace inu {
     readonly signal: AbortSignal
   }
 
+  type SendMessagePeer = number | 'user' | 'group' | 'broadcast'
+
   interface SendMessageFilter {
     /**
-     * Regex the message is supposed to match for the hook to fire
+     * Regex the message is supposed to match for the hook to fire, or whether it is supposed to have
+     * any text (`true`) or none (`false`)
      *
-     * Compiled by Android's `java.util.regex.Pattern`; unsupported syntax throws.
-     * Runs on the send path with no time limit: avoid nested quantifiers like `(a+)+`.
+     * A regex is compiled by Android's `java.util.regex.Pattern`; unsupported syntax throws.
+     * It runs on the send path with no time limit: avoid nested quantifiers like `(a+)+`.
      */
-    text?: RegExp
+    text?: RegExp | boolean
+    /**
+     * Chat(s) the message is supposed to be sent to: marked peer ids, peer types, or both.
+     * Groups include basic groups and supergroups
+     */
+    peer?: SendMessagePeer | SendMessagePeer[]
+    /**
+     * Whether the message is supposed to have media (`true`) or not (`false`), or the type(s) of
+     * media at least one of its items is supposed to be. A document a plugin added by id has no
+     * type, so it matches only `true`
+     */
+    media?: boolean | MediaType | MediaType[]
+    /** Whether the message is supposed to carry a forward (`true`) or not (`false`) */
+    forward?: boolean
     /**
      * When the hook runs:
      * - `'compose'` (default): when the user taps "send", before the app draws the message or uploads its media

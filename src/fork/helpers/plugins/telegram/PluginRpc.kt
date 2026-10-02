@@ -219,7 +219,9 @@ object PluginRpc : SessionResource {
         val splice = PluginCompose.onBound(request, account, messages)
         if (messages.any { PluginOptimisticSend.claimRequest(request, it) }) return markBypassed(request)
         val drawn = readDrawnMedia(request) ?: return
-        if (messages.isEmpty() || splice == null && !PluginSends.mayIntercept(true, collectTexts(request)?.firstOrNull()?.text)) return
+        if (messages.isEmpty()) return
+        val peer = PeerSpecs.toMarkedPeerId(MessagesController.getInstance(account), messages[0].dialogId)
+        if (splice == null && !PluginSends.mayIntercept(true, PluginSends.Probe(account, peer, collectTexts(request)?.firstOrNull()?.text, true, messages.mapNotNullTo(HashSet()) { PluginSends.readMediaKind(it.messageOwner.media) }, false))) return
         storeOptimisticMessages(request, OptimisticMessages(account, messages.toList(), drawn, draftAwaitingClear(account, messages[0]), splice))
     }
 
@@ -485,6 +487,7 @@ object PluginRpc : SessionResource {
             ?: drawnItems.mapIndexed { at, json -> json to at }
         val items = placed.map { it.first }
         val drawnAt = placed.map { it.second }
+        val kinds = drawnAt.map { at -> optimisticMessages.messages.getOrNull(at)?.let { PluginSends.readMediaKind(it.messageOwner.media) } }
         val settle = settle@{ outcome: PluginSends.Outcome ->
             if (chains[operation.scopeId] !== operation) return@settle
             val now = operation.connectionsManager.currentTimeMillis
@@ -514,7 +517,7 @@ object PluginRpc : SessionResource {
                 }
             }
         }
-        if (PluginSends.run(account, true, message, items, settle)) return
+        if (PluginSends.run(account, true, message, items, kinds, settle)) return
         if (optimisticMessages.splice == null) dispatch() else settle(PluginSends.Outcome.Send(message, items.mapIndexed { at, json -> PluginSends.Item(json, at) }))
     }
 

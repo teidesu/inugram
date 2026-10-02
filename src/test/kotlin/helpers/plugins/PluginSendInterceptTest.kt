@@ -247,6 +247,58 @@ class PluginSendInterceptTest {
     }
 
     @Test
+    fun a_filter_on_text_chat_media_or_forward_only_sees_the_sends_it_names() {
+        val toBob = startPlugin("p", "interceptSendMessage")
+        val toGroups = startPlugin("q", "interceptSendMessage")
+        val withText = startPlugin("r", "interceptSendMessage")
+        val withMedia = startPlugin("s", "interceptSendMessage")
+        val forwards = startPlugin("t", "interceptSendMessage")
+        assertNull(toBob.interceptSendMessage(filterJson = """{"peer":[$bob]}"""))
+        assertNull(toGroups.interceptSendMessage(filterJson = """{"peerType":["group","broadcast"]}"""))
+        assertNull(withText.interceptSendMessage(filterJson = """{"peerType":["user"],"text":true}"""))
+        assertNull(withMedia.interceptSendMessage(filterJson = """{"media":true}"""))
+        assertNull(forwards.interceptSendMessage(filterJson = """{"peer":[$alice],"forward":true}"""))
+        withText.js.onDispatchSend = { withText.passSend(it) }
+        forwards.js.onDispatchSend = { forwards.passSend(it) }
+
+        compose("hi")
+        awaitValue("the send never went out") { sentRequests().singleOrNull() }
+        sendWithComment(null, 5)
+        awaitValue("the forward never went out") { sentRequests().getOrNull(1) }
+
+        assertEquals(0, toBob.js.sendDispatches.size, "a peer filter matched another chat")
+        assertEquals(0, toGroups.js.sendDispatches.size, "a peer type filter matched a user")
+        assertEquals(1, withText.js.sendDispatches.size, "a text filter missed the text or matched a bare forward")
+        assertEquals(0, withMedia.js.sendDispatches.size, "a media filter matched a send without media")
+        assertEquals(1, forwards.js.sendDispatches.size, "a forward filter missed the forward or matched the text")
+    }
+
+    @Test
+    fun a_media_type_filter_knows_a_sticker_already_on_the_server() {
+        val stickers = startPlugin("p", "interceptSendMessage")
+        val documents = startPlugin("q", "interceptSendMessage")
+        assertNull(stickers.interceptSendMessage(filterJson = """{"media":["sticker","photo"]}"""))
+        assertNull(documents.interceptSendMessage(filterJson = """{"media":"document"}"""))
+        stickers.js.onDispatchSend = { stickers.dropVerdict(it.dispatchId) }
+        val sticker = TLRPC.TL_document().apply {
+            id = 41
+            access_hash = 42
+            mime_type = "image/webp"
+            attributes.add(TLRPC.TL_documentAttributeSticker().apply { alt = "x"; stickerset = TLRPC.TL_inputStickerSetEmpty() })
+        }
+
+        onUi {
+            SendMessagesHelper.getInstance(0).sendMessage(
+                SendMessageParams.of(sticker, null, null, alice, null, null, null, null, null, null, true, 0, 0, 0, null, null, false),
+            )
+        }
+        val dispatch = awaitValue("the sticker filter never matched") { stickers.js.sendDispatches.firstOrNull() }
+
+        assertEquals("inputMediaDocument", JSONObject(dispatch.messageJson).getJSONArray("media").getJSONObject(0).getString("_"))
+        assertEquals(0, documents.js.sendDispatches.size, "a document filter matched a sticker")
+    }
+
+    @Test
     fun a_comment_a_stage_gives_a_forward_goes_out_ahead_of_it() {
         val plugin = startPlugin("p", "interceptSendMessage")
         assertNull(plugin.interceptSendMessage())

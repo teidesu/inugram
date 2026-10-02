@@ -138,6 +138,7 @@ object PluginCompose {
         val target: Target,
         val message: JSONObject,
         val items: List<JSONObject>,
+        val kinds: List<String?>,
         val origin: Origin,
         val queued: Queued,
     ) {
@@ -194,7 +195,8 @@ object PluginCompose {
         }
         val target = Target(params.peer, params.replyToMsg, params.replyToTopMsg, params.replyQuote, params.notify, params.scheduleDate)
         val text = params.message ?: params.caption.orEmpty()
-        return hold(account, target, text, params.entities, items, Origin.Params(params), text, null) {
+        val kinds = listOf(params.document?.let(PluginSends::readDocumentKind))
+        return hold(account, target, text, params.entities, items, kinds, Origin.Params(params), text, null) {
             resending { helper.sendMessage(params) }
         }
     }
@@ -227,7 +229,7 @@ object PluginCompose {
             return true
         }
         val target = Target(peer, null, replyToTopMsg, null, notify, scheduleDate)
-        return hold(account, target, "", null, emptyList(), Origin.Forward, null, forward to call) {
+        return hold(account, target, "", null, emptyList(), emptyList(), Origin.Forward, null, forward to call) {
             resending {
                 helper.sendMessage(messages, peer, forwardFromMyName, hideCaption, notify, scheduleDate, scheduleRepeatPeriod, replyToTopMsg, videoTimestamp, payStars, monoForumPeerId, suggestionParams)
             }
@@ -263,7 +265,7 @@ object PluginCompose {
         val target = Target(dialogId, replyToMsg, replyToTopMsg, quote, notify, scheduleDate)
         val first = media.first()
         val text = first.caption?.toString().orEmpty()
-        return hold(accountInstance.currentAccount, target, text, first.entities, items, Origin.Media(media.toList(), resume), text, null) {
+        return hold(accountInstance.currentAccount, target, text, first.entities, items, emptyList(), Origin.Media(media.toList(), resume), text, null) {
             resending(again)
         }
     }
@@ -303,7 +305,7 @@ object PluginCompose {
             createLocal(generateId(), "document", name, PluginMedia.guessMimeFromName(name), false)
         }
         val target = Target(dialogId, replyToMsg, replyToTopMsg, quote, notify, scheduleDate)
-        return hold(accountInstance.currentAccount, target, text, captionEntities, items, Origin.Documents(documents, resume), text, null) {
+        return hold(accountInstance.currentAccount, target, text, captionEntities, items, emptyList(), Origin.Documents(documents, resume), text, null) {
             resending(again)
         }
     }
@@ -356,19 +358,21 @@ object PluginCompose {
         text: String,
         entities: List<TLRPC.MessageEntity>?,
         items: List<JSONObject>,
+        kinds: List<String?>,
         origin: Origin,
         filterText: String?,
         forward: Pair<JSONObject, ForwardCall>?,
         resend: () -> Unit,
     ): Boolean {
-        if (!PluginSends.mayIntercept(false, filterText)) {
+        val peer = PeerSpecs.toMarkedPeerId(MessagesController.getInstance(account), target.dialogId)
+        if (!PluginSends.mayIntercept(false, PluginSends.Probe(account, peer, filterText, items.isNotEmpty(), PluginSends.readMediaKinds(items, kinds), forward != null))) {
             // flushed eagerly, so a chat with anything queued has a send still held
             if (queue.none { it.account == account && it.dialogId == target.dialogId }) return false
             queue.add(Queued(account, target.dialogId, resend))
             return true
         }
         val message = createMessage(account, target.dialogId, text, entities, createReplyTo(account, target), target.notify, target.scheduleDate)
-        val send = Send(account, target, message, items, origin, Queued(account, target.dialogId, null))
+        val send = Send(account, target, message, items, kinds, origin, Queued(account, target.dialogId, null))
         forward?.let { (json, call) ->
             message.put("forward", json)
             send.forward = call
@@ -389,7 +393,7 @@ object PluginCompose {
     }
 
     private fun start(send: Send) {
-        val started = PluginSends.run(send.account, false, send.message, send.items) { outcome ->
+        val started = PluginSends.run(send.account, false, send.message, send.items, send.kinds) { outcome ->
             AndroidUtilities.runOnUIThread { decide(send, outcome) }
         }
         if (!started) decide(send, PluginSends.Outcome.Send(send.message, send.items.mapIndexed { at, json -> PluginSends.Item(json, at) }))
@@ -973,7 +977,7 @@ object PluginCompose {
             photo != null && (params.path != null || photo.id == 0L) ->
                 return listOf(createLocal(generateId(), "photo", params.path?.let { File(it).name }.orEmpty(), "image/jpeg", params.hasMediaSpoilers))
             document != null && (params.path != null || document.id == 0L) -> return listOf(
-                createLocal(generateId(), getDocumentKind(document), FileLoader.getDocumentFileName(document).orEmpty(), document.mime_type.orEmpty(), params.hasMediaSpoilers),
+                createLocal(generateId(), PluginSends.readDocumentKind(document), FileLoader.getDocumentFileName(document).orEmpty(), document.mime_type.orEmpty(), params.hasMediaSpoilers),
             )
             photo != null -> TLRPC.TL_inputMediaPhoto().apply {
                 id = TLRPC.TL_inputPhoto().apply {
@@ -1019,17 +1023,6 @@ object PluginCompose {
     private fun createGeoPoint(geo: TLRPC.GeoPoint?): TLRPC.InputGeoPoint = TLRPC.TL_inputGeoPoint().apply {
         lat = geo?.lat ?: 0.0
         _long = geo?._long ?: 0.0
-    }
-
-    private fun getDocumentKind(document: TLRPC.Document): String {
-        val animated = document.attributes.any { it is TLRPC.TL_documentAttributeAnimated }
-        for (attribute in document.attributes) {
-            when (attribute) {
-                is TLRPC.TL_documentAttributeVideo -> return if (attribute.round_message) "round" else if (animated) "gif" else "video"
-                is TLRPC.TL_documentAttributeAudio -> return if (attribute.voice) "voice" else "audio"
-            }
-        }
-        return if (animated) "gif" else "document"
     }
 
     /** a kept LocalMedia may change only its spoiler, which the send carries apart */
@@ -1127,7 +1120,7 @@ object PluginCompose {
         media.mime == "image/gif" -> "gif"
         media.mime.startsWith("image/") -> "photo"
         media.mime.startsWith("video/") -> if (media.described.attributes.any { it is TLRPC.TL_documentAttributeAnimated }) "gif" else "video"
-        media.mime.startsWith("audio/") -> "audio"
+        media.mime.startsWith("audio/") -> "music"
         else -> "document"
     }
 

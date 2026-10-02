@@ -1133,6 +1133,32 @@ fn interceptsendmessage_passes_its_stage_and_refuses_an_unknown_one() {
 }
 
 #[test]
+fn interceptsendmessage_passes_text_peer_media_and_forward_and_refuses_bad_ones() {
+  let (_rt, ctx, host, _state, _logs) = setup(&["interceptSendMessage"]);
+  eval(
+    &ctx,
+    r#"
+      inu.interceptSendMessage({ peer: -1001234567890, media: true, forward: false, text: true }, () => 'send');
+      inu.interceptSendMessage({ peer: [1, 'group', 2], media: ['photo', 'roundVideo'] }, () => 'send');
+      inu.interceptSendMessage({ peer: 'user', media: 'voice' }, () => 'send');
+      globalThis.__errors = [{ peer: '1' }, { peer: [1.5] }, { peer: [] }, { media: 1 }, { media: ['audio'] }, { forward: 'yes' }].map((filter) => {
+        try { inu.interceptSendMessage(filter, () => 'send') } catch (e) { return e.name }
+      });
+    "#,
+  );
+  let filters: Vec<String> = host.send_registered.borrow().iter().map(|entry| entry.1.clone()).collect();
+  assert_eq!(
+    filters,
+    [
+      r#"{"text":true,"peer":[-1001234567890],"media":true,"forward":false}"#,
+      r#"{"peer":[1,2],"peerType":["group"],"media":["photo","roundVideo"]}"#,
+      r#"{"peerType":["user"],"media":["voice"]}"#,
+    ]
+  );
+  assert_eq!(eval_json(&ctx, "__errors"), r#"["TypeError","TypeError","TypeError","TypeError","TypeError","TypeError"]"#);
+}
+
+#[test]
 fn the_bundled_send_intercept_test_plugin_passes() {
   const ORACLE: &str = crate::testing::test_plugin!("send-intercept-test.js");
   let (_rt, ctx, host, state, _logs) = setup(&crate::testing::harness::manifest_grants(ORACLE));

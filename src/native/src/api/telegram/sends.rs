@@ -15,6 +15,12 @@ use crate::utils::qjs::{qjs_is_regexp, qjs_load_prelude};
 
 const SEND_PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/send_message.qbc"));
 const SEND_GRANT: &str = "interceptSendMessage";
+const MAX_SAFE_INTEGER: f64 = 9_007_199_254_740_991.0;
+const PEER_TYPES: &[&str] = &["user", "group", "broadcast"];
+const MEDIA_KINDS: &[&str] = &[
+  "photo", "video", "roundVideo", "voice", "music", "sticker", "gif", "document", "poll", "contact", "location", "venue", "story",
+  "giveaway", "invoice", "other",
+];
 
 impl RpcState {
   pub(super) fn install_send_message<'js>(
@@ -180,8 +186,10 @@ fn read_filter<'js>(ctx: &Ctx<'js>, filter: &Value<'js>) -> JsResult<String> {
     }
   }
   let text: Value = filter.get("text")?;
-  if !text.is_undefined() {
-    let not_regexp = || Exception::throw_type(ctx, "interceptSendMessage: filter.text must be a RegExp");
+  if let Some(text) = text.as_bool() {
+    encoded.set("text", text)?;
+  } else if !text.is_undefined() {
+    let not_regexp = || Exception::throw_type(ctx, "interceptSendMessage: filter.text must be a RegExp or a boolean");
     let Some(text) = text.as_object().filter(|text| qjs_is_regexp(text)) else {
       return Err(not_regexp());
     };
@@ -192,5 +200,63 @@ fn read_filter<'js>(ctx: &Ctx<'js>, filter: &Value<'js>) -> JsResult<String> {
     regex.set("flags", flags)?;
     encoded.set("text", regex)?;
   }
+  let peers = read_one_or_many(ctx, filter, "peer")?;
+  if !peers.is_empty() {
+    let (mut ids, mut types) = (Vec::new(), Vec::new());
+    for peer in peers {
+      match peer.as_number() {
+        Some(id) if id.fract() == 0.0 && id.abs() <= MAX_SAFE_INTEGER => ids.push(id),
+        _ => types.push(read_name(&peer, PEER_TYPES).ok_or_else(|| {
+          Exception::throw_type(ctx, "interceptSendMessage: filter.peer must hold peer ids, 'user', 'group' or 'broadcast'")
+        })?),
+      }
+    }
+    if !ids.is_empty() {
+      encoded.set("peer", ids)?;
+    }
+    if !types.is_empty() {
+      encoded.set("peerType", types)?;
+    }
+  }
+  let media: Value = filter.get("media")?;
+  if let Some(media) = media.as_bool() {
+    encoded.set("media", media)?;
+  } else {
+    let kinds = read_one_or_many(ctx, filter, "media")?
+      .iter()
+      .map(|kind| read_name(kind, MEDIA_KINDS))
+      .collect::<Option<Vec<_>>>()
+      .ok_or_else(|| Exception::throw_type(ctx, "interceptSendMessage: filter.media must be a boolean, or one or more media kinds"))?;
+    if !kinds.is_empty() {
+      encoded.set("media", kinds)?;
+    }
+  }
+  let forward: Value = filter.get("forward")?;
+  if !forward.is_undefined() {
+    let Some(forward) = forward.as_bool() else {
+      return Err(Exception::throw_type(ctx, "interceptSendMessage: filter.forward must be a boolean"));
+    };
+    encoded.set("forward", forward)?;
+  }
   stringify_json(ctx, encoded.into_value(), "interceptSendMessage: the filter did not serialize")
+}
+
+/// an empty array is refused, so an empty result means the field is absent
+fn read_one_or_many<'js>(ctx: &Ctx<'js>, filter: &Object<'js>, key: &str) -> JsResult<Vec<Value<'js>>> {
+  let value: Value = filter.get(key)?;
+  if value.is_undefined() {
+    return Ok(Vec::new());
+  }
+  let Some(values) = value.as_array() else {
+    return Ok(vec![value]);
+  };
+  let values = values.iter::<Value>().collect::<JsResult<Vec<_>>>()?;
+  if values.is_empty() {
+    return Err(Exception::throw_type(ctx, &format!("interceptSendMessage: filter.{key} must not be empty")));
+  }
+  Ok(values)
+}
+
+fn read_name(value: &Value<'_>, names: &[&str]) -> Option<String> {
+  value.as_string()?.to_string().ok().filter(|name| names.contains(&name.as_str()))
 }

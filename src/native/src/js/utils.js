@@ -273,7 +273,7 @@
     },
   })
 
-  const LOCAL_KINDS = ['photo', 'video', 'gif', 'audio', 'voice', 'round', 'document']
+  const LOCAL_KINDS = ['photo', 'video', 'gif', 'music', 'voice', 'roundVideo', 'sticker', 'document']
 
   // the host's id for a LocalMedia, which only it can resolve to a file; never on the object itself
   const localMediaIds = new WeakMap()

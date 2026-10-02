@@ -107,15 +107,22 @@ secret chats, or messages plugins send.
 Use the filter form when you can. The filter runs inside the app, so messages that do not match
 never reach JS:
 
-- `text` is a `RegExp`. It is compiled by Java's regex engine, so syntax Java does not support
-  throws when you register.
+- `text` is a `RegExp`, or `true`/`false` for a send with or without any text. A regex is
+  compiled by Java's regex engine, so syntax Java does not support throws when you register.
   It runs on the app's send path with no time limit, so keep it cheap: a nested quantifier
   like `(a+)+` can backtrack for seconds and freeze every send. Registering one logs a warning.
   If matching fails, the message goes to your middleware as if it matched.
+- `peer` is a marked peer id or a peer type (`'user'`, `'group'`, `'broadcast'`), or an array of
+  them: the hook only sees sends to those chats.
+- `media` is `true`/`false` for a send with or without media, or one or more `MediaType`s (as
+  `Message.mediaType` names them), matched when any item is of one of them. A document a plugin
+  added by id has no type, so it matches only `true`.
+- `forward` picks sends with (`true`) or without (`false`) a forward.
 - `stage` picks when the hook runs, see [Stages](#stages).
 
-For an album, the filter reads its caption. A forward without a comment has no text, so a `text`
-filter never matches it. Each stage's filter reads the text as the stages before it left it.
+Every field given must match. For an album, the filter reads its caption. A forward without a
+comment has no text, so a `text` filter never matches it. Each stage's filter reads the message as
+the stages before it left it.
 
 ### Stages
 
