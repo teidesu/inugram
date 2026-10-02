@@ -754,4 +754,19 @@
     <string name="InuPreviewMessage">Preview</string>
 
     <string name="InuMinimize">Minimize</string>
+    <string name="InuStickerTransformControls">Sticker transform controls</string>
+    <string name="InuStickerTransformControlsInfo">Add an endless rotation thumbwheel, a size slider, resets, gesture locks, and Fit to the sticker editor.</string>
+    <string name="InuStickerRotation">Rotation</string>
+    <string name="InuStickerRotateClockwise">Rotate clockwise</string>
+    <string name="InuStickerRotateCounterclockwise">Rotate counterclockwise</string>
+    <string name="InuStickerSizeControl">Size</string>
+    <string name="InuStickerResetRotation">Reset rotation</string>
+    <string name="InuStickerResetSize">Reset size</string>
+    <string name="InuStickerFit">Fit</string>
+    <string name="InuStickerFitDescription">Fit the entire sticker inside the frame</string>
+    <string name="InuStickerRotationLocked">Rotation gestures locked</string>
+    <string name="InuStickerRotationUnlocked">Rotation gestures unlocked</string>
+    <string name="InuStickerSizeLocked">Size gestures locked</string>
+    <string name="InuStickerSizeUnlocked">Size gestures unlocked</string>
+    <string name="InuStickerFitFailed">Could not calculate sticker bounds. Try Fit again.</string>
 </resources>

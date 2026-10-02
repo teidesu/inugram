@@ -848,7 +848,16 @@ object InuConfig {
     @JvmField
     val EXTRA_DEBUG_LOGS = BoolItem("extra_debug_logs", false, exportable = false)
 
+    @JvmField
+    val STICKER_TRANSFORM_CONTROLS = BoolItem("sticker_transform_controls", true)
+
     // internal state
+    @JvmField
+    val STICKER_ROTATION_LOCKED = BoolItem("sticker_rotation_locked", false, exportable = false)
+
+    @JvmField
+    val STICKER_SIZE_LOCKED = BoolItem("sticker_size_locked", false, exportable = false)
+
     @JvmField
     val VOICE_HINT_SHOWN = BoolItem("voice_hint_shown", false, exportable = false)
 

@@ -1,0 +1,558 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Nika Krasnova <nika@nikableh.moe>
+Date: Thu, 1 Oct 2026 06:48:59 +0200
+Subject: Add precise sticker transform controls and fit to frame.
+
+---
+ .../Paint/Views/StickerMakerView.java         |  11 +-
+ .../ui/Components/PaintingOverlay.java        |   6 +
+ .../java/org/telegram/ui/PhotoViewer.java     | 105 ++++++++++++------
+ 3 files changed, 87 insertions(+), 35 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/StickerMakerView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/StickerMakerView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/StickerMakerView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/StickerMakerView.java
+@@ -98,7 +98,8 @@ public class StickerMakerView extends FrameLayout implements NotificationCenter.
+     private final Path dashPath = new Path();
+     private volatile boolean segmentingLoading;
+     private volatile boolean segmentingLoaded;
+-    private SegmentedObject selectedObject;
++    public SegmentedObject selectedObject;
++    public Runnable inu_onContentChanged;
+     public float outlineWidth = 2f;
+     public boolean empty;
+     public SegmentedObject[] objects;
+@@ -254,13 +255,13 @@ public class StickerMakerView extends FrameLayout implements NotificationCenter.
+         private float borderImageWidth;
+         private float borderImageHeight;
+ 
+-        private final Path segmentBorderPath = new Path();
++        public final Path segmentBorderPath = new Path();
+         private final Path partSegmentBorderPath = new Path();
+ 
+         private int pointsCount;
+         private float[] points;
+         private final Paint bordersFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+-        private final Paint bordersStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
++        public final Paint bordersStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+         private final Paint bordersDiffStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+         private final Paint pointsPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+         private final Paint pointsHighlightPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+@@ -432,6 +433,7 @@ public class StickerMakerView extends FrameLayout implements NotificationCenter.
+ 
+     public void setOutlineWidth(float width) {
+         outlineWidth = width;
++        if (desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue() && inu_onContentChanged != null) inu_onContentChanged.run();
+         if (getParent() instanceof View) {
+             ((View) getParent()).invalidate();
+         }
+@@ -442,6 +444,7 @@ public class StickerMakerView extends FrameLayout implements NotificationCenter.
+         selectedObject.overrideImage = createSmoothEdgesSegmentedImage(0, 0, newMaskBitmap, true);
+         selectedObject.overrideDarkMaskImage = selectedObject.makeDarkMaskImage();
+         createSegmentImagePath(selectedObject, containerWidth, containerHeight);
++        if (desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue() && inu_onContentChanged != null) inu_onContentChanged.run();
+     }
+ 
+     public boolean overriddenPaths() {
+@@ -475,6 +478,7 @@ public class StickerMakerView extends FrameLayout implements NotificationCenter.
+     public void setOutlineVisible(boolean visible) {
+         if (outlineVisible == visible) return;
+         outlineVisible = visible;
++        if (desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue() && inu_onContentChanged != null) inu_onContentChanged.run();
+         weightChooserView.animate().alpha(visible ? 1f : 0f).translationX(visible ? 0 : dp(-18)).setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT).setDuration(320).start();
+         if (getParent() instanceof View) {
+             ((View) getParent()).invalidate();
+@@ -668,6 +672,7 @@ public class StickerMakerView extends FrameLayout implements NotificationCenter.
+     public void setSegmentedState(boolean segmentedState, SegmentedObject selectedObject) {
+         isSegmentedState = segmentedState;
+         this.selectedObject = selectedObject;
++        if (desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue() && inu_onContentChanged != null) inu_onContentChanged.run();
+     }
+ 
+     public Bitmap getSegmentedDarkMaskImage() {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/PaintingOverlay.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/PaintingOverlay.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/PaintingOverlay.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/PaintingOverlay.java
+@@ -36,6 +36,7 @@ import java.util.HashMap;
+ public class PaintingOverlay extends FrameLayout {
+ 
+     private Bitmap paintBitmap;
++    public Runnable inu_onContentChanged;
+     private HashMap<View, VideoEditedInfo.MediaEntity> mediaEntityViews;
+     private boolean ignoreLayout;
+     private Drawable backgroundDrawable;
+@@ -53,6 +54,7 @@ public class PaintingOverlay extends FrameLayout {
+             paintBitmap = null;
+             setBackground(backgroundDrawable = null);
+         }
++        if (desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue() && inu_onContentChanged != null) inu_onContentChanged.run();
+     }
+ 
+     public boolean drawChildren = true;
+@@ -203,6 +205,9 @@ public class PaintingOverlay extends FrameLayout {
+                     }
+                     TLRPC.PhotoSize thumb = FileLoader.getClosestPhotoSizeWithSize(entity.document.thumbs, 90);
+                     imageReceiver.setImage(ImageLocation.getForDocument(entity.document), null, null, null, ImageLocation.getForDocument(thumb, entity.document), null, null, 0, "webp", entity.parentObject, 1);
++                    if (desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue()) imageReceiver.setDelegate((receiver, set, isThumb, memCache) -> {
++                        if (set && !isThumb && desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue() && inu_onContentChanged != null) inu_onContentChanged.run();
++                    });
+                     if ((entity.subType & 2) != 0) {
+                         imageView.setScaleX(-1);
+                     }
+@@ -309,6 +314,7 @@ public class PaintingOverlay extends FrameLayout {
+ 
+     public void setBitmap(Bitmap bitmap) {
+         setBackground(backgroundDrawable = new BitmapDrawable(paintBitmap = bitmap));
++        if (desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue() && inu_onContentChanged != null) inu_onContentChanged.run();
+     }
+ 
+     public Bitmap getBitmap() {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+@@ -400,7 +400,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+     private Activity parentActivity;
+     private Context activityContext;
+ 
+-    private ActionBar actionBar;
++    public ActionBar actionBar;
+     private ImageView actionBarBackButton;
+     private Drawable actionBarBackButtonDrawableDeafult;
+     private Drawable actionBarBackButtonDrawableGlass;
+@@ -923,7 +923,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+     private Paint blackPaint = new Paint();
+     private CheckBox checkImageView;
+     private CounterView photosCounterView;
+-    private FrameLayout pickerView;
++    public FrameLayout pickerView;
+     private FrameLayout topBulletinUnderCaption;
+     private FrameLayout bottomBulletinUnderCaption;
+     private ChatActivityEnterView.SendButton pickerViewSendButton;
+@@ -970,7 +970,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+ 
+     private AnimatorSet currentListViewAnimation;
+     private PhotoCropView photoCropView;
+-    private CropTransform cropTransform = new CropTransform();
++    public CropTransform cropTransform = new CropTransform();
+     private CropTransform leftCropTransform = new CropTransform();
+     private CropTransform rightCropTransform = new CropTransform();
+     private MediaController.CropState leftCropState;
+@@ -996,7 +996,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+     private ChatAttachAlert parentAlert;
+     private WindowVisibilityManager.Controller parentAlertWindowVisibilityController;
+ //    private PhotoViewerCaptionEnterView captionEditText;
+-    private int sendPhotoType;
++    public int sendPhotoType;
+     private boolean sendPhotoTypeIsGif;
+     private boolean sendPhotoTypeIsPollMedia;
+     private boolean sendPhotoTypeIsPollMediaEdit;
+@@ -1139,7 +1139,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+ 
+     private int keyboardSize;
+ 
+-    private float currentPanTranslationY;
++    public float currentPanTranslationY;
+ 
+     public final static int SELECT_TYPE_NO_SELECT = -1;
+     public final static int SELECT_TYPE_AVATAR = 1;
+@@ -1922,7 +1922,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+ //    private boolean mentionListViewVisible;
+ //    private boolean allowMentions;
+ 
+-    private int animationInProgress;
++    public int animationInProgress;
+     private boolean openAnimationInProgress;
+     private long transitionAnimationStartTime;
+     private Runnable animationEndRunnable;
+@@ -1934,7 +1934,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+ 
+     private boolean isEmbedVideo;
+ 
+-    private int currentEditMode;
++    public int currentEditMode;
+ 
+     private final Runnable updateContainerFlagsRunnable = () -> {
+         if (isVisible && animationInProgress == 0) {
+@@ -1995,7 +1995,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+     private int currentImageHasFace;
+     private boolean inu_waitingForFacesOpen;
+     private String currentImageFaceKey;
+-    private PaintingOverlay paintingOverlay;
++    public PaintingOverlay paintingOverlay;
+     private PaintingOverlay leftPaintingOverlay;
+     private PaintingOverlay rightPaintingOverlay;
+     private ImageReceiver leftImage = new ImageReceiver();
+@@ -2027,7 +2027,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+     private VideoAds ads;
+     private ArrayList<VideoPlayer.Quality> currentPlayingVideoQualityFiles;
+     private Uri currentPlayingVideoFile;
+-    private EditState editState = new EditState();
++    public EditState editState = new EditState();
+     private TLRPC.BotInlineResult currentBotInlineResult;
+     private ImageLocation currentFileLocation;
+     private ImageLocation currentFileLocationVideo;
+@@ -2046,13 +2046,15 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+     boolean fromCamera;
+     private boolean captionTranslated;
+     private String captionDetectedLanguage;
++    public desu.inugram.helpers.media.StickerTransformHelper.Session inu_stickerTransforms;
+     public StickerMakerView stickerMakerView;
+     public PhotoViewerCoverEditor coverEditor;
+     private ArrayList<String> selectedEmojis;
+     private StickerMakerBackgroundView stickerMakerBackgroundView;
+-    private BlurButton cutOutBtn;
+-    private LinearLayout btnLayout;
+-    private BlurButton eraseBtn, restoreBtn, undoBtn, outlineBtn;
++    public BlurButton cutOutBtn;
++    public LinearLayout btnLayout;
++    private BlurButton eraseBtn, restoreBtn;
++    public BlurButton undoBtn, outlineBtn;
+ 
+     private long avatarsDialogId;
+     private boolean canEditAvatar;
+@@ -2082,13 +2084,13 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+ 
+     private boolean draggingDown;
+     private float dragY;
+-    private float translationX;
+-    private float translationY;
++    public float translationX;
++    public float translationY;
+     private float translateY;
+-    private float scale = 1;
++    public float scale = 1;
+     private float currentCropScale = 1.0f;
+     private float currentCropX = 0.0f, currentCropY = 0.0f;
+-    private float rotate = 0;
++    public float rotate = 0;
+     private float mirror = 0;
+     private float animateToX;
+     private float animateToY;
+@@ -2100,9 +2102,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+     private float clippingImageProgress;
+     private boolean applying;
+     private long animationStartTime;
+-    private int switchingToMode = -1;
+-    private AnimatorSet imageMoveAnimation;
+-    private AnimatorSet changeModeAnimation;
++    public int switchingToMode = -1;
++    public AnimatorSet imageMoveAnimation;
++    public AnimatorSet changeModeAnimation;
+     private GestureDetector2 gestureDetector;
+     private boolean doubleTapEnabled;
+     private DecelerateInterpolator interpolator = new DecelerateInterpolator(1.5f);
+@@ -2122,8 +2124,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+     private float maxY;
+     private boolean canZoom = true;
+     private boolean changingPage;
+-    private boolean zooming;
+-    private boolean moving;
++    public boolean zooming;
++    public boolean moving;
+     private int paintViewTouched;
+     private int maskPaintViewTouched;
+     private boolean doubleTap;
+@@ -3040,7 +3042,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         default void updatedLivePhotos() {}
+     }
+ 
+-    private class FrameLayoutDrawer extends SizeNotifierFrameLayoutPhoto {
++    public class FrameLayoutDrawer extends SizeNotifierFrameLayoutPhoto {
+ 
+         private Paint paint = new Paint();
+         private boolean ignoreLayout;
+@@ -3329,6 +3331,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+ 
+             notifyHeightChanged();
+             updateExclusionRects();
++            if (desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue()) desu.inugram.helpers.media.StickerTransformHelper.onLayout(PhotoViewer.this);
+         }
+ 
+         private ArrayList<Rect> exclusionRects;
+@@ -3354,7 +3357,13 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+ 
+         @Override
+         protected void onDraw(Canvas canvas) {
++            int inu_save = -1;
++            if (desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue() || inu_stickerTransforms != null) {
++                inu_save = canvas.save();
++                desu.inugram.helpers.media.StickerTransformHelper.beforeDraw(PhotoViewer.this, canvas);
++            }
+             PhotoViewer.this.onDraw(canvas);
++            if (inu_save != -1) canvas.restoreToCount(inu_save);
+ 
+             if (isStatusBarVisible() && AndroidUtilities.statusBarHeight != 0 && actionBar != null) {
+                 paint.setAlpha((int) (255 * actionBar.getAlpha() * 0.498f));
+@@ -7111,6 +7120,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+             boolean hasFilters = !TextUtils.isEmpty(entry.filterPath);
+             if (cutOutBtn.isCutOutState()) {
+                 cutOutBtn.setCancelState(true);
++                if (desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue()) desu.inugram.helpers.media.StickerTransformHelper.onEditorStateChanged(PhotoViewer.this);
+                 stickerMakerView.enableClippingMode(segmentedObject -> {
+                     if (stickerMakerView.hasSegmentedBitmap()) {
+                         ThanosEffect thanosEffect = stickerMakerView.getThanosEffect();
+@@ -7206,7 +7216,10 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                         Utilities.themeQueue.postRunnable(() -> {
+                             applyCurrentEditMode(segmentedImage);
+                         });
+-                        Runnable turnOff = () -> stickerMakerView.isThanosInProgress = false;
++                        Runnable turnOff = () -> {
++                            stickerMakerView.isThanosInProgress = false;
++                            if (desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue()) desu.inugram.helpers.media.StickerTransformHelper.onEditorStateChanged(PhotoViewer.this);
++                        };
+                         thanosEffect.animate(matrix, bitmap, () -> {
+                             centerImage.setImageBitmap(segmentedImage);
+                             cutOutBtn.setUndoCutState(true);
+@@ -7802,6 +7815,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                     setScaleToFill();
+                 }
+             }
++            if (imageReceiver == centerImage && desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue()) desu.inugram.helpers.media.StickerTransformHelper.onContentChanged(PhotoViewer.this);
+         };
+ 
+         centerImage.setParentView(containerView);
+@@ -8143,6 +8157,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                 }
+             }
+             doneButtonPressed = true;
++            if (desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue()) desu.inugram.helpers.media.StickerTransformHelper.onEditorStateChanged(PhotoViewer.this);
+             if (videoEditedInfo != null) {
+                 long sizeToCheck = (long) (videoEditedInfo.estimatedSize * 0.9f);
+                 if ((sizeToCheck > FileLoader.DEFAULT_MAX_FILE_SIZE && !UserConfig.getInstance(currentAccount).isPremium()) || sizeToCheck > FileLoader.DEFAULT_MAX_FILE_SIZE_PREMIUM) {
+@@ -8290,6 +8305,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                         }
+ 
+                         doneButtonPressed = false;
++                        if (desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue()) desu.inugram.helpers.media.StickerTransformHelper.onEditorStateChanged(PhotoViewer.this);
+                         ContentPreviewViewer.getInstance().showCustomStickerActions(fullStickerPath, videoEditedInfo1, stickerMakerView, selectedEmojis, new ContentPreviewViewer.ContentPreviewViewerDelegate() {
+                             @Override
+                             public boolean canSendSticker() {
+@@ -12060,6 +12076,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         showStickerMode((mode == EDIT_MODE_NONE || mode == EDIT_MODE_STICKER_MASK || mode == EDIT_MODE_PAINT && stickerEmpty) && sendPhotoType == SELECT_TYPE_STICKER, true);
+         navigationBar.setVisibility(mode != EDIT_MODE_FILTER ? View.VISIBLE : View.INVISIBLE);
+         switchingToMode = mode;
++        if (desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue()) desu.inugram.helpers.media.StickerTransformHelper.onEditorStateChanged(PhotoViewer.this);
+         if (currentEditMode == EDIT_MODE_NONE) {
+             wasCountViewShown = countView != null && countView.isShown();
+         }
+@@ -12404,6 +12421,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                             }
+                         }
+                     });
++                    if (desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue()) desu.inugram.helpers.media.StickerTransformHelper.onTransitionStarted(PhotoViewer.this, animatorSet);
+                     animatorSet.start();
+                 }
+             });
+@@ -12909,6 +12927,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         if (containerView != null) {
+             containerView.updateExclusionRects();
+         }
++        if (desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue()) desu.inugram.helpers.media.StickerTransformHelper.onEditorStateChanged(PhotoViewer.this);
+     }
+ 
+     private void createMaskPaintView() {
+@@ -15443,6 +15462,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+     }
+ 
+     public void enableStickerMode(TLRPC.Document originalDocument, TLRPC.Document document, boolean empty, Utilities.Callback2<String, TLRPC.InputDocument> customHandler) {
++        if (inu_stickerTransforms != null) desu.inugram.helpers.media.StickerTransformHelper.clear(this);
+         originalSticker = originalDocument;
+         replacedSticker = document;
+         stickerEmpty = empty;
+@@ -15569,6 +15589,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+             }
+         }
+         outlineBtn.setTag(outlineShow ? 1 : null);
++        if (desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue()) desu.inugram.helpers.media.StickerTransformHelper.onEditorStateChanged(PhotoViewer.this);
+     }
+ 
+     private void showEditStickerMode(boolean show, boolean animated) {
+@@ -15621,6 +15642,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+             }
+         }
+         eraseBtn.setTag(show ? 1 : null);
++        if (desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue()) desu.inugram.helpers.media.StickerTransformHelper.onEditorStateChanged(PhotoViewer.this);
+     }
+ 
+     private void showEditCaption(boolean show, boolean animated) {
+@@ -16008,6 +16030,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         }
+ 
+         if (!sameImage) {
++            if (inu_stickerTransforms != null) desu.inugram.helpers.media.StickerTransformHelper.clear(this);
+             desu.inugram.helpers.media.PhotoViewerHelper.clearHdrMode(this);
+             draggingDown = false;
+             translationX = 0;
+@@ -17514,6 +17537,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                     animationEndRunnable = null;
+                 }
+                 animationInProgress = 0;
++                if (desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue()) desu.inugram.helpers.media.StickerTransformHelper.onEditorStateChanged(PhotoViewer.this);
+             }
+         }
+         return animationInProgress != 0;
+@@ -17892,6 +17916,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                         }
+                         containerView.setLayerType(View.LAYER_TYPE_NONE, null);
+                         animationInProgress = 0;
++                        if (desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue()) desu.inugram.helpers.media.StickerTransformHelper.onEditorStateChanged(PhotoViewer.this);
+                         invalidateBlur();
+                         transitionAnimationStartTime = 0;
+                         leftCropState = null;
+@@ -18074,6 +18099,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                         public void onAnimationEnd(Animator animation) {
+                             super.onAnimationEnd(animation);
+                             animationInProgress = 0;
++                            if (desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue()) desu.inugram.helpers.media.StickerTransformHelper.onEditorStateChanged(PhotoViewer.this);
+                             invalidateBlur();
+                             backgroundDrawable.setAlpha(255);
+                             containerView.invalidate();
+@@ -18235,6 +18261,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+             qualityPicker.cancelButton.callOnClick();
+             return;
+         }
++        if (inu_stickerTransforms != null) desu.inugram.helpers.media.StickerTransformHelper.clear(this);
+         desu.inugram.helpers.media.PhotoViewerHelper.clearHdrMode(this);
+         isVisibleOrAnimating = false;
+         openedFullScreenVideo = false;
+@@ -18788,6 +18815,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+     }
+ 
+     public void destroyPhotoViewer() {
++        if (inu_stickerTransforms != null) desu.inugram.helpers.media.StickerTransformHelper.clear(this);
+         if (parentActivity == null || windowView == null) {
+             return;
+         }
+@@ -18992,7 +19020,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         return isVisible && placeProvider != null;
+     }
+ 
+-    private void updateMinMax(float scale) {
++    public void updateMinMax(float scale) {
+         if (aspectRatioFrameLayout != null && aspectRatioFrameLayout.getVisibility() == View.VISIBLE && textureUploaded) {
+             View view = usedSurfaceView ? videoSurfaceView : videoTextureView;
+             scale *= Math.min(getContainerViewWidth() / (float) view.getMeasuredWidth(), getContainerViewHeight() / (float) view.getMeasuredHeight());
+@@ -19054,7 +19082,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         return 0;
+     }
+ 
+-    private int getContainerViewWidth() {
++    public int getContainerViewWidth() {
+         return getContainerViewWidth(currentEditMode);
+     }
+ 
+@@ -19068,7 +19096,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         return width;
+     }
+ 
+-    private int getContainerViewHeight() {
++    public int getContainerViewHeight() {
+         return getContainerViewHeight(currentEditMode);
+     }
+ 
+@@ -19104,7 +19132,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+     float longPressX;
+     Runnable longPressRunnable = this::onLongPress;
+ 
+-    private boolean onTouchEvent(MotionEvent ev) {
++    public boolean onTouchEvent(MotionEvent ev) {
+         lastX = ev.getX();
+         if (currentEditMode == EDIT_MODE_PAINT && animationStartTime != 0 && (ev.getActionMasked() == MotionEvent.ACTION_DOWN || ev.getActionMasked() == MotionEvent.ACTION_POINTER_DOWN)) {
+             if (ev.getPointerCount() >= 2) {
+@@ -19266,10 +19294,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                     pinchCenterX = newPinchCenterX;
+                     pinchCenterY = newPinchCenterY;
+                 }
+-                if (sendPhotoType == SELECT_TYPE_STICKER && currentEditMode == EDIT_MODE_NONE) {
++                if (sendPhotoType == SELECT_TYPE_STICKER && currentEditMode == EDIT_MODE_NONE && (!desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue() || !desu.inugram.helpers.media.StickerTransformHelper.rotationLocked(this))) {
+                     rotate = (float) ((Math.atan2(ev.getY(1) - ev.getY(0), ev.getX(1) - ev.getX(0)) - pinchStartAngle) / Math.PI * 180 + pinchStartRotate);
+                 }
++                if (!desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue() || !desu.inugram.helpers.media.StickerTransformHelper.sizeLocked(this)) {
+                 scale = (float) Math.hypot(ev.getX(1) - ev.getX(0), ev.getY(1) - ev.getY(0)) / pinchStartDistance * pinchStartScale;
++                }
+                 translationX = (pinchCenterX - getContainerViewWidth() / 2) - ((pinchCenterX - getContainerViewWidth() / 2) - pinchStartX) * (scale / pinchStartScale);
+                 translationY = (pinchCenterY - getContainerViewHeight() / 2) - ((pinchCenterY - getContainerViewHeight() / 2) - pinchStartY) * (scale / pinchStartScale);
+                 updateMinMax(scale);
+@@ -19396,6 +19426,10 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                 invalidCoords = true;
+                 float maxScale = sendPhotoType == SELECT_TYPE_STICKER ? 10.0f : 3.0f;
+                 float minScale = sendPhotoType == SELECT_TYPE_STICKER ? 0.33f : 1f;
++                if (sendPhotoType == SELECT_TYPE_STICKER && desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue()) {
++                    minScale = desu.inugram.helpers.media.StickerTransformHelper.minScale(this);
++                    maxScale = desu.inugram.helpers.media.StickerTransformHelper.maxScale(this);
++                }
+                 if (scale < minScale) {
+                     updateMinMax(minScale);
+                     animateTo(minScale, 0, 0, true);
+@@ -21134,6 +21168,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+ 
+     @Override
+     public boolean onDoubleTap(MotionEvent e) {
++        if (desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue() && desu.inugram.helpers.media.StickerTransformHelper.sizeLocked(this)) return true;
+         if ((videoPlayer != null || photoViewerWebView != null && photoViewerWebView.isControllable()) && videoPlayerControlVisible) {
+             long current = getCurrentVideoPosition();
+             long total = getVideoDuration();
+@@ -22867,7 +22902,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         }
+     }
+ 
+-    private void invalidateBlur() {
++    public void invalidateBlur() {
+         if (stickerMakerView != null && stickerMakerView.isThanosInProgress) {
+             return;
+         }
+@@ -22905,12 +22940,13 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         if (videoTimelineView != null) {
+             videoTimelineView.invalidateBlur();
+         }
++        if (desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue() && inu_stickerTransforms != null) inu_stickerTransforms.invalidateBlur();
+         if (containerView != null) {
+             containerView.invalidate();
+         }
+     }
+ 
+-    private class BlurButton extends StickerCutOutBtn {
++    public class BlurButton extends StickerCutOutBtn {
+         public BlurButton() {
+             super(stickerMakerView, activityContext, resourcesProvider, blurManager);
+         }
+@@ -23076,7 +23112,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         return currentMessageObject;
+     }
+ 
+-    private void applyTransformToMatrix(Matrix matrix) {
++    public void applyTransformToMatrix(Matrix matrix) {
+         float currentTranslationY;
+         float currentTranslationX;
+         float currentScale;
+@@ -23838,6 +23874,10 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+ 
+         @Override
+         public boolean onTouchEvent(MotionEvent event) {
++            if (isVisible && desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue()) {
++                Boolean inu_handled = desu.inugram.helpers.media.StickerTransformHelper.onTouch(PhotoViewer.this, event);
++                if (inu_handled != null) return inu_handled;
++            }
+             return isVisible && PhotoViewer.this.onTouchEvent(event);
+         }
+ 
+@@ -23921,7 +23961,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+             navigationBar.layout(getPaddingLeft(), containerView.getMeasuredHeight(), navigationBar.getMeasuredWidth(), containerView.getMeasuredHeight() + navigationBar.getMeasuredHeight());
+             wasLayout = true;
+             if (changed) {
+-                if (!dontResetZoomOnFirstLayout) {
++                if (!dontResetZoomOnFirstLayout && (!desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue() || !desu.inugram.helpers.media.StickerTransformHelper.preserveLayoutTransform(PhotoViewer.this))) {
+                     scale = scale1();
+                     translationX = 0;
+                     translationY = 0;
+@@ -24000,6 +24040,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                 float alpha = Math.min(stickerMakerBackgroundView.getAlpha(), parent != null ? parent.getAlpha() : 1f);
+                 if (alpha > 0) {
+                     canvas.saveLayerAlpha(0, 0, getWidth(), getHeight(), (int) (0xFF * alpha), Canvas.ALL_SAVE_FLAG);
++                    if (desu.inugram.InuConfig.STICKER_TRANSFORM_CONTROLS.getValue()) desu.inugram.helpers.media.StickerTransformHelper.drawBackground(PhotoViewer.this, canvas);
+                     stickerMakerBackgroundView.draw(canvas);
+                     canvas.restore();
+                 }

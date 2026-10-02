@@ -726,4 +726,20 @@
     <string name="InuRefreshStickerSet">Yenile</string>
     <string name="InuStickerSetRefreshed">Paket güncellendi</string>
     <string name="InuStickerSetRefreshFailed">Paket yenilenemedi</string>
+
+    <string name="InuStickerTransformControls">Çıkartma dönüştürme kontrolleri</string>
+    <string name="InuStickerTransformControlsInfo">Çıkartma düzenleyicisine sınırsız döndürme tekerleği, boyut kaydırıcısı, sıfırlama düğmeleri, hareket kilitleri ve çerçeveye sığdırma seçeneği ekler.</string>
+    <string name="InuStickerRotation">Döndürme</string>
+    <string name="InuStickerRotateClockwise">Saat yönünde döndür</string>
+    <string name="InuStickerRotateCounterclockwise">Saat yönünün tersine döndür</string>
+    <string name="InuStickerSizeControl">Boyut</string>
+    <string name="InuStickerResetRotation">Döndürmeyi sıfırla</string>
+    <string name="InuStickerResetSize">Boyutu sıfırla</string>
+    <string name="InuStickerFit">Sığdır</string>
+    <string name="InuStickerFitDescription">Çıkartmanın tamamını çerçeveye sığdır</string>
+    <string name="InuStickerRotationLocked">Döndürme hareketleri kilitli</string>
+    <string name="InuStickerRotationUnlocked">Döndürme hareketlerinin kilidi açık</string>
+    <string name="InuStickerSizeLocked">Boyut değiştirme hareketleri kilitli</string>
+    <string name="InuStickerSizeUnlocked">Boyut değiştirme hareketlerinin kilidi açık</string>
+    <string name="InuStickerFitFailed">Çıkartmanın sınırları hesaplanamadı. Sığdırmayı tekrar deneyin.</string>
 </resources>

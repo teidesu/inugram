@@ -76,6 +76,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - 🐶 full-quality sticker previews in sticker sheets & emoji panel (instead of blurry 90px thumbs; only on unmetered network or when already downloaded)
 - show all recent stickers
 - minimize sticker creator button in recent stickers
+- precise controls in the sticker editor
 - sticker time overlay modes: show / 🐶 hide time / 🐶 hide on incoming / hide completely
 - "Refresh" in the sticker/emoji pack menu
 - compact edited indicator: pencil icon instead of the "edited" label
@@ -360,6 +361,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - unchanged notifications are no longer re-posted on every update (stock re-notifies every chat each time anything changes, making notification bridges like Mi Fitness re-forward the whole stack to the wearable)
 - crash long-pressing a sticker set while off-screen rows are cached (reorder update bound null item on cached/hidden holders)
 - crash cutting out a sticker after the photo editor recycled the source image mid-segmentation
+- slow sticker Fit calculations on images with heavily fragmented transparency
 - storage usage cached-media list intermittently refusing to scroll
 - crash after transferring channel ownership (admin sort comparator overflowed on 64-bit peer ids)
 - chat drifting a few px off the input when hiding the keyboard while a message animation runs (aosp recyclerview bug: end-anchored padding delta applied twice across pre+post layout)

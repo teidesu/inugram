@@ -738,4 +738,20 @@
     <string name="InuRefreshStickerSet">Обновить</string>
     <string name="InuStickerSetRefreshed">Набор обновлён</string>
     <string name="InuStickerSetRefreshFailed">Не удалось обновить набор</string>
+
+    <string name="InuStickerTransformControls">Поворот и размер стикеров</string>
+    <string name="InuStickerTransformControlsInfo">Добавляет в редактор стикеров шкалу поворота без ограничений, ползунок размера, кнопки сброса, блокировку жестов и вписывание в рамку.</string>
+    <string name="InuStickerRotation">Поворот</string>
+    <string name="InuStickerRotateClockwise">Повернуть по часовой стрелке</string>
+    <string name="InuStickerRotateCounterclockwise">Повернуть против часовой стрелки</string>
+    <string name="InuStickerSizeControl">Размер</string>
+    <string name="InuStickerResetRotation">Сбросить поворот</string>
+    <string name="InuStickerResetSize">Сбросить размер</string>
+    <string name="InuStickerFit">Вписать</string>
+    <string name="InuStickerFitDescription">Вписать весь стикер в рамку</string>
+    <string name="InuStickerRotationLocked">Поворот жестами заблокирован</string>
+    <string name="InuStickerRotationUnlocked">Поворот жестами разблокирован</string>
+    <string name="InuStickerSizeLocked">Изменение размера жестами заблокировано</string>
+    <string name="InuStickerSizeUnlocked">Изменение размера жестами разблокировано</string>
+    <string name="InuStickerFitFailed">Не удалось определить границы стикера. Попробуйте вписать его ещё раз.</string>
 </resources>

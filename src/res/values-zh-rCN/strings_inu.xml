@@ -727,4 +727,20 @@
     <string name="InuRefreshStickerSet">刷新</string>
     <string name="InuStickerSetRefreshed">贴纸包已更新</string>
     <string name="InuStickerSetRefreshFailed">无法刷新贴纸包</string>
+
+    <string name="InuStickerTransformControls">贴纸变换控件</string>
+    <string name="InuStickerTransformControlsInfo">为贴纸编辑器添加可无限旋转的滚轮、尺寸滑块、重置按钮、手势锁定和一键适配画布功能。</string>
+    <string name="InuStickerRotation">旋转</string>
+    <string name="InuStickerRotateClockwise">顺时针旋转</string>
+    <string name="InuStickerRotateCounterclockwise">逆时针旋转</string>
+    <string name="InuStickerSizeControl">尺寸</string>
+    <string name="InuStickerResetRotation">重置旋转</string>
+    <string name="InuStickerResetSize">重置尺寸</string>
+    <string name="InuStickerFit">适配</string>
+    <string name="InuStickerFitDescription">缩放贴纸，使其完整显示在画布内</string>
+    <string name="InuStickerRotationLocked">旋转手势已锁定</string>
+    <string name="InuStickerRotationUnlocked">旋转手势已解锁</string>
+    <string name="InuStickerSizeLocked">缩放手势已锁定</string>
+    <string name="InuStickerSizeUnlocked">缩放手势已解锁</string>
+    <string name="InuStickerFitFailed">无法计算贴纸边界，请再次点击适配。</string>
 </resources>

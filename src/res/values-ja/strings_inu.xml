@@ -727,4 +727,20 @@
     <string name="InuRefreshStickerSet">更新</string>
     <string name="InuStickerSetRefreshed">パックを更新しました</string>
     <string name="InuStickerSetRefreshFailed">パックを更新できませんでした</string>
+
+    <string name="InuStickerTransformControls">スタンプの変形コントロール</string>
+    <string name="InuStickerTransformControlsInfo">スタンプエディターに、角度制限のない回転ホイール、サイズスライダー、リセットボタン、ジェスチャーロック、枠に収める機能を追加します。</string>
+    <string name="InuStickerRotation">回転</string>
+    <string name="InuStickerRotateClockwise">時計回りに回転</string>
+    <string name="InuStickerRotateCounterclockwise">反時計回りに回転</string>
+    <string name="InuStickerSizeControl">サイズ</string>
+    <string name="InuStickerResetRotation">回転をリセット</string>
+    <string name="InuStickerResetSize">サイズをリセット</string>
+    <string name="InuStickerFit">フィット</string>
+    <string name="InuStickerFitDescription">スタンプ全体を枠内に収める</string>
+    <string name="InuStickerRotationLocked">ジェスチャーによる回転はロックされています</string>
+    <string name="InuStickerRotationUnlocked">ジェスチャーによる回転のロックは解除されています</string>
+    <string name="InuStickerSizeLocked">ジェスチャーによるサイズ変更はロックされています</string>
+    <string name="InuStickerSizeUnlocked">ジェスチャーによるサイズ変更のロックは解除されています</string>
+    <string name="InuStickerFitFailed">スタンプの範囲を計算できませんでした。もう一度フィットを試してください。</string>
 </resources>
