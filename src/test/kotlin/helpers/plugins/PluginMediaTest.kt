@@ -86,6 +86,37 @@ class PluginMediaTest {
     }
 
     @Test
+    fun a_photo_already_on_disk_resolves_under_its_own_name() {
+        val plugin = granted()
+        val message = TLRPC.TL_message().apply {
+            id = 4243
+            message = ""
+            val photo = TLRPC.TL_photo().apply {
+                id = 98L
+                access_hash = 1L
+                dc_id = 2
+                file_reference = ByteArray(0)
+                sizes.add(TLRPC.TL_photoSize().apply {
+                    type = "y"
+                    w = 3
+                    h = 2
+                    size = 5
+                    location = TLRPC.TL_fileLocationToBeDeprecated().apply { volume_id = 1L; local_id = 1 }
+                }.synced())
+            }.synced()
+            media = TLRPC.TL_messageMediaPhoto().apply { this.photo = photo }.synced()
+        }.synced()
+        TestApp.fileLoader(0).paths[message.id] = onDisk("photo.jpg", "12345")
+
+        assertNull(write(plugin, PluginWrites.OP_DOWNLOAD_MEDIA, JSONObject(), arrayOf(messageWire(message))))
+        settle()
+
+        val json = JSONObject((PluginWire.decode(plugin.js.writeResults.last().resultWire) as PluginWire.Value.Json).json)
+        assertEquals("photo.jpg", json.getString("name"))
+        assertEquals("image/jpeg", json.getString("mime"))
+    }
+
+    @Test
     fun a_download_is_the_app_s_own_reports_its_progress_and_lets_go_when_it_lands() {
         val plugin = granted()
         val message = withMedia()

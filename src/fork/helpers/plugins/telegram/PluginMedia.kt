@@ -136,7 +136,7 @@ object PluginMedia : SessionResource {
         (message.media as? TLRPC.TL_messageMediaDocument)?.document
 
     private fun downloadName(message: TLRPC.Message, file: File): String =
-        FileLoader.getDocumentFileName(getMessageDocument(message)).takeIf { it.isNotEmpty() } ?: file.name
+        FileLoader.getDocumentFileName(getMessageDocument(message))?.takeIf { it.isNotEmpty() } ?: file.name
 
     private fun getMessageMime(message: TLRPC.Message, fileName: String): String =
         getMessageDocument(message)?.mime_type?.takeIf { it.isNotEmpty() } ?: guessMimeFromName(fileName)
