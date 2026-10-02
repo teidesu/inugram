@@ -127,8 +127,11 @@ the stages before it left it.
 ### Stages
 
 By default a hook runs at the `compose` stage: as soon as the user sends, before the app draws the
-message, processes its files or uploads anything. The app draws nothing until every compose stage
-has answered, and later sends to the same chat wait behind it, so they still arrive in order.
+message, processes its files or uploads anything. The app sends nothing until every compose stage
+has answered, and later sends to the same chat wait behind it, so they still arrive in order. A text
+message held longer than 100 ms is drawn as sending in the meantime, along with the texts sent after
+it, and turns into whatever the stages made of it, or goes away if they dropped it. If the user
+cancels it while it waits, it is not sent, whatever the stages answer.
 
 `{ stage: 'uploaded' }` runs for messages with media, once it is uploaded, right before the message
 goes out, after every compose stage. The message is already drawn by then.

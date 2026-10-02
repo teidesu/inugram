@@ -23,6 +23,7 @@ import org.telegram.messenger.FileLoader
 import org.telegram.messenger.MessageObject
 import org.telegram.messenger.MessageSuggestionParams
 import org.telegram.messenger.MessagesController
+import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.VideoEditedInfo
 import org.telegram.messenger.SendMessageChatArguments
 import org.telegram.messenger.SendMessagesHelper
@@ -41,7 +42,9 @@ import org.telegram.ui.LaunchActivity
  * The compose stage of `interceptSendMessage`. What the user asks to send is held at stock's send entry
  * points before the app draws, processes or uploads any of it, run past the stages, see [PluginSends],
  * and handed back to stock as they left it. Media stock cannot be handed goes out as a plain request,
- * drawn once the server answers. A chat's sends leave in the order they were made.
+ * drawn once the server answers. A chat's sends leave in the order they were made. A text the stages hold
+ * longer than [EARLY_DRAW_DELAY_MS], and texts behind it, are handed to stock ahead of their turn with their
+ * request parked, see [drawEarly].
  *
  * Ui thread, but for [onBound] and the LocalMedia registry.
  */
@@ -50,9 +53,12 @@ object PluginCompose {
 
     /** stock persists `Message.params` across retries, so a retried file still finds what follows it */
     private const val BOUND_KEY = "inu_plugin_compose"
+    /** likewise, so a restart finds an early message the stages never answered for */
+    private const val EARLY_KEY = "inu_plugin_early"
     private const val LOCAL_MEDIA = "localMedia"
     private const val SCHEDULE_WHEN_ONLINE = 0x7FFFFFFE
     private const val FORWARD_BATCH = 100
+    private const val EARLY_DRAW_DELAY_MS = 100L
     private const val ALBUM_LIMIT = 10
     internal val POLICY = TlFilter.Policy(takeover = true, drafts = false)
     internal val COMPOSED = SendMessageChatArguments.Builder().apply { inu_setComposed(true) }.build()
@@ -138,8 +144,17 @@ object PluginCompose {
         object Forward : Origin
     }
 
-    /** a place in a chat's line of sends; [run] is set once it may go */
-    private class Queued(val account: Int, val dialogId: Long, var run: (() -> Unit)?)
+    /** a place in a chat's line of sends; [run] is set once it may go, [draw] once it may be drawn ahead of that */
+    private class Queued(val account: Int, val dialogId: Long, var run: (() -> Unit)?) {
+        var draw: (() -> Unit)? = null
+        var drawn = false
+        var early: Early? = null
+    }
+
+    /** the message stock drew ahead of the send's turn, and its request, which [resume] makes */
+    private class Early(val message: MessageObject, val resume: Runnable) {
+        var taker: SendMessageParams? = null
+    }
 
     private class Send(
         val account: Int,
@@ -184,6 +199,37 @@ object PluginCompose {
     /** keyed by the arguments instance each batch is handed to stock with */
     private val batches = ConcurrentHashMap<SendMessageChatArguments, Batch>()
 
+    /** the send whose early message the next stock send of its chat takes the id of while its plan runs, see [morphEarly]; ui thread */
+    private var morphing: Send? = null
+
+    /** the entry [drawEarly] is handing stock; ui thread */
+    private var drawing: Queued? = null
+
+    /** early messages whose send took their id, by account, until stock draws it */
+    private val awaitingDraw = HashMap<Int, HashSet<Int>>()
+
+    private val drawObserver = object : NotificationCenter.NotificationCenterDelegate {
+        override fun didReceivedNotification(id: Int, account: Int, vararg args: Any?) {
+            val ids = awaitingDraw[account] ?: return
+            @Suppress("UNCHECKED_CAST")
+            val drawn = (args[1] as ArrayList<MessageObject>).filter { it.id in ids }
+            if (drawn.isEmpty()) return
+            // the chat skipped them, having their id already: swapped in place, they grow out of it
+            AndroidUtilities.runOnUIThread {
+                NotificationCenter.getInstance(account).postNotificationName(NotificationCenter.replaceMessagesObjects, args[0], ArrayList(drawn))
+            }
+            for (message in drawn) stopAwaitingDraw(account, message.id)
+        }
+    }
+
+    private fun stopAwaitingDraw(account: Int, id: Int) {
+        val ids = awaitingDraw[account] ?: return
+        ids.remove(id)
+        if (ids.isNotEmpty()) return
+        awaitingDraw.remove(account)
+        NotificationCenter.getInstance(account).removeObserver(drawObserver, NotificationCenter.didReceiveNewMessages)
+    }
+
     private val sealTick = Runnable {
         val sends = tick.toList()
         tick.clear()
@@ -192,7 +238,18 @@ object PluginCompose {
 
     @JvmStatic
     fun interceptParams(helper: SendMessagesHelper, account: Int, params: SendMessageParams): Boolean {
+        if (morphing != null && Looper.myLooper() == Looper.getMainLooper()) takeEarly(account, params)
         params.sendMessageChatArguments?.let(batches::get)?.let { batch -> markBatchItem(params, batch) }
+        val retried = params.retryMessageObject
+        if (retried != null && Looper.myLooper() == Looper.getMainLooper()) {
+            // stock retries every unsent message it stores once those it retried at launch are out
+            if (queue.any { it.account == account && it.early?.message?.id == retried.id }) return true
+            if (retried.messageOwner?.params?.containsKey(EARLY_KEY) == true) {
+                PluginLog.HOST.w("compose", "a send the stages never answered for was not sent")
+                PluginRpc.removeDroppedMessage(helper, account, retried.messageOwner, retried.scheduled)
+                return true
+            }
+        }
         if (!PluginManager.anyRunning || resuming || params.retryMessageObject != null || isExempt(params.sendMessageChatArguments)) return false
         // an album's items, which stock sends one by one once their files are processed
         if (params.params?.get("groupId").let { it != null && it != "0" }) return false
@@ -378,10 +435,16 @@ object PluginCompose {
         resend: () -> Unit,
     ): Boolean {
         val peer = PeerSpecs.toMarkedPeerId(MessagesController.getInstance(account), target.dialogId)
+        // a paid one could stop at a price confirmation, which would send it again past the stages
+        val drawable = (origin as? Origin.Params)?.params?.takeIf { items.isEmpty() && text.isNotEmpty() && forward == null && it.payStars == 0L }
         if (!PluginSends.mayIntercept(false, PluginSends.Probe(account, peer, filterText, items.isNotEmpty(), PluginSends.readMediaKinds(items, kinds), forward != null))) {
             // flushed eagerly, so a chat with anything queued has a send still held
             if (queue.none { it.account == account && it.dialogId == target.dialogId }) return false
-            queue.add(Queued(account, target.dialogId, resend))
+            val queued = Queued(account, target.dialogId, null)
+            queued.run = { if (queued.drawn) release(queued) else resend() }
+            if (drawable != null) queued.draw = resend
+            queue.add(queued)
+            drawEarly()
             return true
         }
         val message = createMessage(account, target.dialogId, text, entities, createReplyTo(account, target), target.notify, target.scheduleDate)
@@ -398,7 +461,108 @@ object PluginCompose {
         queue.add(send.queued)
         if (tick.isEmpty()) AndroidUtilities.runOnUIThread(sealTick)
         tick.add(send)
+        if (drawable != null) {
+            AndroidUtilities.runOnUIThread({
+                if (send.queued !in queue) return@runOnUIThread
+                send.queued.draw = {
+                    val kept = drawable.params
+                    drawable.params = HashMap(kept.orEmpty()).apply { put(EARLY_KEY, "1") }
+                    try {
+                        resend()
+                    } finally {
+                        drawable.params = kept
+                    }
+                }
+                drawEarly()
+            }, EARLY_DRAW_DELAY_MS)
+        }
         return true
+    }
+
+    /** draws each chat's line in order, up to the first send not yet ready to be drawn */
+    private fun drawEarly() {
+        val blocked = HashSet<Pair<Int, Long>>()
+        for (entry in queue.toList()) {
+            val dialog = entry.account to entry.dialogId
+            if (dialog in blocked || entry.drawn) continue
+            val draw = entry.draw
+            if (draw == null) {
+                blocked.add(dialog)
+                continue
+            }
+            entry.drawn = true
+            drawing = entry
+            try {
+                draw()
+            } finally {
+                drawing = null
+            }
+        }
+    }
+
+    /** stock's request for the message [drawEarly] has it draw, which [send] makes once the send's turn comes */
+    @JvmStatic
+    fun parkRequest(message: MessageObject, send: Runnable): Boolean {
+        if (Looper.myLooper() != Looper.getMainLooper()) return false
+        val entry = drawing ?: return false
+        if (message.currentAccount != entry.account || message.dialogId != entry.dialogId) return false
+        drawing = null
+        entry.early = Early(message, send)
+        return true
+    }
+
+    /** stock deletes a sending message by taking it off its sending list, and leaves its request to whoever holds it */
+    private fun isEarlyKept(entry: Queued, early: Early): Boolean =
+        SendMessagesHelper.getInstance(entry.account).isSendingMessage(early.message.id)
+
+    private fun release(entry: Queued) {
+        val early = entry.early ?: return
+        if (isEarlyKept(entry, early)) early.resume.run()
+    }
+
+    private fun removeEarly(entry: Queued) {
+        val early = entry.early ?: return
+        if (!isEarlyKept(entry, early)) return
+        PluginRpc.removeDroppedMessage(SendMessagesHelper.getInstance(entry.account), entry.account, early.message.messageOwner, early.message.scheduled)
+    }
+
+    /** runs [plan] with [send]'s early message on offer to the first stock send of its chat, and takes it away if none took it */
+    private fun morphEarly(send: Send, plan: Plan, target: Target) {
+        val early = send.queued.early ?: return plan.run(target)
+        if (!isEarlyKept(send.queued, early)) {
+            for (media in plan.taken) media.upload.discard()
+            return
+        }
+        val message = early.message
+        val helper = SendMessagesHelper.getInstance(send.account)
+        helper.processSentMessage(message.id)
+        helper.removeFromSendingMessages(message.id, message.scheduled)
+        morphing = send
+        try {
+            plan.run(target)
+        } finally {
+            morphing = null
+            val taker = early.taker
+            // stock can return before building the message, as when it asks to confirm a paid one
+            if (taker == null || taker.inu_messageId != 0) {
+                taker?.inu_messageId = 0
+                stopAwaitingDraw(send.account, message.id)
+                PluginRpc.removeDroppedMessage(helper, send.account, message.messageOwner, message.scheduled)
+            }
+        }
+    }
+
+    private fun takeEarly(account: Int, params: SendMessageParams) {
+        val send = morphing ?: return
+        val early = send.queued.early ?: return
+        if (account != send.account || params.peer != send.target.dialogId || params.replyToTopMsg?.id != send.target.replyToTopMsg?.id) return
+        if ((params.scheduleDate != 0) != early.message.scheduled || params.retryMessageObject != null) return
+        morphing = null
+        early.taker = params
+        params.inu_messageId = early.message.id
+        val ids = awaitingDraw.getOrPut(account) { HashSet() }
+        if (ids.isEmpty()) NotificationCenter.getInstance(account).addObserver(drawObserver, NotificationCenter.didReceiveNewMessages)
+        ids.add(early.message.id)
     }
 
     private fun resending(block: () -> Unit) {
@@ -432,7 +596,10 @@ object PluginCompose {
     private fun decide(send: Send, outcome: PluginSends.Outcome) {
         for (json in send.items) json.optString("id").toLongOrNull()?.let(picked::remove)
         when (outcome) {
-            PluginSends.Outcome.Dropped -> settle(send) { finishSendTransition(send.account, send.target.dialogId) }
+            PluginSends.Outcome.Dropped -> settle(send) {
+                removeEarly(send.queued)
+                finishSendTransition(send.account, send.target.dialogId)
+            }
             is PluginSends.Outcome.Failed -> fail(send, outcome.reason)
             is PluginSends.Outcome.Send -> {
                 val plan = try {
@@ -443,7 +610,7 @@ object PluginCompose {
                 resolveTarget(send, outcome.message, { reason ->
                     for (media in plan.taken) media.upload.discard()
                     fail(send, reason)
-                }) { target -> settle(send) { plan.run(target) } }
+                }) { target -> settle(send) { morphEarly(send, plan, target) } }
             }
         }
     }
@@ -451,6 +618,7 @@ object PluginCompose {
     private fun fail(send: Send, reason: String) {
         PluginLog.HOST.w("compose", "a send was not sent: $reason")
         settle(send) {
+            removeEarly(send.queued)
             finishSendTransition(send.account, send.target.dialogId)
             LaunchActivity.getSafeLastFragment()?.let { BulletinFactory.of(it).createErrorBulletin(reason).show() }
         }
@@ -479,6 +647,7 @@ object PluginCompose {
             }
         }
         for (entry in ready) entry.run!!()
+        drawEarly()
     }
 
     internal fun readRefusal(e: PluginRefusal): String = (PluginWire.decode(e.wire) as? PluginWire.Value.PluginErr)?.message ?: e.wire

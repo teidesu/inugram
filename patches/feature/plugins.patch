@@ -6,13 +6,13 @@ Subject: Add the QuickJS plugin engine (hooks, action rows)
 ---
  .../messenger/MessagesController.java         | 124 ++++++++++--------
  .../messenger/SendMessageChatArguments.java   |   7 +
- .../messenger/SendMessagesHelper.java         |  29 +++-
+ .../messenger/SendMessagesHelper.java         |  36 ++++-
  .../telegram/tgnet/ConnectionsManager.java    |   8 +-
  .../java/org/telegram/ui/Cells/TextCell.java  |   2 +-
  .../java/org/telegram/ui/ChatActivity.java    |  12 +-
  .../org/telegram/ui/GroupCreateActivity.java  |  33 +++--
  .../java/org/telegram/ui/LaunchActivity.java  |   1 +
- 8 files changed, 145 insertions(+), 71 deletions(-)
+ 8 files changed, 151 insertions(+), 72 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 index 0000000..0000000 100644
@@ -267,7 +267,17 @@ index 0000000..0000000 100644
          final SendMessageChatArguments sendMessageChatArguments = sendMessageParams.sendMessageChatArguments != null ?
                  sendMessageParams.sendMessageChatArguments : SendMessageChatArguments.EMPTY;
          String message = sendMessageParams.message;
-@@ -7434,7 +7438,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -4819,7 +4823,8 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+                 if (newMsg.attachPath == null) {
+                     newMsg.attachPath = "";
+                 }
+-                newMsg.local_id = newMsg.id = getUserConfig().getNewMessageId();
++                newMsg.local_id = newMsg.id = sendMessageParams.inu_messageId != 0 ? sendMessageParams.inu_messageId : getUserConfig().getNewMessageId();
++                sendMessageParams.inu_messageId = 0;
+                 newMsg.out = true;
+                 TLRPC.Chat chat = sendToPeer != null ? getMessagesController().getChat(sendToPeer.channel_id) : null;
+                 if (isChannel && sendToPeer != null && (chat == null || !chat.signatures)) {
+@@ -7434,7 +7439,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
          }
      }
  
@@ -276,7 +286,7 @@ index 0000000..0000000 100644
          TLRPC.Message message;
          if (mid > 0) {
              message = editingMessages.get(mid);
-@@ -7565,6 +7569,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -7565,6 +7570,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
              return;
          }
  
@@ -284,7 +294,7 @@ index 0000000..0000000 100644
          int reqId = getConnectionsManager().sendRequest(request, (response, error) -> {
              if (error != null && FileRefController.isFileRefError(error.text)) {
                  final int fileRefIndex = FileRefController.getFileRefErrorIndex(error.text);
-@@ -7835,6 +7840,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -7835,6 +7841,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                      }
                      Utilities.stageQueue.postRunnable(() -> getMessagesController().processUpdates(updates, false));
                  } else {
@@ -294,7 +304,17 @@ index 0000000..0000000 100644
                      AlertsCreator.processError(currentAccount, error, null, request);
                      isSentError = true;
                  }
-@@ -7959,6 +7967,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -7949,6 +7958,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+         }
+         final TLRPC.Message newMsgObj = msgObj.messageOwner;
+         putToSendingMessages(newMsgObj, scheduled);
++        if (desu.inugram.helpers.plugins.telegram.PluginCompose.parkRequest(msgObj, () -> performSendMessageRequest(req, msgObj, originalPath, parentMessage, check, delayedMessage, parentObject, params, scheduled))) {
++            return;
++        }
+         if (!StarsController.getInstance(currentAccount).beforeSendingFinalRequest(req, msgObj, () -> performSendMessageRequest(req, msgObj, originalPath, parentMessage, check, delayedMessage, parentObject, params, scheduled))) {
+             return;
+         }
+@@ -7959,6 +7971,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
              return;
          }
  
@@ -302,7 +322,7 @@ index 0000000..0000000 100644
          newMsgObj.reqId = getConnectionsManager().sendRequest(req, (response, error) -> {
              if (error != null && (req instanceof TLRPC.TL_messages_sendMedia || req instanceof TL_ephemeral.TL_sendMessage || req instanceof TLRPC.TL_messages_editMessage || req instanceof TLRPC.TL_messages_addPollAnswer) && FileRefController.isFileRefError(error.text)) {
                  if (FileRefController.isFileRefErrorCover(error.text)) {
-@@ -8380,6 +8389,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -8380,6 +8393,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                              }
                          }
                      } else {
@@ -312,7 +332,7 @@ index 0000000..0000000 100644
                          AlertsCreator.processError(currentAccount, error, null, req);
                          isSentError = true;
                      }
-@@ -8488,7 +8500,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -8488,7 +8504,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
          return false;
      }
  
@@ -321,7 +341,7 @@ index 0000000..0000000 100644
          updateMediaPaths(newMsgObj, sentMessage, newMsgId, Collections.singletonList(originalPath), post, -1, params);
      }
  
-@@ -9965,6 +9977,11 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -9965,6 +9981,11 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
          if (paths == null && originalPaths == null && uris == null || paths != null && originalPaths != null && paths.size() != originalPaths.size()) {
              return;
          }
@@ -333,7 +353,7 @@ index 0000000..0000000 100644
          Utilities.globalQueue.postRunnable(() -> {
              int error = 0;
              long[] groupId = new long[1];
-@@ -10691,6 +10708,12 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -10691,6 +10712,12 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
          if (media.isEmpty()) {
              return;
          }
@@ -346,6 +366,14 @@ index 0000000..0000000 100644
          for (int a = 0, N = media.size(); a < N; a++) {
              if (media.get(a).ttl > 0) {
                  groupMedia = false;
+@@ -12124,6 +12151,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+     }
+ 
+     public static class SendMessageParams {
++        public int inu_messageId;
+         public String message;
+         public String caption;
+         public TLRPC.MessageMedia location;
 diff --git a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java b/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java

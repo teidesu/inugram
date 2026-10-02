@@ -170,9 +170,103 @@ class PluginSendInterceptTest {
         }
 
         compose("hi")
-        val message = awaitValue("the message was never drawn") { drawn.firstOrNull() }
+        awaitValue("the send never went out") { sentRequests().singleOrNull() }
 
-        assertEquals(77, message.reply_to?.reply_to_msg_id)
+        assertEquals(77, drawn.last().reply_to?.reply_to_msg_id)
+    }
+
+    /** what the chat is told through the notifications [ids] for the rest of the test, as `(notification, message ids)` */
+    private fun recordChat(vararg ids: Int): ArrayList<Pair<Int, List<Int>>> {
+        val seen = ArrayList<Pair<Int, List<Int>>>()
+        val delegate = NotificationCenter.NotificationCenterDelegate { id, _, args ->
+            @Suppress("UNCHECKED_CAST")
+            val messages = when (id) {
+                NotificationCenter.messagesDeleted -> args[0] as List<Int>
+                else -> (args[1] as List<MessageObject>).map { it.id }
+            }
+            synchronized(seen) { seen.add(id to messages) }
+        }
+        onUi { for (id in ids) NotificationCenter.getInstance(0).addObserver(delegate, id) }
+        return seen
+    }
+
+    @Test
+    fun a_send_a_stage_holds_is_drawn_early_and_the_sent_message_grows_out_of_it() {
+        val plugin = startPlugin("p", "interceptSendMessage")
+        assertNull(plugin.interceptSendMessage())
+        val seen = recordChat(NotificationCenter.replaceMessagesObjects)
+
+        compose("hi")
+        val dispatch = awaitValue("the stage was never asked") { plugin.js.sendDispatches.firstOrNull() }
+        val early = awaitValue("nothing was drawn while the stage held the send") { drawn.firstOrNull() }
+        assertEquals("hi", early.message)
+        Thread.sleep(200)
+        settle()
+        assertEquals(emptyList(), sentRequests(), "an early message went out before the stage answered")
+
+        plugin.passSend(dispatch) { message -> message.put("text", text("rewritten")) }
+        val sent = awaitValue("the send never went out") { sentRequests().singleOrNull() } as TLRPC.TL_messages_sendMessage
+        val swapped = awaitValue("the sent message never took the early one's place") { synchronized(seen) { seen.firstOrNull() } }
+
+        assertEquals("rewritten", sent.message)
+        assertEquals(NotificationCenter.replaceMessagesObjects to listOf(early.id), swapped)
+        assertEquals(listOf(early.id, early.id), drawn.map { it.id }, "the sent message was drawn as a second bubble")
+    }
+
+    @Test
+    fun a_send_a_stage_drops_takes_its_early_message_away() {
+        val plugin = startPlugin("p", "interceptSendMessage")
+        assertNull(plugin.interceptSendMessage())
+        val seen = recordChat(NotificationCenter.messagesDeleted)
+
+        compose("hi")
+        val dispatch = awaitValue("the stage was never asked") { plugin.js.sendDispatches.firstOrNull() }
+        val early = awaitValue("nothing was drawn while the stage held the send") { drawn.firstOrNull() }
+        plugin.dropVerdict(dispatch.dispatchId)
+
+        val removed = awaitValue("the early message stayed") { synchronized(seen) { seen.firstOrNull() } }
+        assertEquals(NotificationCenter.messagesDeleted to listOf(early.id), removed)
+        assertEquals(false, SendMessagesHelper.getInstance(0).isSendingMessage(early.id))
+        assertEquals(emptyList(), sentRequests())
+    }
+
+    @Test
+    fun an_early_message_the_user_cancels_is_not_sent_once_the_stage_passes_it() {
+        val plugin = startPlugin("p", "interceptSendMessage")
+        assertNull(plugin.interceptSendMessage())
+
+        compose("hi")
+        val dispatch = awaitValue("the stage was never asked") { plugin.js.sendDispatches.firstOrNull() }
+        val early = awaitValue("nothing was drawn while the stage held the send") { drawn.firstOrNull() }
+        onUi { SendMessagesHelper.getInstance(0).cancelSendingMessage(MessageObject(0, early, false, false)) }
+        plugin.passSend(dispatch)
+        Thread.sleep(200)
+        settle()
+
+        assertEquals(emptyList(), sentRequests())
+        assertEquals(listOf(early.id), drawn.map { it.id })
+    }
+
+    @Test
+    fun a_send_the_stages_never_answered_for_before_a_restart_is_not_retried() {
+        val owner = TLRPC.TL_message().apply {
+            id = -77
+            local_id = id
+            out = true
+            peer_id = TLRPC.TL_peerUser().apply { user_id = alice }
+            from_id = TLRPC.TL_peerUser().apply { user_id = self }
+            dialog_id = alice
+            message = "held"
+            date = 1_700_000_000
+            send_state = MessageObject.MESSAGE_SEND_STATE_SENDING
+            params = hashMapOf("inu_plugin_early" to "1")
+        }
+        val seen = recordChat(NotificationCenter.messagesDeleted)
+
+        onUi { SendMessagesHelper.getInstance(0).retrySendMessage(MessageObject(0, owner, false, true), false, 0) }
+
+        assertEquals(NotificationCenter.messagesDeleted to listOf(-77), awaitValue("the message stayed") { synchronized(seen) { seen.firstOrNull() } })
+        assertEquals(emptyList(), sentRequests())
     }
 
     @Test
@@ -198,7 +292,10 @@ class PluginSendInterceptTest {
         compose(".hold")
         compose("after")
         awaitValue("the stage was never asked") { held }
-        assertEquals(emptyList(), drawn.map { it.message }, "a send overtook the one held ahead of it")
+        awaitValue("the sends were never drawn") { drawn.takeIf { it.size == 2 } }
+        assertEquals(listOf(".hold", "after"), drawn.map { it.message }, "a send overtook the one held ahead of it")
+        assertTrue(drawn[0].id > drawn[1].id, "the later send took an earlier id")
+        assertEquals(emptyList(), sentRequests())
 
         plugin.passSend(held!!)
         awaitValue("the sends never went out") { sentRequests().takeIf { it.size == 2 } }

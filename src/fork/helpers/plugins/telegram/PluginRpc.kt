@@ -304,7 +304,7 @@ object PluginRpc : SessionResource {
         else -> ChatActivity.MODE_DEFAULT
     }
 
-    private fun removeDroppedMessage(helper: SendMessagesHelper, account: Int, message: TLRPC.Message, scheduled: Boolean) {
+    internal fun removeDroppedMessage(helper: SendMessagesHelper, account: Int, message: TLRPC.Message, scheduled: Boolean) {
         if (Looper.myLooper() != Looper.getMainLooper()) {
             return AndroidUtilities.runOnUIThread { removeDroppedMessage(helper, account, message, scheduled) }
         }
