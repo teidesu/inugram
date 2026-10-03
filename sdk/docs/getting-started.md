@@ -131,6 +131,7 @@ A few notes:
 | `inu build [names...]` | Bundle every plugin, or the named ones. `-w` watches |
 | `inu check [names...]` | Validate manifests and routines, then typecheck, without writing files. Use `--no-typecheck` to skips `tsc` type checking |
 | `inu dev [names...]` | Run the watcher |
+| `inu push [names...]` | Build, push and reload once, then print the log for `--logs <seconds>` (default 3). Exits with 1 on a build, install or load failure, or any error logged. Useful for scripts and agents |
 | `inu list` | List installed plugins on the connected device |
 | `inu remove <file>` | Uninstall a dev plugin |
 | `inu verify <files...>` | Check that each compiled routine in a built file matches its recorded source |

@@ -5,6 +5,7 @@ import { checkCmd } from './commands/check.js'
 import { devCmd } from './commands/dev.js'
 import { initCmd } from './commands/init.js'
 import { listCmd } from './commands/list.js'
+import { pushCmd } from './commands/push.js'
 import { removeCmd } from './commands/remove.js'
 import { verifyCmd } from './commands/verify.js'
 import { version } from './meta.js'
@@ -22,6 +23,7 @@ const main = defineCommand({
     check: checkCmd,
     dev: devCmd,
     list: listCmd,
+    push: pushCmd,
     remove: removeCmd,
     verify: verifyCmd,
   },

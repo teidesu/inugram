@@ -24,6 +24,7 @@ and validates grants before you install the plugin.
 | `inu build [names...]` | bundle every plugin, or the ones named |
 | `inu check [names...]` | validate manifests and routines and typecheck, without building (`--no-typecheck` to skip types) |
 | `inu dev [names...]` | build, push to a connected device and reload on every save |
+| `inu push [names...]` | build, push and reload once, print the log for `--logs <seconds>` (default 3); exits 1 on a build, install or load failure, or any error line |
 | `inu list` | what the device has installed |
 | `inu remove <file>` | uninstall a dev plugin by file name |
 
