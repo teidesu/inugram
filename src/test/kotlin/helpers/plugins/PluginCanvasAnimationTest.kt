@@ -289,6 +289,47 @@ class PluginCanvasAnimationTest {
     }
 
     @Test
+    fun reading_a_frame_by_index_mid_iteration_goes_on_from_that_frame() {
+        val plugin = engineFor()
+        val t = JSONObject(plugin.await(
+            """
+            (async () => {
+              using canvas = inu.canvas.create(64, 64)
+              const ctx = canvas.getContext('2d')
+              using encoder = await inu.canvas.createEncoder({ width: 64, height: 64, fps: 10 })
+              for (let i = 0; i < 10; i++) {
+                const level = i * 24
+                ctx.fillStyle = `rgb(${'$'}{level}, ${'$'}{level}, ${'$'}{level})`
+                ctx.fillRect(0, 0, 64, 64)
+                await encoder.addFrame(canvas)
+              }
+              using mp4 = await encoder.finish()
+              using animation = await inu.canvas.decodeAnimation(mp4, { width: 32, height: 32 })
+              using into = inu.canvas.create(32, 32)
+              const inner = into.getContext('2d')
+              const levels = []
+              const take = (frame) => {
+                inner.drawImage(frame, 0, 0)
+                levels.push(inner.getAverageColor().r)
+                frame.dispose()
+              }
+              take((await animation.next()).value)
+              take((await animation.next()).value)
+              take(await animation.frame(5))
+              take((await animation.next()).value)
+              take((await animation.next()).value)
+              return { levels }
+            })()
+            """,
+        ))
+        val levels = t.getJSONArray("levels")
+        val expected = listOf(0, 1, 5, 6, 7).map { it * 24 }
+        for ((at, want) in expected.withIndex()) {
+            assertTrue(kotlin.math.abs(levels.getInt(at) - want) < 14, "read ${at + 1} gave $levels, expected source frames 0, 1, 5, 6, 7")
+        }
+    }
+
+    @Test
     fun a_video_read_at_a_higher_rate_answers_a_frame_for_every_tick() {
         val plugin = engineFor()
         val t = JSONObject(plugin.await(

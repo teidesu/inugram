@@ -32,20 +32,49 @@ internal sealed class PluginAnimationDecoder(shared: Executor) {
     /** `0` when the source does not say */
     abstract val fps: Int
 
-    abstract fun frame(index: Int): Frame
+    protected abstract fun frame(index: Int): Frame
 
-    abstract fun next(): Frame?
+    protected abstract fun next(): Frame?
 
     protected abstract fun release()
 
     @Volatile
     private var closed = false
 
+    /** the frame after the one [readNext] answered last, decoded while the plugin draws that one; on [queue] */
+    private var ahead: Result<Frame?>? = null
+
+    /** on [queue] */
+    fun readNext(): Frame? {
+        val taken = ahead
+        ahead = null
+        val frame = if (taken != null) taken.getOrThrow() else next()
+        if (frame != null) {
+            runCatching { queue.execute { if (!closed && ahead == null) ahead = runCatching { next() } } }
+        }
+        return frame
+    }
+
+    /** on [queue]. A frame read ahead is dropped: the decoder already moved past it, which [frame] accounts for */
+    fun readFrame(index: Int): Frame {
+        dropAhead()
+        return frame(index)
+    }
+
+    private fun dropAhead() {
+        ahead?.getOrNull()?.bitmap?.recycle()
+        ahead = null
+    }
+
     /** called from any thread, so the decoder is released on [queue] behind a frame that may still be decoding */
     fun close() {
         if (closed) return
         closed = true
-        if (runCatching { queue.execute { release() } }.isFailure) release()
+        val discard = {
+            dropAhead()
+            release()
+        }
+        if (runCatching { queue.execute(discard) }.isFailure) discard()
     }
 
     protected fun newFrame(width: Int, height: Int): Bitmap =

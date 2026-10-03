@@ -762,7 +762,7 @@ object PluginCanvas : SessionResource {
             val imageId = reader.i64()
             val index = reader.i32()
             val decoder = getAnimation(id)
-            submitFrame(requestId, imageId, decoder) { decoder.frame(index) }
+            submitFrame(requestId, imageId, decoder) { decoder.readFrame(index) }
             return ""
         }
 
@@ -770,7 +770,7 @@ object PluginCanvas : SessionResource {
             val requestId = reader.i64()
             val imageId = reader.i64()
             val decoder = getAnimation(id)
-            submitFrame(requestId, imageId, decoder) { decoder.next() }
+            submitFrame(requestId, imageId, decoder) { decoder.readNext() }
             return ""
         }
 
