@@ -69,9 +69,6 @@ interface UiListener {
     ): String?
 
     fun actionUnregister(kind: Int, token: Int)
-
-    /** [op] keeps in sync with rust `actions::EDITOR_*` */
-    fun actionEditor(op: Int, surface: Long, payloadJson: String): String?
 }
 
 interface PlatformListener {

@@ -62,27 +62,6 @@ class ActionSurface private constructor(
             )
         }
 
-        fun editor(
-            accountId: Int,
-            dialogId: Long,
-            topicId: Long?,
-            surfaceId: Long,
-            text: String,
-            entitiesJson: String?,
-        ): ActionSurface {
-            val draft = JSONObject().put("text", text)
-            if (entitiesJson != null) draft.put("entities", JSONArray(entitiesJson))
-            return ActionSurface(
-                chatJson(accountId, dialogId, topicId)
-                    .put("surface", surfaceId)
-                    .put("draft", draft)
-                    .toString(),
-                PluginActions.KIND_EDITOR,
-                -1,
-                dialogId,
-            )
-        }
-
         private fun chatJson(accountId: Int, dialogId: Long, topicId: Long?): JSONObject {
             val out = JSONObject()
                 .put("accountId", accountId)

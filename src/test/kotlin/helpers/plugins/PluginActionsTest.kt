@@ -291,12 +291,6 @@ class PluginActionsTest {
         assertEquals(emptyList(), rendered(PluginActions.KIND_CHAT, chat))
         assertEquals(0, plugin.js.actionRenders.size)
     }
-
-    @Test
-    fun an_editor_op_naming_a_composer_that_is_gone_is_refused_rather_than_dropped_silently() {
-        val refusal = PluginActions.editorOp(PluginActions.EDITOR_REPLACE, 404L, """{"text":"hi"}""")
-        assertPluginError("handle-expired", refusal)
-    }
 }
 
 private object DialogObjectIds {

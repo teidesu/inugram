@@ -2,7 +2,6 @@ use crate::runtime::Dispose;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use rquickjs::object::Accessor;
 use rquickjs::{Array, Ctx, Exception, Function, Object, Persistent, Result as JsResult, Value};
 
 use crate::api::error::{call_callback, describe_js_error, format_exception};
@@ -12,7 +11,6 @@ use crate::api::tl::proxy::json_parse_tl;
 use crate::api::ui::icons::{icon_from_value, Icon};
 use crate::runtime::enter_js;
 use crate::runtime::pump_jobs;
-use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry};
 use crate::utils::arguments::{field, opt_fn, req_fn, req_str, stringify_json};
 
@@ -20,7 +18,6 @@ pub const KIND_GLOBAL: i32 = 0;
 pub const KIND_CHAT: i32 = 1;
 pub const KIND_MESSAGE: i32 = 2;
 pub const KIND_PROFILE: i32 = 3;
-pub const KIND_EDITOR: i32 = 4;
 
 pub const MESSAGE_PLACEMENT_BUBBLE: i32 = 1;
 pub const MESSAGE_PLACEMENT_SELECTION: i32 = 2;
@@ -30,20 +27,13 @@ pub const DYNAMIC_TEXT: i32 = 1;
 pub const DYNAMIC_ICON: i32 = 2;
 pub const DYNAMIC_VISIBLE: i32 = 4;
 
-const DRAFT_GRANT: &str = "account.read";
-const DRAFT_SCOPE: &str = "draft";
-
-const KIND_COUNT: usize = 5;
-
-pub const EDITOR_REPLACE: i32 = 0;
-pub const EDITOR_SEND: i32 = 1;
+const KIND_COUNT: usize = 4;
 
 fn kind_name(kind: i32) -> &'static str {
   match kind {
     KIND_CHAT => "registerChatAction",
     KIND_MESSAGE => "registerMessageAction",
     KIND_PROFILE => "registerProfileAction",
-    KIND_EDITOR => "registerMessageEditorAction",
     _ => "registerGlobalAction",
   }
 }
@@ -60,7 +50,6 @@ pub trait ActionHost {
     dynamic_fields: i32,
   ) -> Option<String>;
   fn action_unregister(&self, kind: i32, token: u32);
-  fn action_editor(&self, op: i32, surface: i64, payload_json: &str) -> Option<String>;
 }
 
 enum Label {
@@ -88,7 +77,6 @@ pub struct ActionState {
   lifecycle: Rc<Lifecycle>,
   log: crate::Log,
   accounts: Option<Rc<AccountState>>,
-  grants: Rc<dyn GrantHost>,
   jvm: Option<Rc<JvmState>>,
   kinds: Vec<Registry<Rc<ActionDef>>>,
 }
@@ -104,7 +92,6 @@ pub fn install_actions<'js>(
   host: Rc<dyn ActionHost>,
   lifecycle: Rc<Lifecycle>,
   accounts: Option<Rc<AccountState>>,
-  grants: Rc<dyn GrantHost>,
   jvm: Option<Rc<JvmState>>,
   log: crate::Log,
   globals: &crate::api::Globals<'js>,
@@ -114,7 +101,6 @@ pub fn install_actions<'js>(
     lifecycle,
     log,
     accounts,
-    grants,
     jvm,
     kinds: (0..KIND_COUNT).map(|_| Registry::default()).collect(),
   });
@@ -124,7 +110,6 @@ pub fn install_actions<'js>(
     ("registerChatAction", KIND_CHAT),
     ("registerMessageAction", KIND_MESSAGE),
     ("registerProfileAction", KIND_PROFILE),
-    ("registerMessageEditorAction", KIND_EDITOR),
   ] {
     let state = state.clone();
     globals.inu.set(
@@ -286,62 +271,7 @@ impl ActionState {
       out.set("messages", wrapped)?;
       return Ok((out, placement));
     }
-    if kind == KIND_EDITOR {
-      if self.grants.is_granted(DRAFT_GRANT, Some(DRAFT_SCOPE), MATCH_EXACT) {
-        let draft: Value = parsed.get("draft")?;
-        out.set("draft", draft)?;
-      } else {
-        let state2 = self.clone();
-        out.prop(
-          "draft",
-          Accessor::new_get(move |ctx: Ctx<'js>| -> JsResult<Value<'js>> {
-            state2.grants.check_grant(&ctx, DRAFT_GRANT, Some(DRAFT_SCOPE), MATCH_EXACT)?;
-            Ok(Value::new_undefined(ctx))
-          })
-          .enumerable()
-          .configurable(),
-        )?;
-      }
-      let surface: i64 = parsed.get::<_, Option<f64>>("surface")?.unwrap_or(0.0) as i64;
-      for (name, op) in [("replace", EDITOR_REPLACE), ("send", EDITOR_SEND)] {
-        let state = self.clone();
-        out.set(
-          name,
-          Function::new(ctx.clone(), move |ctx: Ctx<'js>, value: Value<'js>| {
-            state.editor_op(&ctx, op, surface, value)
-          })?,
-        )?;
-      }
-    }
     Ok((out, ALL_PLACEMENTS))
-  }
-
-  fn editor_op<'js>(&self, ctx: &Ctx<'js>, op: i32, surface: i64, value: Value<'js>) -> JsResult<()> {
-    let what = if op == EDITOR_REPLACE { "replace" } else { "send" };
-    let payload = Object::new(ctx.clone())?;
-    if let Some(text) = value.as_string() {
-      payload.set("text", text.to_string()?)?;
-    } else if let Some(obj) = value.as_object() {
-      let text: Value = obj.get("text")?;
-      let Some(text) = text.as_string() else {
-        return Err(Exception::throw_type(ctx, &format!("{what}: expected a string or {{ text, entities }}")));
-      };
-      payload.set("text", text.to_string()?)?;
-      let entities: Value = obj.get("entities")?;
-      if !entities.is_undefined() && !entities.is_null() {
-        if entities.as_array().is_none() {
-          return Err(Exception::throw_type(ctx, &format!("{what}: entities must be an array")));
-        }
-        payload.set("entities", entities)?;
-      }
-    } else {
-      return Err(Exception::throw_type(ctx, &format!("{what}: expected a string or {{ text, entities }}")));
-    }
-    let json = stringify_json(ctx, payload.into_value(), &format!("{what}: serialization failed"))?;
-    match self.host.action_editor(op, surface, &json) {
-      Some(err) => Err(ctx.throw(crate::api::error::host_error_to_js(ctx, &err)?)),
-      None => Ok(()),
-    }
   }
 
   fn surface_context<'js>(

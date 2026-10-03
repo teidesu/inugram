@@ -14,7 +14,6 @@ import desu.inugram.helpers.plugins.PluginManager
 import desu.inugram.helpers.plugins.QuickJs
 import java.util.concurrent.CopyOnWriteArrayList
 import org.json.JSONArray
-import org.json.JSONObject
 import org.telegram.messenger.AndroidUtilities
 
 /** a reload builds a new engine whose tokens restart at 1, so never key by [Plugin] */
@@ -50,8 +49,7 @@ object PluginActions : SessionResource {
     const val KIND_CHAT = 1
     const val KIND_MESSAGE = 2
     const val KIND_PROFILE = 3
-    const val KIND_EDITOR = 4
-    private const val KIND_COUNT = 5
+    private const val KIND_COUNT = 4
 
     // keep in sync with rust `actions::MESSAGE_PLACEMENT_*`
     const val MESSAGE_PLACEMENT_BUBBLE = 1
@@ -65,9 +63,6 @@ object PluginActions : SessionResource {
     const val DYNAMIC_VISIBLE = 4
     private const val DYNAMIC_PRESENTATION = DYNAMIC_TEXT or DYNAMIC_ICON
     private const val DYNAMIC_ALL = DYNAMIC_PRESENTATION or DYNAMIC_VISIBLE
-
-    // keep in sync with rust `actions::EDITOR_*`; anything but replace sends
-    const val EDITOR_REPLACE = 0
 
     /** the engine queue is shared with every engine op, so the wait is bounded */
     const val RENDER_BUDGET_MS = 150L
@@ -89,16 +84,6 @@ object PluginActions : SessionResource {
 
     fun watchCounts(redraw: () -> Unit) {
         onCountsChanged.add(redraw)
-    }
-
-    /** ui thread, plus a volatile view */
-    private val editorSurfaces = HashMap<Long, EditorSurface>()
-    @Volatile private var liveEditorSurfaces = emptySet<Long>()
-    private var nextEditorSurface = 1L
-
-    interface EditorSurface {
-        fun replaceDraft(text: String, entitiesJson: String?)
-        fun sendDraft(text: String, entitiesJson: String?)
     }
 
     fun register(
@@ -129,24 +114,6 @@ object PluginActions : SessionResource {
     override fun detach(session: PluginSession) {
         registry.forget(session.engine)
         publishCounts()
-    }
-
-    fun editorOp(op: Int, surface: Long, payloadJson: String): String? {
-        if (surface !in liveEditorSurfaces) {
-            return PluginWire.encodePluginError("handle-expired", "the composer this action came from is gone")
-        }
-        val payload = try {
-            JSONObject(payloadJson)
-        } catch (e: Exception) {
-            return PluginWire.encodePluginError("invalid-argument", "action: ${e.message}")
-        }
-        val text = payload.optString("text")
-        val entities = payload.optJSONArray("entities")?.toString()
-        AndroidUtilities.runOnUIThread {
-            val target = editorSurfaces[surface] ?: return@runOnUIThread
-            if (op == EDITOR_REPLACE) target.replaceDraft(text, entities) else target.sendDraft(text, entities)
-        }
-        return null
     }
 
     /** far above stock ids and the fork's (`ChatHelper.OPTION_*`, `ChatActionsHelper.ACTION_*`) */
@@ -334,18 +301,6 @@ object PluginActions : SessionResource {
             }
             live.owner.dispatchAction(surface.kind, live.token, surfaceJson)
         }
-    }
-
-    fun openEditorSurface(target: EditorSurface): Long {
-        val id = nextEditorSurface++
-        editorSurfaces[id] = target
-        liveEditorSurfaces = editorSurfaces.keys.toSet()
-        return id
-    }
-
-    fun closeEditorSurface(id: Long) {
-        if (editorSurfaces.remove(id) == null) return
-        liveEditorSurfaces = editorSurfaces.keys.toSet()
     }
 
     /** `common.d.ts` promises plugin-list order, and membership makes rows from stopped engines inert */

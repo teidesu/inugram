@@ -4,22 +4,14 @@ Date: Wed, 2 Sep 2026 05:51:44 +0400
 Subject: hook for fork rows in the send preview sheet
 
 ---
- .../java/org/telegram/ui/Components/ChatActivityEnterView.java | 3 ++-
- 1 file changed, 2 insertions(+), 1 deletion(-)
+ .../java/org/telegram/ui/Components/ChatActivityEnterView.java  | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
-@@ -4894,6 +4894,7 @@ public class ChatActivityEnterView extends FrameLayout implements
-         };
-         messageSendPreview.setOnDismissListener(di -> {
-             messageSendPreview = null;
-+            desu.inugram.helpers.chat.ChatActionsHelper.onSendPreviewDismissed(this);
-         });
- 
-         final boolean containsSendMessage = audioToSendMessageObject != null || messageEditText != null && !TextUtils.isEmpty(messageEditText.getText());
-@@ -5118,7 +5119,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -5118,7 +5118,7 @@ public class ChatActivityEnterView extends FrameLayout implements
          }
          messageSendPreview.setItemOptions(options);
  

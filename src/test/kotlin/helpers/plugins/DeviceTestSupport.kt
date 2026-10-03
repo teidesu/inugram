@@ -354,8 +354,6 @@ internal object DeviceMissing : CoreListener, UiListener, PlatformListener, Canv
     ) = throw UnsupportedOperationException("this suite has no actions")
 
     override fun actionUnregister(kind: Int, token: Int) = throw UnsupportedOperationException("this suite has no actions")
-
-    override fun actionEditor(op: Int, surface: Long, payloadJson: String) = throw UnsupportedOperationException("this suite has no actions")
 }
 
 fun createManifest(name: String, grants: List<String>): PluginManifest = PluginManifest(

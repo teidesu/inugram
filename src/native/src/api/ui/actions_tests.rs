@@ -10,17 +10,9 @@ use rquickjs::{Context, Runtime};
 pub(crate) struct TestActionHost {
   registered: RefCell<Vec<(i32, u32, String, Option<String>, Option<String>, i32)>>,
   unregistered: RefCell<Vec<(i32, u32)>>,
-  editor: RefCell<Vec<(i32, i64, String)>>,
   rows: RefCell<Vec<(i32, String, u32, i32)>>,
   pub(crate) limit: Cell<usize>,
   refuse_register: RefCell<Option<String>>,
-  refuse_editor: RefCell<Option<String>>,
-}
-
-impl TestActionHost {
-  pub(crate) fn editor_ops(&self) -> Vec<(i32, i64, String)> {
-    self.editor.borrow().clone()
-  }
 }
 
 impl ActionHost for TestActionHost {
@@ -71,13 +63,6 @@ impl ActionHost for TestActionHost {
     self.rows.borrow_mut().retain(|r| !(r.0 == kind && r.2 == token));
     self.unregistered.borrow_mut().push((kind, token));
   }
-  fn action_editor(&self, op: i32, surface: i64, payload_json: &str) -> Option<String> {
-    if let Some(err) = self.refuse_editor.borrow().clone() {
-      return Some(err);
-    }
-    self.editor.borrow_mut().push((op, surface, payload_json.to_string()));
-    None
-  }
 }
 
 pub(crate) type Disposing = crate::testing::harness::DisposeOnDrop<ActionState>;
@@ -85,10 +70,10 @@ pub(crate) type Fixture =
   (Runtime, Context, Rc<TestActionHost>, Disposing, std::sync::Arc<crate::testing::harness::Logs>);
 
 pub(crate) fn setup() -> Fixture {
-  setup_with(Lifecycle::new(), &["account.read(draft)"])
+  setup_with(Lifecycle::new())
 }
 
-fn setup_with(lifecycle: Rc<Lifecycle>, grants: &[&str]) -> Fixture {
+fn setup_with(lifecycle: Rc<Lifecycle>) -> Fixture {
   let (rt, ctx) = crate::testing::harness::new_engine();
   let host = Rc::new(TestActionHost::default());
   let host_dyn: Rc<dyn ActionHost> = host.clone();
@@ -98,8 +83,7 @@ fn setup_with(lifecycle: Rc<Lifecycle>, grants: &[&str]) -> Fixture {
     let inu = crate::testing::harness::get_api_globals(&ctx);
     let shared = crate::api::tl::utils::install_utils(&ctx, &inu).unwrap();
     crate::api::tl::message::install_message(&ctx, &shared, &inu).unwrap();
-    let grants = crate::sandbox::grants::CachedGrantHost::new(grants);
-    install_actions(&ctx, host_dyn, lifecycle, None, grants, None, log, &inu).unwrap()
+    install_actions(&ctx, host_dyn, lifecycle, None, None, log, &inu).unwrap()
   });
   let state = Disposing::new(&ctx, state, |ctx, state| state.dispose(ctx));
   (rt, ctx, host, state, logs)
@@ -252,7 +236,7 @@ fn a_disposer_removes_the_row_and_tells_the_host_once() {
 fn registering_after_unload_began_registers_nothing() {
   let lifecycle = Lifecycle::new();
   lifecycle.begin_unload();
-  let (_rt, ctx, host, state, _logs) = setup_with(lifecycle, &["account.read(draft)"]);
+  let (_rt, ctx, host, state, _logs) = setup_with(lifecycle);
   eval(
     &ctx,
     r#"
@@ -269,7 +253,7 @@ fn registering_after_unload_began_registers_nothing() {
 fn a_malformed_registration_throws_even_while_unloading() {
   let lifecycle = Lifecycle::new();
   lifecycle.begin_unload();
-  let (_rt, ctx, _host, _state, _logs) = setup_with(lifecycle, &["account.read(draft)"]);
+  let (_rt, ctx, _host, _state, _logs) = setup_with(lifecycle);
   let err = eval_err(&ctx, "inu.registerChatAction({ id: 'a', text: 'A' })");
   assert!(err.contains("'callback' must be a function"), "{err}");
 }
@@ -419,76 +403,6 @@ fn kinds_are_separate_registries() {
   assert_eq!(state.render(&ctx, KIND_MESSAGE, MESSAGE_SURFACE).unwrap(), rows(&[row(1, "message")]));
 }
 
-/// the composer's text is app state, and `getDraft` charges `account.read(draft)` for the very
-/// same thing - so a row a plugin drew is not a way around that gate. `send` still works, or
-/// the refusal would take the whole api away from a row that never reads anything.
-#[test]
-fn reading_the_draft_needs_the_same_grant_get_draft_does() {
-  let (_rt, ctx, host, state, _logs) = setup_with(Lifecycle::new(), &[]);
-  eval(
-    &ctx,
-    r#"
-      globalThis.__log = [];
-      inu.registerMessageEditorAction({
-        id: 'a', text: 'Shout',
-        callback: ctx => {
-          try {
-            __log.push(ctx.draft.text)
-          } catch (e) {
-            __log.push((e.code ?? e.name) + ':' + e.message)
-          }
-          ctx.replace('written anyway');
-        },
-      })
-    "#,
-  );
-  let surface = r#"{"accountId":0,"dialogId":5,"surface":42,"draft":{"text":"hi there"}}"#;
-  state.dispatch(&ctx, KIND_EDITOR, 1, surface);
-  let log = read_log(&ctx);
-  assert!(log.contains("not-granted"), "{log}");
-  assert!(log.contains("account.read(draft)"), "{log}");
-  assert_eq!(host.editor.borrow().len(), 1, "the write half is not gated on a read scope");
-}
-
-#[test]
-fn a_bad_editor_argument_is_a_type_error() {
-  let (_rt, ctx, host, state, _logs) = setup();
-  eval(
-    &ctx,
-    r#"
-      globalThis.__log = [];
-      inu.registerMessageEditorAction({
-        id: 'a', text: 'x',
-        callback: ctx => {
-          try { ctx.replace(42) } catch (e) { __log.push(e.name) }
-          try { ctx.send({ text: 'ok', entities: 'no' }) } catch (e) { __log.push(e.name) }
-        },
-      })
-    "#,
-  );
-  state.dispatch(&ctx, KIND_EDITOR, 1, r#"{"accountId":0,"dialogId":5,"surface":1,"draft":{"text":""}}"#);
-  assert_eq!(read_log(&ctx), r#"["TypeError","TypeError"]"#);
-  assert!(host.editor.borrow().is_empty());
-}
-
-#[test]
-fn a_host_that_refuses_an_editor_op_throws_into_the_callback() {
-  let (_rt, ctx, host, state, _logs) = setup();
-  *host.refuse_editor.borrow_mut() = Some("the composer is gone".to_string());
-  eval(
-    &ctx,
-    r#"
-      globalThis.__log = [];
-      inu.registerMessageEditorAction({
-        id: 'a', text: 'x',
-        callback: ctx => { try { ctx.send('hi') } catch (e) { __log.push(e.message) } },
-      })
-    "#,
-  );
-  state.dispatch(&ctx, KIND_EDITOR, 1, r#"{"accountId":0,"dialogId":5,"surface":1,"draft":{"text":""}}"#);
-  assert_eq!(read_log(&ctx), r#"["the composer is gone"]"#);
-}
-
 #[test]
 fn the_bundled_actions_test_plugin_passes() {
   let (rt, ctx, host, state, logs) = setup();
@@ -503,19 +417,12 @@ fn the_bundled_actions_test_plugin_passes() {
   state.dispatch(&ctx, KIND_MESSAGE, 1, SELECTION_SURFACE);
   state.dispatch(&ctx, KIND_PROFILE, 1, CHAT_SURFACE);
   state.dispatch(&ctx, KIND_GLOBAL, 1, r#"{"accountId":0}"#);
-  let editor_surface = r#"{"accountId":0,"dialogId":-100,"surface":42,"draft":{"text":"hello"}}"#;
-  state.dispatch(&ctx, KIND_EDITOR, 1, editor_surface);
 
   while rt.is_job_pending() {
     rt.execute_pending_job().ok();
   }
   let lines = lines.borrow().clone();
-  crate::testing::harness::assert_oracle_exact(&lines, "actions test done", 19);
-  let editor = host.editor_ops();
-  assert_eq!(editor.len(), 2);
-  assert_eq!(editor[0], (EDITOR_REPLACE, 42, r#"{"text":"replaced"}"#.to_string()));
-  assert_eq!((editor[1].0, editor[1].1), (EDITOR_SEND, 42));
-  assert!(editor[1].2.contains("messageEntityBold"), "{}", editor[1].2);
+  crate::testing::harness::assert_oracle_exact(&lines, "actions test done", 16);
   // what the oracle cannot see about itself: its throwing row was dropped from the render
   // above and left the plugin running, so every assertion after it still ran
   let logs = logs.borrow();

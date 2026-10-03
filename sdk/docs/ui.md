@@ -169,7 +169,6 @@ Using actions APIs, you can expand the app's built-in menus with custom actions:
 | `registerChatAction` | Chat activity's ⋮ |
 | `registerProfileAction` | Profile activity's ⋮ |
 | `registerMessageAction` | Message context menu |
-| `registerMessageEditorAction` | Long tap on the send button |
 
 ```ts
 inu.registerMessageAction({

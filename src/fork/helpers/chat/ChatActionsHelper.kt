@@ -5,8 +5,6 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.text.InputType
-import android.text.SpannableStringBuilder
-import android.text.TextPaint
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.View
@@ -18,22 +16,17 @@ import desu.inugram.helpers.plugins.ui.ActionRow
 import desu.inugram.helpers.menu.ChatMenuConfig
 import desu.inugram.helpers.menu.reorderByMenu
 import desu.inugram.helpers.menu.reorderByKeys
-import desu.inugram.helpers.plugins.tl.TlFilter
-import desu.inugram.helpers.plugins.tl.TlJson
 import desu.inugram.helpers.plugins.ui.ActionSurface
 import desu.inugram.helpers.plugins.ui.MessageActionSource
 import desu.inugram.helpers.plugins.ui.PluginActions
 import desu.inugram.helpers.plugins.ui.PluginIcons
-import desu.inugram.helpers.plugins.ui.PluginText
 import desu.inugram.helpers.translate.TranslateHelper
 import desu.inugram.ui.showInputDialog
 import java.util.WeakHashMap
-import org.json.JSONArray
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.BuildVars
 import org.telegram.messenger.ChatObject
 import org.telegram.messenger.LocaleController
-import org.telegram.messenger.MediaDataController
 import org.telegram.messenger.MessageObject
 import org.telegram.messenger.MessagesController
 import org.telegram.messenger.R
@@ -359,56 +352,12 @@ object ChatActionsHelper {
         state.swipeBackShown = true
     }
 
-    /**
-     * every fork row in the send-button long-press sheet, and the sheet's own `show()`. Unlike the
-     * chat header's menu, this one is rebuilt from scratch on every long press, so there is nothing
-     * to keep live between opens - but a plugin row's label only comes from globalQueue, so the
-     * sheet is parked until the rows land or [PluginActions.RENDER_BUDGET_MS] runs out, exactly as
-     * the message menu is. With no plugin rows registered this is stock's own `show()`.
-     */
+    /** the send-button long-press sheet: its fork rows, and the sheet's own `show()` */
     @JvmStatic
     fun showSendPreview(enterView: ChatActivityEnterView, options: ItemOptions, preview: MessageSendPreview) {
-        val activity = enterView.parentFragment
-        addRefetchWebPreviewItem(activity, enterView, options, preview)
-        if (activity == null || PluginActions.rowCount(PluginActions.KIND_EDITOR) == 0) {
-            options.setupSelectors()
-            preview.show()
-            return
-        }
-
-        val text = enterView.fieldText ?: ""
-        val parsed = arrayOf<CharSequence>(SpannableStringBuilder(text))
-        val entities = MediaDataController.getInstance(activity.currentAccount).getEntities(parsed, true)
-        val entitiesJson = JSONArray().apply {
-            for (entity in entities) put(TlJson.toJson(entity, TlFilter.Policy(takeover = false, drafts = true)))
-        }
-
-        // the composer outlives the sheet, so the surface is opened here and closed with it
-        // ([onSendPreviewDismissed]): a callback that resolves after the user dismissed the
-        // menu has nothing left to write into
-        val surfaceId = PluginActions.openEditorSurface(EditorSurface(enterView))
-        editorSurfaces.put(enterView, surfaceId)?.let(PluginActions::closeEditorSurface)
-        val surface = ActionSurface.editor(
-            activity.currentAccount,
-            activity.dialogId,
-            activity.topicId,
-            surfaceId,
-            parsed[0].toString(),
-            entitiesJson.toString(),
-        )
-
-        var shown = false
-        fun showOnce(rows: List<ActionRow>) {
-            if (shown) return
-            shown = true
-            for (row in rows) {
-                options.add(R.drawable.msg_settings_old, row.text) { PluginActions.dispatch(row, surface) }
-            }
-            options.setupSelectors()
-            preview.show()
-        }
-        PluginActions.render(PluginActions.KIND_EDITOR, surface) { rows -> showOnce(rows) }
-        AndroidUtilities.runOnUIThread({ showOnce(emptyList()) }, PluginActions.RENDER_BUDGET_MS)
+        addRefetchWebPreviewItem(enterView.parentFragment, enterView, options, preview)
+        options.setupSelectors()
+        preview.show()
     }
 
     private fun addRefetchWebPreviewItem(
@@ -425,49 +374,6 @@ object ChatActionsHelper {
             preview.dismiss(false)
             enterView.messageSendPreview = null
             activity.inu_refetchWebPreview()
-        }
-    }
-
-    // one sheet per composer at a time, so this is the surface the live one owns
-    private val editorSurfaces = WeakHashMap<ChatActivityEnterView, Long>()
-
-    @JvmStatic
-    fun onSendPreviewDismissed(enterView: ChatActivityEnterView) {
-        editorSurfaces.remove(enterView)?.let(PluginActions::closeEditorSurface)
-    }
-
-    /**
-     * what `MessageEditorActionContext.replace`/`send` reach. The composer is held for as long as
-     * the sheet is up and no longer ([PluginActions.closeEditorSurface]); both arrive on the ui
-     * thread, which is where the field and the send path both have to be touched from.
-     */
-    private class EditorSurface(
-        private val enterView: ChatActivityEnterView,
-    ) : PluginActions.EditorSurface {
-        override fun replaceDraft(text: String, entitiesJson: String?) {
-            enterView.setFieldText(buildFieldText(text, entitiesJson))
-        }
-
-        override fun sendDraft(text: String, entitiesJson: String?) {
-            enterView.setFieldText(buildFieldText(text, entitiesJson))
-            enterView.sendMessage()
-        }
-
-        /**
-         * the composer's own entity applier rather than [PluginText]'s: these spans have to survive
-         * the round trip back out of the field when the message is sent, which is only true of the
-         * ones stock puts there itself - a mention, a custom emoji, a date that stays a date.
-         *
-         * The paint fallback is stock's own ([ChatActivityEnterView.setEditingBusinessLink]): the
-         * edit field is created lazily, and a custom emoji cannot size itself without one.
-         */
-        private fun buildFieldText(text: String, entitiesJson: String?): CharSequence {
-            val paint = enterView.editField?.paint ?: TextPaint().apply { textSize = AndroidUtilities.dp(18f).toFloat() }
-            return ChatActivityEnterView.applyMessageEntities(
-                PluginText.parseEntities(entitiesJson),
-                text,
-                paint.fontMetricsInt,
-            ) ?: text
         }
     }
 

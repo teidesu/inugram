@@ -1502,11 +1502,6 @@ declare namespace inu {
     /** Oldest to newest. A bubble expands its album; a selection contains exactly what the user selected. */
     messages: readonly Message[]
   }
-  interface MessageEditorActionContext extends ChatActionContext {
-    draft: TextWithEntities
-    replace: (draft: InputText) => void
-    send: (message: InputText) => void
-  }
 
   interface ActionOptions<Ctx, GetterCtx = Ctx> {
     id: string
@@ -1536,9 +1531,6 @@ declare namespace inu {
 
   /** Register a profile action, shown in the profile hamburger menu */
   function registerProfileAction(options: ActionOptions<ChatActionContext>): Disposer
-
-  /** Register a message editor action, shown when long-tapping the send button in the message editor */
-  function registerMessageEditorAction(options: ActionOptions<MessageEditorActionContext>): Disposer
 
   /** Quoted part of a replied-to message */
   interface ReplyQuote extends TextWithEntities {

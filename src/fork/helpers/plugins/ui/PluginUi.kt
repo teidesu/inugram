@@ -140,9 +140,6 @@ object PluginUi : SessionResource {
         ): String? = PluginActions.register(session, kind, token, id, placements, text, icon, dynamicFields)
 
         override fun actionUnregister(kind: Int, token: Int) = onHost { PluginActions.unregister(session.engine, kind, token) }
-
-        override fun actionEditor(op: Int, surface: Long, payloadJson: String): String? =
-            PluginActions.editorOp(op, surface, payloadJson)
     }
 
     fun onPageOpened(activity: PluginSettingsActivity) {

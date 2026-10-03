@@ -107,22 +107,10 @@ inu.registerGlobalAction({
   },
 })
 
-inu.registerMessageEditorAction({
-  id: 'editor',
-  text: 'Editor row',
-  callback: (ctx) => {
-    check('an editor action is handed the draft', ctx.draft.text === 'hello', ctx.draft.text)
-    ctx.replace('replaced')
-    pass('replace crosses to the composer')
-    ctx.send({ text: 'sent', entities: [{ _: 'messageEntityBold', offset: 0, length: 4 }] })
-    pass('send crosses to the composer')
-  },
-})
-
-// counted at registration, never at draw. the editor row above is the first of the eight
+// counted at registration, never at draw. the profile row above is the first of the eight
 const CAP = 8
 for (let i = 1; i < CAP; i++) {
-  inu.registerMessageEditorAction({
+  inu.registerProfileAction({
     id: 'filler-' + i,
     text: 'filler ' + i,
     visible: () => false,
@@ -130,12 +118,12 @@ for (let i = 1; i < CAP; i++) {
   })
 }
 expectThrow('a ninth row of one menu is refused', 'quota-exceeded', () => {
-  inu.registerMessageEditorAction({ id: 'one-too-many', text: 'nope', callback: () => {} })
+  inu.registerProfileAction({ id: 'one-too-many', text: 'nope', callback: () => {} })
 })
 
 let replaced = 'no-throw'
 try {
-  inu.registerMessageEditorAction({
+  inu.registerProfileAction({
     id: 'filler-1',
     text: 'filler 1 (updated)',
     visible: () => false,

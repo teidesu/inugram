@@ -413,10 +413,6 @@ impl ActionHost for JniBridge {
   fn action_unregister(&self, kind: i32, token: u32) {
     self.call_void("registerAction", self.on_action_unregister, &[Arg::Int(kind), Arg::Int(token as i32)]);
   }
-
-  fn action_editor(&self, op: i32, surface: i64, payload_json: &str) -> Option<String> {
-    self.call_refusal("action", self.on_action_editor, &[Arg::Int(op), Arg::Long(surface), Arg::Str(payload_json)])
-  }
 }
 
 impl RandomHost for JniBridge {

@@ -160,7 +160,6 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
           action_host,
           lifecycle.clone(),
           Some(account.clone()),
-          grants.clone(),
           jvm.clone(),
           log.clone(),
           &globals,
