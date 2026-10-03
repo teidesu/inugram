@@ -396,6 +396,9 @@
     <string name="InuChatVoiceInAttach">Recorder in attachments</string>
     <string name="InuChatVoiceInAttachInfo">Moves the voice/video record button from the input bar into the attachment sheet</string>
 
+    <string name="InuOptimizedAttachmentMenu">Optimized attachment menu</string>
+    <string name="InuOptimizedAttachmentMenuInfo">Improves animation smoothness when opening photos and videos. Disables background blur in the media viewer</string>
+
     <string name="InuDisableIntroSticker">Don\'t send intro sticker</string>
     <string name="InuDisableIntroStickerInfo">…and hide greeting sticker suggestions</string>
 

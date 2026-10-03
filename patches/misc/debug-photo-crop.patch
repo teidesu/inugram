@@ -40,7 +40,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMes
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
-@@ -4758,6 +4758,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -4760,6 +4760,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
              updateColors();
              return;
          }
@@ -48,7 +48,7 @@ index 0000000..0000000 100644
          inBubbleMode = activity instanceof BubbleActivity;
          parentActivity = activity;
          activityContext = new ContextThemeWrapper(parentActivity, R.style.Theme_TMessages);
-@@ -7793,6 +7794,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -7831,6 +7832,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                  if (!isCurrentVideo && (currentEditMode == EDIT_MODE_CROP || sendPhotoType == SELECT_TYPE_AVATAR || sendPhotoType == SELECT_TYPE_STICKER) && photoCropView != null) {
                      Bitmap bitmap = imageReceiver.getBitmap();
                      if (bitmap != null) {
@@ -56,7 +56,7 @@ index 0000000..0000000 100644
                          photoCropView.setBitmap(bitmap, imageReceiver.getOrientation(), sendPhotoType != SELECT_TYPE_AVATAR && sendPhotoType != SELECT_TYPE_STICKER, true, paintingOverlay, cropTransform, null, null);
                      }
                  }
-@@ -11889,6 +11891,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -11929,6 +11931,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
      }
  
      private void createCropView() {
@@ -64,7 +64,7 @@ index 0000000..0000000 100644
          if (photoCropView != null) {
              return;
          }
-@@ -12501,6 +12504,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -12544,6 +12547,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                      }
  
                      final Bitmap bitmap = centerImage.getBitmap();
@@ -72,7 +72,7 @@ index 0000000..0000000 100644
                      if (bitmap != null || isCurrentVideo) {
                          photoCropView.setBitmap(bitmap, centerImage.getOrientation(), sendPhotoType != SELECT_TYPE_AVATAR, false, paintingOverlay, cropTransform, isCurrentVideo ? (VideoEditTextureView) videoTextureView : null, editState.cropState);
                          photoCropView.onDisappear();
-@@ -19600,6 +19604,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -19687,6 +19691,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
      }
  
      public void inu_reloadCurrentPhoto(MediaController.PhotoEntry entry, boolean reloadImage) {

@@ -224,6 +224,8 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - batch import proxy links from clipboard (one per line)
 - send MP4 files attached through Files as playable videos without conversion
 - sort attach panel albums by photo count instead of recency
+- 🐶 faster attachment photo previews: smaller images when choosing photos, full quality when zooming or editing while preserving zoom and applied edits
+- 🐶 optimized attachment menu setting: [smoother animations](https://github.com/teidesu/inugram/pull/56) when opening photos and videos; disables background blur in the media viewer
 - 🐶 "Minimize" option in the attach panel discard prompt to keep the selection (e.g. to choose a message to reply to)
 - choose the media save folder (Inugram/Telegram) used for saved photos, videos, music and downloads
 - original video quality option in quality picker, including audio removal without re-encoding video

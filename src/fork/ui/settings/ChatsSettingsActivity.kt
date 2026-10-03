@@ -117,6 +117,14 @@ class ChatsSettingsActivity : SettingsPageActivity() {
                 LocaleController.getString(R.string.InuSimpleAttachPopupAnimation),
             ).setChecked(InuConfig.SIMPLE_ATTACH_POPUP_ANIMATION.value)
         )
+        items.add(
+            mkTwoLineCheckItem(
+                TOGGLE_OPTIMIZED_ATTACHMENT_MENU,
+                R.string.InuOptimizedAttachmentMenu,
+                R.string.InuOptimizedAttachmentMenuInfo,
+                InuConfig.OPTIMIZED_ATTACHMENT_MENU.value,
+            )
+        )
         items.add(UItem.asShadow(null))
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.InuVoiceRecorder)))
@@ -297,6 +305,10 @@ class ChatsSettingsActivity : SettingsPageActivity() {
             TOGGLE_CHAT_VOICE_IN_ATTACH -> (view as? NotificationsCheckCell)?.isChecked = InuConfig.CHAT_VOICE_IN_ATTACH.toggle()
             TOGGLE_SORT_ALBUMS_BY_SIZE -> (view as? NotificationsCheckCell)?.isChecked = InuConfig.SORT_ALBUMS_BY_SIZE.toggle()
             TOGGLE_SIMPLE_ATTACH_POPUP_ANIMATION -> (view as? TextCheckCell)?.isChecked = InuConfig.SIMPLE_ATTACH_POPUP_ANIMATION.toggle()
+            TOGGLE_OPTIMIZED_ATTACHMENT_MENU -> {
+                val checked = InuConfig.OPTIMIZED_ATTACHMENT_MENU.toggle()
+                (view as? NotificationsCheckCell)?.isChecked = checked
+            }
             BUTTON_ROUND_DEFAULT_CAMERA -> RadioItemOptions.show(
                 this, view,
                 listOf(
@@ -352,6 +364,7 @@ class ChatsSettingsActivity : SettingsPageActivity() {
         private val TOGGLE_CHAT_VOICE_IN_ATTACH = InuUtils.generateId()
         private val TOGGLE_SORT_ALBUMS_BY_SIZE = InuUtils.generateId()
         private val TOGGLE_SIMPLE_ATTACH_POPUP_ANIMATION = InuUtils.generateId()
+        private val TOGGLE_OPTIMIZED_ATTACHMENT_MENU = InuUtils.generateId()
         private val BUTTON_ROUND_DEFAULT_CAMERA = InuUtils.generateId()
         private val TOGGLE_ROUND_RECORDER_ZOOM_SLIDER = InuUtils.generateId()
         private val TOGGLE_ROUND_RECORDER_KEEP_ZOOM = InuUtils.generateId()
@@ -398,6 +411,7 @@ class ChatsSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("chat-voice-in-attach", R.string.InuChatVoiceInAttach, TOGGLE_CHAT_VOICE_IN_ATTACH),
                 SearchRegistry.Entry("sort-albums-by-size", R.string.InuSortAlbumsBySize, TOGGLE_SORT_ALBUMS_BY_SIZE),
                 SearchRegistry.Entry("simple-attach-popup-animation", R.string.InuSimpleAttachPopupAnimation, TOGGLE_SIMPLE_ATTACH_POPUP_ANIMATION),
+                SearchRegistry.Entry("lightweight-attachment-animation", R.string.InuOptimizedAttachmentMenu, TOGGLE_OPTIMIZED_ATTACHMENT_MENU),
                 SearchRegistry.Entry("round-default-camera", R.string.InuRoundDefaultCamera, BUTTON_ROUND_DEFAULT_CAMERA),
                 SearchRegistry.Entry("round-recorder-zoom-slider", R.string.InuRoundRecorderZoomSlider, TOGGLE_ROUND_RECORDER_ZOOM_SLIDER),
                 SearchRegistry.Entry("round-recorder-keep-zoom", R.string.InuRoundRecorderKeepZoom, TOGGLE_ROUND_RECORDER_KEEP_ZOOM),

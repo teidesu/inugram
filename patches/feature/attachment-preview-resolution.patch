@@ -1,0 +1,105 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dubzer <me@dubzer.dev>
+Date: Sat, 3 Oct 2026 18:17:25 +0300
+Subject: Load full-size attachment photos only when zooming or editing
+
+Use smaller photo previews when choosing attachments to reduce decoding,
+resizing and texture-upload work. Request the normal full-size viewer
+image when the user zooms in or starts editing, keeping the preview visible
+until it is ready and deferring editing until loading completes.
+
+Preserve zoom through asynchronous image replacement, retain already
+edited bitmaps, and clear preview state when the photo changes or the
+viewer closes or is destroyed.
+---
+ .../java/org/telegram/ui/PhotoViewer.java     | 20 ++++++++++++++++++-
+ 1 file changed, 19 insertions(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+@@ -7800,8 +7800,10 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                     containerView.requestLayout();
+                 }
+                 desu.inugram.helpers.media.PhotoViewerHelper.updateHdrMode(this);
++                desu.inugram.helpers.media.AttachmentPreviewHelper.onAttachmentPreviewLoaded(this);
+             }
+-            if (imageReceiver == centerImage && set && placeProvider != null && placeProvider.scaleToFill() && !ignoreDidSetImage && sendPhotoType != SELECT_TYPE_AVATAR && sendPhotoType != SELECT_TYPE_STICKER) {
++            if (imageReceiver == centerImage && set && placeProvider != null && placeProvider.scaleToFill() && !ignoreDidSetImage && sendPhotoType != SELECT_TYPE_AVATAR && sendPhotoType != SELECT_TYPE_STICKER
++                && !desu.inugram.helpers.media.AttachmentPreviewHelper.shouldKeepAttachmentZoom(this)) {
+                 if (!wasLayout) {
+                     dontResetZoomOnFirstLayout = true;
+                 } else {
+@@ -12038,6 +12040,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         if (currentEditMode == mode || (isCurrentVideo && photoProgressViews[0].backgroundState != 3) && !isCurrentVideo && (centerImage.getBitmap() == null || photoProgressViews[0].backgroundState != -1) || changeModeAnimation != null || imageMoveAnimation != null || isCaptionOpen()) {
+             return;
+         }
++        if (desu.inugram.helpers.media.AttachmentPreviewHelper.deferAttachmentEdit(this, mode, sendPhotoType)) {
++            return;
++        }
+         if (!isCurrentVideo && currentEditMode == EDIT_MODE_NONE && mode != EDIT_MODE_NONE && currentIndex >= 0 && currentIndex < imagesArrLocals.size()) {
+             Object object = imagesArrLocals.get(currentIndex);
+             if (object instanceof MediaController.MediaEditState) {
+@@ -15774,6 +15779,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+ 
+         int prevIndex = currentIndex;
+         currentIndex = index;
++        if (prevIndex != index) {
++            desu.inugram.helpers.media.AttachmentPreviewHelper.onAttachmentPhotoChanged(this);
++        }
+         setIsAboutToSwitchToIndex(currentIndex, init, animateCaption, force);
+ 
+         boolean isVideo = false;
+@@ -16810,6 +16818,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                             path = photoEntry.path;
+                         }
+                         int editSize = (int) (AndroidUtilities.getPhotoSize(true) / AndroidUtilities.density);
++                        editSize = desu.inugram.helpers.media.AttachmentPreviewHelper.getAttachmentPreviewSize(this, photoEntry, sendPhotoType, editSize);
+                         filter = String.format(Locale.US, "%d_%d", editSize, editSize);
+                     }
+                 } else if (object instanceof TLRPC.BotInlineResult) {
+@@ -18253,6 +18262,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+             qualityPicker.cancelButton.callOnClick();
+             return;
+         }
++        desu.inugram.helpers.media.AttachmentPreviewHelper.clearAttachmentPreviews(this);
+         desu.inugram.helpers.media.PhotoViewerHelper.clearHdrMode(this);
+         isVisibleOrAnimating = false;
+         openedFullScreenVideo = false;
+@@ -18798,6 +18808,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+     }
+ 
+     public void destroyPhotoViewer() {
++        desu.inugram.helpers.media.AttachmentPreviewHelper.clearAttachmentPreviews(this);
+         if (parentActivity == null || windowView == null) {
+             return;
+         }
+@@ -18839,6 +18850,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+     }
+ 
+     private void onPhotoClosed(PlaceProviderObject object) {
++        desu.inugram.helpers.media.AttachmentPreviewHelper.clearAttachmentPreviews(this);
+         if (doneButtonPressed) {
+             releasePlayer(true);
+         }
+@@ -19280,6 +19292,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                     rotate = (float) ((Math.atan2(ev.getY(1) - ev.getY(0), ev.getX(1) - ev.getX(0)) - pinchStartAngle) / Math.PI * 180 + pinchStartRotate);
+                 }
+                 scale = (float) Math.hypot(ev.getX(1) - ev.getX(0), ev.getY(1) - ev.getY(0)) / pinchStartDistance * pinchStartScale;
++                if (scale > 1.0f) {
++                    desu.inugram.helpers.media.AttachmentPreviewHelper.upgradeAttachmentPreview(this);
++                }
+                 translationX = (pinchCenterX - getContainerViewWidth() / 2) - ((pinchCenterX - getContainerViewWidth() / 2) - pinchStartX) * (scale / pinchStartScale);
+                 translationY = (pinchCenterY - getContainerViewHeight() / 2) - ((pinchCenterY - getContainerViewHeight() / 2) - pinchStartY) * (scale / pinchStartScale);
+                 updateMinMax(scale);
+@@ -19566,6 +19581,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         if (scale == newScale && translationX == newTx && translationY == newTy) {
+             return;
+         }
++        if (isZoom && newScale > scale) {
++            desu.inugram.helpers.media.AttachmentPreviewHelper.upgradeAttachmentPreview(this);
++        }
+         zoomAnimation = isZoom;
+         animateToScale = newScale;
+         animateToX = newTx;
