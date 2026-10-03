@@ -135,7 +135,7 @@ object PluginActions : SessionResource {
 
     fun registeredRows(kind: Int, placements: Int = getDefaultPlacements(kind)): List<RegisteredActionRow> {
         val rows = registeredRows.getOrElse(kind) { emptyList() }
-        return PluginManager.plugins().mapNotNull { plugin -> plugin.session?.takeIf { it.canDispatch() } }.flatMap { session ->
+        return PluginManager.getDispatchTargets().mapNotNull { plugin -> plugin.session?.takeIf { it.canDispatch() } }.flatMap { session ->
             rows.filter { it.owner === session.engine && it.placements and placements != 0 }
         }
     }
@@ -240,7 +240,7 @@ object PluginActions : SessionResource {
         getSurfaceJson: (PluginSession) -> String,
         onRows: (List<ActionRow>) -> Unit,
     ) {
-        val plugins = PluginManager.plugins().mapNotNull { plugin -> plugin.session?.takeIf { it.canDispatch() } }
+        val plugins = PluginManager.getDispatchTargets().mapNotNull { plugin -> plugin.session?.takeIf { it.canDispatch() } }
         val cached = registeredRows.getOrElse(kind) { emptyList() }
         val registrations = plugins.flatMap { session ->
             cached.filter { it.owner === session.engine && it.placements and placements != 0 }
@@ -290,7 +290,7 @@ object PluginActions : SessionResource {
         EngineDispatch.scheduler.postRunnable {
             val live = registeredRows.getOrElse(row.key.kind) { emptyList() }
                 .firstOrNull { it.key == row.key } ?: return@postRunnable
-            val session = PluginManager.plugins()
+            val session = PluginManager.getDispatchTargets()
                 .mapNotNull { plugin -> plugin.session?.takeIf { it.canDispatch() } }
                 .firstOrNull { it.engine === live.owner } ?: return@postRunnable
             val surfaceJson = try {
@@ -305,7 +305,7 @@ object PluginActions : SessionResource {
 
     /** `common.d.ts` promises plugin-list order, and membership makes rows from stopped engines inert */
     private fun publishCounts() {
-        val plugins = PluginManager.plugins().mapNotNull { plugin -> plugin.session?.takeIf { it.canDispatch() } }
+        val plugins = PluginManager.getDispatchTargets().mapNotNull { plugin -> plugin.session?.takeIf { it.canDispatch() } }
         val order = plugins.map { it.engine }
         val rows = List(KIND_COUNT) { kind ->
             registry.registrationsInOrder(kind, order).mapNotNull { registration ->

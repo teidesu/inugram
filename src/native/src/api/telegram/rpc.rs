@@ -16,7 +16,7 @@ use crate::runtime::{enter_js, pump_jobs, PendingSettle, PendingTable};
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle, Registry};
 use crate::utils::arguments::{opt_bool, stringify_json};
-use crate::utils::qjs::{qjs_load_prelude, qjs_object_freeze, qjs_promise_then, qjs_read_typed_bytes};
+use crate::utils::qjs::{qjs_load_prelude, qjs_object_freeze,, resolve_and_then};
 use crate::Log;
 
 pub trait RpcHost {
@@ -293,12 +293,6 @@ impl PendingSettle {
       }
     }
   }
-}
-
-fn resolve_and_then<'js>(ctx: &Ctx<'js>, result: Value<'js>, ok: Function<'js>, err: Function<'js>) -> JsResult<()> {
-  let (promise, resolve, _) = ctx.promise()?;
-  resolve.call::<_, ()>((result,))?;
-  qjs_promise_then(&promise, &ok, &err)
 }
 
 #[allow(clippy::too_many_arguments)]

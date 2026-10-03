@@ -78,7 +78,7 @@ object PluginAppVisibility {
         // tracked either way, so a plugin started later reads the real state
         if (!PluginManager.anyRunning) return
         EngineDispatch.scheduler.postRunnable {
-            for (plugin in PluginManager.plugins()) plugin.engine?.appVisibilityChanged(mode)
+            for (plugin in PluginManager.getDispatchTargets()) plugin.engine?.appVisibilityChanged(mode)
         }
     }
 }

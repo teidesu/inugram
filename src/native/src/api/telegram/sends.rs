@@ -3,7 +3,7 @@ use std::rc::Rc;
 use rquickjs::function::Opt;
 use rquickjs::{Ctx, Exception, Function, Object, Persistent, Result as JsResult, Value};
 
-use super::{resolve_and_then, Abandon, RpcState, UpdateDispatchState};
+use super::{Abandon, RpcState, UpdateDispatchState};
 use crate::api::error::{self, describe_js_error, error_value_to_string, format_thrown};
 use crate::api::telegram::account::dispatch_account;
 use crate::api::tl::proxy;
@@ -11,7 +11,7 @@ use crate::runtime::{enter_js, pump_jobs};
 use crate::sandbox::grants::MATCH_EXACT;
 use crate::sandbox::registry::{make_disposer, noop_disposer};
 use crate::utils::arguments::stringify_json;
-use crate::utils::qjs::{qjs_is_regexp, qjs_load_prelude};
+use crate::utils::qjs::{qjs_is_regexp, qjs_load_prelude, resolve_and_then};
 
 const SEND_PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/send_message.qbc"));
 const SEND_GRANT: &str = "interceptSendMessage";

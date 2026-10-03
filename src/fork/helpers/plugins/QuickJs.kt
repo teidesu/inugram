@@ -77,6 +77,15 @@ open class QuickJs {
 
     fun evaluate(code: String, filename: String = "<plugin>"): String? = requireLive { nativeEvaluate(it, code, filename) }
 
+    /** native calls [onResult] by name, from the engine queue or from whatever closes the engine */
+    fun interface EvalCallback {
+        fun onResult(fulfilled: Boolean, text: String)
+    }
+
+    /** `inu eval`: [callback] is answered exactly once, also when the engine closes before the result settles */
+    fun evaluateInspected(code: String, callback: EvalCallback) =
+        requireLive { nativeEvaluateInspected(it, code, callback) }
+
     /**
      * Runs on the hooked thread. [invocation] is `[method, this, ...args]`. Answers `["A", wire]`, or
      * `["P0" | "P1", ...args]` to run the original, `=` keeping an argument; `P1` means [xposedAfter] is
@@ -236,6 +245,8 @@ open class QuickJs {
         grants: Array<String>,
     ): Long
     private external fun nativeEvaluate(ptr: Long, code: String, filename: String): String?
+
+    private external fun nativeEvaluateInspected(ptr: Long, code: String, callback: EvalCallback)
     private external fun nativeInstallInfo(
         ptr: Long,
         appVersion: String,

@@ -124,6 +124,34 @@ A few notes:
 - In message interceptors, instead of `drop`-ping the message and sending a new one separately,
   just replace the content in the passed context.
 
+## Eval
+
+`inu eval <name> <code>` runs code inside the plugin's running engine, with its grants, storage and
+globals, and prints the result the way `console.log` prints it:
+
+```sh
+inu eval dog 'await tg.invoke({ _: "help.getConfig" })'
+inu eval dog -f probe.ts
+echo 'localStorage.length' | inu eval dog -
+```
+
+- The code answers with its last expression, awaited, like a REPL. An earlier `return` answers instead.
+- TypeScript is stripped before sending. The code runs as a global script, so it sees the plugin's
+  top-level bindings (as bundled, so possibly renamed), but nothing inside its closures.
+- Only plugins pushed from the CLI can be evaluated in, and only while running.
+- A thrown error or rejection is printed with its stack, and exits with 1.
+- What the plugin logs meanwhile is printed before the result (`--no-logs` to turn off).
+
+`inu eval --scratch <code>` (`-x`) needs no plugin or project: the code runs in a scratch plugin the app
+creates on demand, with every grant. It is never listed or stored, and keeps its globals, timers, hooks
+and storage between runs until `--reset` restarts it with its storage wiped, developer mode is turned
+off, or the app restarts.
+
+```sh
+inu eval -x 'globalThis.seen = (globalThis.seen ?? 0) + 1'
+inu eval --reset
+```
+
 ## Commands
 
 | Command | What it does |
@@ -132,6 +160,7 @@ A few notes:
 | `inu check [names...]` | Validate manifests and routines, then typecheck, without writing files. Use `--no-typecheck` to skips `tsc` type checking |
 | `inu dev [names...]` | Run the watcher |
 | `inu push [names...]` | Build, push and reload once, then print the log for `--logs <seconds>` (default 3). Exits with 1 on a build, install or load failure, or any error logged. Useful for scripts and agents |
+| `inu eval <name> [code]` | Run code inside a running dev plugin and print the result. See [below](#eval) |
 | `inu list` | List installed plugins on the connected device |
 | `inu remove <file>` | Uninstall a dev plugin |
 | `inu verify <files...>` | Check that each compiled routine in a built file matches its recorded source |

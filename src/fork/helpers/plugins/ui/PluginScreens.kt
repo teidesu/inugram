@@ -42,7 +42,7 @@ object PluginScreens {
             .toString()
         val stackJson = JSONArray().apply { next.forEach { put(toJson(it)) } }.toString()
         EngineDispatch.scheduler.postRunnable {
-            for (plugin in PluginManager.plugins()) {
+            for (plugin in PluginManager.getDispatchTargets()) {
                 plugin.engine?.dispatchScreenChange(change, stackJson)
             }
         }

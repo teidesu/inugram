@@ -1,4 +1,5 @@
 import { execFile, spawn } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { basename } from 'node:path'
 import { createInterface } from 'node:readline'
 import { promisify } from 'node:util'
@@ -75,6 +76,31 @@ const RemoveSchema = v.object({
 })
 export type DevRemoval = v.InferOutput<typeof RemoveSchema>
 
+/** a rejection is `fulfilled: false`, not a failure: the code ran */
+const EvalSchema = v.object({
+  ok: v.literal(true),
+  fulfilled: v.boolean(),
+  text: v.string(),
+  plugin: DevPluginSchema,
+})
+export type DevEval = v.InferOutput<typeof EvalSchema>
+
+export interface LogLine {
+  /** epoch microseconds */
+  time: number
+  level: string
+  tag: string
+  message: string
+}
+
+/** epoch format: "  1790813149.881343  pid  tid D tag: message" */
+function parseLogLine(line: string): LogLine | null {
+  const match = /^\s*(\d+)\.(\d{6})\s+\d+\s+\d+\s+([VDIWEF]) ([^:]*): ?(.*)$/.exec(line)
+  if (!match) return null
+  const [, seconds, micros, level, paddedTag, message] = match
+  return { time: Number(seconds) * 1_000_000 + Number(micros), level, tag: paddedTag.trim(), message }
+}
+
 export class Device {
   readonly appId: string
   private readonly serial: string[]
@@ -88,9 +114,12 @@ export class Device {
     return `/sdcard/Android/data/${this.appId}/files/${DROP_DIR_NAME}`
   }
 
-  private async adb(args: string[], allowFailure = false) {
+  /** [input] is written to stdin; `adb shell` passes its end on to the device under shell protocol v2, which android 7+ has */
+  private async adb(args: string[], { allowFailure = false, input }: { allowFailure?: boolean, input?: string } = {}) {
     try {
-      return await run('adb', [...this.serial, ...args], { maxBuffer: 32 * 1024 * 1024 })
+      const pending = run('adb', [...this.serial, ...args], { maxBuffer: 32 * 1024 * 1024 })
+      if (input !== undefined) pending.child.stdin?.end(input)
+      return await pending
     } catch (error) {
       if (allowFailure) return { stdout: '', stderr: String(error) }
       const detail = error as { stderr?: string, stdout?: string, code?: string }
@@ -101,7 +130,7 @@ export class Device {
 
   /** Returns null if the app is not running and no dev receiver is available. */
   async pid(): Promise<string | null> {
-    const out = await this.adb(['shell', 'pidof', this.appId], true)
+    const out = await this.adb(['shell', 'pidof', this.appId], { allowFailure: true })
     const value = out.stdout.trim().split(/\s+/)[0]
     return value || null
   }
@@ -168,6 +197,17 @@ export class Device {
     return this.send({ cmd: 'remove', file: basename(name) }, RemoveSchema)
   }
 
+  /**
+   * runs [code] in the plugin [pluginFile] was pushed as, or with null in the scratch plugin, which [reset]
+   * restarts with its storage wiped first. The app reads the code from the drop dir and deletes it
+   */
+  async evaluate(pluginFile: string | null, code: string, timeoutSeconds: number, reset = false): Promise<DevEval> {
+    const name = `eval-${randomUUID()}.txt`
+    await this.adb(['shell', `mkdir -p ${this.dropDir} && cat > ${this.dropDir}/${name}`], { input: code })
+    const target: Record<string, string> = pluginFile === null ? { reset: String(reset) } : { file: basename(pluginFile) }
+    return this.send({ cmd: 'eval', code: name, timeout: String(timeoutSeconds), ...target }, EvalSchema)
+  }
+
   async list(): Promise<DevPlugin[]> {
     const reply = await this.send({ cmd: 'list' }, ListSchema)
     return reply.plugins
@@ -187,6 +227,15 @@ export class Device {
   }
 
   /**
+   * The lines [pid] logged since [since]. A stream started at that moment can miss lines logged while
+   * it attaches, even with `-T`; a dump of the buffer misses none
+   */
+  async dumpLogs(since: string, pid: string): Promise<LogLine[]> {
+    const out = await this.adb(['logcat', '-d', '-v', 'epoch,usec', '-T', since, '--pid', pid])
+    return out.stdout.split('\n').map(parseLogLine).filter(line => line !== null)
+  }
+
+  /**
    * Logcat only supports exact tag filters, so read the whole process and let [onLine] filter.
    * The stream ends when logd drops a reader, and is ended here when the app restarts, since
    * `logcat --pid` keeps waiting on a dead process. [onEnd] gets the reason, then the PID is resolved
@@ -198,9 +247,10 @@ export class Device {
     onEnd: (reason: string) => void,
     signal: AbortSignal,
   ) {
-    // epoch microseconds of the last line printed, and how many were printed at it: one crash logs its
+    // epoch microseconds of the latest line printed, and how many were printed at it: one crash logs its
     // whole stack under one timestamp, and `-T` resumes at that millisecond, so a reconnect skips
-    // exactly what was already printed
+    // exactly what was already printed. Threads interleave with slightly earlier timestamps, so only a
+    // reconnect's replay skips by time
     let lastTime = 0
     let printedAtLast = 0
     let from = since
@@ -217,6 +267,7 @@ export class Device {
         let stderr = ''
         let restarted = false
         let skipAtLast = printedAtLast
+        let replaying = lastTime > 0
         const watch = setInterval(() => {
           void this.pid().then((current) => {
             if (current === pid) return
@@ -227,24 +278,24 @@ export class Device {
         child.stderr.on('data', (chunk: Buffer) => {
           stderr += chunk.toString()
         })
-        createInterface({ input: child.stdout }).on('line', (line) => {
-          // epoch format: "  1790813149.881343  pid  tid D tag: message"
-          const match = /^\s*(\d+)\.(\d{6})\s+\d+\s+\d+\s+([VDIWEF]) ([^:]*): ?(.*)$/.exec(line)
-          if (!match) return
-          const [, seconds, micros, level, paddedTag, message] = match
-          const tag = paddedTag.trim()
-          const time = Number(seconds) * 1_000_000 + Number(micros)
-          if (time < lastTime) return
-          if (time === lastTime && skipAtLast > 0) {
-            skipAtLast--
-            return
+        createInterface({ input: child.stdout }).on('line', (text) => {
+          const line = parseLogLine(text)
+          if (!line) return
+          const { time, level, tag, message } = line
+          if (replaying) {
+            if (time < lastTime) return
+            if (time === lastTime && skipAtLast > 0) {
+              skipAtLast--
+              return
+            }
+            replaying = false
           }
           if (time === lastTime) {
             printedAtLast++
-          } else {
+          } else if (time > lastTime) {
             lastTime = time
             printedAtLast = 1
-            from = `${seconds}.${micros.slice(0, 3)}`
+            from = `${Math.floor(time / 1_000_000)}.${String(Math.floor(time / 1000) % 1000).padStart(3, '0')}`
           }
           onLine(level, tag, message)
         })

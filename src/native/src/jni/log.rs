@@ -1,7 +1,7 @@
 use jni::objects::{Global, JMethodID, JObject, JValue};
 use jni::refs::IntoAuto;
 use jni::signature::{Primitive, ReturnType};
-use rquickjs::{Ctx, Function, Object, Result as JsResult};
+use rquickjs::{Ctx, Exception, Function, JsLifetime, Object, Result as JsResult};
 use std::sync::Arc;
 
 use super::env::{clear_exception, with_current_env};
@@ -40,11 +40,19 @@ pub(crate) fn make_log(console: Arc<ConsoleSink>) -> crate::Log {
   })
 }
 
+/// the console's value printer, for whatever else prints a value the way `console.log` does
+#[derive(Clone, JsLifetime)]
+pub(crate) struct Inspect<'js>(pub(crate) Function<'js>);
+
 pub(crate) fn install_console<'js>(ctx: &Ctx<'js>, emit: impl Fn(i32, &str) + 'static) -> JsResult<()> {
   let emit = Function::new(ctx.clone(), move |level: i32, line: String| emit(level, &line))?;
   let factory = qjs_load_prelude(ctx, PRELUDE)?;
-  let console: Object = factory.call((emit,))?;
-  ctx.globals().set("console", console)
+  let parts: Object = factory.call((emit,))?;
+  ctx.globals().set("console", parts.get::<_, Object>("console")?)?;
+  ctx
+    .store_userdata(Inspect(parts.get("inspect")?))
+    .map_err(|_| Exception::throw_message(ctx, "console is already installed"))?;
+  Ok(())
 }
 
 #[cfg(test)]

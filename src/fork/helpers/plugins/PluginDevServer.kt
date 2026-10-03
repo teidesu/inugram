@@ -9,8 +9,10 @@ import desu.inugram.InuConfig
 import desu.inugram.core.plugins.PluginManifestParser
 import desu.inugram.helpers.plugins.ui.PluginAppVisibility
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 import org.json.JSONArray
 import org.json.JSONObject
+import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
 import org.telegram.ui.Components.BulletinFactory
@@ -27,6 +29,14 @@ object PluginDevServer {
     private const val SENDER_PERMISSION = "android.permission.DUMP"
 
     private val safeName = Regex("[A-Za-z0-9._-]+")
+
+    private const val EVAL_DEFAULT_SECONDS = 10L
+
+    /** an `am broadcast` is a background broadcast, which the system declares an ANR after 60s */
+    private const val EVAL_MAX_SECONDS = 50L
+
+    /** the reply crosses binder inside the broadcast result */
+    private const val EVAL_MAX_CHARS = 64 * 1024
 
     private var registered = false
 
@@ -57,6 +67,7 @@ object PluginDevServer {
     private fun unregister(context: Context) {
         if (!registered) return
         registered = false
+        PluginManager.resetScratch()
         try {
             context.unregisterReceiver(receiver)
         } catch (e: Exception) {
@@ -67,6 +78,10 @@ object PluginDevServer {
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action != ACTION) return
+            if (intent.getStringExtra("cmd") == "eval") {
+                evaluate(context, intent, isOrderedBroadcast, goAsync())
+                return
+            }
             // on the main thread, unlike other install paths: an ordered broadcast's result must be set before onReceive returns
             val reply = try {
                 handle(context, intent)
@@ -166,17 +181,83 @@ object PluginDevServer {
         .put("plugin", describe(plugin))
 
     /** resolved through the file's plugin id, as an install would land */
-    private fun remove(context: Context, name: String?): JSONObject {
-        if (name == null) return fail("remove needs --es file <name>")
-        val file = resolve(context, name).firstOrNull()
-        val target = file
+    private fun findInstalled(context: Context, name: String): Plugin? =
+        resolve(context, name).firstOrNull()
             ?.let { runCatching { it.readText() }.getOrNull() }
             ?.let { PluginManifestParser.parseOrNull(it) }
             ?.let { PluginManager.findUpdateTarget(it) }
-            ?: return fail("not installed: $name")
+
+    private fun remove(context: Context, name: String?): JSONObject {
+        if (name == null) return fail("remove needs --es file <name>")
+        val target = findInstalled(context, name) ?: return fail("not installed: $name")
         val described = describe(target)
         PluginManager.remove(target)
         return JSONObject().put("ok", true).put("action", "removed").put("plugin", described)
+    }
+
+    /** answers off the main thread so the result can be awaited: `am broadcast` blocks until [BroadcastReceiver.PendingResult.finish] */
+    private fun evaluate(context: Context, intent: Intent, ordered: Boolean, pending: BroadcastReceiver.PendingResult) {
+        val answered = AtomicBoolean()
+        val answer = { reply: JSONObject ->
+            if (answered.compareAndSet(false, true)) {
+                if (ordered) pending.resultData = reply.toString() else PluginLog.HOST.d("dev", reply.toString())
+                pending.finish()
+            }
+        }
+        val refused = try {
+            startEval(context, intent, answer)
+        } catch (e: Exception) {
+            PluginLog.HOST.e("dev", "eval failed", e)
+            fail(e.message ?: e.toString())
+        }
+        refused?.let(answer)
+    }
+
+    /**
+     * null once the engine owns the answer. Without a plugin file it runs in the scratch plugin. Only dev
+     * plugins otherwise: the code reads the plugin's storage, which adb otherwise cannot
+     */
+    private fun startEval(context: Context, intent: Intent, answer: (JSONObject) -> Unit): JSONObject? {
+        val codeName = intent.getStringExtra("code") ?: return fail("eval needs --es code <name>")
+        val codeFile = resolve(context, codeName).firstOrNull() ?: return fail("no code file $codeName in ${dropDir(context)}")
+        val code = try {
+            codeFile.readText()
+        } finally {
+            codeFile.delete()
+        }
+        val seconds = (intent.getStringExtra("timeout")?.toLongOrNull() ?: EVAL_DEFAULT_SECONDS).coerceIn(1L, EVAL_MAX_SECONDS)
+
+        val name = intent.getStringExtra("file")
+        if (name == null) {
+            if (!PluginManager.isEngineEnabled()) return fail("plugins are disabled in settings")
+            if (PluginManager.safeMode) return fail("plugins are in safe mode")
+            AndroidUtilities.runOnUIThread({ answer(fail("no result after ${seconds}s")) }, seconds * 1000)
+            val run = {
+                PluginManager.withScratch { session ->
+                    if (session == null) answer(fail("the scratch plugin did not start, see the app log"))
+                    else evaluateIn(session, code, answer)
+                }
+            }
+            if (intent.getStringExtra("reset") == "true") PluginManager.resetScratch { AndroidUtilities.runOnUIThread(run) } else run()
+            return null
+        }
+
+        val target = findInstalled(context, name) ?: return fail("not installed: $name")
+        if (!target.dev) return fail("${target.manifest.name} was not pushed from the cli, so eval is not allowed")
+        val session = target.session ?: return fail("${target.manifest.name} is not running")
+        AndroidUtilities.runOnUIThread({ answer(fail("no result after ${seconds}s")) }, seconds * 1000)
+        evaluateIn(session, code, answer)
+        return null
+    }
+
+    private fun evaluateIn(session: PluginSession, code: String, answer: (JSONObject) -> Unit) {
+        val plugin = session.plugin
+        EngineDispatch.onEngine(session, onDropped = { answer(fail("${plugin.manifest.name} reloaded before the code ran")) }) {
+            session.engine.evaluateInspected(code) { fulfilled, text ->
+                val shown = if (text.length <= EVAL_MAX_CHARS) text else "${text.take(EVAL_MAX_CHARS)}\n... ${text.length - EVAL_MAX_CHARS} more characters"
+                answer(JSONObject().put("ok", true).put("fulfilled", fulfilled).put("text", shown).put("plugin", describe(plugin)))
+            }
+        }
     }
 
     /** refuses anything that isn't a plain name inside the drop dir */

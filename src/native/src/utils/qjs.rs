@@ -49,6 +49,13 @@ pub(crate) fn qjs_promise_then<'js>(promise: &Promise<'js>, ok: &Function<'js>, 
   Ok(())
 }
 
+/// [`qjs_promise_then`] on [result] whether or not it is a promise
+pub(crate) fn resolve_and_then<'js>(ctx: &Ctx<'js>, result: Value<'js>, ok: Function<'js>, err: Function<'js>) -> JsResult<()> {
+  let (promise, resolve, _) = ctx.promise()?;
+  resolve.call::<_, ()>((result,))?;
+  qjs_promise_then(&promise, &ok, &err)
+}
+
 /// `None` when the array is detached. `read` must not run javascript: a plugin could detach or
 /// resize the buffer under the slice. A gc it triggers frees only what nothing references, and
 /// `array` is referenced.

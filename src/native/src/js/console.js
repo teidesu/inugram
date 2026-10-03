@@ -266,5 +266,5 @@
   for (const [name, level] of [['log', 0], ['info', 1], ['warn', 2], ['error', 3], ['debug', 4]]) {
     console[name] = (...args) => emit(level, formatLine(args))
   }
-  return console
+  return { console, inspect }
 }

@@ -56,7 +56,7 @@ object PluginAccounts {
         if (current == lastAccounts) return
         lastAccounts = current
         EngineDispatch.scheduler.postRunnable {
-            for (plugin in PluginManager.plugins()) plugin.engine?.notifyAccountsChanged()
+            for (plugin in PluginManager.getDispatchTargets()) plugin.engine?.notifyAccountsChanged()
         }
     }
 

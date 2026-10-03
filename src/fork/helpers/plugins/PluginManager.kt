@@ -69,6 +69,15 @@ object PluginManager {
 
     private val plugins = mutableListOf<Plugin>()
 
+    /** a minted id is random, so none will be this one; boot sweeps its storage as an orphan */
+    private val SCRATCH_ID = "0".repeat(PluginInstalls.ID_LENGTH)
+
+    /**
+     * `inu eval --scratch`: every grant, created on demand and never stored or listed. Dispatch reaches
+     * it through [getDispatchTargets]. Ui-thread owned
+     */
+    @Volatile private var scratch: Plugin? = null
+
     // the engine queue reads the order to sort interceptor chains while the ui thread mutates it
     @Volatile
     private var snapshot: List<Plugin> = emptyList()
@@ -90,7 +99,7 @@ object PluginManager {
         private set
 
     fun refreshAnyRunning() {
-        anyRunning = snapshot.any { it.session != null }
+        anyRunning = snapshot.any { it.session != null } || scratch?.session != null
     }
 
     // the plugins page and an info page can be mounted at once, and the revealed fragment resumes before the other pauses
@@ -136,6 +145,12 @@ object PluginManager {
     fun isEngineEnabled(): Boolean = InuConfig.PLUGINS_ENABLED.value
 
     fun plugins(): List<Plugin> = snapshot
+
+    /** [plugins], and the scratch plugin last while it runs. For dispatch, never for anything shown */
+    fun getDispatchTargets(): List<Plugin> {
+        val scratch = scratch?.takeIf { it.session != null } ?: return snapshot
+        return snapshot + scratch
+    }
 
     /** `Plugin` has no `equals()` and a reload replaces the instance */
     fun orderIndex(): IdentityHashMap<Plugin, Int> {
@@ -206,6 +221,7 @@ object PluginManager {
         PluginLog.HOST.e("manager", "uncaught on the plugin thread, stopping every plugin", e)
         if (!guard.enterSafeMode(BootGuard.Reason.HOST_ERROR)) return
         for (plugin in plugins()) stop(plugin)
+        scratch?.let { stop(it) }
         notifyChanged()
     }
 
@@ -226,6 +242,7 @@ object PluginManager {
             }
         } else {
             for (plugin in plugins) stop(plugin)
+            scratch?.let { stop(it) }
         }
         return enabled
     }
@@ -315,6 +332,45 @@ object PluginManager {
         return null
     }
 
+    /** main thread. [onReady] runs on the plugin queue with the running scratch session, or null when it did not start */
+    fun withScratch(onReady: (PluginSession?) -> Unit) {
+        val plugin = scratch ?: createScratch().also { scratch = it }
+        plugin.enabled = true
+        plugin.failure = null
+        run(plugin) { onReady(plugin.session) }
+    }
+
+    /** stops the scratch plugin and wipes its storage; [after] runs on the plugin queue */
+    fun resetScratch(after: () -> Unit = {}) {
+        val plugin = scratch ?: return after()
+        stop(plugin) {
+            wipeInstall(plugin.id)
+            after()
+        }
+    }
+
+    private fun createScratch(): Plugin {
+        val name = "Scratch"
+        val grants = GrantCatalog.names.sorted()
+        val manifest = PluginManifest(
+            name = name,
+            author = null,
+            declaredId = null,
+            version = null,
+            description = null,
+            localizedDescriptions = emptyMap(),
+            icon = null,
+            grants = grants,
+            pluginApi = PLUGIN_API_VERSION,
+            platform = PLATFORM,
+            raw = mapOf("name" to listOf(name), "grant" to grants),
+        )
+        return Plugin(SCRATCH_ID, File(PluginStore.dir, PluginInstalls.fileName(SCRATCH_ID)), "", manifest).apply {
+            dev = true
+            this.grants = grants
+        }
+    }
+
     sealed interface ImportResult {
         /** false when this took over a failed record's id: [remove] would wipe storage that belonged to it */
         class Installed(val plugin: Plugin, val reversible: Boolean) : ImportResult
@@ -324,13 +380,7 @@ object PluginManager {
     fun remove(plugin: Plugin) {
         plugin.enabled = false
         // same queue as stop()'s completion, so the wipe is ordered after the engine is gone
-        stop(plugin) {
-            PluginLocalStorage.wipe(plugin.id)
-            wipeSessionScratch(plugin.id)
-            PluginFs.wipe(plugin.id)
-            // a class cannot be unloaded, so staged dex outlives the engine
-            PluginJvm.wipe(plugin.id)
-        }
+        stop(plugin) { wipeInstall(plugin.id) }
         plugin.file.delete()
         plugins.remove(plugin)
         PluginStore.persist(plugins)
@@ -389,11 +439,11 @@ object PluginManager {
 
     private val stopping = java.util.IdentityHashMap<Plugin, MutableList<() -> Unit>>()
 
-    private fun run(plugin: Plugin) {
+    private fun run(plugin: Plugin, after: () -> Unit = {}) {
         EngineDispatch.scheduler.postRunnable {
             val pending = stopping[plugin]
-            if (pending != null) pending.add { start(plugin) }
-            else start(plugin)
+            if (pending != null) pending.add { start(plugin); after() }
+            else { start(plugin); after() }
         }
     }
 
@@ -505,6 +555,14 @@ object PluginManager {
 
     private fun failUnload(session: PluginSession, e: Throwable) =
         fail(session, PluginFailure.Site.UNLOAD, e.message ?: e.toString())
+
+    private fun wipeInstall(installId: String) {
+        PluginLocalStorage.wipe(installId)
+        wipeSessionScratch(installId)
+        PluginFs.wipe(installId)
+        // a class cannot be unloaded, so staged dex outlives the engine
+        PluginJvm.wipe(installId)
+    }
 
     /** durable trees ([PluginFs], [PluginJvm], [PluginLocalStorage]) are uninstall's alone */
     private fun wipeSessionScratch(installId: String) {

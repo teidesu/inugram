@@ -1,4 +1,5 @@
-use jni::objects::{JByteArray, JClass, JObject, JObjectArray, JString};
+use jni::objects::{JByteArray, JClass, JObject, JObjectArray, JString, JValue};
+use jni::refs::IntoAuto;
 use jni::signature::{MethodSignature, RuntimeMethodSignature};
 use jni::strings::JNIString;
 use jni::sys::{jboolean, jint, jlong, jobject, jstring};
@@ -11,8 +12,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use super::bridge::JniBridge;
-use super::env::{clear_exception, in_env, jstring_to_string, new_jstring_raw, read_header, read_string_array};
-use super::log::{install_console, make_log};
+use super::env::{
+  clear_exception, in_env, jstring_to_string, new_jstring_raw, read_header, read_string_array, with_current_env,
+};
+use super::eval::{evaluate_inspected, EvalReply};
+use super::log::{install_console, make_log, Inspect};
 use super::{
   engine_jvm_refs, enter_engine, insert_engine, remove_engine, stop_engine_callbacks, try_enter_engine, CallerEntry,
   Engine, EntryError, CALLER_LEASE_WAIT,
@@ -1166,6 +1170,43 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeEvaluate(
   })
 }
 
+/// [callback] is a `QuickJs.EvalCallback`, answered exactly once, possibly while the engine closes
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeEvaluateInspected(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  code: JString,
+  callback: JObject,
+) {
+  in_env(&mut env, (), |env| {
+    let Ok(callback) = env.new_global_ref(&callback) else {
+      clear_exception(env);
+      return;
+    };
+    let reply = EvalReply::new(move |ok, text| {
+      with_current_env(|env| {
+        let (Ok(signature), Ok(text)) = (RuntimeMethodSignature::from_str("(ZLjava/lang/String;)V"), env.new_string(text))
+        else {
+          clear_exception(env);
+          return;
+        };
+        let text = text.auto();
+        let args = [JValue::Bool(ok), JValue::Object(&text)];
+        let _ = env.call_method(&callback, JNIString::from("onResult"), MethodSignature::from(&signature), &args);
+        clear_exception(env);
+      });
+    });
+    let _deadline = arm(EVAL_DEADLINE_MS);
+    let Some(engine) = enter_engine(ptr, None) else {
+      return;
+    };
+    let code = jstring_to_string(env, &code).into_bytes();
+    enter_js(&engine.ctx, |ctx| evaluate_inspected(&ctx, code, reply));
+    engine.pump();
+  })
+}
+
 #[no_mangle]
 pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDestroy(
   _env: EnvUnowned,
@@ -1179,6 +1220,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDestroy(
     enter_js(&engine.ctx, |ctx| {
       drop(engine.shared.take().unwrap().restore(&ctx));
       drop(ctx.remove_userdata::<Globals>().unwrap());
+      drop(ctx.remove_userdata::<Inspect>());
       crate::api::tl::proxy::dispose_tl_shared(&ctx);
     });
   }

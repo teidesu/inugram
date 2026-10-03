@@ -29,6 +29,7 @@ use crate::{
 
 pub(crate) mod bridge;
 pub(crate) mod env;
+pub(crate) mod eval;
 pub(crate) mod exports;
 pub(crate) mod hosts;
 pub(crate) mod log;

@@ -39,11 +39,6 @@ const LEVEL_COLOR: Record<string, (text: string) => string> = {
   V: color.gray,
 }
 
-/**
- * log tag -> the name its lines are printed under. Seeded from the config so the first push's
- * `onLoad` lines are not lost; a plugin with neither id nor author is keyed by its install id,
- * which only the push answers with
- */
 /** a dev session reloads what it pushes, so it is never all of them by accident */
 export function requireNamedPlugins(command: string, args: ProjectArgs, { config }: Project) {
   if (args._.length > 0 || config.plugins.length <= 1) return
@@ -51,26 +46,38 @@ export function requireNamedPlugins(command: string, args: ProjectArgs, { config
   throw new CliError(`there's more than one plugin, please specify one with ${color.blue(`inu ${command} <name>`)}:\n${known.join('\n')}`)
 }
 
-export function addLogChannels(channels: Map<string, string>, { plugins }: Project) {
-  for (const plugin of plugins) {
-    const id = resolveManifestId(plugin.manifest)
-    if (id !== null) channels.set(PLUGIN_LOG_TAG_PREFIX + id, plugin.slug)
+/**
+ * Log tag -> the name its lines are printed under. Seeded from the config so the first push's
+ * `onLoad` lines are not lost; a plugin with neither id nor author is keyed by its install id,
+ * which only the push answers with
+ */
+export class LogChannels {
+  private readonly names = new Map<string, string>()
+
+  constructor(project: Project | null) {
+    if (project !== null) this.addProject(project)
   }
-}
 
-export function addInstallChannel(channels: Map<string, string>, install: DevInstall, slug: string) {
-  if (install.ok) channels.set(PLUGIN_LOG_TAG_PREFIX + (install.plugin.pluginId ?? install.plugin.id), slug)
-}
+  addProject({ plugins }: Project) {
+    for (const plugin of plugins) {
+      const id = resolveManifestId(plugin.manifest)
+      if (id !== null) this.names.set(PLUGIN_LOG_TAG_PREFIX + id, plugin.slug)
+    }
+  }
 
-/** undefined for a line not worth printing */
-export function labelLogLine(channels: Map<string, string>, level: string, tag: string): string | undefined {
-  if (tag === HOST_LOG_TAG) return HOST_LEVELS.has(level) ? 'app' : undefined
-  if (tag === CRASH_TAG) return level === 'E' ? 'crash' : undefined
-  return channels.get(tag)
-}
+  addPlugin(plugin: DevPlugin, slug: string) {
+    this.names.set(PLUGIN_LOG_TAG_PREFIX + (plugin.pluginId ?? plugin.id), slug)
+  }
 
-export function printLogLine(label: string, level: string, message: string) {
-  console.log(`${(LEVEL_COLOR[level] ?? color.gray)(label)} ${message}`)
+  /** false for a line not worth printing */
+  print(level: string, tag: string, message: string): boolean {
+    const label = tag === HOST_LOG_TAG
+      ? (HOST_LEVELS.has(level) ? 'app' : undefined)
+      : tag === CRASH_TAG ? (level === 'E' ? 'crash' : undefined) : this.names.get(tag)
+    if (label === undefined) return false
+    console.log(`${(LEVEL_COLOR[level] ?? color.gray)(label)} ${message}`)
+    return true
+  }
 }
 
 export const devCmd = defineCommand({
@@ -102,8 +109,7 @@ export const devCmd = defineCommand({
     if (ping.safeMode) warn('plugins are in safe mode, your code will not run')
 
     const pushed = new Map<string, string>()
-    const channels = new Map<string, string>()
-    addLogChannels(channels, project)
+    const channels = new LogChannels(project)
     const queue = new AsyncLock()
     const logsSince = args.logs ? await device.getLogTime() : null
 
@@ -119,7 +125,7 @@ export const devCmd = defineCommand({
       try {
         for (const install of await device.install([file])) {
           reportInstall(install)
-          addInstallChannel(channels, install, outcome.plugin.slug)
+          if (install.ok) channels.addPlugin(install.plugin, outcome.plugin.slug)
         }
       } catch (error) {
         // a failed push must not stick: the next rebuild has to try again
@@ -133,7 +139,7 @@ export const devCmd = defineCommand({
       project,
       onReload: (next) => {
         checkProject(next)
-        addLogChannels(channels, next)
+        channels.addProject(next)
       },
       onBuilt: (config, outcome) => {
         void reportOutcome(config, outcome)
@@ -146,8 +152,7 @@ export const devCmd = defineCommand({
     if (logsSince !== null) {
       device
         .tailLogs(logsSince, (level, tag, message) => {
-          const label = labelLogLine(channels, level, tag)
-          if (label !== undefined) printLogLine(label, level, message)
+          channels.print(level, tag, message)
         }, (reason) => {
           console.log(color.gray(`logcat stopped (${reason}), reconnecting`))
         }, aborter.signal)

@@ -3,6 +3,7 @@ import { runMain } from 'citty'
 import { buildCmd } from './commands/build.js'
 import { checkCmd } from './commands/check.js'
 import { devCmd } from './commands/dev.js'
+import { evalCmd } from './commands/eval.js'
 import { initCmd } from './commands/init.js'
 import { listCmd } from './commands/list.js'
 import { pushCmd } from './commands/push.js'
@@ -22,6 +23,7 @@ const main = defineCommand({
     build: buildCmd,
     check: checkCmd,
     dev: devCmd,
+    eval: evalCmd,
     list: listCmd,
     push: pushCmd,
     remove: removeCmd,
