@@ -737,11 +737,12 @@ object PluginCanvas : SessionResource {
             val requestId = reader.i64()
             val width = reader.i32()
             val height = reader.i32()
+            val fps = reader.i32()
             val path = reader.text()
             submitOwned(
                 requestId,
                 work,
-                produce = { PluginAnimationDecoder.open(work, path, width, height) },
+                produce = { PluginAnimationDecoder.open(work, path, width, height, fps) },
                 discard = PluginAnimationDecoder::close,
             ) { decoder ->
                 animations[id] = decoder

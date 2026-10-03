@@ -106,7 +106,7 @@ fn render_request(op: i32, arg: &str, bytes: Option<&[u8]>) -> String {
           out.push(text(&mut r));
         }
         OP_DECODE_ANIMATION => {
-          out.extend([r.i32().to_string(), r.i32().to_string()]);
+          out.extend([r.i32().to_string(), r.i32().to_string(), r.i32().to_string()]);
           out.push(text(&mut r));
         }
         OP_ANIMATION_FRAME => out.extend([r.i64().to_string(), r.i32().to_string()]),
@@ -1494,7 +1494,7 @@ fn an_animations_staged_source_outlives_the_request_and_goes_with_the_decoder() 
   let f = setup("animation-stage");
   run(&f, "globalThis.p = inu.canvas.decodeAnimation(new Uint8Array([1,2,3,4]))");
   let arg = last_call(&f, OP_DECODE_ANIMATION);
-  let path = arg.split(FIELD).nth(3).unwrap().to_string();
+  let path = arg.split(FIELD).nth(4).unwrap().to_string();
   assert!(std::fs::metadata(&path).is_ok(), "nothing was staged at {path}");
   answer(&f, GIF_SHAPE);
   settle(&f, "p.then(a => (globalThis.a = a, 1))");
@@ -1509,7 +1509,7 @@ fn an_animation_the_host_could_not_open_deletes_what_it_staged() {
   *f.host.fail.borrow_mut() = Some((OP_DECODE_ANIMATION, "Pinvalid-argument\n\n\n\nnot an animation".to_string()));
   run(&f, "globalThis.p = inu.canvas.decodeAnimation(new Uint8Array([1,2,3,4]))");
   let arg = last_call(&f, OP_DECODE_ANIMATION);
-  let path = arg.split(FIELD).nth(3).unwrap().to_string();
+  let path = arg.split(FIELD).nth(4).unwrap().to_string();
   assert_eq!(settle(&f, "p"), "TypeError:not an animation");
   assert!(std::fs::metadata(&path).is_err(), "the staged copy outlived the failed open");
 }
@@ -1529,6 +1529,24 @@ fn a_decode_size_is_passed_along_and_defaults_to_the_sources_own() {
   assert_eq!((asked[0][1], asked[0][2]), ("0", "0"));
   assert_eq!((asked[1][1], asked[1][2]), ("128", "96"));
   assert!(refusal(&f, "inu.canvas.decodeAnimation(new Uint8Array([1]), { width: 128 })").starts_with("TypeError:"));
+}
+
+/// zero reads every source frame
+#[test]
+fn a_frame_rate_to_read_at_is_passed_along_and_checked() {
+  let f = setup("animation-fps");
+  run(&f, "inu.canvas.decodeAnimation(new Uint8Array([1]))");
+  run(&f, "inu.canvas.decodeAnimation(new Uint8Array([1]), { fps: 12.5 })");
+  let calls = f.host.log.borrow().calls.clone();
+  let asked: Vec<Vec<&str>> = calls
+    .iter()
+    .filter(|(op, ..)| *op == OP_DECODE_ANIMATION)
+    .map(|(_, _, arg)| arg.split(FIELD).collect())
+    .collect();
+  assert_eq!(asked[0][3], "0");
+  assert_eq!(asked[1][3], "12");
+  assert!(refusal(&f, "inu.canvas.decodeAnimation(new Uint8Array([1]), { fps: 0 })").starts_with("TypeError:"));
+  assert!(refusal(&f, "inu.canvas.decodeAnimation(new Uint8Array([1]), { fps: 1000 })").starts_with("TypeError:"));
 }
 
 #[test]

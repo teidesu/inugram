@@ -4,16 +4,42 @@ Date: Wed, 2 Sep 2026 05:51:47 +0400
 Subject: Add the QuickJS plugin engine (hooks, action rows)
 
 ---
+ TMessagesProj/jni/gifvideo.cpp                |  13 ++
  .../messenger/MessagesController.java         | 124 ++++++++++--------
  .../messenger/SendMessageChatArguments.java   |   7 +
  .../messenger/SendMessagesHelper.java         |  36 ++++-
  .../telegram/tgnet/ConnectionsManager.java    |   8 +-
  .../java/org/telegram/ui/Cells/TextCell.java  |   2 +-
  .../java/org/telegram/ui/ChatActivity.java    |  12 +-
+ .../ui/Components/AnimatedFileNative.java     |   7 +
  .../org/telegram/ui/GroupCreateActivity.java  |  33 +++--
  .../java/org/telegram/ui/LaunchActivity.java  |   1 +
- 8 files changed, 151 insertions(+), 72 deletions(-)
+ 10 files changed, 171 insertions(+), 72 deletions(-)
 
+diff --git a/TMessagesProj/jni/gifvideo.cpp b/TMessagesProj/jni/gifvideo.cpp
+index 0000000..0000000 100644
+--- a/TMessagesProj/jni/gifvideo.cpp
++++ b/TMessagesProj/jni/gifvideo.cpp
+@@ -954,6 +954,19 @@ extern "C" JNIEXPORT int JNICALL Java_org_telegram_ui_Components_AnimatedFileNat
+     return result;
+ }
+ 
++extern "C" JNIEXPORT jint JNICALL Java_org_telegram_ui_Components_AnimatedFileNative_nInuWriteCurrentFrame(JNIEnv *env, jclass clazz, jlong ptr, jobject bitmap, jintArray data) {
++    if (ptr == 0 || bitmap == nullptr || data == nullptr) {
++        return 0;
++    }
++    VideoInfo *info = (VideoInfo *) (intptr_t) ptr;
++    AVFrame *frame = info->reader->frame();
++    if (frame == nullptr || frame->data[0] == nullptr) {
++        return 0;
++    }
++    writeFrameToBitmap(env, info, frame, data, bitmap);
++    return 1;
++}
++
+ extern "C" JNIEXPORT jint JNICALL Java_org_telegram_ui_Components_AnimatedFileNative_nGetVideoFrame(JNIEnv *env, jclass clazz, jlong ptr, jobject bitmap, jintArray data, jboolean preview, jfloat start_time, jfloat end_time, jboolean loop) {
+     if (ptr == 0) {
+         return 0;
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
@@ -473,6 +499,30 @@ index 0000000..0000000 100644
              }
              chatListView.stopScroll();
              chatLayoutManager.setCanScrollVertically(false);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedFileNative.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedFileNative.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedFileNative.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedFileNative.java
+@@ -71,6 +71,11 @@ public class AnimatedFileNative {
+         return getVideoFrame(mNativePtr, bitmap, mMetaData, preview, startTimeSeconds, endTimeSeconds, loop);
+     }
+ 
++    public int inu_writeCurrentFrame(Bitmap bitmap) {
++        checkNotDestroyed();
++        return nInuWriteCurrentFrame(mNativePtr, bitmap, mMetaData);
++    }
++
+     public void seekToMs(long ms, boolean precise) {
+         checkNotDestroyed();
+         seekToMs(mNativePtr, ms, mMetaData, precise);
+@@ -208,4 +213,6 @@ public class AnimatedFileNative {
+     private static native void nPrepareToSeek(long ptr);
+ 
+     private static native void nGetVideoInfo(String src, int[] params, long fileOffset);
++
++    private static native int nInuWriteCurrentFrame(long ptr, Bitmap bitmap, int[] data);
+ }
+\ No newline at end of file
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/GroupCreateActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/GroupCreateActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/GroupCreateActivity.java

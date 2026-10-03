@@ -939,6 +939,15 @@ fn read_dimensions(ctx: &Ctx<'_>, options: &Object<'_>, what: &str, required: bo
   Ok(size)
 }
 
+fn read_fps(ctx: &Ctx<'_>, options: &Object<'_>, what: &str) -> JsResult<Option<i32>> {
+  let Some(value) = options.get::<_, Option<Coerced<f64>>>("fps")? else { return Ok(None) };
+  let rounded = if value.0.is_finite() { value.0.trunc() as i32 } else { 0 };
+  if !(1..=MAX_FPS).contains(&rounded) {
+    return Err(Exception::throw_type(ctx, &format!("{what}: 'fps' must be between 1 and {MAX_FPS}")));
+  }
+  Ok(Some(rounded))
+}
+
 fn check_dimensions(ctx: &Ctx<'_>, width: i32, height: i32) -> JsResult<()> {
   if width <= 0 || height <= 0 {
     return Err(Exception::throw_type(ctx, "a canvas needs a positive width and height"));
@@ -1091,9 +1100,12 @@ impl CanvasState {
       return PluginErrorCode::QuotaExceeded(MAX_ANIMATIONS as i64 + 1, MAX_ANIMATIONS as i64)
         .throw(ctx, &format!("at most {MAX_ANIMATIONS} animations may be open at once"));
     }
-    let [width, height] = match options.0.as_ref().and_then(|v| v.as_object()) {
-      Some(options) => read_dimensions(ctx, options, "decodeAnimation", false)?,
-      None => [0, 0],
+    let ([width, height], fps) = match options.0.as_ref().and_then(|v| v.as_object()) {
+      Some(options) => (
+        read_dimensions(ctx, options, "decodeAnimation", false)?,
+        read_fps(ctx, options, "decodeAnimation")?.unwrap_or(0),
+      ),
+      None => ([0, 0], 0),
     };
     if width != 0 || height != 0 {
       check_dimensions(ctx, width, height)?;
@@ -1103,6 +1115,7 @@ impl CanvasState {
     let describe = |args: &mut Encoder| {
       args.i32(width);
       args.i32(height);
+      args.i32(fps);
       args.text(&path.to_string_lossy());
     };
     self.start_op(
@@ -1143,14 +1156,7 @@ impl CanvasState {
     if width % 2 != 0 || height % 2 != 0 {
       return Err(Exception::throw_type(ctx, "createEncoder: a video's width and height must both be even"));
     }
-    let mut fps = DEFAULT_ENCODER_FPS;
-    if let Some(value) = options.get::<_, Option<Coerced<f64>>>("fps")? {
-      let rounded = if value.0.is_finite() { value.0.trunc() as i32 } else { 0 };
-      if !(1..=MAX_FPS).contains(&rounded) {
-        return Err(Exception::throw_type(ctx, &format!("createEncoder: 'fps' must be between 1 and {MAX_FPS}")));
-      }
-      fps = rounded;
-    }
+    let fps = read_fps(ctx, options, "createEncoder")?.unwrap_or(DEFAULT_ENCODER_FPS);
     let mut bitrate = 0i64;
     if let Some(value) = options.get::<_, Option<Coerced<f64>>>("bitrate")? {
       if !value.0.is_finite() || value.0 < 1.0 || value.0 > MAX_ENCODER_BITRATE as f64 {

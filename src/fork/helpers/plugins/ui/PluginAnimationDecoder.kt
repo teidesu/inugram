@@ -13,7 +13,10 @@ import org.telegram.ui.Components.RLottieNative
 
 private fun AnimatedFileNative.readInto(bitmap: Bitmap?): Int = getVideoFrame(bitmap, false, 0f, 0f, false)
 
-/** All operations run on [queue]: decoders are not thread-safe and sequential reads depend on frame order. */
+/**
+ * All operations run on [queue]: decoders are not thread-safe and sequential reads depend on frame order.
+ * Read at a [rate], frame `i` is the first source frame at or after `i / rate` seconds, stamped with that tick.
+ */
 internal sealed class PluginAnimationDecoder(shared: Executor) {
     val queue: Executor = SerialExecutor(shared)
 
@@ -53,24 +56,34 @@ internal sealed class PluginAnimationDecoder(shared: Executor) {
         private val lottie: RLottieNative,
         override val width: Int,
         override val height: Int,
+        private val rate: Int,
     ) : PluginAnimationDecoder(shared) {
-        override val frameCount = lottie.frameCount.coerceAtLeast(1)
-        override val fps = lottie.fps.coerceAtLeast(1)
-        override val duration = (frameCount * 1000L / fps).toInt()
+        private val sourceCount = lottie.frameCount.coerceAtLeast(1)
+        private val sourceFps = lottie.fps.coerceAtLeast(1)
+        override val duration = (sourceCount * 1000L / sourceFps).toInt()
+        override val fps = if (rate > 0) rate else sourceFps
+        override val frameCount = if (rate > 0) countTicks(duration, rate) else sourceCount
         private var nextIndex = 0
 
+        private fun getSourceIndex(index: Int): Int =
+            if (rate > 0) ((index * 1000L / rate * sourceFps + 999) / 1000).toInt() else index
+
         override fun frame(index: Int): Frame {
+            val tickMs = (index * 1000L / fps).toInt()
+            val source = getSourceIndex(index)
+            if (source >= sourceCount) throw NoFrame(index)
             val bitmap = newFrame(width, height)
             // below zero means nothing was drawn
-            if (lottie.getFrame(index, bitmap, true) < 0) {
+            if (lottie.getFrame(source, bitmap, true) < 0) {
                 bitmap.recycle()
                 throw IllegalArgumentException("frame $index did not render")
             }
             nextIndex = index + 1
-            return Frame(bitmap, (index * 1000L / fps).toInt())
+            return Frame(bitmap, tickMs)
         }
 
-        override fun next(): Frame? = if (nextIndex < frameCount) frame(nextIndex) else null
+        override fun next(): Frame? =
+            if (nextIndex < frameCount && getSourceIndex(nextIndex) < sourceCount) frame(nextIndex) else null
 
         override fun release() = lottie.recycle()
     }
@@ -86,6 +99,7 @@ internal sealed class PluginAnimationDecoder(shared: Executor) {
         wantedWidth: Int,
         wantedHeight: Int,
         opaque: Boolean,
+        private val rate: Int,
     ) : PluginAnimationDecoder(shared) {
         private val turned = rotation == 90 || rotation == 270
 
@@ -97,16 +111,18 @@ internal sealed class PluginAnimationDecoder(shared: Executor) {
         private val decodeWidth = if (opaque) frameWidth else video.width
         private val decodeHeight = if (opaque) frameHeight else video.height
         override val duration = video.getDuration(TimeUnit.MILLISECONDS)
-        override val fps = video.fps.takeIf { it > 0 } ?: DEFAULT_FPS
-        override val frameCount = (duration.toLong() * fps / 1000L).toInt().coerceAtLeast(1)
+        override val fps = if (rate > 0) rate else video.fps.takeIf { it > 0 } ?: DEFAULT_FPS
+        override val frameCount = countTicks(duration, fps)
 
         private var nextIndex = 0
 
+        /** read at a [rate]: the time of the source frame decoded last, which stays convertible until the next is */
+        private var decodedMs = -1
+        private var ended = false
+
         override fun frame(index: Int): Frame {
-            if (index < nextIndex) {
-                video.seekToMs(0, false)
-                nextIndex = 0
-            }
+            if (rate > 0) return pick(index) ?: throw NoFrame(index)
+            if (index < nextIndex) rewind()
             while (nextIndex < index) {
                 if (video.readInto(null) == 0) throw NoFrame(index)
                 nextIndex++
@@ -115,9 +131,33 @@ internal sealed class PluginAnimationDecoder(shared: Executor) {
         }
 
         override fun next(): Frame? = try {
-            read(nextIndex) { bitmap -> video.readInto(bitmap) }
+            if (rate > 0) pick(nextIndex) else read(nextIndex) { bitmap -> video.readInto(bitmap) }
         } catch (e: NoFrame) {
             null
+        }
+
+        /** frames no tick lands on are decoded but never converted, which is most of a video's cost */
+        private fun pick(index: Int): Frame? {
+            if (index >= frameCount) return null
+            if (index < nextIndex) rewind()
+            val tickMs = (index * 1000L / rate).toInt()
+            while (!ended && decodedMs < tickMs) {
+                if (video.readInto(null) == 0) {
+                    ended = true
+                } else {
+                    decodedMs = video.getProgress(TimeUnit.MILLISECONDS)
+                }
+            }
+            // ffmpeg lets go of the last frame once it finds nothing after it
+            if (ended) return null
+            return read(index) { bitmap -> video.inu_writeCurrentFrame(bitmap) }.let { Frame(it.bitmap, tickMs) }
+        }
+
+        private fun rewind() {
+            video.seekToMs(0, false)
+            nextIndex = 0
+            decodedMs = -1
+            ended = false
         }
 
         private inline fun read(index: Int, decode: (Bitmap) -> Int): Frame {
@@ -156,6 +196,8 @@ internal sealed class PluginAnimationDecoder(shared: Executor) {
 
     private class NoFrame(index: Int) : IllegalArgumentException("the source has no frame $index")
 
+    protected fun countTicks(durationMs: Int, fps: Int): Int = (durationMs.toLong() * fps / 1000L).toInt().coerceAtLeast(1)
+
     companion object {
         private const val DEFAULT_FPS = 30
 
@@ -163,7 +205,8 @@ internal sealed class PluginAnimationDecoder(shared: Executor) {
         private const val LOTTIE_SIDE = 512
 
         /** sniffed from content: bytes the plugin passed were staged without a name. Lottie has no own size */
-        fun open(shared: Executor, path: String, width: Int, height: Int): PluginAnimationDecoder {
+        /** [rate] is the frame rate to read at, or zero for every source frame */
+        fun open(shared: Executor, path: String, width: Int, height: Int, rate: Int): PluginAnimationDecoder {
             val file = File(path)
             if (!file.isFile || file.length() == 0L) {
                 throw IllegalArgumentException("there is nothing to decode here")
@@ -172,14 +215,14 @@ internal sealed class PluginAnimationDecoder(shared: Executor) {
                 val side = if (width > 0) width else LOTTIE_SIDE
                 val lottieHeight = if (height > 0) height else LOTTIE_SIDE
                 val lottie = RLottieNative.createFromFile(path, null, side, lottieHeight, false, null, false, 0)
-                if (lottie != null) return Lottie(shared, lottie, side, lottieHeight)
+                if (lottie != null) return Lottie(shared, lottie, side, lottieHeight, rate)
             } else {
                 val meta = IntArray(META_FIELDS)
                 val video = AnimatedFileNative.createDecoderFrom(path, meta, UserConfig.selectedAccount, 0, null, false)
                 if (video != null) {
                     if (video.width > 0 && video.height > 0) {
                         val opaque = (width <= 0 && height <= 0) || isOpaque(video)
-                        return Video(shared, video, video.rotation, width, height, opaque)
+                        return Video(shared, video, video.rotation, width, height, opaque, rate)
                     }
                     video.recycle()
                 }

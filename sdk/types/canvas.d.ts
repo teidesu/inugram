@@ -205,7 +205,7 @@ declare interface AnimatedImage extends AsyncIterableIterator<AnimationFrame> {
   readonly frameCount: number
   /** animation duration in milliseconds, `0` when not available */
   readonly duration: number
-  /** animation fps rate, `0` when not available */
+  /** animation fps rate, `0` when not available; the rate asked for, when one was and the source moves */
   readonly fps: number
 
   /** read the next frame */
@@ -271,6 +271,12 @@ declare namespace inu {
         width?: number
         /** height to decode at */
         height?: number
+        /**
+         * frame rate to read at (1-120), instead of every source frame: frame `i` is the first source
+         * frame at or after `i / fps` seconds, stamped with that tick. Skipped frames are never converted,
+         * so this is much cheaper than reading every frame and dropping some
+         */
+        fps?: number
       },
     ): Promise<AnimatedImage>
 

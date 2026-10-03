@@ -77,6 +77,19 @@ async function drawEveryFrame(file: Blob, canvas: OffscreenCanvas) {
 }
 ```
 
+Pass `fps` to read it at that rate instead of the source fps: frame `i` is the first source frame
+at or after `i / fps` seconds, its `timestamp` is that tick, and a frame shown across several ticks
+comes once per tick. Frames no tick lands on are decoded but never converted, so a 60 fps video read
+at 12 fps costs a fraction of reading every frame:
+
+```ts
+using animation = await inu.canvas.decodeAnimation(video, { width: 360, height: 360, fps: 12 })
+for await (using frame of animation) {
+  ctx.drawImage(frame, 0, 0)
+  await encoder.addFrame(canvas)
+}
+```
+
 Then, you can use `inu.canvas.createEncoder({ width, height, fps?, bitrate? })` to actually encode the video
 into a silent MP4:
 

@@ -154,6 +154,48 @@ class PluginCanvasAnimationTest {
     }
 
     @Test
+    fun a_video_drawn_down_keeps_its_colors_where_they_were() {
+        val plugin = engineFor()
+        val t = JSONObject(plugin.await(
+            """
+            (async () => {
+              using canvas = inu.canvas.create(320, 256)
+              const ctx = canvas.getContext('2d')
+              using encoder = await inu.canvas.createEncoder({ width: 320, height: 256, fps: 10 })
+              for (let i = 0; i < 4; i++) {
+                ctx.fillStyle = '#ff0000'
+                ctx.fillRect(0, 0, 160, 128)
+                ctx.fillStyle = '#00ff00'
+                ctx.fillRect(160, 0, 160, 128)
+                ctx.fillStyle = '#0000ff'
+                ctx.fillRect(0, 128, 320, 128)
+                await encoder.addFrame(canvas)
+              }
+              using mp4 = await encoder.finish()
+              using animation = await inu.canvas.decodeAnimation(mp4, { width: 64, height: 64 })
+              using frame = await animation.frame(1)
+              using into = inu.canvas.create(64, 64)
+              const inner = into.getContext('2d')
+              inner.drawImage(frame, 0, 0)
+              return {
+                topLeft: inner.getAverageColor(8, 8, 16, 16),
+                topRight: inner.getAverageColor(40, 8, 16, 16),
+                bottom: inner.getAverageColor(8, 40, 48, 16),
+              }
+            })()
+            """,
+        ))
+        fun assertColor(where: String, r: Int, g: Int, b: Int) {
+            val color = t.getJSONObject(where)
+            val got = listOf(color.getInt("r"), color.getInt("g"), color.getInt("b"))
+            assertTrue(got.zip(listOf(r, g, b)).all { (have, want) -> kotlin.math.abs(have - want) < 48 }, "$where came back as $got")
+        }
+        assertColor("topLeft", 255, 0, 0)
+        assertColor("topRight", 0, 255, 0)
+        assertColor("bottom", 0, 0, 255)
+    }
+
+    @Test
     fun the_platform_reads_the_written_file_as_a_silent_video() {
         val plugin = engineFor()
         plugin.await(
@@ -198,6 +240,104 @@ class PluginCanvasAnimationTest {
             asDocument.attributes.isEmpty() && asDocument.thumb == null,
             "a file the caller asked to send as a document was described anyway",
         )
+    }
+
+    @Test
+    fun a_video_read_at_a_lower_rate_answers_the_first_frame_at_or_after_each_tick() {
+        val plugin = engineFor()
+        val t = JSONObject(plugin.await(
+            """
+            (async () => {
+              using canvas = inu.canvas.create(64, 64)
+              const ctx = canvas.getContext('2d')
+              using encoder = await inu.canvas.createEncoder({ width: 64, height: 64, fps: 30 })
+              for (let i = 0; i < 30; i++) {
+                const level = i * 8
+                ctx.fillStyle = `rgb(${'$'}{level}, ${'$'}{level}, ${'$'}{level})`
+                ctx.fillRect(0, 0, 64, 64)
+                await encoder.addFrame(canvas)
+              }
+              using mp4 = await encoder.finish()
+              using animation = await inu.canvas.decodeAnimation(mp4, { width: 32, height: 32, fps: 10 })
+              using into = inu.canvas.create(32, 32)
+              const inner = into.getContext('2d')
+              const frames = []
+              for await (using frame of animation) {
+                inner.drawImage(frame, 0, 0)
+                frames.push({ at: frame.timestamp, level: inner.getAverageColor().r, width: frame.width })
+              }
+              using again = await animation.frame(4)
+              inner.drawImage(again, 0, 0)
+              return { fps: animation.fps, frameCount: animation.frameCount, frames, again: { at: again.timestamp, level: inner.getAverageColor().r } }
+            })()
+            """,
+        ))
+        assertEquals(10, t.getInt("fps"))
+        assertTrue(t.getInt("frameCount") in 9..10, "a one-second video at 10fps counts ${t.getInt("frameCount")} frames")
+        val frames = t.getJSONArray("frames")
+        assertTrue(frames.length() in 9..10, "a one-second video at 10fps read back as ${frames.length()} frames")
+        for (i in 0 until frames.length()) {
+            val frame = frames.getJSONObject(i)
+            assertEquals(i * 100, frame.getInt("at"), "frame $i is not stamped with its tick")
+            assertEquals(32, frame.getInt("width"))
+            val level = frame.getInt("level")
+            assertTrue(kotlin.math.abs(level - i * 24) < 14, "frame $i is source frame ${level / 8.0}, not ${i * 3}")
+        }
+        val again = t.getJSONObject("again")
+        assertEquals(400, again.getInt("at"))
+        assertTrue(kotlin.math.abs(again.getInt("level") - 96) < 14, "reading frame 4 again gave level ${again.getInt("level")}")
+    }
+
+    @Test
+    fun a_video_read_at_a_higher_rate_answers_a_frame_for_every_tick() {
+        val plugin = engineFor()
+        val t = JSONObject(plugin.await(
+            """
+            (async () => {
+              using canvas = inu.canvas.create(64, 64)
+              const ctx = canvas.getContext('2d')
+              using encoder = await inu.canvas.createEncoder({ width: 64, height: 64, fps: 5 })
+              for (let i = 0; i < 5; i++) {
+                ctx.fillStyle = i % 2 === 0 ? '#ffffff' : '#000000'
+                ctx.fillRect(0, 0, 64, 64)
+                await encoder.addFrame(canvas)
+              }
+              using mp4 = await encoder.finish()
+              using animation = await inu.canvas.decodeAnimation(mp4, { fps: 20 })
+              using into = inu.canvas.create(64, 64)
+              const inner = into.getContext('2d')
+              const levels = []
+              for await (using frame of animation) {
+                inner.drawImage(frame, 0, 0)
+                levels.push(inner.getAverageColor().r)
+              }
+              return { levels }
+            })()
+            """,
+        ))
+        val levels = t.getJSONArray("levels")
+        assertTrue(levels.length() >= 13, "a one-second video at 20fps read back as ${levels.length()} frames")
+        // tick 1 at 50ms first finds the source frame at 200ms
+        assertTrue(levels.getInt(0) > 200 && levels.getInt(1) < 50 && levels.getInt(4) < 50 && levels.getInt(5) > 200, "levels: $levels")
+    }
+
+    @Test
+    fun a_lottie_source_read_at_a_rate_answers_a_frame_for_every_tick() {
+        val plugin = engineFor()
+        plugin.js("globalThis.lottie = ${JSONObject.quote(lottieJson(30, 30))}")
+        val t = JSONObject(plugin.await(
+            """
+            (async () => {
+              using animation = await inu.canvas.decodeAnimation(new TextEncoder().encode(lottie), { width: 64, height: 64, fps: 10 })
+              const at = []
+              for await (using frame of animation) at.push(frame.timestamp)
+              return { fps: animation.fps, frameCount: animation.frameCount, at }
+            })()
+            """,
+        ))
+        assertEquals(10, t.getInt("fps"))
+        assertEquals(10, t.getInt("frameCount"))
+        assertEquals((0 until 10).map { it * 100 }.toString(), t.getJSONArray("at").toString().replace(",", ", "))
     }
 
     @Test
