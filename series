@@ -319,3 +319,5 @@ feature/instant-camera-mode.patch
 feature/minimize-attach-panel.patch
 bugfix/link-scrim-offset.patch
 bugfix/scrim-touch-lock.patch
+feature/attachment-preview-resolution.patch
+feature/optimized-attachment-menu.patch
