@@ -1,0 +1,191 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Nika Krasnova <nika@nikableh.moe>
+Date: Sat, 3 Oct 2026 23:47:30 +0200
+Subject: Preserve image quality across sticker cutout edits
+
+---
+ .../ui/Components/Paint/Painting.java         | 10 +++-
+ .../ui/Components/Paint/ShaderSet.java        | 50 +++++++++++++++++--
+ .../Components/Paint/Views/MaskPaintView.java |  6 +++
+ .../Paint/Views/StickerMakerView.java         |  6 +++
+ .../java/org/telegram/ui/PhotoViewer.java     |  3 ++
+ 5 files changed, 71 insertions(+), 4 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Painting.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Painting.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Painting.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Painting.java
+@@ -547,7 +547,8 @@ public class Painting {
+ 
+             GLES20.glViewport(0, 0, (int) size.width, (int) size.height);
+ 
+-            Shader shader = shaders.get(brush.getShaderName(Brush.PAINT_TYPE_COMPOSITE));
++            final boolean inu_masking = masking && desu.inugram.InuConfig.FIX_STICKER_MASK_ALPHA.getValue() && (brush instanceof Brush.Radial || brush instanceof Brush.Eraser);
++            Shader shader = shaders.get(brush.getShaderName(Brush.PAINT_TYPE_COMPOSITE) + (inu_masking ? "_masking" : ""));
+             if (shader == null) {
+                 return null;
+             }
+@@ -566,6 +567,13 @@ public class Painting {
+             GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
+             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, getPaintTexture());
+ 
++            if (inu_masking) {
++                GLES20.glUniform1i(shader.getUniform("otexture"), 2);
++                GLES20.glUniform1f(shader.getUniform("preview"), 0);
++                GLES20.glActiveTexture(GLES20.GL_TEXTURE2);
++                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, originalBitmapTexture.texture());
++            }
++
+             Object lock = null;
+             if (brush instanceof Brush.Blurer) {
+                 GLES20.glUniform1i(shader.getUniform("blured"), 2);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/ShaderSet.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/ShaderSet.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/ShaderSet.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/ShaderSet.java
+@@ -69,6 +69,48 @@ public class ShaderSet {
+         "   gl_FragColor = texture2D(texture, varTexcoord.st, 0.0) * (preview + (1.0 - preview) * texture2D(mask, varTexcoord.st, 0.0).a);" +
+         "   gl_FragColor.rgb *= gl_FragColor.a;" +
+         "}";
++    // The editable texture holds absolute alpha, not a mask relative to the PNG's alpha.
++    // Android uploads premultiplied RGB, so change its alpha exactly once.
++    private static final String inu_MASKING_COLOR_FSH =
++        "vec4 inu_maskColor(vec4 original, float editedAlpha, float preview) {" +
++        "   float alpha = mix(min(editedAlpha, original.a), original.a, preview);" +
++        "   return original.a > 0.0 ? vec4(original.rgb * (alpha / original.a), alpha) : vec4(0.0);" +
++        "}";
++    private static final String inu_MASKING_BLIT_FSH =
++        "precision highp float;" +
++        "varying vec2 varTexcoord;" +
++        "uniform sampler2D texture;" +
++        "uniform sampler2D mask;" +
++        "uniform float preview;" +
++        inu_MASKING_COLOR_FSH +
++        "void main(void) {" +
++        "   gl_FragColor = inu_maskColor(texture2D(texture, varTexcoord.st), texture2D(mask, varTexcoord.st).a, preview);" +
++        "}";
++    private static final String inu_MASKING_BRUSH_FSH =
++        "precision highp float;" +
++        "varying vec2 varTexcoord;" +
++        "uniform sampler2D texture;" +
++        "uniform sampler2D otexture;" +
++        "uniform sampler2D mask;" +
++        "uniform vec4 color;" +
++        "uniform float preview;" +
++        inu_MASKING_COLOR_FSH;
++    private static final String inu_MASKING_BLITWITHMASK_FSH =
++        inu_MASKING_BRUSH_FSH +
++        "void main(void) {" +
++        "   vec4 original = texture2D(otexture, varTexcoord.st);" +
++        "   float dstAlpha = min(texture2D(texture, varTexcoord.st).a, original.a);" +
++        "   float srcAlpha = color.a * texture2D(mask, varTexcoord.st).a;" +
++        "   float outAlpha = mix(dstAlpha, original.a, srcAlpha);" +
++        "   gl_FragColor = inu_maskColor(original, outAlpha, preview);" +
++        "}";
++    private static final String inu_MASKING_BLITWITHMASKERASER_FSH =
++        inu_MASKING_BRUSH_FSH +
++        "void main(void) {" +
++        "   float dstAlpha = texture2D(texture, varTexcoord.st).a;" +
++        "   float srcAlpha = color.a * texture2D(mask, varTexcoord.st).a;" +
++        "   gl_FragColor = inu_maskColor(texture2D(otexture, varTexcoord.st), dstAlpha * (1.0 - srcAlpha), preview);" +
++        "}";
+     private static final String PAINT_BLITWITHMASK_FSH =
+         "precision highp float;" +
+         "varying vec2 varTexcoord;" +
+@@ -400,7 +442,7 @@ public class ShaderSet {
+ 
+         shader = new HashMap<>();
+         shader.put(VERTEX, PAINT_BLIT_VSH);
+-        shader.put(FRAGMENT, PAINT_MASKING_BLIT_FSH);
++        shader.put(FRAGMENT, desu.inugram.InuConfig.FIX_STICKER_MASK_ALPHA.getValue() ? inu_MASKING_BLIT_FSH : PAINT_MASKING_BLIT_FSH);
+         shader.put(ATTRIBUTES, new String[]{"inPosition", "inTexcoord"});
+         shader.put(UNIFORMS, new String[]{"mvpMatrix", "texture", "mask", "alpha", "preview"});
+         result.put("maskingBlit", Collections.unmodifiableMap(shader));
+@@ -414,10 +456,11 @@ public class ShaderSet {
+ 
+         shader = new HashMap<>();
+         shader.put(VERTEX, PAINT_BLIT_VSH);
+-        shader.put(FRAGMENT, PAINT_MASKING_BLITWITHMASK_FSH);
++        shader.put(FRAGMENT, desu.inugram.InuConfig.FIX_STICKER_MASK_ALPHA.getValue() ? inu_MASKING_BLITWITHMASK_FSH : PAINT_MASKING_BLITWITHMASK_FSH);
+         shader.put(ATTRIBUTES, new String[]{"inPosition", "inTexcoord"});
+         shader.put(UNIFORMS, new String[]{"mvpMatrix", "otexture", "texture", "mask", "color", "preview"});
+         result.put("blitWithMask_masking", Collections.unmodifiableMap(shader));
++        if (desu.inugram.InuConfig.FIX_STICKER_MASK_ALPHA.getValue()) result.put("compositeWithMask_masking", Collections.unmodifiableMap(shader));
+ 
+         shader = new HashMap<>();
+         shader.put(VERTEX, PAINT_BLIT_VSH);
+@@ -480,10 +523,11 @@ public class ShaderSet {
+ 
+         shader = new HashMap<>();
+         shader.put(VERTEX, PAINT_BLIT_VSH);
+-        shader.put(FRAGMENT, PAINT_MASKING_BLITWITHMASKERASER_FSH);
++        shader.put(FRAGMENT, desu.inugram.InuConfig.FIX_STICKER_MASK_ALPHA.getValue() ? inu_MASKING_BLITWITHMASKERASER_FSH : PAINT_MASKING_BLITWITHMASKERASER_FSH);
+         shader.put(ATTRIBUTES, new String[]{"inPosition", "inTexcoord"});
+         shader.put(UNIFORMS, new String[]{"mvpMatrix", "texture", "otexture", "preview", "mask", "color"});
+         result.put("blitWithMaskEraser_masking", Collections.unmodifiableMap(shader));
++        if (desu.inugram.InuConfig.FIX_STICKER_MASK_ALPHA.getValue()) result.put("compositeWithMaskEraser_masking", Collections.unmodifiableMap(shader));
+ 
+         shader = new HashMap<>();
+         shader.put(VERTEX, PAINT_BLIT_VSH);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/MaskPaintView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/MaskPaintView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/MaskPaintView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/MaskPaintView.java
+@@ -48,6 +48,7 @@ public class MaskPaintView extends FrameLayout {
+     private final RenderView renderView;
+     private Bitmap bitmapToEdit;
+     private int orientation;
++    private boolean inu_hasDrawn;
+ 
+     private boolean inBubbleMode;
+ 
+@@ -102,6 +103,7 @@ public class MaskPaintView extends FrameLayout {
+ 
+             @Override
+             public void onFinishedDrawing(boolean moved) {
++                inu_hasDrawn = true;
+                 undoStore.getDelegate().historyChanged();
+                 weightChooserView.setViewHidden(false);
+                 onDrawn();
+@@ -173,6 +175,10 @@ public class MaskPaintView extends FrameLayout {
+ 
+     }
+ 
++    public boolean inu_hasChanges() {
++        return inu_hasDrawn;
++    }
++
+     public boolean canUndo() {
+         return undoStore.canUndo();
+     }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/StickerMakerView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/StickerMakerView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/StickerMakerView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/StickerMakerView.java
+@@ -788,6 +788,12 @@ public class StickerMakerView extends FrameLayout implements NotificationCenter.
+         if (inputBitmap == null || inputBitmap.isRecycled() || srcBitmap == null || srcBitmap.isRecycled()) {
+             return null;
+         }
++        if (full && desu.inugram.InuConfig.FIX_STICKER_MASK_ALPHA.getValue()) {
++            // A completed brush edit already contains its final colors and alpha.
++            Bitmap result = Bitmap.createBitmap(srcBitmap.getWidth(), srcBitmap.getHeight(), Bitmap.Config.ARGB_8888);
++            new Canvas(result).drawBitmap(inputBitmap, null, new Rect(0, 0, result.getWidth(), result.getHeight()), new Paint(Paint.FILTER_BITMAP_FLAG));
++            return result;
++        }
+         Paint bitmapPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+         Bitmap bluredBitmap = Bitmap.createBitmap(srcBitmap.getWidth(), srcBitmap.getHeight(), Bitmap.Config.ARGB_8888);
+         Canvas canvas = new Canvas(bluredBitmap);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+@@ -11514,6 +11514,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+ 
+             photoPaintView.onCleanupEntities();
+         } else if (currentEditMode == EDIT_MODE_STICKER_MASK) {
++            if (desu.inugram.InuConfig.FIX_STICKER_MASK_ALPHA.getValue() && !maskPaintView.inu_hasChanges()) {
++                return true;
++            }
+             hasChanged = true;
+             bitmap = maskPaintView.getBitmap();
+             centerImage.setImageBitmap(bitmap);
