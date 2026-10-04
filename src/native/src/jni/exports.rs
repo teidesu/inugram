@@ -44,6 +44,7 @@ use crate::api::tl::utils::{install_utils_with_host, UtilsHost};
 use crate::api::ui::actions::{install_actions, ActionHost};
 use crate::api::ui::dialogs::install_dialogs;
 use crate::api::ui::files::{install_files, FilesHost};
+use crate::api::ui::history::{install_history, HistoryHost};
 use crate::api::ui::icons::{install_icons, IconHost};
 use crate::api::ui::pages::{install_ui, UiHost};
 use crate::api::ui::screens::{install_screens, ScreenHost};
@@ -181,6 +182,10 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
           &globals,
         )
       })?;
+      let history_host: Rc<dyn HistoryHost> = bridge.clone();
+      let history = install_part(&ctx, "inu.ui.openChatHistory", log.as_ref(), |ctx, globals| {
+        install_history(&ctx, history_host, jvm.clone(), lifecycle.clone(), log.clone(), &globals)
+      })?;
       let notification_host: Rc<dyn NotificationHost> = bridge.clone();
       let notifications =
         install_part(&ctx, "inu.android.addNotificationCenterDelegate", log.as_ref(), |ctx, globals| {
@@ -287,6 +292,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
         dialogs,
         ui,
         screens,
+        history,
         actions,
         account,
         reads,
@@ -852,6 +858,79 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeUiPageClo
   page_id: jlong,
 ) {
   with_engine(ptr, (), |engine| engine.ui.close_page(&engine.ctx, page_id));
+}
+
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeChatHistoryLoad(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  history_id: jlong,
+  request_id: jlong,
+  cursor: JString,
+  newer: jboolean,
+) {
+  with_engine_env(&mut env, ptr, (), |env, engine| {
+    let cursor = if cursor.is_null() { None } else { Some(jstring_to_string(env, &cursor)) };
+    engine.history.dispatch_load(&engine.ctx, history_id, request_id, cursor.as_deref(), newer);
+  })
+}
+
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeChatHistoryRead(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  history_id: jlong,
+  key: JString,
+) {
+  with_engine_env(&mut env, ptr, (), |env, engine| {
+    let key = jstring_to_string(env, &key);
+    engine.history.dispatch_read(&engine.ctx, history_id, &key);
+  })
+}
+
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeChatHistoryButtonClick(
+  _env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  history_id: jlong,
+) {
+  with_engine(ptr, (), |engine| engine.history.dispatch_button_click(&engine.ctx, history_id));
+}
+
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeChatHistoryMenu(
+  _env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  history_id: jlong,
+  request_id: jlong,
+) {
+  with_engine(ptr, (), |engine| engine.history.dispatch_menu(&engine.ctx, history_id, request_id));
+}
+
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeChatHistoryMenuClick(
+  _env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  history_id: jlong,
+  request_id: jlong,
+  index: jint,
+) {
+  with_engine(ptr, (), |engine| engine.history.dispatch_menu_click(&engine.ctx, history_id, request_id, index));
+}
+
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeChatHistoryClosed(
+  _env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  history_id: jlong,
+) {
+  with_engine(ptr, (), |engine| engine.history.dispatch_closed(&engine.ctx, history_id));
 }
 
 #[no_mangle]

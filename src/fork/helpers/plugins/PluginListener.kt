@@ -52,6 +52,19 @@ interface UiListener {
 
     fun uiOpenMenu(menuId: Long, pageId: Long, anchorKey: String, itemsJson: String): String?
 
+    fun uiOpenChatHistory(historyId: Long, optionsJson: String): String?
+
+    /** [op] keeps in sync with rust `history::OP_*` */
+    fun uiChatHistoryUpdate(historyId: Long, op: Int, json: String): String?
+
+    fun uiChatHistoryClose(historyId: Long)
+
+    /** answers [QuickJs.chatHistoryLoad]: `S` + page json or `E` + message */
+    fun uiChatHistoryPage(requestId: Long, wire: String)
+
+    /** answers [QuickJs.chatHistoryMenu]: `S` + items json or `E` + message */
+    fun uiChatHistoryMenu(requestId: Long, wire: String)
+
     /** [kind] keeps in sync with rust `icons::KIND_*` */
     fun iconResolves(kind: Int, value: String): Boolean
 

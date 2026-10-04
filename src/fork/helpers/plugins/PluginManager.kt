@@ -33,6 +33,7 @@ import desu.inugram.helpers.plugins.ui.PluginActions
 import desu.inugram.helpers.plugins.ui.PluginAppVisibility
 import desu.inugram.helpers.plugins.ui.PluginCanvas
 import desu.inugram.helpers.plugins.ui.PluginFilePicker
+import desu.inugram.helpers.plugins.ui.PluginChatHistory
 import desu.inugram.helpers.plugins.ui.PluginUi
 import desu.inugram.helpers.update.UpdateHelper
 import desu.inugram.ui.settings.PluginInfoActivity
@@ -578,6 +579,7 @@ object PluginManager {
         PluginMedia,
         PluginOptimisticSend,
         PluginUi,
+        PluginChatHistory,
         PluginFilePicker,
         PluginFetch,
         PluginActions,

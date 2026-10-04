@@ -267,6 +267,7 @@
             minId: toCount(opts.minId, 'getHistory', 'minId'),
             maxId: toCount(opts.maxId, 'getHistory', 'maxId'),
             topicId: toCount(opts.topicId, 'getHistory', 'topicId'),
+            force: !!opts.force,
           },
         ]
       }).then(messages => messages.map(wrap))
@@ -352,6 +353,7 @@
           minId: opts.minId,
           maxId: opts.maxId,
           topicId: opts.topicId,
+          force: opts.force,
         })
         for (const message of page) {
           yield message

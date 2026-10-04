@@ -18,6 +18,7 @@ use crate::api::tl::utils::UtilsHost;
 use crate::api::ui::actions::ActionHost;
 use crate::api::ui::dialogs::DialogHost;
 use crate::api::ui::files::FilesHost;
+use crate::api::ui::history::HistoryHost;
 use crate::api::ui::icons::IconHost;
 use crate::api::ui::pages::UiHost;
 use crate::api::ui::screens::ScreenHost;
@@ -337,6 +338,32 @@ impl UiHost for JniBridge {
       self.on_ui_open_menu,
       &[Arg::Long(menu_id), Arg::Long(page_id), Arg::Str(anchor_key), Arg::Str(items_json)],
     )
+  }
+}
+
+impl HistoryHost for JniBridge {
+  fn history_open(&self, history_id: i64, options_json: &str) -> Option<String> {
+    self.call_refusal("openChatHistory", self.on_ui_open_chat_history, &[Arg::Long(history_id), Arg::Str(options_json)])
+  }
+
+  fn history_update(&self, history_id: i64, op: i32, json: &str) -> Option<String> {
+    self.call_refusal(
+      "openChatHistory",
+      self.on_ui_chat_history_update,
+      &[Arg::Long(history_id), Arg::Int(op), Arg::Str(json)],
+    )
+  }
+
+  fn history_close(&self, history_id: i64) {
+    self.call_void("openChatHistory", self.on_ui_chat_history_close, &[Arg::Long(history_id)]);
+  }
+
+  fn history_page(&self, request_id: i64, wire: &str) {
+    self.call_void("openChatHistory", self.on_ui_chat_history_page, &[Arg::Long(request_id), Arg::Str(wire)]);
+  }
+
+  fn history_menu(&self, request_id: i64, wire: &str) {
+    self.call_void("openChatHistory", self.on_ui_chat_history_menu, &[Arg::Long(request_id), Arg::Str(wire)]);
   }
 }
 

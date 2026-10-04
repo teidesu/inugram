@@ -85,6 +85,8 @@ object TlJson {
             val field = fields[key]
                 ?: throw IllegalArgumentException("TlJson.fromJson: unknown field '$key' on '$tlName'")
             val jsonValue = json.get(key)
+            // a spread TL proxy carries its absent optionals as null
+            if (jsonValue == JSONObject.NULL) continue
             val converted = jsonToValue(field.genericType, jsonValue, "$tlName.$key")
             field.set(instance, converted)
             written.add(key)

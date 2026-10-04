@@ -322,3 +322,13 @@ fn the_bundled_icons_test_plugin_passes() {
 
   crate::testing::harness::assert_oracle_exact(&lines, "icons test done", 31);
 }
+
+#[test]
+fn an_avatar_icon_names_the_dialog_and_its_account() {
+  let (_rt, ctx, _host) = setup(&[]);
+  assert_eq!(eval_string(&ctx, "inu.icons.avatar(777000).__inuIcon"), "p-1:777000");
+  assert_eq!(eval_string(&ctx, "inu.icons.avatar(-1001234567890, { account: 2 }).__inuIcon"), "p2:-1001234567890");
+  assert_eq!(thrown_code(&ctx, "inu.icons.avatar(0)"), "TypeError");
+  assert_eq!(thrown_code(&ctx, "inu.icons.avatar('777000')"), "TypeError");
+  assert!(is_avatar_spec("-1:5") && is_avatar_spec("3:-100") && !is_avatar_spec("5") && !is_avatar_spec("-2:5") && !is_avatar_spec("0:0"));
+}

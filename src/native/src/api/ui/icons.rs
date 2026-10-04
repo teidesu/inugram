@@ -107,6 +107,7 @@ fn validate_spec<'js>(ctx: &Ctx<'js>, what: &str, spec: &str) -> JsResult<()> {
     Some(b'a') => animation_payload(spec).is_some_and(is_resource_name),
     Some(b'e') => animation_payload(spec).is_some_and(is_positive_id),
     Some(b't') => animation_payload(spec).is_some_and(is_sticker_spec),
+    Some(b'p') => is_avatar_spec(&spec[1..]),
     _ => false,
   };
   if valid {
@@ -155,6 +156,31 @@ pub(crate) fn icon_from_value<'js>(
   }
   validate_spec(ctx, what, &spec)?;
   Ok(Some(Icon { spec, retained_value: None }))
+}
+
+/// `p<account>:<dialogId>`; account -1 is the selected one. The peer is looked up when drawn, so an
+/// unknown one shows initials-less placeholder rather than failing here.
+fn is_avatar_spec(payload: &str) -> bool {
+  let Some((account, dialog)) = payload.split_once(':') else { return false };
+  account.parse::<i32>().is_ok_and(|a| a >= -1) && dialog.parse::<i64>().is_ok_and(|d| d != 0)
+}
+
+fn js_avatar<'js>(ctx: &Ctx<'js>, dialog_id: Value<'js>, options: Opt<Value<'js>>) -> JsResult<Object<'js>> {
+  let what = "icons.avatar";
+  let id = dialog_id
+    .as_int()
+    .map(i64::from)
+    .or_else(|| dialog_id.as_float().filter(|f| f.fract() == 0.0).map(|f| f as i64))
+    .filter(|id| *id != 0)
+    .ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: expected a non-zero dialog id")))?;
+  let account = match options.0.filter(|v| !v.is_undefined() && !v.is_null()) {
+    Some(options) => {
+      let obj = options.as_object().ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: options must be an object")))?;
+      crate::utils::arguments::opt_int(ctx, obj, what, "account")?.filter(|a| *a >= 0).unwrap_or(-1)
+    }
+    None => -1,
+  };
+  new_icon(ctx, format!("p{account}:{id}"))
 }
 
 fn new_icon<'js>(ctx: &Ctx<'js>, spec: String) -> JsResult<Object<'js>> {
@@ -398,6 +424,12 @@ pub fn install_icons<'js>(
   icons.set(
     "sticker",
     Function::new(ctx.clone(), move |ctx: Ctx<'js>, options: Value<'js>| js_sticker(&ctx, options))?,
+  )?;
+  icons.set(
+    "avatar",
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>, dialog_id: Value<'js>, options: Opt<Value<'js>>| {
+      js_avatar(&ctx, dialog_id, options)
+    })?,
   )?;
   set_fn!(icons, "svg", ctx, host, move |ctx: Ctx<'js>, source: Value<'js>| js_svg(&ctx, &host, source));
   globals.inu.set("icons", icons)?;

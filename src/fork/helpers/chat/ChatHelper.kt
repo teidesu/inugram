@@ -40,6 +40,7 @@ import desu.inugram.helpers.plugins.PluginManager
 import desu.inugram.helpers.plugins.ui.MessageActionSource
 import desu.inugram.helpers.plugins.ui.ActionSurface
 import desu.inugram.helpers.plugins.ui.PluginActions
+import desu.inugram.helpers.plugins.ui.PluginChatHistory
 import desu.inugram.helpers.plugins.ui.PluginIcons
 import desu.inugram.helpers.plugins.ui.RegisteredActionRow
 import desu.inugram.helpers.translate.TranslateHelper
@@ -98,6 +99,7 @@ object ChatHelper {
     private const val COMPACT_FORWARD_ICON_SIZE = 12f
     private const val COMPACT_FORWARD_MIN_NAME_WIDTH = 56f
 
+    // NOTE: update PluginChatHistory's LOCAL_MESSAGE_OPTIONS and REAL_MESSAGE_OPTIONS as needed.
     const val OPTION_SAVE = 501
     const val OPTION_DETAILS = 502
     const val OPTION_REPLY_IN = 503
@@ -266,7 +268,7 @@ object ChatHelper {
         noforwards: Boolean,
         allowSendActions: Boolean
     ) {
-        if (allowSendActions && !noforwards && activity.currentChat != null && !ChatObject.isChannelAndNotMegaGroup(activity.currentChat)) {
+        if (allowSendActions && !noforwards && activity.currentChat != null && !ChatObject.isChannelAndNotMegaGroup(activity.currentChat) || PluginChatHistory.showsInChat(activity, selectedObject)) {
             items.add(LocaleController.getString(R.string.InuReplyIn))
             options.add(OPTION_REPLY_IN)
             icons.add(R.drawable.menu_reply)
@@ -322,7 +324,7 @@ object ChatHelper {
             icons.add(R.drawable.msg_stats)
         }
 
-        if (activity.isFiltered) {
+        if (activity.isFiltered || PluginChatHistory.showsInChat(activity, selectedObject)) {
             items.add(LocaleController.getString(R.string.InuShowInChat))
             options.add(OPTION_SHOW_IN_CHAT)
             icons.add(R.drawable.msg_openin)
@@ -372,6 +374,10 @@ object ChatHelper {
         items.add(LocaleController.getString(R.string.InuMessageDetails))
         options.add(OPTION_DETAILS)
         icons.add(R.drawable.msg_info)
+
+        if (activity.chatMode == ChatActivity.inu_MODE_PLUGIN_HISTORY) {
+            PluginChatHistory.filterMessageMenu(activity, selectedObject, selectedObjectGroup, items, options, icons)
+        }
 
         reservePluginItems(items, options, icons, activity, selectedObject, selectedObjectGroup)
         applyMessageMenuOrder(items, options, icons)
@@ -724,6 +730,9 @@ object ChatHelper {
                 } else {
                     messages.add(selectedObject)
                 }
+                if (activity.chatMode == ChatActivity.inu_MODE_PLUGIN_HISTORY) {
+                    PluginChatHistory.realMessages(messages)
+                }
                 forwardToSavedMessages(activity, messages)
             }
 
@@ -734,6 +743,9 @@ object ChatHelper {
                     if (group != null) {
                         replyMsg = group.captionMessage ?: replyMsg
                     }
+                }
+                if (activity.chatMode == ChatActivity.inu_MODE_PLUGIN_HISTORY) {
+                    replyMsg = PluginChatHistory.realMessage(replyMsg)
                 }
                 val args = Bundle().apply {
                     putBoolean("onlySelect", true)
@@ -813,7 +825,11 @@ object ChatHelper {
                 clearMessageCaches(activity, targets)
             }
 
-            OPTION_SHOW_IN_CHAT -> openInNewChat(activity, activity.dialogId, selectedObject.id)
+            OPTION_SHOW_IN_CHAT -> if (activity.chatMode == ChatActivity.inu_MODE_PLUGIN_HISTORY) {
+                openInNewChat(activity, selectedObject.dialogId, selectedObject.realId)
+            } else {
+                openInNewChat(activity, activity.dialogId, selectedObject.id)
+            }
 
             OPTION_REPEAT -> {
                 val available = availableRepeatModes(activity, selectedObject, selectedObjectGroup)
@@ -1129,6 +1145,7 @@ object ChatHelper {
         if (activity.isReport) return false
         val chatMode = activity.chatMode
         if (chatMode == ChatActivity.MODE_PINNED) return InuConfig.HIDE_BOTTOM_BAR_PINNED.value
+        if (chatMode == ChatActivity.inu_MODE_PLUGIN_HISTORY) return PluginChatHistory.buttonText(activity) == null
 
         val user = activity.currentUser
         if (user != null && UserObject.isReplyUser(user) && InuConfig.HIDE_BOTTOM_BAR_REPLIES.value) return true

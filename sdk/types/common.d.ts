@@ -535,7 +535,8 @@ declare namespace inu {
     getChatFoldersCached(): Promise<ChatFolder[]>
 
     /**
-     * Get chat history in a specific dialog
+     * Get chat history in a specific dialog,
+     * preferring data from the local cache.
      *
      * @needs-grant account.read(history)
      */
@@ -546,8 +547,10 @@ declare namespace inu {
         offsetId?: number
         minId?: number
         maxId?: number
-
         topicId?: number
+
+        /** skip the cache and ask the server */
+        force?: boolean
       },
     ): Promise<Message[]>
     /** @needs-grant account.read(history) */
@@ -560,6 +563,9 @@ declare namespace inu {
         maxId?: number
         batchSize?: number
         topicId?: number
+
+        /** skip the cache and ask the server */
+        force?: boolean
       },
     ): AsyncIterableIterator<Message>
 
@@ -1021,6 +1027,15 @@ declare namespace inu {
      */
     function sticker(options: StickerOptions): UIIcon
 
+    /**
+     * {@link UIIcon} with a peer's profile photo (or initials placeholder)
+     *
+     * @param dialogId Marked peer ID of the peer to show the avatar for
+     * @param options
+     * @param options.account Acocunt slot to use when loading the avatar
+     */
+    function avatar(dialogId: number, options?: { account?: number }): UIIcon
+
     /** {@link UIIcon} from a built-in common icon */
     function common(
       name:
@@ -1067,6 +1082,172 @@ declare namespace inu {
     function openPage(page: UIPage): void
     /** open a stock commonly used page */
     function openPage(screen: PageTarget): void
+
+    interface ChatHistoryMenuItem {
+      text: InputText
+      icon?: UIIcon
+      /** red, like stock's Delete */
+      danger?: boolean
+      /** draws a checkbox in this state; omitted, the row has none */
+      checked?: boolean
+      onClick(): void
+    }
+
+    /** A single entry in a custom chat history page */
+    interface ChatHistoryEntry {
+      /** Message represented by this entry */
+      message: tl.TypeMessage
+      /**
+       * Identity of this entry on the screen
+       *
+       * Required when the same message appears more than once
+       *
+       * @default `${peer}:${id}`
+       */
+      key?: string
+      /**
+       * Whether the message is "synthetic", i.e. not backed by a real server message.
+       *
+       * Defaults to the screen's `synthetic` option.
+       *
+       * Synthetic messages lose some of the menu actions a real message would have
+       */
+      synthetic?: boolean
+    }
+
+    interface ChatHistoryPage {
+      /** Items in the history, newest first, max 200 */
+      entries: ChatHistoryEntry[]
+      /** Users the messages reference that the app may not have cached yet */
+      users?: tl.TypeUser[]
+      /** Chats the messages reference that the app may not have cached yet */
+      chats?: tl.TypeChat[]
+      /**
+       * cursor for the next page **in the requested direction**
+       *
+       * Omit when we have reached the end in this direction
+       */
+      next?: string
+      /**
+       * **Only read from the first page**
+       *
+       * A cursor for the pages newer than it.
+       * When omitted, the screen starts at the bottom and never asks for `'newer'`.
+       */
+      newer?: string
+      /**
+       * **Only read from the first page**
+       *
+       * The key of the first unread entry on the page, to show the "Unread messages" line
+       */
+      firstUnread?: string
+      /**
+       * The number of "unread" messages, to be shown on the jump-to-bottom button
+       *
+       * When omitted, the value stays the same
+       */
+      unreadCount?: number
+    }
+
+    interface ChatHistory {
+      /**
+       * Add items to the page content
+       *
+       * Newest first, existing keys are skipped
+       */
+      append(page: Omit<ChatHistoryPage, 'next' | 'newer' | 'firstUnread'>): void
+      /**
+       * Replace some of the items on the page
+       *
+       * Matched by key, unknown keys are skipped
+       */
+      replace(page: Omit<ChatHistoryPage, 'next' | 'newer' | 'firstUnread'>): void
+      /** Remove items from the page by their keys */
+      remove(keys: string[]): void
+      /**
+       * Manually update the number on the jump-to-bottom button
+       *
+       * Normally this value is updated from `load`-ed pages and `append`/`replace` via `unreadCount`.
+       */
+      setUnreadCount(count: number): void
+      /**
+       * Updates the bottom button, or hides it with `null`
+       *
+       * @throws if the button was not declared
+       */
+      setButton(button: { text: InputText } | null): void
+      /** Close the screen */
+      close(): void
+      /** A promise that resolves when the user leaves the screen */
+      readonly closed: Promise<void>
+    }
+
+    /**
+     * Open a chat screen, with the data supplied by the pluggin.
+     *
+     * Supports infinite scrolling in both directions
+     *
+     * Every item in the dataset gets its own ID, so the same server message can appear more than once
+     *
+     * @throws `not-found` when `account` is not logged in.
+     */
+    function openChatHistory(options: {
+      /** Title of the page */
+      title: InputText
+      /** Subtitle of the page */
+      subtitle?: InputText
+      /**
+       * Icon (or rather, "avatar") of the page, shown in the header next to the title.
+       */
+      icon?: UIIcon
+      /** Account slot to use for the page */
+      account?: number
+      /**
+       * Default for each entry's `synthetic`.
+       *
+       * Synthetic items are *not* backed by a real server message, and thus do not have
+       * some of the menu actions a real message would have.
+       *
+       * Synthetic messages still need `peer_id`, `from_id`, `date` and `out`
+       * to be drawn correctly.
+       *
+       * @default false
+       */
+      synthetic?: boolean
+      /**
+       * Whether to draw peer avatars and names next to the message,
+       * as if it was a group (or a "show authors profile" channel)
+       *
+       * @default false
+       */
+      avatars?: boolean
+      /**
+       * The data provider for the chat page
+       *
+       * It is called with a cursor (anchor) to load from, and a direction to advance:
+       * - `(null, 'older')`: called when the page is opened, "where should we start?" request
+       * - `(null, 'newer')`: the newest page, called when the user jumps to the bottom
+       * - `(cursor, direction)`: the regular call, requesting a page after a `next` (or the first page's `newer`) cursor.
+       *
+       * An exception ends that direction.
+       */
+      load(cursor: string | null, direction: 'older' | 'newer'): MaybePromise<ChatHistoryPage>
+      /**
+       * Called when a user advances downwards and "reads" a new message,
+       * with the `key` of the newest entry the user has on the screen
+       */
+      onRead?(key: string): void
+      /**
+       * A button on the bottom of the screen (where a Mute/Join button would reside)
+       *
+       * Without `text` it starts hidden until `setButton`
+       */
+      button?: { text?: InputText, onClick(): void }
+      /**
+       * Customizable overflow menu items, shown as a three-dot dropdown in the header.
+       */
+      menu?(): MaybePromise<ChatHistoryMenuItem[]>
+    }): ChatHistory
 
     /**
      * Displays a stack of peer avatars in place of a bulletin's icon.

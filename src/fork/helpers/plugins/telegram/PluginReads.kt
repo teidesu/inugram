@@ -26,6 +26,7 @@ import org.telegram.messenger.MediaDataController
 import org.telegram.messenger.MessageObject
 import org.telegram.messenger.MessagesController
 import org.telegram.messenger.MessagesStorage
+import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.UserConfig
 import org.telegram.tgnet.ConnectionsManager
 import org.telegram.tgnet.TLObject
@@ -539,6 +540,10 @@ object PluginReads {
         val minId = call.int("minId")
         val maxId = call.int("maxId")
         val topicId = call.int("topicId")
+        if (!call.flag("force") && minId == 0 && maxId == 0) {
+            val dialogId = PeerSpecs.resolveDialogId(call.controller, call.accountId, call.spec)
+            if (dialogId != null) return loadHistoryThroughApp(call, dialogId, pageLimit, offsetId, topicId)
+        }
         // the same rpc the app sends when a forum topic is opened
         val request: TLObject = if (topicId > 0) {
             TLRPC.TL_messages_getReplies().apply {
@@ -563,6 +568,57 @@ object PluginReads {
             call.cache(messages.users, messages.chats)
             mintEach(call.handles, messages.messages)
         }
+    }
+
+    /**
+     * The app's own loader: sqlite first, holes respected, the server when the cache has nothing, and what the
+     * server returns is stored. A short cached page short of the history's start is a gap the app would fill
+     * on the next scroll; one call has no next scroll, so that one goes to the server here. `min_id`/`max_id`
+     * have no cache path, so those calls go straight to the server above, as does `force`.
+     */
+    private fun loadHistoryThroughApp(call: Fetch, dialogId: Long, limit: Int, offsetId: Int, topicId: Int): String? {
+        val guid = ConnectionsManager.generateClassGuid()
+        val center = NotificationCenter.getInstance(call.accountId)
+        fun load(fromCache: Boolean) = call.controller.loadMessages(
+            dialogId, 0, false, limit, offsetId, 0, fromCache, 0, guid, MessagesController.LOAD_BACKWARD, 0, 0, topicId.toLong(), 0, 0, topicId != 0,
+        )
+        AndroidUtilities.runOnUIThread {
+            val observer = object : NotificationCenter.NotificationCenterDelegate {
+                var retriedFromServer = false
+
+                fun done() {
+                    center.removeObserver(this, NotificationCenter.messagesDidLoad)
+                    center.removeObserver(this, NotificationCenter.loadingMessagesFailed)
+                }
+
+                override fun didReceivedNotification(id: Int, account: Int, vararg args: Any?) {
+                    if (id == NotificationCenter.messagesDidLoad) {
+                        if (args[10] as Int != guid) return
+                        @Suppress("UNCHECKED_CAST")
+                        val objects = args[2] as ArrayList<MessageObject>
+                        val isCache = args[3] as Boolean
+                        val isEnd = args[9] as Boolean
+                        if (isCache && objects.size < limit && !isEnd && !retriedFromServer) {
+                            retriedFromServer = true
+                            load(false)
+                            return
+                        }
+                        done()
+                        val messages = objects.map { it.messageOwner }
+                        call.answer { mintEach(call.handles, messages) }
+                    } else if (id == NotificationCenter.loadingMessagesFailed) {
+                        if (args[0] as Int != guid) return
+                        done()
+                        val error = args[2] as? TLRPC.TL_error
+                        call.answer { PluginWire.encodeRpcError(error?.code ?: 0, error?.text ?: "history load failed") }
+                    }
+                }
+            }
+            center.addObserver(observer, NotificationCenter.messagesDidLoad)
+            center.addObserver(observer, NotificationCenter.loadingMessagesFailed)
+            load(true)
+        }
+        return null
     }
 
     private fun fetchMessages(call: Fetch): String? {

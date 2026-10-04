@@ -16,7 +16,7 @@ use crate::runtime::{enter_js, pump_jobs, PendingSettle, PendingTable};
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle, Registry};
 use crate::utils::arguments::{opt_bool, stringify_json};
-use crate::utils::qjs::{qjs_load_prelude, qjs_object_freeze,, resolve_and_then};
+use crate::utils::qjs::{qjs_load_prelude, qjs_object_freeze, qjs_read_typed_bytes, resolve_and_then};
 use crate::Log;
 
 pub trait RpcHost {

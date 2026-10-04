@@ -339,6 +339,16 @@ internal object DeviceMissing : CoreListener, UiListener, PlatformListener, Canv
 
     override fun uiOpenMenu(menuId: Long, pageId: Long, anchorKey: String, itemsJson: String) = throw UnsupportedOperationException("this suite has no ui")
 
+    override fun uiOpenChatHistory(historyId: Long, optionsJson: String) = throw UnsupportedOperationException("this suite has no ui")
+
+    override fun uiChatHistoryUpdate(historyId: Long, op: Int, json: String) = throw UnsupportedOperationException("this suite has no ui")
+
+    override fun uiChatHistoryClose(historyId: Long) = throw UnsupportedOperationException("this suite has no ui")
+
+    override fun uiChatHistoryPage(requestId: Long, wire: String) = throw UnsupportedOperationException("this suite has no ui")
+
+    override fun uiChatHistoryMenu(requestId: Long, wire: String) = throw UnsupportedOperationException("this suite has no ui")
+
     override fun iconResolves(kind: Int, value: String) = throw UnsupportedOperationException("this suite has no icons")
 
     override fun commonIcon(name: String) = throw UnsupportedOperationException("this suite has no icons")

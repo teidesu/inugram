@@ -3,7 +3,10 @@ package desu.inugram.helpers.plugins.ui
 import android.content.Context
 import android.content.res.Resources
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorFilter
+import android.graphics.PixelFormat
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
@@ -12,8 +15,11 @@ import android.util.LruCache
 import android.view.View
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.platform.PluginJvm
+import desu.inugram.helpers.plugins.telegram.PeerSpecs
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.ApplicationLoader
+import org.telegram.messenger.ImageReceiver
+import org.telegram.messenger.MessagesController
 import org.telegram.messenger.MediaDataController
 import org.telegram.messenger.R
 import org.telegram.messenger.SvgHelper
@@ -22,6 +28,7 @@ import org.telegram.tgnet.TLRPC
 import org.telegram.ui.ActionBar.ActionBarMenuSubItem
 import org.telegram.ui.Components.AnimatedEmojiDrawable
 import org.telegram.ui.Components.AnimatedEmojiSpan
+import org.telegram.ui.Components.AvatarDrawable
 import org.telegram.ui.Components.ItemOptions
 import org.telegram.ui.Components.RLottieDrawable
 import org.telegram.ui.Components.RLottieImageView
@@ -82,6 +89,65 @@ object PluginIcons {
     private val svgMasks = LruCache<String, Bitmap>(SVG_CACHE_SIZE)
     private val boundSpecs = WeakHashMap<RLottieImageView, String>()
     private val emojiBindings = WeakHashMap<RLottieImageView, WeakReference<EmojiBinding>>()
+    private val avatarBindings = WeakHashMap<RLottieImageView, AvatarBinding>()
+
+    /** `p<account>:<dialogId>`; account -1 is the selected one, the dialog id is the plugin's marked form */
+    internal fun parseAvatarSpec(spec: String): Pair<Int, Long>? {
+        val (account, dialog) = spec.substring(1).split(':', limit = 2).takeIf { it.size == 2 } ?: return null
+        val accountId = account.toIntOrNull()?.let { if (it < 0) UserConfig.selectedAccount else it } ?: return null
+        return accountId to PeerSpecs.toSimpleDialogId(dialog.toLongOrNull() ?: return null)
+    }
+
+    /** a peer's photo, or its initials placeholder, in a circle; an unknown peer draws an empty one */
+    internal class AvatarIconDrawable(parent: View, accountId: Int, dialogId: Long, private val size: Int) : Drawable() {
+        val receiver = ImageReceiver(parent).also { it.setRoundRadius(size / 2) }
+
+        init {
+            val avatar = AvatarDrawable()
+            val peer = MessagesController.getInstance(accountId).getUserOrChat(dialogId)
+            if (peer != null) {
+                avatar.setInfo(accountId, peer)
+                receiver.setForUserOrChat(peer, avatar)
+            } else {
+                avatar.setInfo(dialogId, "", "")
+                receiver.setImageBitmap(avatar)
+            }
+        }
+
+        override fun draw(canvas: Canvas) {
+            receiver.setImageCoords(bounds.left.toFloat(), bounds.top.toFloat(), bounds.width().toFloat(), bounds.height().toFloat())
+            receiver.draw(canvas)
+        }
+
+        override fun getIntrinsicWidth(): Int = size
+        override fun getIntrinsicHeight(): Int = size
+        override fun setAlpha(alpha: Int) = receiver.setAlpha(alpha / 255f)
+
+        /** rows tint their icon to the text colour, which would paint the photo flat */
+        override fun setColorFilter(colorFilter: ColorFilter?) = Unit
+        @Deprecated("Deprecated in Java")
+        override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
+    }
+
+    private class AvatarBinding(private val view: RLottieImageView, val drawable: AvatarIconDrawable) : View.OnAttachStateChangeListener {
+        fun attach() {
+            view.addOnAttachStateChangeListener(this)
+            if (view.isAttachedToWindow) drawable.receiver.onAttachedToWindow()
+        }
+
+        override fun onViewAttachedToWindow(view: View) {
+            drawable.receiver.onAttachedToWindow()
+        }
+
+        override fun onViewDetachedFromWindow(view: View) {
+            drawable.receiver.onDetachedFromWindow()
+        }
+
+        fun dispose() {
+            view.removeOnAttachStateChangeListener(this)
+            drawable.receiver.onDetachedFromWindow()
+        }
+    }
 
     internal data class AnimationSpec(val value: String, val repeatCount: Int?, val isStatic: Boolean)
 
@@ -158,6 +224,14 @@ object PluginIcons {
             view.setImageDrawable(resolveImmediateDrawable(view.context, spec, engine) ?: return false)
             return true
         }
+        if (spec[0] == 'p') {
+            val (accountId, dialogId) = parseAvatarSpec(spec) ?: return false
+            val binding = AvatarBinding(view, AvatarIconDrawable(view, accountId, dialogId, AndroidUtilities.dp(sizeDp)))
+            avatarBindings[view] = binding
+            view.setImageDrawable(binding.drawable)
+            binding.attach()
+            return true
+        }
         if (animation == null) return false
         if (spec[0] == 'a') {
             val id = resolveIdentifier(rawResourceIds, animation.value, "raw")
@@ -207,6 +281,7 @@ object PluginIcons {
     fun clearIcon(view: RLottieImageView) {
         boundSpecs.remove(view)
         emojiBindings.remove(view)?.get()?.dispose()
+        avatarBindings.remove(view)?.dispose()
         view.stopAnimation()
         view.clearAnimationDrawable()
     }

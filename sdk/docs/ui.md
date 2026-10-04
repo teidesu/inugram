@@ -150,6 +150,7 @@ Many of the UI rows accept an `icon` parameter, which is an `UIIcon`. You can ge
 | `customEmoji(id, options?)` | A Telegram custom emoji by its ID |
 | `sticker(options)` | A Telegram sticker from a specified set |
 | `svg(source)` | Custom SVG |
+| `avatar(dialogId, options?)` | A user's or chat's profile photo, initials while it loads; `dialogId` is a marked peer id (`-100…` for channels) |
 
 Additionally, you can use some of the less-safe APIs:
 
@@ -235,6 +236,36 @@ private storage, and returned as one or more `File`-s.
 `content` is a `Blob` or `Uint8Array` of up to 32 MB, or `{ path }`grant.
 
 See [io.md](io.md) for more info on blobs and paths.
+
+## Chat history
+
+`inu.ui.openChatHistory(options)` allows plugins to open a chat
+history view, with the data fully supplied by the plugin.
+
+```ts
+const history = inu.ui.openChatHistory({
+  title: 'Edit history',
+  synthetic: true,
+  load: async (cursor, direction) => {
+    const page = await store.page(cursor, direction)
+    return {
+      entries: page.versions.map(v => ({ key: v.key, message: v.message })),
+      next: page.next,
+    }
+  },
+})
+history.closed.then(() => console.log('left'))
+```
+
+The full API is described in the `d.ts` files, but a quick overview:
+
+- `load` is called every time the screen needs to load more data.
+  - The first call is usually `(null, 'older')`, requesting the start position of the chat
+  - When the user taps "jump to bottom", `(null, 'newer')` is called, asking for the newest (bottommost) page
+- Messages are addressed by a string key, which is by default `${peer}:${id}`
+- Messages can be "synthetic", i.e. not backed by a real server message.
+- `button: { text, onClick }` can be used to add a button on the bottom of the screen
+- `append`, `replace` and `remove` on the handle allow imperative updates to the page
 
 ## Current screen
 

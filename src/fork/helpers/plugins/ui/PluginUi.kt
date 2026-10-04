@@ -125,6 +125,18 @@ object PluginUi : SessionResource {
         override fun uiOpenMenu(menuId: Long, pageId: Long, anchorKey: String, itemsJson: String): String? =
             openMenu(session, menuId, pageId, anchorKey, itemsJson)
 
+        override fun uiOpenChatHistory(historyId: Long, optionsJson: String): String? =
+            PluginChatHistory.open(session, historyId, optionsJson)
+
+        override fun uiChatHistoryUpdate(historyId: Long, op: Int, json: String): String? =
+            PluginChatHistory.update(session, historyId, op, json)
+
+        override fun uiChatHistoryClose(historyId: Long) = PluginChatHistory.close(session, historyId)
+
+        override fun uiChatHistoryPage(requestId: Long, wire: String) = PluginChatHistory.page(requestId, wire)
+
+        override fun uiChatHistoryMenu(requestId: Long, wire: String) = PluginChatHistory.menu(requestId, wire)
+
         override fun iconResolves(kind: Int, value: String): Boolean = PluginIcons.iconResolves(kind, value)
 
         override fun commonIcon(name: String): String? = PluginIcons.commonIconName(name)

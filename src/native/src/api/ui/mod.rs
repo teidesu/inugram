@@ -9,6 +9,7 @@ pub(crate) const OP_SELECT_PEERS: i32 = 6;
 pub(crate) mod actions;
 pub(crate) mod dialogs;
 pub(crate) mod files;
+pub(crate) mod history;
 pub(crate) mod icons;
 pub(crate) mod pages;
 pub(crate) mod screens;

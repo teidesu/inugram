@@ -161,6 +161,21 @@ open class QuickJs {
 
     fun uiPageClosed(pageId: Long) = requireLive { nativeUiPageClosed(it, pageId) }
 
+    /** answered exactly once through [UiListener.uiChatHistoryPage] */
+    fun chatHistoryLoad(historyId: Long, requestId: Long, cursor: String?, newer: Boolean) =
+        requireLive { nativeChatHistoryLoad(it, historyId, requestId, cursor, newer) }
+
+    fun chatHistoryClosed(historyId: Long) = requireLive { nativeChatHistoryClosed(it, historyId) }
+
+    fun chatHistoryRead(historyId: Long, key: String) = requireLive { nativeChatHistoryRead(it, historyId, key) }
+
+    fun chatHistoryButtonClick(historyId: Long) = requireLive { nativeChatHistoryButtonClick(it, historyId) }
+
+    fun chatHistoryMenu(historyId: Long, requestId: Long) = requireLive { nativeChatHistoryMenu(it, historyId, requestId) }
+
+    fun chatHistoryMenuClick(historyId: Long, requestId: Long, index: Int) =
+        requireLive { nativeChatHistoryMenuClick(it, historyId, requestId, index) }
+
     /** never call it off [EngineDispatch.scheduler] */
     open fun renderActions(kind: Int, surfaceJson: String): String? = ifLiveOr(null) { nativeRenderActions(it, kind, surfaceJson) }
 
@@ -280,6 +295,12 @@ open class QuickJs {
     private external fun nativeUiEvent(ptr: Long, pageId: Long, slot: Int, argJson: String)
     private external fun nativeUiMenuClick(ptr: Long, menuId: Long, slot: Int)
     private external fun nativeUiPageClosed(ptr: Long, pageId: Long)
+    private external fun nativeChatHistoryLoad(ptr: Long, historyId: Long, requestId: Long, cursor: String?, newer: Boolean)
+    private external fun nativeChatHistoryClosed(ptr: Long, historyId: Long)
+    private external fun nativeChatHistoryRead(ptr: Long, historyId: Long, key: String)
+    private external fun nativeChatHistoryButtonClick(ptr: Long, historyId: Long)
+    private external fun nativeChatHistoryMenu(ptr: Long, historyId: Long, requestId: Long)
+    private external fun nativeChatHistoryMenuClick(ptr: Long, historyId: Long, requestId: Long, index: Int)
     private external fun nativeRenderActions(ptr: Long, kind: Int, surfaceJson: String): String?
     private external fun nativeDispatchAction(ptr: Long, kind: Int, token: Int, surfaceJson: String)
     private external fun nativeDispatchScreenChange(ptr: Long, changeJson: String, stackJson: String)

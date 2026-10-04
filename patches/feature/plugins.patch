@@ -7,14 +7,15 @@ Subject: Add the QuickJS plugin engine (hooks, action rows)
  TMessagesProj/jni/gifvideo.cpp                |  13 ++
  .../messenger/MessagesController.java         | 124 ++++++++++--------
  .../messenger/SendMessageChatArguments.java   |   7 +
- .../messenger/SendMessagesHelper.java         |  36 ++++-
+ .../messenger/SendMessagesHelper.java         |  38 +++++-
  .../telegram/tgnet/ConnectionsManager.java    |   8 +-
  .../java/org/telegram/ui/Cells/TextCell.java  |   2 +-
- .../java/org/telegram/ui/ChatActivity.java    |  12 +-
+ .../java/org/telegram/ui/ChatActivity.java    | 117 ++++++++++++++---
  .../ui/Components/AnimatedFileNative.java     |   7 +
+ .../ui/Components/ChatAvatarContainer.java    |   9 +-
  .../org/telegram/ui/GroupCreateActivity.java  |  33 +++--
  .../java/org/telegram/ui/LaunchActivity.java  |   1 +
- 10 files changed, 171 insertions(+), 72 deletions(-)
+ 11 files changed, 269 insertions(+), 90 deletions(-)
 
 diff --git a/TMessagesProj/jni/gifvideo.cpp b/TMessagesProj/jni/gifvideo.cpp
 index 0000000..0000000 100644
@@ -285,6 +286,15 @@ index 0000000..0000000 100644
          int sendResult = 0;
          long myId = getUserConfig().getClientUserId();
          boolean isChannel = false;
+@@ -3843,7 +3846,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+             req.msg_id = messageObject.messageOwner.fwd_from.saved_from_msg_id;
+         } else {
+             req.peer = getMessagesController().getInputPeer(messageObject.getDialogId());
+-            req.msg_id = messageObject.getId();
++            req.msg_id = messageObject.getRealId();
+         }
+         req.add_to_recent = addToRecent;
+         if (addToRecent && addedReaction != null) {
 @@ -4274,6 +4277,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
      }
  
@@ -466,7 +476,15 @@ index 0000000..0000000 100644
      private ChatActivityEnterTopView chatActivityEnterTopView;
      private ChatReplyContainer replyLayout;
      private int chatActivityEnterViewAnimateFromTop;
-@@ -1135,8 +1135,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -683,6 +683,7 @@ public class ChatActivity extends BaseFragment implements
+     public static final int MODE_SEARCH = 7;
+     public static final int MODE_SUGGESTIONS = 8;
+     public static final int MODE_WELCOME_MESSAGES = 9;
++    public static final int inu_MODE_PLUGIN_HISTORY = 100;
+ 
+     public static final int SEARCH_THIS_CHAT = 0;
+     public static final int SEARCH_MY_MESSAGES = 1;
+@@ -1135,8 +1136,8 @@ public class ChatActivity extends BaseFragment implements
      public static Pattern publicMsgUrlPattern;
      public static Pattern voiceChatUrlPattern;
      public static Pattern privateMsgUrlPattern;
@@ -477,7 +495,231 @@ index 0000000..0000000 100644
      private Animator messageEditTextAnimator;
  
      private boolean openImport;
-@@ -32205,6 +32205,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -2866,6 +2867,10 @@ public class ChatActivity extends BaseFragment implements
+             if (searchType == 0 || searchingHashtag == null) {
+                 return false;
+             }
++        } else if (chatMode == inu_MODE_PLUGIN_HISTORY) {
++            if (!desu.inugram.helpers.plugins.ui.PluginChatHistory.attach(this, arguments)) {
++                return false;
++            }
+         } else {
+             return false;
+         }
+@@ -2922,7 +2927,7 @@ public class ChatActivity extends BaseFragment implements
+                 observersGroup.add(NotificationCenter.didVerifyMessagesStickers);
+             }
+         }
+-        if (chatMode != MODE_PINNED) {
++        if (chatMode != MODE_PINNED && chatMode != inu_MODE_PLUGIN_HISTORY) {
+             observersGroup.add(NotificationCenter.didReceiveNewMessages);
+         }
+         if (chatMode == 0) {
+@@ -3276,6 +3281,8 @@ public class ChatActivity extends BaseFragment implements
+             waitingForLoad.add(lastLoadIndex);
+             if (chatMode == MODE_SEARCH) {
+                 HashtagSearchController.getInstance(currentAccount).searchHashtag(searchingHashtag, classGuid, searchType, lastLoadIndex++);
++            } else if (chatMode == inu_MODE_PLUGIN_HISTORY) {
++                desu.inugram.helpers.plugins.ui.PluginChatHistory.load(this, lastLoadIndex++, false);
+             } else if (startLoadFromDate != 0) {
+                 getMessagesController().loadMessages(dialog_id, mergeDialogId, false, 30, 0, startLoadFromDate, true, 0, classGuid, 4, 0, chatMode, threadMessageId, replyMaxReadId, lastLoadIndex++, isTopic);
+             } else if (startLoadFromMessageId != 0 && (!isThreadChat() || startLoadFromMessageId == highlightMessageId || isTopic)) {
+@@ -3374,6 +3381,9 @@ public class ChatActivity extends BaseFragment implements
+     @Override
+     public void onFragmentDestroy() {
+         super.onFragmentDestroy();
++        if (chatMode == inu_MODE_PLUGIN_HISTORY) {
++            desu.inugram.helpers.plugins.ui.PluginChatHistory.onDestroyed(this);
++        }
+         if (commentsMessagesObserver != null) {
+             getNotificationCenter().removeObserver(commentsMessagesObserver, NotificationCenter.messagesDidLoad);
+             commentsMessagesObserver = null;
+@@ -3717,9 +3727,15 @@ public class ChatActivity extends BaseFragment implements
+         }
+ 
+         actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
++            @Override
++            public boolean canOpenMenu() {
++                return chatMode != inu_MODE_PLUGIN_HISTORY || !desu.inugram.helpers.plugins.ui.PluginChatHistory.requestMenu(ChatActivity.this);
++            }
++
+             @Override
+             public void onItemClick(final int id) {
+                 if (ChatActionsHelper.handleClick(id, ChatActivity.this)) return;
++                if (chatMode == inu_MODE_PLUGIN_HISTORY && desu.inugram.helpers.plugins.ui.PluginChatHistory.onMenuItemClick(ChatActivity.this, id)) return;
+                 if (id == -1) {
+                     if (isInPollAddOptionMode()) {
+                         pollAddOptionModeClose();
+@@ -4523,6 +4539,11 @@ public class ChatActivity extends BaseFragment implements
+                 feeItemGap.setVisibility(View.GONE);
+                 feeItemText.setVisibility(View.GONE);
+             }
++        } else if (chatMode == inu_MODE_PLUGIN_HISTORY && desu.inugram.helpers.plugins.ui.PluginChatHistory.hasMenu(this)) {
++            headerItem = menu.addItem(chat_menu_options, otherIcon);
++            otherIcon.addView(headerItem.getIconView());
++            headerItem.setContentDescription(LocaleController.getString(R.string.AccDescrMoreOptions));
++            headerItem.getPopupLayout();
+         } else if (chatMode == MODE_EDIT_BUSINESS_LINK) {
+             headerItem = menu.addItem(chat_menu_options, otherIcon);
+             otherIcon.addView(headerItem.getIconView());
+@@ -4579,7 +4600,7 @@ public class ChatActivity extends BaseFragment implements
+             }
+         }
+ 
+-        if (BuildConfig.DEBUG_PRIVATE_VERSION && headerItem != null) {
++        if (BuildConfig.DEBUG_PRIVATE_VERSION && headerItem != null && chatMode != inu_MODE_PLUGIN_HISTORY) {
+             headerItem.lazilyAddSubItem(888, R.drawable.menu_download_round, "Dump Canvas");
+         }
+ 
+@@ -4618,9 +4639,12 @@ public class ChatActivity extends BaseFragment implements
+             BlurredBackgroundProviderImpl.topPanelChatActivity(themeDelegate),
+             ChatObject.isForum(currentChat));
+ 
+-        if (chatMode == MODE_PINNED) {
++        if (chatMode == MODE_PINNED || chatMode == inu_MODE_PLUGIN_HISTORY) {
+             actionBar.setChatAvatarContainer(avatarContainer);
+             avatarContainer.setActionBar(actionBar);
++            if (chatMode == inu_MODE_PLUGIN_HISTORY) {
++                desu.inugram.helpers.plugins.ui.PluginChatHistory.applyAvatar(this, avatarContainer.avatarImageView);
++            }
+         } else if (chatMode == MODE_WELCOME_MESSAGES) {
+             actionBar.setChatAvatarContainer(avatarContainer);
+             actionBar.setForcedMenuWidth(dp(46));
+@@ -8601,6 +8625,8 @@ public class ChatActivity extends BaseFragment implements
+                     args.putLong("chat_id", -dialogId);
+                 }
+                 presentFragment(new ChatActivity(args));
++            } else if (chatMode == inu_MODE_PLUGIN_HISTORY) {
++                desu.inugram.helpers.plugins.ui.PluginChatHistory.onButtonClick(this);
+             } else if (isReport()) {
+                 ArrayList<Integer> ids = new ArrayList<>();
+                 for (int b = 0; b < selectedMessagesIds[0].size(); b++) {
+@@ -13931,6 +13957,19 @@ public class ChatActivity extends BaseFragment implements
+ 
+             return;
+         }
++        if (chatMode == inu_MODE_PLUGIN_HISTORY) {
++            if (totalItemCount - firstVisibleItemFinal - visibleItemCountFinal <= checkLoadCount && !loading && !endReached[0]) {
++                loading = true;
++                waitingForLoad.add(lastLoadIndex);
++                desu.inugram.helpers.plugins.ui.PluginChatHistory.load(this, lastLoadIndex++, false);
++            }
++            if (visibleItemCountFinal > 0 && !loadingForward && firstVisibleItemFinal <= 10 && !forwardEndReached[0]) {
++                loadingForward = true;
++                waitingForLoad.add(lastLoadIndex);
++                desu.inugram.helpers.plugins.ui.PluginChatHistory.load(this, lastLoadIndex++, true);
++            }
++            return;
++        }
+ 
+         AndroidUtilities.runOnUIThread(() -> {
+             if (totalItemCount - firstVisibleItemFinal - visibleItemCountFinal <= checkLoadCount && !loading) {
+@@ -15914,6 +15953,10 @@ public class ChatActivity extends BaseFragment implements
+ 
+             waitingForLoad.add(lastLoadIndex);
+             AndroidUtilities.runOnUIThread(() -> {
++                if (chatMode == inu_MODE_PLUGIN_HISTORY) {
++                    desu.inugram.helpers.plugins.ui.PluginChatHistory.reload(this, lastLoadIndex++);
++                    return;
++                }
+                 getMessagesController().loadMessages(dialog_id, mergeDialogId, false, 30, 0, 0, true, 0, classGuid, 0, 0, chatMode, threadMessageId, replyMaxReadId, lastLoadIndex++, isTopic);
+             }, SCROLL_DEBUG_DELAY ? 7500 : 0);
+         }
+@@ -16364,6 +16407,9 @@ public class ChatActivity extends BaseFragment implements
+             }
+             if (chatMode != MODE_SCHEDULED && messageObject != null) {
+                 int id = messageObject.getId();
++                if (chatMode == inu_MODE_PLUGIN_HISTORY && visibleToBeRead) {
++                    desu.inugram.helpers.plugins.ui.PluginChatHistory.onVisible(this, id);
++                }
+                 if (
+                     !isThreadChat() && visibleToBeRead && (!messageObject.isOut() && messageObject.isUnread() || messageObject.messageOwner.from_scheduled && id > currentReadMaxId) ||
+                      (isThreadChat() || ChatObject.isMonoForum(currentChat)) && id > 0 && id > currentReadMaxId && id > replyMaxReadId
+@@ -19094,7 +19140,8 @@ public class ChatActivity extends BaseFragment implements
+     }
+ 
+     private void checkActionBarMenu(boolean animated) {
+-        if (currentEncryptedChat != null && !(currentEncryptedChat instanceof TLRPC.TL_encryptedChat) ||
++        if (chatMode == inu_MODE_PLUGIN_HISTORY ||
++                currentEncryptedChat != null && !(currentEncryptedChat instanceof TLRPC.TL_encryptedChat) ||
+                 currentChat != null && (chatMode != 0 || threadMessageId != 0 || chatInfo == null || chatInfo.ttl_period == 0) ||
+                 currentUser != null && (UserObject.isDeleted(currentUser) || currentEncryptedChat == null && (userInfo == null || userInfo.ttl_period == 0))) {
+             if (timeItem2 != null) {
+@@ -19355,14 +19402,14 @@ public class ChatActivity extends BaseFragment implements
+                     if (!messageObject.isAnimatedEmoji() && (messageObject.isSticker() || messageObject.isAnimatedSticker()) && MessageObject.isStickerHasSet(messageObject.getDocument())) {
+                         selectedMessagesCanStarIds[index].put(messageObject.getId(), messageObject);
+                     }
+-                    if (messageObject.canEditMessage(currentChat)) {
++                    if (chatMode != inu_MODE_PLUGIN_HISTORY && messageObject.canEditMessage(currentChat)) {
+                         canEditMessagesCount++;
+                     }
+-                    if (!messageObject.canDeleteMessage(chatMode == MODE_SCHEDULED, currentChat)) {
++                    if (chatMode == inu_MODE_PLUGIN_HISTORY || !messageObject.canDeleteMessage(chatMode == MODE_SCHEDULED, currentChat)) {
+                         cantDeleteMessagesCount++;
+                     }
+                     boolean noforwards = isPeerNoForwards();
+-                    if (chatMode == MODE_SCHEDULED || !messageObject.canForwardMessage() || noforwards) {
++                    if (chatMode == MODE_SCHEDULED || !messageObject.canForwardMessage() || noforwards || chatMode == inu_MODE_PLUGIN_HISTORY && desu.inugram.helpers.plugins.ui.PluginChatHistory.isSynthetic(ChatActivity.this, messageObject)) {
+                         cantForwardMessagesCount++;
+                     } else {
+                         canForwardMessagesCount++;
+@@ -19745,6 +19792,8 @@ public class ChatActivity extends BaseFragment implements
+             }
+         } else if (chatMode == MODE_PINNED) {
+             avatarContainer.setTitle(LocaleController.formatPluralString("PinnedMessagesCount", getPinnedMessagesCount()));
++        } else if (chatMode == inu_MODE_PLUGIN_HISTORY) {
++            avatarContainer.setTitle(desu.inugram.helpers.plugins.ui.PluginChatHistory.title(this));
+         } else if (currentChat != null) {
+             avatarContainer.setTitle(AndroidUtilities.removeRTL(AndroidUtilities.removeDiacritics(currentChat.title)), currentChat.scam, currentChat.fake, currentChat.verified, false, currentChat.emoji_status, animated);
+         } else if (currentUser != null) {
+@@ -25589,7 +25638,7 @@ public class ChatActivity extends BaseFragment implements
+     private Runnable updateStreamingTopic;
+ 
+     private ArrayList<MessageObject> notPushedSponsoredMessages;
+-    private void processNewMessages(ArrayList<MessageObject> arr) {
++    public void processNewMessages(ArrayList<MessageObject> arr) {
+         processNewMessages(arr, true);
+     }
+     private void processNewMessages(ArrayList<MessageObject> arr, final boolean animatedFromBottom) {
+@@ -26538,7 +26587,7 @@ public class ChatActivity extends BaseFragment implements
+         return sponsoredMessagesCount;
+     }
+ 
+-    private void processDeletedMessages(ArrayList<Integer> markAsDeletedMessages, long channelId, boolean sent) {
++    public void processDeletedMessages(ArrayList<Integer> markAsDeletedMessages, long channelId, boolean sent) {
+         processDeletedMessages(markAsDeletedMessages, channelId, sent, true);
+     }
+     private void processDeletedMessages(ArrayList<Integer> markAsDeletedMessages, long channelId, boolean sent, boolean thanos) {
+@@ -26900,7 +26949,7 @@ public class ChatActivity extends BaseFragment implements
+     private final BotForumHelper.BotDraftAnimationsPool botDraftAnimationsPool = new BotForumHelper.BotDraftAnimationsPool();
+     private final ChatActivityDraftMessageMeasureController botDraftHeightController = new ChatActivityDraftMessageMeasureController();
+ 
+-    private void replaceMessageObjects(ArrayList<MessageObject> messageObjects, int loadIndex, boolean remove) {
++    public void replaceMessageObjects(ArrayList<MessageObject> messageObjects, int loadIndex, boolean remove) {
+         replaceMessageObjects(messageObjects, loadIndex, remove, false);
+     }
+ 
+@@ -28039,6 +28088,10 @@ public class ChatActivity extends BaseFragment implements
+             }
+         } else if (isReport()) {
+             updateActionModeTitle();
++        } else if (chatMode == inu_MODE_PLUGIN_HISTORY) {
++            bottomOverlayChatText.setTag(null);
++            CharSequence inu_buttonText = desu.inugram.helpers.plugins.ui.PluginChatHistory.buttonText(this);
++            bottomOverlayChatText.setText(inu_buttonText != null ? inu_buttonText : "");
+         } else if (chatMode == MODE_PINNED) {
+             boolean allowPin;
+             if (currentChat != null) {
+@@ -28296,7 +28349,7 @@ public class ChatActivity extends BaseFragment implements
+             } else if (isReport()) {
+                 bottomChannelButtonsLayout.setVisibility(View.VISIBLE);
+                 chatActivityEnterView.setVisibility(View.INVISIBLE);
+-            } else if (chatMode == MODE_PINNED ||
++            } else if (chatMode == MODE_PINNED || chatMode == inu_MODE_PLUGIN_HISTORY ||
+                     currentChat != null && (!ChatObject.isMonoForum(currentChat) || !isSubscriberSuggestions) && ((!ChatHelper.isEffectivelyInChat(currentChat) && !UserObject.isBotForum(currentUser) || !ChatObject.canWriteToChat(currentChat)) && (currentChat.join_to_send || !isThreadChat() || ChatObject.isForum(currentChat)) || forumTopic != null && forumTopic.closed && !ChatObject.canManageTopic(currentAccount, currentChat, forumTopic) || shouldDisplaySwipeToLeftToReplyInForum()) ||
+                     currentUser != null && (UserObject.isDeleted(currentUser) || userBlocked || UserObject.isReplyUser(currentUser))) {
+                 if (chatActivityEnterView.isEditingMessage()) {
+@@ -32205,6 +32258,7 @@ public class ChatActivity extends BaseFragment implements
                          }
                      }
                      scrimPopupWindowItems[a] = cell;
@@ -485,7 +727,7 @@ index 0000000..0000000 100644
                      if (option == OPTION_REMOVE_ADS) {
                          popupLayout.addView(new ActionBarPopupWindow.GapView(contentView.getContext(), themeDelegate), LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 8));
                      }
-@@ -32644,10 +32645,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -32644,10 +32698,11 @@ public class ChatActivity extends BaseFragment implements
                      }
                  }, 420);
              };
@@ -499,6 +741,92 @@ index 0000000..0000000 100644
              }
              chatListView.stopScroll();
              chatLayoutManager.setCanScrollVertically(false);
+@@ -33032,7 +33087,7 @@ public class ChatActivity extends BaseFragment implements
+     }
+ 
+     public void selectReaction(View cell, MessageObject primaryMessage, ReactionsContainerLayout reactionsLayout, View fromView, float x, float y, ReactionsLayoutInBubble.VisibleReaction visibleReaction, boolean fromDoubleTap, boolean bigEmoji, boolean addToRecent, boolean withoutAnimation) {
+-        if (isInScheduleMode() || primaryMessage == null) {
++        if (isInScheduleMode() || primaryMessage == null || chatMode == inu_MODE_PLUGIN_HISTORY && desu.inugram.helpers.plugins.ui.PluginChatHistory.isSynthetic(this, primaryMessage)) {
+             return;
+         }
+         if (getMessagesController().isFrozen()) {
+@@ -34182,6 +34237,9 @@ public class ChatActivity extends BaseFragment implements
+                 if (selectedObject == replyingMessageObject && isComments) {
+                     req.id = replyOriginalMessageId;
+                     req.channel = MessagesController.getInputChannel(replyOriginalChat);
++                } else if (chatMode == inu_MODE_PLUGIN_HISTORY) {
++                    req.id = selectedObject.getRealId();
++                    req.channel = MessagesController.getInputChannel(getMessagesController().getChat(-selectedObject.getDialogId()));
+                 } else {
+                     req.id = selectedObject.getId();
+                     req.channel = MessagesController.getInputChannel(currentChat);
+@@ -34385,7 +34443,9 @@ public class ChatActivity extends BaseFragment implements
+             }
+             case OPTION_VIEW_REPLIES_OR_THREAD: {
+                 MessageObject message = selectedObjectGroup != null ? selectedObjectGroup.findPrimaryMessageObject() : selectedObject;
+-                if (message != null) {
++                if (message != null && chatMode == inu_MODE_PLUGIN_HISTORY) {
++                    openDiscussionMessageChat(-message.getDialogId(), null, message.getRealId(), 0, -1, 0, null);
++                } else if (message != null) {
+                     openDiscussionMessageChat(currentChat.id, null, message.getId(), 0, -1, 0, null);
+                 }
+                 break;
+@@ -34626,6 +34686,9 @@ public class ChatActivity extends BaseFragment implements
+                 }
+             }
+         }
++        if (chatMode == inu_MODE_PLUGIN_HISTORY) {
++            desu.inugram.helpers.plugins.ui.PluginChatHistory.realMessages(fmessages);
++        }
+         for (int j = 0; j < dids.size(); j++) {
+             TLRPC.Chat chat = getMessagesController().getChat(-dids.get(j).dialogId);
+             if (chat != null) {
+@@ -35634,6 +35697,18 @@ public class ChatActivity extends BaseFragment implements
+         return chatMode;
+     }
+ 
++    public void inu_pluginHistoryEnds(boolean older, boolean newer) {
++        endReached[0] = older;
++        forwardEndReached[0] = newer;
++    }
++
++    public void inu_setPluginUnreadCount(int count) {
++        newUnreadMessageCount = count;
++        if (sideControlsButtonsLayout != null) {
++            inlineUpdate2();
++        }
++    }
++
+     public boolean isInBotForumMode() {
+         return UserObject.isBotForum(currentUser);
+     }
+@@ -36503,7 +36578,7 @@ public class ChatActivity extends BaseFragment implements
+                     if (chatMode != MODE_SEARCH) {
+                         finishFragment();
+                     }
+-                } else if (str.contains("@")) {
++                } else if (str.contains("@") || chatMode == inu_MODE_PLUGIN_HISTORY) {
+                     presentFragment(new HashtagActivity(str, resourceProvider));
+                 } else {
+                     openHashtagSearch(str);
+@@ -37713,7 +37788,7 @@ public class ChatActivity extends BaseFragment implements
+                 if (view instanceof ChatMessageCell) {
+                     final ChatMessageCell messageCell = (ChatMessageCell) view;
+                     MessageObject.GroupedMessages groupedMessages = desu.inugram.helpers.chat.BlockedMessagesHelper.filterGroup(getValidGroupedMessage(message));
+-                    messageCell.isChat = currentChat != null || UserObject.isUserSelf(currentUser) || UserObject.isReplyUser(currentUser) || (chatMode == MODE_SEARCH);
++                    messageCell.isChat = currentChat != null || UserObject.isUserSelf(currentUser) || UserObject.isReplyUser(currentUser) || (chatMode == MODE_SEARCH) || desu.inugram.helpers.plugins.ui.PluginChatHistory.showsAvatars(ChatActivity.this);
+                     messageCell.setSponsoredMessageVisible(true, false);
+                     messageCell.isBotForum = UserObject.isBotForum(currentUser);
+                     messageCell.isReportChat = isReport();
+@@ -41068,7 +41143,7 @@ public class ChatActivity extends BaseFragment implements
+ 
+         @Override
+         public boolean shouldShowDialogButton(ChatMessageCell cell) {
+-            return chatMode == MODE_SEARCH && searchType == SEARCH_MY_MESSAGES;
++            return chatMode == MODE_SEARCH && searchType == SEARCH_MY_MESSAGES || desu.inugram.helpers.plugins.ui.PluginChatHistory.showsInChat(ChatActivity.this, cell.getMessageObject());
+         }
+ 
+         @Override
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedFileNative.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedFileNative.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedFileNative.java
@@ -523,6 +851,33 @@ index 0000000..0000000 100644
 +    private static native int nInuWriteCurrentFrame(long ptr, Bitmap bitmap, int[] data);
  }
 \ No newline at end of file
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAvatarContainer.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAvatarContainer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAvatarContainer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAvatarContainer.java
+@@ -255,7 +255,8 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
+                 parentFragment.getChatMode() == ChatActivity.MODE_PINNED ||
+                 parentFragment.getChatMode() == ChatActivity.MODE_QUICK_REPLIES ||
+                 parentFragment.getChatMode() == ChatActivity.MODE_WELCOME_MESSAGES ||
+-                parentFragment.getChatMode() == ChatActivity.MODE_EDIT_BUSINESS_LINK
++                parentFragment.getChatMode() == ChatActivity.MODE_EDIT_BUSINESS_LINK ||
++                parentFragment.getChatMode() == ChatActivity.inu_MODE_PLUGIN_HISTORY && !desu.inugram.helpers.plugins.ui.PluginChatHistory.hasAvatar(parentFragment)
+             );
+             if (avatarImageIsHidden) {
+                 avatarImageView.setVisibility(GONE);
+@@ -1096,6 +1097,12 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
+             setSubtitle(BusinessLinksController.stripHttps(parentFragment.businessLink.link));
+             return;
+         }
++        if (parentFragment.getChatMode() == ChatActivity.inu_MODE_PLUGIN_HISTORY) {
++            CharSequence inu_subtitle = desu.inugram.helpers.plugins.ui.PluginChatHistory.subtitle(parentFragment);
++            getSubtitleTextView().setVisibility(inu_subtitle == null ? GONE : VISIBLE);
++            if (inu_subtitle != null) setSubtitle(inu_subtitle);
++            return;
++        }
+         TLRPC.User user = parentFragment.getCurrentUser();
+         TLRPC.Chat chat = parentFragment.getCurrentChat();
+         boolean showSavedMessagesHint = (
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/GroupCreateActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/GroupCreateActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/GroupCreateActivity.java

@@ -189,7 +189,7 @@ done and what to re-check.
 
 ## End of rebase
 
-`stg push -a` exits 0 with no conflict when done. Then run **all six** checks —
+`stg push -a` exits 0 with no conflict when done. Then run **all seven** checks —
 a rebase is not finished until they pass.
 
 ### 1. Stack fully applied, no leftovers
@@ -263,7 +263,23 @@ starting point, not the whole change). The map describes what JS receives:
 Many sites dispatch to a background post, so check the declared type of each
 argument, not just the call. Delegate this to a subagent when the list is long.
 
-### 6. The app actually builds
+### 6. Plugin chat history menu options
+
+`PluginChatHistory` keeps an allow-list of message menu options for plugin history
+screens: `LOCAL_MESSAGE_OPTIONS` (never send a message id) and `REAL_MESSAGE_OPTIONS`
+(routed to `realId` and the message's own chat). Anything else is hidden there, so a
+new upstream option silently disappears from those screens.
+
+```bash
+rg -o 'public final static int OPTION_\w+' worktree/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+```
+
+For each option not in either set, read its `processSelectedOption` case. Add it to
+`LOCAL_MESSAGE_OPTIONS` if it never sends `getId()` or the screen's `dialog_id` to
+the server; if it does and should work on real entries, route it to `realId` and add
+it to `REAL_MESSAGE_OPTIONS`; otherwise leave it out. Log the ones left out to `TODO.md`.
+
+### 7. The app actually builds
 
 Compile errors are the main thing a marker-free resolution still gets wrong:
 upstream renames a class, moves a package, or changes a signature, and both the
