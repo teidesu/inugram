@@ -32,7 +32,8 @@ manifest generator and dev server plugin authors use). Neither is patched into
 the worktree.
 
 Mappings live in `scripts/config.ts` → `forkSyncFiles`. Update `FEATURES.md` when
-adding, removing, or meaningfully changing a feature or patch.
+adding, removing, or meaningfully changing a feature or patch. Release notes live in
+`changelogs/<build>.md`, drafted with the `inugram-changelog` skill.
 
 ## Rules
 

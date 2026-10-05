@@ -96,7 +96,7 @@ object InuHooks {
     }
 
     fun onNewMessage(message: MessageObject, account: Int) {
-        if (message.messageOwner != null) UpdateHelper.onNewMessage(message.messageOwner)
+        if (message.messageOwner != null) UpdateHelper.onNewMessage(message.messageOwner, account)
     }
 
     @JvmStatic

@@ -1,8 +1,8 @@
 package desu.inugram.helpers.update
 
 import android.os.Build
+import android.util.Base64
 import desu.inugram.InuConfig
-import desu.inugram.helpers.InuUtils
 import desu.inugram.helpers.security.ParanoiaHelper
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.ApplicationLoader
@@ -15,12 +15,13 @@ import org.telegram.messenger.MessageObject
 import org.telegram.messenger.MessagesController
 import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.R
+import org.telegram.messenger.RichMessageLayout
 import org.telegram.messenger.SharedConfig
 import org.telegram.messenger.UserConfig
 import org.telegram.tgnet.ConnectionsManager
+import org.telegram.tgnet.SerializedData
 import org.telegram.tgnet.TLRPC
-import kotlin.math.max
-import kotlin.math.min
+import org.telegram.tgnet.tl.TL_iv
 
 object UpdateHelper {
     const val USERNAME = "InugramCI"
@@ -60,7 +61,7 @@ object UpdateHelper {
         return "${getVersionInfoString()}\nBuilt on: ${BuildVars.BUILD_DATE}"
     }
 
-    private val APK_RE = Regex("^inugram-(.+)-(\\d+)\\.apk$")
+    private val APK_RE = Regex("^inugram-(.+)-(\\d+)-(full|pluginless)\\.apk$")
     private val SHORT_SHA_RE = Regex("-([0-9a-f]{7,40})$")
 
     @Volatile
@@ -103,6 +104,15 @@ object UpdateHelper {
             return
         }
         check { whenDone?.run() }
+    }
+
+    // a pending update saved by an older build carries plain text there
+    fun getChangelog(update: TLRPC.TL_help_appUpdate): TL_iv.RichMessage? {
+        val bytes = runCatching { Base64.decode(update.text, Base64.NO_WRAP) }.getOrNull() ?: return null
+        val data = SerializedData(bytes)
+        val changelog = TL_iv.RichMessage.TLdeserialize(data, data.readInt32(false), false)
+        data.cleanup()
+        return changelog
     }
 
     fun clearPending() {
@@ -150,22 +160,14 @@ object UpdateHelper {
                     stopPendingStart()
                     return@runOnUIThread
                 }
-                val req = TLRPC.TL_channels_getMessages().apply {
-                    channel = mc.getInputChannel(CHANNEL_ID)
-                    id.add(messageId)
-                }
-                ConnectionsManager.getInstance(account).sendRequest(req) { resp, _ ->
-                    AndroidUtilities.runOnUIThread {
-                        if (!isPendingStart) return@runOnUIThread
-                        val msg = (resp as? TLRPC.messages_Messages)?.messages
-                            ?.firstOrNull { it.id == messageId }
-                        val freshDoc = msg?.let { extractApkInfo(it)?.document }
-                        if (msg == null || freshDoc == null) {
-                            beginLoad(account, doc, sourceMessageParent(messageId))
-                        } else {
-                            pendingSourceMessage = msg
-                            beginLoad(account, freshDoc, MessageObject(account, msg, false, false))
-                        }
+                loadRichMessage(account, messageId) { msg ->
+                    if (!isPendingStart) return@loadRichMessage
+                    val freshDoc = msg?.let { extractApkInfo(it)?.document }
+                    if (msg == null || freshDoc == null) {
+                        beginLoad(account, doc, sourceMessageParent(messageId))
+                    } else {
+                        pendingSourceMessage = msg
+                        beginLoad(account, freshDoc, MessageObject(account, msg, false, false))
                     }
                 }
             }
@@ -240,7 +242,7 @@ object UpdateHelper {
         val req = TLRPC.TL_messages_search().apply {
             peer = mc.getInputPeer(peerId)
             q = "#release"
-            filter = TLRPC.TL_inputMessagesFilterDocument()
+            filter = TLRPC.TL_inputMessagesFilterEmpty()
             limit = 10
         }
         ConnectionsManager.getInstance(account).sendRequest(req) { resp, err ->
@@ -249,83 +251,87 @@ object UpdateHelper {
                     finish(callback, CheckResult.Error(err?.text ?: "no response"))
                     return@runOnUIThread
                 }
-                val match = resp.messages.firstNotNullOfOrNull { msg ->
-                    extractApkInfo(msg)?.let { msg to it }
+                val latest = resp.messages.filter { it.rich_message != null }.maxByOrNull { it.id }
+                fun onLoaded(msg: TLRPC.Message?) {
+                    val info = msg?.let(::extractApkInfo)
+                    val current = currentBuild()
+                    if (info == null || !isNewer(info, current)) {
+                        clearPending()
+                        finish(callback, CheckResult.UpToDate)
+                        return
+                    }
+                    finish(callback, CheckResult.Updated(applyUpdate(msg, info, current)))
                 }
-                val current = currentBuild()
-                if (match == null || !isNewer(match.second, current)) {
-                    clearPending()
-                    finish(callback, CheckResult.UpToDate)
-                    return@runOnUIThread
-                }
-                val (msg, info) = match
-                val updateObj = applyUpdate(msg, info, current)
-                finish(callback, CheckResult.Updated(updateObj))
+                if (latest?.rich_message?.part == true) loadRichMessage(account, latest.id, ::onLoaded)
+                else onLoaded(latest)
             }
         }
     }
 
-    fun onNewMessage(msg: TLRPC.Message) {
+    // search results may hold a truncated rich message without all of its documents
+    private fun loadRichMessage(account: Int, messageId: Int, callback: (TLRPC.Message?) -> Unit) {
+        val req = TL_iv.getRichMessage().apply {
+            peer = MessagesController.getInstance(account).getInputPeer(-CHANNEL_ID)
+            id = messageId
+        }
+        ConnectionsManager.getInstance(account).sendRequest(req) { resp, _ ->
+            AndroidUtilities.runOnUIThread {
+                callback((resp as? TLRPC.messages_Messages)?.messages?.firstOrNull { it.id == messageId })
+            }
+        }
+    }
+
+    fun onNewMessage(msg: TLRPC.Message, account: Int) {
         if (!InuConfig.UPDATES_ENABLED.value) return
         if (BuildConfig.INU_BUILD_TYPE == "debug") return
         if (msg.peer_id?.channel_id != CHANNEL_ID) return
-        if (msg.message?.contains("#release") != true) return
-        val info = extractApkInfo(msg) ?: return
-        val current = currentBuild()
-        if (!isNewer(info, current)) return
-        AndroidUtilities.runOnUIThread {
-            applyUpdate(msg, info, current)
+        val rich = msg.rich_message ?: return
+        fun onLoaded(full: TLRPC.Message?) {
+            val info = full?.let(::extractApkInfo) ?: return
+            val current = currentBuild()
+            if (!isNewer(info, current)) return
+            applyUpdate(full, info, current)
             revealPendingUpdate()
             InuConfig.UPDATE_LAST_CHECK_MS.value = System.currentTimeMillis()
+        }
+        AndroidUtilities.runOnUIThread {
+            if (rich.part) loadRichMessage(account, msg.id, ::onLoaded)
+            else onLoaded(msg)
         }
     }
 
     private fun applyUpdate(msg: TLRPC.Message, info: ApkInfo, current: CurrentBuild): TLRPC.TL_help_appUpdate {
+        var skipping = false
+        val blocks = msg.rich_message.blocks.filterIsInstance<TL_iv.pageBlockDetails>().firstOrNull()?.blocks.orEmpty().filterTo(ArrayList()) {
+            if (it is TL_iv.pageBlockHeading2) {
+                skipping = BuildConfig.INU_PLUGINLESS && RichMessageLayout.getString(it.text).trim() == "Plugins"
+            }
+            !skipping
+        }
+        val changelog = TL_iv.RichMessage().apply {
+            this.blocks = blocks
+            photos = msg.rich_message.photos
+            documents = msg.rich_message.documents
+        }
+        val data = SerializedData(changelog.objectSize)
+        changelog.serializeToStream(data)
+
         val updateObj = TLRPC.TL_help_appUpdate().apply {
             flags = flags or 2
-            // stash the source channel message id in the otherwise-unused `id` field
+            // stash the source channel message id and the serialized changelog in otherwise-unused fields
             id = msg.id
             version = info.verCode.toString()
-            text = msg.message ?: ""
-            entities = cloneEntities(msg.entities)
+            text = Base64.encodeToString(data.toByteArray(), Base64.NO_WRAP)
             document = info.document
         }
-
-        val blockquote = updateObj.entities.firstOrNull {
-            it is TLRPC.TL_messageEntityBlockquote
-        }
-        if (blockquote != null) {
-            val start = blockquote.offset
-            val end = blockquote.offset + blockquote.length
-            val newEntities = arrayListOf<TLRPC.MessageEntity>()
-            for (entity in updateObj.entities) {
-                if (entity === blockquote) continue
-                if (entity.offset + entity.length <= start) continue
-                if (entity.offset >= end) continue
-                val clippedStart = max(entity.offset, start)
-                val clippedEnd = min(entity.offset + entity.length, end)
-                entity.offset = clippedStart - start
-                entity.length = clippedEnd - clippedStart
-                newEntities.add(entity)
-            }
-            updateObj.text = updateObj.text.substring(start, end)
-            updateObj.entities = newEntities
-        }
+        data.cleanup()
 
         SharedConfig.pendingAppUpdate = updateObj
         SharedConfig.pendingAppUpdateBuildVersion = current.versionCode
         SharedConfig.saveConfig()
-        pendingBetaUpdate = BetaUpdate(info.appVerName, info.verCode, updateObj.text)
+        pendingBetaUpdate = BetaUpdate(info.appVerName, info.verCode, null)
         pendingSourceMessage = msg
         return updateObj
-    }
-
-    private fun cloneEntities(entities: ArrayList<TLRPC.MessageEntity>?): ArrayList<TLRPC.MessageEntity> {
-        val out = ArrayList<TLRPC.MessageEntity>(entities?.size ?: 0)
-        entities?.forEach { entity ->
-            InuUtils.cloneTLObject(entity, TLRPC.MessageEntity::TLdeserialize)?.let(out::add)
-        }
-        return out
     }
 
     private fun finish(callback: ((CheckResult) -> Unit)?, result: CheckResult) {
@@ -338,11 +344,12 @@ object UpdateHelper {
     private fun currentBuild(): CurrentBuild = CurrentBuild(packageInfo.versionCode)
 
     private fun extractApkInfo(msg: TLRPC.Message): ApkInfo? {
-        val media = msg.media as? TLRPC.TL_messageMediaDocument ?: return null
-        val doc = media.document ?: return null
-        val nameAttr = doc.attributes.filterIsInstance<TLRPC.TL_documentAttributeFilename>().firstOrNull()
-            ?: return null
-        val match = APK_RE.matchEntire(nameAttr.file_name) ?: return null
+        val variant = if (BuildConfig.INU_PLUGINLESS) "pluginless" else "full"
+        val (match, doc) = msg.rich_message?.documents.orEmpty().firstNotNullOfOrNull { doc ->
+            APK_RE.matchEntire(FileLoader.getDocumentFileName(doc))
+                ?.takeIf { it.groupValues[3] == variant }
+                ?.let { it to doc }
+        } ?: return null
         val verName = match.groupValues[1]
         val verCode = match.groupValues[2].toIntOrNull() ?: return null
         val appVerName = verName.replace(SHORT_SHA_RE, "")

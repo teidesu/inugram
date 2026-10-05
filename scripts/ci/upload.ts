@@ -1,24 +1,26 @@
+import type { InputRichMessageMedia } from '@mtcute/node'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
 import { join, resolve } from 'node:path'
-import { html, MemoryStorage, TelegramClient } from '@mtcute/node'
-import { joinTextWithEntities } from '@mtcute/node/utils.js'
+import { InputMedia, MemoryStorage, TelegramClient } from '@mtcute/node'
 
 interface BuildInfo {
   verName: string
   verCode: number
   appVerCode: number
   buildNum: number
-  apkFile: string
+  apkFiles: { full: string, pluginless: string }
+  baseTag: string | null
   commitSha: string
-  commits: { sha: string, message: string }[]
   repo: string
 }
 
 const artifactDir = resolve(process.argv[2] ?? 'out')
 const info: BuildInfo = JSON.parse(await fs.readFile(join(artifactDir, 'build-info.json'), 'utf8'))
-const apkPath = join(artifactDir, info.apkFile)
-await fs.access(apkPath)
+const variants = ['full', 'pluginless'] as const
+for (const variant of variants) {
+  await fs.access(join(artifactDir, info.apkFiles[variant]))
+}
 
 const apiId = Number(process.env.TELEGRAM_API_ID)
 const apiHash = process.env.TELEGRAM_API_HASH
@@ -63,31 +65,35 @@ async function persistSession(session: string) {
 }
 
 try {
-  const commits = info.commits.filter(c => !c.message.startsWith('infra:')).reverse()
-  const buildCaption = (cs: typeof commits) => html`
-    #release
-    <br/>
-    <b>v${info.verName}</b> (build ${info.buildNum}, based on ${info.appVerCode})
-    <br/><br/>
-    <blockquote expandable>
-      ${joinTextWithEntities(
-        cs.map(c => html`<a href="https://github.com/${info.repo}/commit/${c.sha}">${c.sha.slice(0, 7)}</a>: ${c.message}`),
-        '\n',
-      )}
-    </blockquote>
-  `
+  const notes = await fs.readFile(`changelogs/${info.buildNum}.md`, 'utf8').catch(() => '')
+  const fullChangelog = info.baseTag
+    ? `[Full changelog: ${info.baseTag}...${info.commitSha.slice(0, 7)}](https://github.com/${info.repo}/compare/${info.baseTag}...${info.commitSha})`
+    : `[Full changelog](https://github.com/${info.repo}/commits/${info.commitSha})`
 
-  let caption = buildCaption(commits)
-  while (caption.text.length > 1024 && commits.length > 0) {
-    commits.pop()
-    caption = buildCaption(commits)
+  const attachments: Record<string, InputRichMessageMedia> = {}
+  for (const variant of variants) {
+    // @ts-expect-error mtcute 0.32.3 omits document inputs from its rich-media type
+    attachments[variant] = InputMedia.document(`file:${join(artifactDir, info.apkFiles[variant])}`, {
+      fileName: info.apkFiles[variant],
+      fileMime: 'application/vnd.android.package-archive',
+    })
   }
 
-  await tg.sendMedia(channel, {
-    type: 'document',
-    file: `file:${apkPath}`,
-    fileName: info.apkFile,
-    caption,
+  await tg.sendRichMessage(channel, {
+    content: {
+      type: 'markdown',
+      // tg://document links are undocumented, but work in image syntax
+      content: [
+        `## Inugram v${info.buildNum}`,
+        `<footer>#release v${info.verName} (build ${info.buildNum}, based on ${info.appVerCode})</footer>`,
+        ...variants.map(variant => `![${variant}](tg://document?id=${variant})`),
+        '<details><summary>Changelog</summary>',
+        notes.trim(),
+        fullChangelog,
+        '</details>',
+      ].filter(Boolean).join('\n\n'),
+      attachments,
+    },
   })
 } finally {
   const exported = await tg.exportSession()

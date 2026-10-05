@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises'
 
-const props = await fs.readFile('worktree/gradle.properties', 'utf8')
+const worktree = process.argv.includes('--pluginless') ? 'worktree-pluginless' : 'worktree'
+const props = await fs.readFile(`${worktree}/gradle.properties`, 'utf8')
 const appVerName = /^APP_VERSION_NAME=(.+)$/m.exec(props)?.[1]
 if (!appVerName) throw new Error('failed to read APP_VERSION_NAME')
 const appVerCode = /^APP_VERSION_CODE=(\d+)$/m.exec(props)?.[1]
@@ -15,7 +16,8 @@ const sha = process.env.GITHUB_SHA ?? ''
 const shortSha = sha.slice(0, 7)
 const verName = `${appVerName}-${shortSha}`
 const verCode = buildNum
-const apkName = `inugram-${verName}-${verCode}.apk`
+const apkFullName = `inugram-${verName}-${verCode}-full.apk`
+const apkPluginlessName = `inugram-${verName}-${verCode}-pluginless.apk`
 const tag = `v${appVerName}-${buildNum}`
 
 const out = {
@@ -24,7 +26,8 @@ const out = {
   'build-num': String(buildNum),
   'ver-name': verName,
   'ver-code': String(verCode),
-  'apk-name': apkName,
+  'apk-full-name': apkFullName,
+  'apk-pluginless-name': apkPluginlessName,
   tag,
 }
 

@@ -7,8 +7,10 @@ on:
         required: true
         type: string
     outputs:
-      apk-name:
-        value: ${{ jobs.build.outputs.apk-name }}
+      apk-full-name:
+        value: ${{ jobs.build.outputs.apk-full-name }}
+      apk-pluginless-name:
+        value: ${{ jobs.build.outputs.apk-pluginless-name }}
       ver-name:
         value: ${{ jobs.build.outputs.ver-name }}
       ver-code:
@@ -45,8 +47,17 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: full
+            worktree: worktree
+          - variant: pluginless
+            worktree: worktree-pluginless
     outputs:
-      apk-name: ${{ steps.info.outputs.apk-name }}
+      apk-full-name: ${{ steps.info.outputs.apk-full-name }}
+      apk-pluginless-name: ${{ steps.info.outputs.apk-pluginless-name }}
       ver-name: ${{ steps.info.outputs.ver-name }}
       ver-code: ${{ steps.info.outputs.ver-code }}
       app-ver-code: ${{ steps.info.outputs.app-ver-code }}
@@ -83,11 +94,13 @@ jobs:
       # rquickjs-sys always runs bindgen, which loads the clang C api; the runner image ships the
       # clang drivers without libclang.so
       - name: install libclang
+        if: matrix.variant == 'full'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends libclang-dev
 
       - name: cache cargo
+        if: matrix.variant == 'full'
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
@@ -99,6 +112,7 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: install android rust toolchain
+        if: matrix.variant == 'full'
         run: |
           rustup target add aarch64-linux-android
           cargo install cargo-ndk --version 4.1.2 --locked
@@ -106,6 +120,7 @@ jobs:
       # the plugin engine's own suite, including every bundled oracle; ubuntu-latest already ships
       # rustup and a stable toolchain
       - name: test (plugin engine)
+        if: matrix.variant == 'full'
         working-directory: src/native
         run: cargo test --locked
 
@@ -127,16 +142,18 @@ jobs:
           save: ${{ github.event_name != 'pull_request' }}
 
       - name: set up worktree
-        run: pnpm run setup -- --no-stgit
+        run: pnpm run setup -- --no-stgit ${{ matrix.variant == 'pluginless' && '--pluginless' || '' }}
 
       # the node --check loop plus both tsc projects: the plugin contract, and the bundled plugins
       # against it - a bundled oracle that lost a member reads as a refusal and passes without this
       - name: typecheck (plugin contract + bundled plugins)
+        if: matrix.variant == 'full'
         run: pnpm run typecheck-plugins
 
       # the two typings files the tl generator writes, which the sdk publish in release.yml needs and
       # cannot make without a worktree of its own
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: matrix.variant == 'full'
         with:
           name: ${{ env.ARTIFACT_NAME }}-sdk
           path: |
@@ -149,7 +166,7 @@ jobs:
         id: info
         env:
           INU_BUILD: ${{ vars.INU_BUILD || '1' }}
-        run: pnpm tsx scripts/ci/version.ts
+        run: pnpm tsx scripts/ci/version.ts ${{ matrix.variant == 'pluginless' && '--pluginless' || '' }}
 
       - uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
         with:
@@ -173,21 +190,21 @@ jobs:
 
       # pure JVM, no android toolchain: the shared plugin policy plus the plugin bridge harness
       - name: test (InuCore + plugin bridge)
-        working-directory: worktree
+        working-directory: ${{ matrix.worktree }}
         run: ./gradlew --no-daemon :InuCore:check
 
       - name: reset ccache stats
         run: ccache -z
 
       - name: build (unsigned, debug-keyed)
-        working-directory: worktree
+        working-directory: ${{ matrix.worktree }}
         env:
           COMMIT_ID: ${{ github.sha }}
           INU_BUILD: ${{ steps.info.outputs.build-num }}
           INU_BUILD_TYPE: release
           CCACHE_COMPILERCHECK: content
           CCACHE_SLOPPINESS: time_macros,file_macro,include_file_mtime,include_file_ctime,locale,system_headers
-          CCACHE_BASEDIR: ${{ github.workspace }}/worktree
+          CCACHE_BASEDIR: ${{ github.workspace }}/${{ matrix.worktree }}
         run: ./gradlew --no-daemon :TMessagesProj_App:assembleRelease
 
       - name: show ccache stats
@@ -195,50 +212,31 @@ jobs:
         run: ccache -s -v
 
       - name: stage artifacts
-        env:
-          LAST_UPLOADED_SHA: ${{ vars.LAST_RELEASE_SHA }}
-          PUSH_BEFORE: ${{ github.event.before }}
         run: |
           mkdir -p out
-          apk='${{ steps.info.outputs.apk-name }}'
-          cp worktree/TMessagesProj_App/build/outputs/apk/release/app.apk "out/$apk"
-
-          base="$LAST_UPLOADED_SHA"
-          if [ -n "$base" ] && ! git cat-file -e "$base^{commit}" 2>/dev/null; then
-            echo "::warning::last uploaded sha $base not in history, falling back"
-            base=
-          fi
-          if [ -z "$base" ] && [ -n "$PUSH_BEFORE" ] && [ "$PUSH_BEFORE" != "0000000000000000000000000000000000000000" ]; then
-            if git cat-file -e "$PUSH_BEFORE^{commit}" 2>/dev/null; then
-              base="$PUSH_BEFORE"
-            fi
-          fi
-          if [ -n "$base" ] && [ "$base" != "$GITHUB_SHA" ]; then
-            git log --pretty='%H %s' "$base..$GITHUB_SHA" > out/commits.txt
-          else
-            git log -1 --pretty='%H %s' "$GITHUB_SHA" > out/commits.txt
+          apk='${{ matrix.variant == 'full' && steps.info.outputs.apk-full-name || steps.info.outputs.apk-pluginless-name }}'
+          cp '${{ matrix.worktree }}/TMessagesProj_App/build/outputs/apk/release/app.apk' "out/$apk"
+          if [ '${{ matrix.variant }}' != full ]; then
+            exit 0
           fi
 
-          commits_json=$(jq -R -n '
-            [inputs | capture("^(?<sha>[0-9a-f]+) (?<message>.*)$")]
-          ' out/commits.txt)
-          rm out/commits.txt
-
+          base=$(git describe --tags --abbrev=0 --match 'v*' --exclude '${{ steps.info.outputs.tag }}' HEAD 2>/dev/null || true)
           jq -n \
             --arg verName '${{ steps.info.outputs.ver-name }}' \
             --argjson verCode '${{ steps.info.outputs.ver-code }}' \
             --argjson appVerCode '${{ steps.info.outputs.app-ver-code }}' \
             --argjson buildNum '${{ steps.info.outputs.build-num }}' \
-            --arg apkFile "$apk" \
+            --arg apkFull '${{ steps.info.outputs.apk-full-name }}' \
+            --arg apkPluginless '${{ steps.info.outputs.apk-pluginless-name }}' \
+            --arg baseTag "$base" \
             --arg commitSha "$GITHUB_SHA" \
-            --argjson commits "$commits_json" \
             --arg repo "$GITHUB_REPOSITORY" \
-            '{verName:$verName,verCode:$verCode,appVerCode:$appVerCode,buildNum:$buildNum,apkFile:$apkFile,commitSha:$commitSha,commits:$commits,repo:$repo}' \
+            '{verName:$verName,verCode:$verCode,appVerCode:$appVerCode,buildNum:$buildNum,apkFiles:{full:$apkFull,pluginless:$apkPluginless},baseTag:(if $baseTag == "" then null else $baseTag end),commitSha:$commitSha,repo:$repo}' \
             > out/build-info.json
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: ${{ env.ARTIFACT_NAME }}-unsigned
+          name: ${{ env.ARTIFACT_NAME }}-unsigned-${{ matrix.variant }}
           path: out/*
           if-no-files-found: error
           retention-days: 1

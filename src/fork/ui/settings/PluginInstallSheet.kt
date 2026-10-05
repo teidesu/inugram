@@ -1,14 +1,8 @@
 package desu.inugram.ui.settings
 
-import android.animation.ValueAnimator
 import android.content.Context
-import android.graphics.Canvas
-import android.graphics.LinearGradient
-import android.graphics.Paint
-import android.graphics.Shader
 import android.view.Gravity
 import android.view.View.MeasureSpec
-import android.widget.FrameLayout
 import android.widget.LinearLayout
 import androidx.recyclerview.widget.RecyclerView
 import desu.inugram.core.plugins.PluginManifest
@@ -23,7 +17,6 @@ import org.telegram.ui.ActionBar.BaseFragment
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Cells.TextCell
 import org.telegram.ui.Components.BottomSheetWithRecyclerListView
-import org.telegram.ui.Components.CubicBezierInterpolator
 import org.telegram.ui.Components.LayoutHelper
 import org.telegram.ui.Components.RecyclerListView
 import org.telegram.ui.Components.UItem
@@ -76,7 +69,7 @@ class PluginInstallSheet(
     private var enableNow = true
     private var showKeptGrants = false
 
-    private val buttons: ButtonsView
+    private val buttons: SheetButtonsView
     private var seenEnd = false
 
     init {
@@ -123,7 +116,7 @@ class PluginInstallSheet(
             addView(cancel, LinearLayout.LayoutParams(0, LayoutHelper.MATCH_PARENT, 1f).apply { marginEnd = dp(8f) })
             addView(install, LinearLayout.LayoutParams(0, LayoutHelper.MATCH_PARENT, 1f))
         }
-        buttons = ButtonsView(context)
+        buttons = SheetButtonsView(context)
         buttons.addView(
             row,
             LayoutHelper.createFrameMarginPx(
@@ -167,57 +160,6 @@ class PluginInstallSheet(
         adapter = UniversalAdapter(recyclerListView, context, currentAccount, 0, false, this::fillItems, resourcesProvider)
         adapter.setApplyBackground(false)
         return adapter
-    }
-
-    /**
-     * The strip is opaque while it covers content and fades out once there is nothing left under
-     * it - the cancel button has no fill of its own, so over a scrolling list it would otherwise be
-     * a label floating on top of rows.
-     */
-    private inner class ButtonsView(context: Context) : FrameLayout(context) {
-        private val paint = Paint()
-        // inside the view rather than above it: the sheet clips its children, so the band the
-        // shadow falls on has to be part of what this one measures
-        private val shadowHeight = dp(3f)
-        private val shadowPaint = Paint().apply {
-            shader = LinearGradient(
-                0f, 0f, 0f, shadowHeight.toFloat(),
-                0x00000000, 0x12000000, Shader.TileMode.CLAMP,
-            )
-        }
-        private var progress = 1f
-        private var covering = true
-        private var animator: ValueAnimator? = null
-
-        init {
-            setWillNotDraw(false)
-            setPadding(0, dp(12f) + shadowHeight, 0, 0)
-        }
-
-        fun setCovering(value: Boolean) {
-            if (covering == value) return
-            covering = value
-            animator?.cancel()
-            animator = ValueAnimator.ofFloat(progress, if (value) 1f else 0f).apply {
-                duration = 180
-                interpolator = CubicBezierInterpolator.DEFAULT
-                addUpdateListener {
-                    progress = it.animatedValue as Float
-                    invalidate()
-                }
-                start()
-            }
-        }
-
-        override fun onDraw(canvas: Canvas) {
-            if (progress <= 0f) return
-            val alpha = (255 * progress).toInt()
-            shadowPaint.alpha = alpha
-            canvas.drawRect(0f, 0f, width.toFloat(), shadowHeight.toFloat(), shadowPaint)
-            paint.color = Theme.getColor(Theme.key_windowBackgroundWhite)
-            paint.alpha = alpha
-            canvas.drawRect(0f, shadowHeight.toFloat(), width.toFloat(), height.toFloat(), paint)
-        }
     }
 
     /** one viewport short of a full page, so the row that was under the strip stays in sight */
