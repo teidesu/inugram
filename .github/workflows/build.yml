@@ -133,16 +133,16 @@ jobs:
         uses: hendrikmuhs/ccache-action@e42e6681d2906409c5dde4a315af6214eaa890ee # v1.2
         with:
           append-timestamp: true
-          key: ${{ runner.os }}-ndk-27.2-release
+          key: ${{ runner.os }}-ndk-27.2-release-${{ matrix.variant }}
           restore-keys: |
+            ${{ runner.os }}-ndk-27.2-release-${{ matrix.variant }}
             ${{ runner.os }}-ndk-27.2-release
             ${{ runner.os }}-
           max-size: 5G
           verbose: 2
-          save: ${{ github.event_name != 'pull_request' }}
 
       - name: set up worktree
-        run: pnpm run setup -- --no-stgit ${{ matrix.variant == 'pluginless' && '--pluginless' || '' }}
+        run: pnpm run setup -- --ci ${{ matrix.variant == 'pluginless' && '--pluginless' || '' }}
 
       # the node --check loop plus both tsc projects: the plugin contract, and the bundled plugins
       # against it - a bundled oracle that lost a member reads as a refusal and passes without this
@@ -171,7 +171,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
         with:
           gradle-home-cache-cleanup: true
-          cache-read-only: ${{ github.event_name == 'pull_request' }}
+          cache-read-only: false
 
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
         with:

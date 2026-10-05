@@ -67,8 +67,18 @@ export async function ensureDir(dir: string) {
   await fs.mkdir(dir, { recursive: true })
 }
 
-export async function cloneUpstream(targetDir: string, commit: string) {
+export async function cloneUpstream(targetDir: string, commit: string, shallow = false) {
   await ensureEmptyCloneTarget(targetDir)
+  if (shallow) {
+    step(`Fetching upstream ${commit} into ${targetDir}`)
+    await ensureDir(targetDir)
+    const git = cd(targetDir)
+    await git`git init -q`
+    await git`git remote add upstream ${upstreamUrl}`
+    await git`git fetch --depth 1 upstream ${commit}`
+    await git`git checkout FETCH_HEAD`
+    return
+  }
   if (!existsSync(join(targetDir, '.git'))) {
     step(`Cloning upstream into ${targetDir}`)
     await $`git clone ${upstreamUrl} ${targetDir}`
@@ -103,7 +113,7 @@ export async function ensureUpstreamRemote(repoDir: string) {
   await git`git remote add upstream ${upstreamUrl}`
 }
 
-export async function syncSubmodules(repoDir: string, excludedSubmodules: string[] = []) {
+export async function syncSubmodules(repoDir: string, excludedSubmodules: string[] = [], shallow = false) {
   if (!existsSync(join(repoDir, '.gitmodules'))) {
     return false
   }
@@ -122,7 +132,8 @@ export async function syncSubmodules(repoDir: string, excludedSubmodules: string
 
   step(`Syncing ${stale.length} submodule(s), this will take a while`)
   const skips = skippedSubmodules.flatMap(name => ['-c', `submodule.${name}.update=none`])
-  await git`git ${skips} submodule update --init --recursive --filter=blob:none -- ${paths}`
+  const depth = shallow ? ['--depth', '1'] : ['--filter=blob:none']
+  await git`git ${skips} submodule update --init --recursive ${depth} -- ${paths}`
   return true
 }
 

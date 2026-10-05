@@ -28,7 +28,7 @@ import { svgBodyToVectorDrawable } from './svg-to-vector.js'
 const BRANCH = 'inugram'
 const args = process.argv.slice(2)
 const force = args.includes('--force')
-const noStgit = args.includes('--no-stgit')
+const ci = args.includes('--ci')
 const noSubmodules = args.includes('--no-submodules')
 const pluginless = args.includes('--pluginless')
 const worktreeDir = pluginless ? join(rootDir, 'worktree-pluginless') : defaultWorktreeDir
@@ -215,49 +215,36 @@ async function forceReimportPatches(seriesEntries: string[]) {
 const commit = await readPinnedUpstreamCommit()
 const seriesEntries = (await readSeries()).filter(entry => !pluginless || entry !== 'feature/plugins.patch')
 
-if (noStgit) {
+if (ci) {
   if (hasGitRepo(worktreeDir)) {
-    throw new Error(`--no-stgit needs a fresh worktree (${worktreeDir} already exists)`)
+    throw new Error(`--ci needs a fresh worktree (${worktreeDir} already exists)`)
   }
-  await cloneUpstream(worktreeDir, commit)
+  await cloneUpstream(worktreeDir, commit, true)
   const repo = cd(worktreeDir)
   for (const entry of seriesEntries) {
     step(`Applying ${entry}`)
     await repo`git apply --index ${join(patchesDir, entry)}`
   }
-  if (!noSubmodules) {
-    await syncSubmodules(worktreeDir, excludedSubmodules)
-    await applySubmodulePatches(worktreeDir, excludedSubmodules)
-  }
-  await writeBuildProperties()
-  await ensureAdGuardFilter()
-  await linkForkSource(worktreeDir, pluginless)
-  await generateIconDrawables(worktreeDir)
-  if (!pluginless) {
-    await generateTl()
-    await generateGrants()
-  }
-  success('Flat setup complete')
 } else {
-  const expectedPatches = seriesEntries.map(patchNameFromSeriesEntry)
   await ensureWorktree(commit)
   const branchExisted = await ensureBranch(commit)
   await ensureStgitStack(commit, branchExisted, force)
   if (force) {
     await forceReimportPatches(seriesEntries)
   } else {
-    await ensurePatches(expectedPatches, seriesEntries)
+    await ensurePatches(seriesEntries.map(patchNameFromSeriesEntry), seriesEntries)
   }
-  const configuredBuild = await writeBuildProperties()
-  const syncedSubmodules = noSubmodules ? false : await syncSubmodules(worktreeDir, excludedSubmodules)
-  const patchedSubmodules = noSubmodules ? false : await applySubmodulePatches(worktreeDir, excludedSubmodules)
-  await ensureAdGuardFilter()
-  await ensureGitExclude(worktreeDir, '.kotlin')
-  await ensureGitExclude(worktreeDir, '.cxx')
-  if (!pluginless) await cd(worktreeDir)`git config submodule.TMessagesProj_App/jni/lsplant.ignore all`
-  const linkedAny = await linkForkSource(worktreeDir, pluginless)
-  const generatedAny = await generateIconDrawables(worktreeDir)
-  const generatedTl = pluginless ? false : await generateTl()
-  const generatedGrants = pluginless ? false : await generateGrants()
-  success(configuredBuild || linkedAny || generatedAny || generatedTl || generatedGrants || syncedSubmodules || patchedSubmodules ? 'Setup complete' : 'Up to date')
 }
+
+const configuredBuild = await writeBuildProperties()
+const syncedSubmodules = noSubmodules ? false : await syncSubmodules(worktreeDir, excludedSubmodules, ci)
+const patchedSubmodules = noSubmodules ? false : await applySubmodulePatches(worktreeDir, excludedSubmodules)
+await ensureAdGuardFilter()
+await ensureGitExclude(worktreeDir, '.kotlin')
+await ensureGitExclude(worktreeDir, '.cxx')
+if (!pluginless) await cd(worktreeDir)`git config submodule.TMessagesProj_App/jni/lsplant.ignore all`
+const linkedAny = await linkForkSource(worktreeDir, pluginless)
+const generatedAny = await generateIconDrawables(worktreeDir)
+const generatedTl = pluginless ? false : await generateTl()
+const generatedGrants = pluginless ? false : await generateGrants()
+success(configuredBuild || linkedAny || generatedAny || generatedTl || generatedGrants || syncedSubmodules || patchedSubmodules ? 'Setup complete' : 'Up to date')

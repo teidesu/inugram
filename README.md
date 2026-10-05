@@ -85,7 +85,7 @@ you can then simply open (not import!) `worktree/` in Android Studio and start h
 
 `pnpm run setup -- --pluginless` prepares `worktree-pluginless/` instead, skipping
 `feature/plugins.patch`, LSPlant and its nested submodules/local patches, and plugin API generation.
-It also works with `--no-stgit` and `--no-submodules`. Build it with `pnpm run build-debug-pluginless`.
+It also works with `--ci` and `--no-submodules`. Build it with `pnpm run build-debug-pluginless`.
 The plain build excludes the plugin engine, native hooking libraries, plugin screens, and plugin test assets.
 Other scripts continue to target `worktree/`.
 
