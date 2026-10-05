@@ -41,6 +41,7 @@ use crate::api::timers::{install_timers, TimerHost};
 use crate::api::tl::message::install_message;
 use crate::api::tl::proxy::TlViews;
 use crate::api::tl::utils::{install_utils_with_host, UtilsHost};
+use crate::api::translation::{install_translation, TranslationHost};
 use crate::api::ui::actions::{install_actions, ActionHost};
 use crate::api::ui::dialogs::install_dialogs;
 use crate::api::ui::files::{install_files, FilesHost};
@@ -276,6 +277,10 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
           &globals,
         )
       })?;
+      let translation_host: Rc<dyn TranslationHost> = bridge.clone();
+      let translation = install_part(&ctx, "inu.registerTranslationProvider", log.as_ref(), |ctx, globals| {
+        install_translation(&ctx, translation_host, lifecycle.clone(), log.clone(), &globals)
+      })?;
       // last onto the account prototype, since this installs before the reads and writes that build it
       install_part(&ctx, "Account.suppressNotifications", log.as_ref(), |ctx, _| {
         notifications.install_account_suppress(&ctx, &account)
@@ -294,6 +299,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
         screens,
         history,
         actions,
+        translation,
         account,
         reads,
         writes,
@@ -963,6 +969,32 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchA
     let surface_json = jstring_to_string(env, &surface_json);
     engine.actions.dispatch(&engine.ctx, kind, token as u32, &surface_json);
   })
+}
+
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchTranslation(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  token: jint,
+  dispatch_id: jlong,
+  request_json: JString,
+) {
+  with_engine_env(&mut env, ptr, (), |env, engine| {
+    let request_json = jstring_to_string(env, &request_json);
+    engine.translation.dispatch(&engine.ctx, token as u32, dispatch_id, &request_json);
+  })
+}
+
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeAbandonTranslation(
+  _env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  dispatch_id: jlong,
+  timed_out: jboolean,
+) {
+  with_engine(ptr, (), |engine| engine.translation.abandon(&engine.ctx, dispatch_id, timed_out));
 }
 
 #[no_mangle]

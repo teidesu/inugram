@@ -12,6 +12,7 @@ import desu.inugram.helpers.plugins.telegram.PluginReads
 import desu.inugram.helpers.plugins.telegram.PluginRpc
 import desu.inugram.helpers.plugins.telegram.PluginCompose
 import desu.inugram.helpers.plugins.telegram.PluginSends
+import desu.inugram.helpers.plugins.telegram.PluginTranslation
 import desu.inugram.helpers.plugins.telegram.PluginUpdates
 import desu.inugram.helpers.plugins.telegram.PluginWrites
 import desu.inugram.helpers.plugins.tl.TlHandles
@@ -47,6 +48,7 @@ fun resetBridge() {
         PluginXposed.detach(session)
         PluginJvm.detach(session)
         PluginActions.detach(session)
+        PluginTranslation.detach(session)
         PluginNotifications.detach(session)
         PluginCanvas.detach(session)
         session.stopDispatching()
@@ -179,6 +181,7 @@ fun closeEngine(plugin: Plugin) {
     PluginXposed.detach(session)
     PluginJvm.detach(session)
     PluginCanvas.detach(session)
+    PluginTranslation.detach(session)
     session.stopDispatching()
     session.engine.close()
     plugin.session = null
@@ -283,6 +286,7 @@ fun attachBridge(
         fetch = PluginFetch.listenerFor(session),
         canvas = canvas,
         notifications = PluginNotifications.listenerFor(session),
+        translation = PluginTranslation.listenerFor(session),
         jvm = jvm,
         xposed = PluginXposed.listenerFor(session, jvm),
     )

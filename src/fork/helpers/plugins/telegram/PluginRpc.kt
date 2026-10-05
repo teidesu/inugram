@@ -792,7 +792,7 @@ object PluginRpc : SessionResource {
         }
     }
 
-    private fun isBypassed(request: TLObject): Boolean =
+    internal fun isBypassed(request: TLObject): Boolean =
         synchronized(bypassed) { bypassed.containsKey(request) }
 
     internal fun releaseBypass(request: TLObject) {

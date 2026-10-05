@@ -28,6 +28,7 @@ class PluginBridge(
     fetch: FetchListener,
     val canvas: CanvasListener,
     notifications: NotificationListener,
+    translation: TranslationListener,
     val jvm: JvmListener? = null,
     val xposed: XposedListener? = null,
 ) : CoreListener by core,
@@ -41,6 +42,7 @@ class PluginBridge(
     FetchListener by fetch,
     CanvasListener by canvas,
     NotificationListener by notifications,
+    TranslationListener by translation,
     JvmListener by (jvm ?: MissingJvm),
     XposedListener by (xposed ?: MissingXposed) {
 

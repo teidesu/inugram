@@ -19,7 +19,11 @@ pub fn install_text<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
         let parsed = match kind {
           KIND_MARKDOWN => tgtext::markdown::parse(&borrowed, &subs),
           KIND_HTML => tgtext::html::parse(false, &borrowed, &subs),
-          KIND_HTML_RAW => tgtext::html::parse(true, &borrowed, &subs),
+          KIND_HTML_RAW => {
+            let dedented = tgtext::html::dedent(&borrowed);
+            let dedented: Vec<&str> = dedented.iter().map(String::as_str).collect();
+            tgtext::html::parse(true, &dedented, &subs)
+          }
           _ => return Err(Exception::throw_type(&ctx, "parse: unknown format")),
         };
         text_to_js(&ctx, &parsed)
@@ -97,7 +101,7 @@ fn read_subs<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<Vec<Sub>> {
   Ok(subs)
 }
 
-fn read_entities<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<Vec<Entity>> {
+pub(crate) fn read_entities<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<Vec<Entity>> {
   if value.is_undefined() || value.is_null() {
     return Ok(Vec::new());
   }
@@ -175,7 +179,7 @@ fn read_entity<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<Entity> {
   Ok(Entity::new(kind, offset, length))
 }
 
-fn text_to_js<'js>(ctx: &Ctx<'js>, value: &TextWithEntities) -> JsResult<Object<'js>> {
+pub(crate) fn text_to_js<'js>(ctx: &Ctx<'js>, value: &TextWithEntities) -> JsResult<Object<'js>> {
   let out = Object::new(ctx.clone())?;
   out.set("text", value.text.as_str())?;
   let entities = Array::new(ctx.clone())?;

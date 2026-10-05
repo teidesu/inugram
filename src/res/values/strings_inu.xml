@@ -269,6 +269,11 @@
     <string name="InuTranslator">Translator</string>
     <string name="InuTranslationTarget">Target language</string>
     <string name="InuTranslationTargetFollowApp">Follow app</string>
+    <string name="InuTranslationProvider">Translation provider</string>
+    <string name="InuTranslationProviderTelegram">Telegram</string>
+    <string name="InuTranslationProviderFromPlugin">from %1$s</string>
+    <string name="InuTranslationProviderUnavailable">Unavailable</string>
+    <string name="InuTranslationProviderInfo">You can install additional translation services as **Plugins >**</string>
     <string name="InuHideReactionEntry">Hide reaction appear animation</string>
     <string name="InuHideReactionEntryInfo">…when a reaction is added to a message</string>
     <string name="InuMutualContact">Mutual contact</string>

@@ -181,6 +181,12 @@ open class QuickJs {
 
     open fun dispatchAction(kind: Int, token: Int, surfaceJson: String) = ifLive { nativeDispatchAction(it, kind, token, surfaceJson) }
 
+    /** answered exactly once through [TranslationListener.translationResult], unless abandoned first */
+    open fun dispatchTranslation(token: Int, dispatchId: Long, requestJson: String) =
+        requireLive { nativeDispatchTranslation(it, token, dispatchId, requestJson) }
+
+    open fun abandonTranslation(dispatchId: Long, timedOut: Boolean) = ifLive { nativeAbandonTranslation(it, dispatchId, timedOut) }
+
     /** the host owns the diff ([desu.inugram.core.plugins.ScreenStack]) */
     fun dispatchScreenChange(changeJson: String, stackJson: String) = requireLive { nativeDispatchScreenChange(it, changeJson, stackJson) }
 
@@ -303,6 +309,8 @@ open class QuickJs {
     private external fun nativeChatHistoryMenuClick(ptr: Long, historyId: Long, requestId: Long, index: Int)
     private external fun nativeRenderActions(ptr: Long, kind: Int, surfaceJson: String): String?
     private external fun nativeDispatchAction(ptr: Long, kind: Int, token: Int, surfaceJson: String)
+    private external fun nativeDispatchTranslation(ptr: Long, token: Int, dispatchId: Long, requestJson: String)
+    private external fun nativeAbandonTranslation(ptr: Long, dispatchId: Long, timedOut: Boolean)
     private external fun nativeDispatchScreenChange(ptr: Long, changeJson: String, stackJson: String)
     private external fun nativeDispatchNotification(ptr: Long, callbackId: Int, name: String, accountId: Int, args: Array<String>)
     private external fun nativeWriteProgress(ptr: Long, requestId: Long, loaded: Long, total: Long)

@@ -912,6 +912,9 @@ object InuConfig {
     val TRANSLATE_AUTO_DETECT_LANG = BoolItem("translate_auto_detect_lang", true)
 
     @JvmField
+    val TRANSLATION_PROVIDER = StringItem("translation_provider", "", exportable = false)
+
+    @JvmField
     val ACCOUNT_ORDER = StringItem("account_order", "", exportable = false)
 
     @JvmField

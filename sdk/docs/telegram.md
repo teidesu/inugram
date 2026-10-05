@@ -255,6 +255,44 @@ function formatScore(name: string, score: number) {
 
 The API is prety much the same as mtcute, so just refer to [mtcute docs](https://mtcute.dev/guide/topics/parse-modes.html) for more details, not to repeat all that here.
 
+## Translation providers
+
+Plugins can implement custom translation providers for the app's built-in translation
+via `inu.registerTranslationProvider`.
+
+```ts
+inu.registerTranslationProvider({
+  id: 'deepl',
+  name: 'DeepL',
+  format: 'html',
+  async translate({ texts, to, signal }) {
+    const res = await fetch('https://api-free.deepl.com/v2/translate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'authorization': `DeepL-Auth-Key ${KEY}` },
+      body: JSON.stringify({ text: texts, target_lang: to, tag_handling: 'html' }),
+      signal,
+    })
+    const { translations } = await res.json()
+    return translations.map(t => t.text)
+  },
+})
+```
+
+You can choose a `format` to use when talking to the provider:
+
+- `plain` (default): plain text strings in and out, formatting is dropped
+- `html`: Entities are formated as a Telegram's HTML subset
+- `entities`: Raw `TextWithEntities`, you can handle them yourself
+
+`from` holds the detected language of each text, or `null` where the app does not know it
+(polls, voice transcriptions, text not detected yet).
+
+When your provider is picked, all translations the app requests go through it. Specifically,
+this means that `messages.translateText` requests are never issued, and are instead
+handled by Inugram directly.
+
+Manually using `invokeRpc({ _: 'messages.translateText', ... })` works as usual, however.
+
 ## Events
 
 There are a few methods that are events you can subscribe to, to do something when something happens.

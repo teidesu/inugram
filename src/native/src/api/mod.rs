@@ -16,6 +16,7 @@ pub(crate) mod platform;
 pub(crate) mod telegram;
 pub(crate) mod timers;
 pub(crate) mod tl;
+pub(crate) mod translation;
 pub(crate) mod ui;
 pub(crate) mod url;
 

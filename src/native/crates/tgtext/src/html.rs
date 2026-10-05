@@ -117,19 +117,9 @@ fn decode_attribute(value: &str) -> Cow<'_, str> {
   Cow::Owned(out)
 }
 
-/// Parse html, interpolating `subs` between `parts`. `keep_whitespace` is the `thtml` variant: the
-/// text keeps its newlines and runs of spaces, and the parts are dedented first.
+/// Parse html, interpolating `subs` between `parts`. With `keep_whitespace` the text keeps its
+/// newlines and runs of spaces.
 pub fn parse(keep_whitespace: bool, parts: &[&str], subs: &[Sub]) -> TextWithEntities {
-  let dedented: Vec<String>;
-  let borrowed: Vec<&str>;
-  let parts: &[&str] = if keep_whitespace {
-    dedented = dedent(parts);
-    borrowed = dedented.iter().map(String::as_str).collect();
-    &borrowed
-  } else {
-    parts
-  };
-
   let mut parser = Parser::new(keep_whitespace);
 
   for (index, sub) in subs.iter().enumerate() {
@@ -679,7 +669,7 @@ fn link_kind(url: String) -> EntityKind {
   EntityKind::TextUrl { url }
 }
 
-fn dedent(parts: &[&str]) -> Vec<String> {
+pub fn dedent(parts: &[&str]) -> Vec<String> {
   // a line spanning an interpolation is one line, and its indent is measured up to the
   // interpolation when nothing but whitespace precedes it
   let mut min_indent = usize::MAX;

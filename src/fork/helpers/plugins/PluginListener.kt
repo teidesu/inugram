@@ -132,6 +132,16 @@ interface SendsListener {
     fun onSendVerdict(dispatchId: Long, verdict: String)
 }
 
+/** `registerTranslationProvider` */
+interface TranslationListener {
+    fun translationRegister(token: Int, id: String, name: String): String?
+
+    fun translationUnregister(token: Int)
+
+    /** answers [QuickJs.dispatchTranslation]: `S` and a json array of `{text, entities}`, or `E` and a reason */
+    fun translationResult(dispatchId: Long, wire: String)
+}
+
 /** a separate table in rust from [RpcListener]'s */
 interface UpdatesListener {
     /** [scope] "" means each constructor is its own scope, else the demuxed event name */

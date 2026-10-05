@@ -414,27 +414,30 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
 +++ b/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
-@@ -381,7 +381,10 @@ public class ConnectionsManager extends BaseController {
+@@ -381,10 +381,13 @@ public class ConnectionsManager extends BaseController {
          return requestToken;
      }
  
 -    private void sendRequestInternal(TLObject object, RequestDelegate onComplete, RequestDelegateTimestamp onCompleteTimestamp, QuickAckDelegate onQuickAck, WriteToSocketDelegate onWriteToSocket, int flags, int datacenterId, int connectionType, boolean immediate, int requestToken) {
 +    public void sendRequestInternal(TLObject object, RequestDelegate onComplete, RequestDelegateTimestamp onCompleteTimestamp, QuickAckDelegate onQuickAck, WriteToSocketDelegate onWriteToSocket, int flags, int datacenterId, int connectionType, boolean immediate, int requestToken) {
+         if (desu.inugram.helpers.translate.TranslationProviderHelper.maybeTranslate(currentAccount, requestToken, object, onComplete, onCompleteTimestamp)) {
+             return;
+         }
 +        if (desu.inugram.helpers.plugins.telegram.PluginRpc.maybeIntercept(this, object, onComplete, onCompleteTimestamp, onQuickAck, onWriteToSocket, flags, datacenterId, connectionType, immediate, requestToken, currentAccount)) {
 +            return;
 +        }
          if (BuildVars.LOGS_ENABLED) {
              FileLog.d("send request " + object + " with token = " + requestToken);
          }
-@@ -566,6 +569,7 @@ public class ConnectionsManager extends BaseController {
- 
-     public void cancelRequest(int token, boolean notifyServer, Runnable onCancelled) {
-         Utilities.stageQueue.postRunnable(() -> {
+@@ -575,6 +578,7 @@ public class ConnectionsManager extends BaseController {
+                 }
+                 return;
+             }
 +            desu.inugram.helpers.plugins.telegram.PluginRpc.onRequestCancelled(currentAccount, token, notifyServer, onCancelled);
              if (onCancelled != null) {
                  listenCancel(token, () -> {
                      Utilities.stageQueue.postRunnable(onCancelled);
-@@ -581,6 +585,7 @@ public class ConnectionsManager extends BaseController {
+@@ -590,6 +594,7 @@ public class ConnectionsManager extends BaseController {
  
      public void cancelRequestsForGuid(int guid) {
          Utilities.stageQueue.postRunnable(() -> {
@@ -442,7 +445,7 @@ index 0000000..0000000 100644
              native_cancelRequestsForGuid(currentAccount, guid);
          });
      }
-@@ -589,6 +594,7 @@ public class ConnectionsManager extends BaseController {
+@@ -598,6 +603,7 @@ public class ConnectionsManager extends BaseController {
          if (guid == 0) {
              return;
          }

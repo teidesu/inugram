@@ -59,39 +59,49 @@
   }))
 
   const signalBrand = Symbol('AbortSignal')
-  const signalState = new WeakMap()
-
-  const getSignalState = (signal) => {
-    const state = signalState.get(signal)
-    if (state === undefined) throw new TypeError('not an AbortSignal')
-    return state
-  }
+  let abortSignal
 
   class AbortSignal {
+    #aborted = false
+    #reason = undefined
+    #listeners = []
+
+    static {
+      abortSignal = (signal, reason) => {
+        if (signal.#aborted) return
+        signal.#aborted = true
+        signal.#reason = reason
+        for (const listener of signal.#listeners.splice(0, signal.#listeners.length)) {
+          try {
+            listener()
+          } catch (e) {
+            console.error('AbortSignal listener threw:', (e && e.stack) || String(e))
+          }
+        }
+      }
+    }
+
     constructor(brand) {
       if (brand !== signalBrand) throw new TypeError('Illegal constructor')
-      signalState.set(this, { aborted: false, reason: undefined, listeners: [] })
     }
 
     get aborted() {
-      return getSignalState(this).aborted
+      return this.#aborted
     }
 
     get reason() {
-      return getSignalState(this).reason
+      return this.#reason
     }
 
     addEventListener(type, listener) {
-      const state = getSignalState(this)
-      if (type !== 'abort' || typeof listener !== 'function' || state.aborted) return
-      if (!state.listeners.includes(listener)) state.listeners.push(listener)
+      if (type !== 'abort' || typeof listener !== 'function' || this.#aborted) return
+      if (!this.#listeners.includes(listener)) this.#listeners.push(listener)
     }
 
     removeEventListener(type, listener) {
-      const state = getSignalState(this)
       if (type !== 'abort') return
-      const at = state.listeners.indexOf(listener)
-      if (at !== -1) state.listeners.splice(at, 1)
+      const at = this.#listeners.indexOf(listener)
+      if (at !== -1) this.#listeners.splice(at, 1)
     }
   }
 
@@ -101,19 +111,7 @@
     }
 
     abort(reason) {
-      const state = getSignalState(this.signal)
-      if (state.aborted) return
-      state.aborted = true
-      state.reason = reason !== undefined
-        ? reason
-        : new DOMException('signal is aborted without reason', 'AbortError')
-      for (const listener of state.listeners.splice(0, state.listeners.length)) {
-        try {
-          listener()
-        } catch (e) {
-          console.error('AbortSignal listener threw:', (e && e.stack) || String(e))
-        }
-      }
+      abortSignal(this.signal, reason ?? new DOMException('signal is aborted without reason', 'AbortError'))
     }
   }
 
@@ -139,7 +137,6 @@
     TypeError,
     URIError,
   })
-
 
   // Record every clone to preserve shared references, not just cycles. Repeated references clone to
   // one object, and views over the same buffer keep sharing a buffer.

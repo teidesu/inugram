@@ -1,7 +1,9 @@
 use std::path::Path;
 use std::rc::Rc;
 
-use rquickjs::{ArrayBuffer, Ctx, Exception, Function, Object, Result as JsResult, TypedArray, Value};
+use rquickjs::{
+  ArrayBuffer, Constructor, Ctx, Exception, Function, Object, Persistent, Result as JsResult, TypedArray, Value,
+};
 
 use crate::utils::qjs::{qjs_read_buffer_bytes, qjs_read_typed_bytes, qjs_write_typed_bytes};
 use crate::{
@@ -60,6 +62,16 @@ pub fn install_globals<'js>(
   let factory = crate::utils::qjs::qjs_load_prelude(ctx, PRELUDE)?;
   factory.call::<_, ()>((natives,))?;
   Ok(blobs)
+}
+
+/// the prelude's `AbortController`, absent in a context without sandbox globals
+pub fn save_abort_controller(ctx: &Ctx<'_>) -> JsResult<Option<Persistent<Constructor<'static>>>> {
+  Ok(
+    ctx
+      .globals()
+      .get::<_, Option<Constructor>>("AbortController")?
+      .map(|ctor| Persistent::save(ctx, ctor)),
+  )
 }
 
 fn decode_utf8(ctx: &Ctx<'_>, input: Value<'_>) -> JsResult<String> {

@@ -27,6 +27,7 @@ import desu.inugram.helpers.plugins.telegram.PluginMedia
 import desu.inugram.helpers.plugins.telegram.PluginOptimisticSend
 import desu.inugram.helpers.plugins.telegram.PluginRpc
 import desu.inugram.helpers.plugins.telegram.PluginSends
+import desu.inugram.helpers.plugins.telegram.PluginTranslation
 import desu.inugram.helpers.plugins.telegram.PluginUpdates
 import desu.inugram.helpers.plugins.tl.TlReflect
 import desu.inugram.helpers.plugins.ui.PluginActions
@@ -141,6 +142,7 @@ object PluginManager {
         PluginJvm.sweepOrphans(live)
         PluginPaths.emptyTrash()
         PluginActions.retainInstalls(live)
+        PluginTranslation.retainInstalls(live)
     }
 
     fun isEngineEnabled(): Boolean = InuConfig.PLUGINS_ENABLED.value
@@ -386,6 +388,7 @@ object PluginManager {
         plugins.remove(plugin)
         PluginStore.persist(plugins)
         PluginActions.retainInstalls(PluginStore.installIds(plugins))
+        PluginTranslation.retainInstalls(PluginStore.installIds(plugins))
         republishOrder()
         notifyChanged()
     }
@@ -506,6 +509,7 @@ object PluginManager {
             fetch = PluginFetch.listenerFor(session),
             canvas = PluginCanvas.listenerFor(session),
             notifications = PluginNotifications.listenerFor(session),
+            translation = PluginTranslation.listenerFor(session),
             jvm = jvm,
             xposed = PluginXposed.listenerFor(session, jvm),
         )
@@ -583,6 +587,7 @@ object PluginManager {
         PluginFilePicker,
         PluginFetch,
         PluginActions,
+        PluginTranslation,
         PluginNotifications,
         PluginCanvas,
         PluginXposed,

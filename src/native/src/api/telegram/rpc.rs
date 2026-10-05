@@ -244,7 +244,8 @@ impl RpcState {
   }
 
   fn sync_blocking(&self) {
-    let count = self.dispatches.borrow().len() + self.update_dispatches.borrow().len() + self.send_dispatches.borrow().len();
+    let count =
+      self.dispatches.borrow().len() + self.update_dispatches.borrow().len() + self.send_dispatches.borrow().len();
     self.lifecycle.set_blocking_dispatches(count);
   }
 }
@@ -320,12 +321,7 @@ pub fn install_rpc<'js>(
     intercept_update_fns: Registry::default(),
     demux: RefCell::new(None),
     send_wrap: RefCell::new(None),
-    abort_controller: RefCell::new(
-      ctx
-        .globals()
-        .get::<_, Option<Constructor>>("AbortController")?
-        .map(|ctor| Persistent::save(ctx, ctor)),
-    ),
+    abort_controller: RefCell::new(crate::api::globals::save_abort_controller(ctx)?),
     dispatches: RefCell::new(HashMap::new()),
     update_dispatches: RefCell::new(HashMap::new()),
     send_dispatches: RefCell::new(HashMap::new()),

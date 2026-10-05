@@ -10,7 +10,7 @@ fn html(text: &str) -> TextWithEntities {
 }
 
 fn thtml(text: &str) -> TextWithEntities {
-  parse(true, &[text], &[])
+  parse(true, &[dedent(&[text])[0].as_str()], &[])
 }
 
 fn check(result: TextWithEntities, expected_text: &str, expected: &[Entity]) {
@@ -488,7 +488,9 @@ fn thtml_preserves_whitespace_and_dedents() {
   );
   check(thtml("hello  <b>bold</b>  world"), "hello  bold  world", &[entity(EntityKind::Bold, 7, 4)]);
   // the part after an interpolation continues its line, so the shared indent is not taken off it
-  check(parse(true, &["\n    a ", " b\n    c"], &[Sub::Text("X".into())]), "a X b\nc", &[]);
+  let dedented = dedent(&["\n    a ", " b\n    c"]);
+  let parts: Vec<&str> = dedented.iter().map(String::as_str).collect();
+  check(parse(true, &parts, &[Sub::Text("X".into())]), "a X b\nc", &[]);
   check(thtml("hello<br>world"), "hello\nworld", &[]);
   check(thtml("hello&nbsp;&nbsp;world"), "hello  world", &[]);
 }

@@ -1713,6 +1713,69 @@ declare namespace inu {
   /** Register a profile action, shown in the profile hamburger menu */
   function registerProfileAction(options: ActionOptions<ChatActionContext>): Disposer
 
+  /** A request to {@link TranslationProvider} */
+  interface TranslationRequest<T> {
+    /**
+     * The texts the provider was asked to translate.
+     *
+     * More than one texts can be passed at once,
+     * and the response should return the translations in the same order
+     */
+    readonly texts: readonly T[]
+    /**
+     * Detected language for each text (in order), such as `en`.
+     *
+     * `null` when the app does not know it
+     */
+    readonly from: readonly (string | null)[]
+    /** Language code to translate into, such as `en` or `zh-CN` */
+    readonly to: string
+    /**
+     * The tone the user picked when translating their own text before sending it, if not neutral
+     * (can be ignored if the provider doesn't support it)
+     */
+    readonly tone?: 'formal' | 'casual'
+    /** Abort signal that should be used for `fetch`-es inside the provider */
+    readonly signal: AbortSignal
+  }
+
+  type TranslationProvider = {
+    /** ID of the provider. Used by the picker, keep it stable across versions */
+    id: string
+    /** Display name of the provider */
+    name: string
+  } & (
+    | {
+      /**
+       * Format of the input and output texts
+       *
+       * - `'plain'` (default): plain strings in and out, formatting is dropped
+       * - `'html'`: Telegram's HTML subset with whitespace kept as written (see {@link utils.thtml}), recommended for services that correctly keep markup
+       */
+      format?: 'plain' | 'html'
+      translate(request: TranslationRequest<string>): MaybePromise<string[]>
+    }
+    | {
+      /**
+       * Format of the input and output texts
+       *
+       * - `'entities'`: Telegram's native `TextWithEntities` format, `InputText` out
+       */
+      format: 'entities'
+      translate(request: TranslationRequest<TextWithEntities>): MaybePromise<InputText[]>
+    }
+  )
+
+  /**
+   * Register a translation provider, which can be chosen by the user in Translator settings.
+   *
+   * When the provider is selected, every translation request will be forwarded to the `translate`
+   * method of the provider.
+   *
+   * **Limits: 30 s per request.**
+   */
+  function registerTranslationProvider(provider: TranslationProvider): Disposer
+
   /** Quoted part of a replied-to message */
   interface ReplyQuote extends TextWithEntities {
     /** Where the quote starts in the replied-to message's text, in UTF-16 code units */

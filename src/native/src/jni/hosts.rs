@@ -15,6 +15,7 @@ use crate::api::telegram::writes::WritesHost;
 use crate::api::timers::TimerHost;
 use crate::api::tl::proxy::{TlHost, ORDINAL_FALLBACK};
 use crate::api::tl::utils::UtilsHost;
+use crate::api::translation::TranslationHost;
 use crate::api::ui::actions::ActionHost;
 use crate::api::ui::dialogs::DialogHost;
 use crate::api::ui::files::FilesHost;
@@ -113,6 +114,24 @@ impl RpcHost for JniBridge {
 
   fn on_send_verdict(&self, dispatch_id: i64, verdict: &str) {
     self.call_void("interceptSendMessage", self.on_send_verdict, &[Arg::Long(dispatch_id), Arg::Str(verdict)]);
+  }
+}
+
+impl TranslationHost for JniBridge {
+  fn translation_register(&self, token: u32, id: &str, name: &str) -> Option<String> {
+    self.call_refusal(
+      "registerTranslationProvider",
+      self.on_translation_register,
+      &[Arg::Int(token as i32), Arg::Str(id), Arg::Str(name)],
+    )
+  }
+
+  fn translation_unregister(&self, token: u32) {
+    self.call_void("registerTranslationProvider", self.on_translation_unregister, &[Arg::Int(token as i32)]);
+  }
+
+  fn translation_result(&self, dispatch_id: i64, wire: &str) {
+    self.call_void("translate", self.on_translation_result, &[Arg::Long(dispatch_id), Arg::Str(wire)]);
   }
 }
 

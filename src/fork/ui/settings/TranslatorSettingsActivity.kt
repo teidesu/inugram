@@ -4,12 +4,14 @@ import android.view.View
 import desu.inugram.InuConfig
 import desu.inugram.SearchRegistry
 import desu.inugram.helpers.InuUtils
+import desu.inugram.helpers.plugins.telegram.PluginTranslation
+import desu.inugram.helpers.translate.TranslationProviderHelper
 import desu.inugram.ui.settings.TranslationTargetActivity
+import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.MessagesController
 import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.R
-import org.telegram.messenger.UserConfig
 import org.telegram.messenger.Utilities
 import org.telegram.ui.Cells.TextCheckCell
 import org.telegram.ui.Components.TranslateAlert2
@@ -31,6 +33,23 @@ class TranslatorSettingsActivity : SettingsPageActivity() {
 
     override fun fillItems(items: ArrayList<UItem>, adapter: UniversalAdapter) {
         items.add(
+            UItem.asButton(
+                BUTTON_PROVIDER,
+                LocaleController.getString(R.string.InuTranslationProvider),
+                providerLabel(),
+            )
+        )
+        items.add(
+            UItem.asShadow(
+                AndroidUtilities.replaceArrows(
+                    AndroidUtilities.replaceSingleTag(LocaleController.getString(R.string.InuTranslationProviderInfo)) {
+                        presentFragment(PluginsActivity())
+                    },
+                    true,
+                )
+            )
+        )
+        items.add(
             UItem.asCheck(
                 TOGGLE_SHOW_TRANSLATE_BUTTON,
                 LocaleController.getString(R.string.ShowTranslateButton),
@@ -41,10 +60,10 @@ class TranslatorSettingsActivity : SettingsPageActivity() {
                 TOGGLE_SHOW_TRANSLATE_CHAT_BUTTON,
                 LocaleController.getString(R.string.ShowTranslateChatButton),
             ).setChecked(translateController.isChatTranslateEnabled)
-                .setLocked(!UserConfig.getInstance(currentAccount).isPremium)
+                .setLocked(!TranslationProviderHelper.canTranslateChats(currentAccount))
                 .onBind(Utilities.Callback { view ->
                     (view as TextCheckCell).setCheckBoxIcon(
-                        if (UserConfig.getInstance(currentAccount).isPremium) 0 else R.drawable.permission_locked
+                        if (TranslationProviderHelper.canTranslateChats(currentAccount)) 0 else R.drawable.permission_locked
                     )
                 })
         )
@@ -124,7 +143,7 @@ class TranslatorSettingsActivity : SettingsPageActivity() {
 
             TOGGLE_SHOW_TRANSLATE_CHAT_BUTTON -> {
                 val new = !translateController.isChatTranslateEnabled
-                if (new && !UserConfig.getInstance(currentAccount).isPremium) {
+                if (new && !TranslationProviderHelper.canTranslateChats(currentAccount)) {
                     showDialog(
                         PremiumFeatureBottomSheet(
                             this,
@@ -142,8 +161,35 @@ class TranslatorSettingsActivity : SettingsPageActivity() {
 
             BUTTON_DO_NOT_TRANSLATE -> presentFragment(RestrictedLanguagesSelectActivity())
 
+            BUTTON_PROVIDER -> showProviderDialog()
+
             BUTTON_TARGET_LANG -> presentFragment(TranslationTargetActivity())
         }
+    }
+
+    private fun showProviderDialog() {
+        val providers = PluginTranslation.providers
+        val selected = InuConfig.TRANSLATION_PROVIDER.value
+        val items = listOf(RadioDialogBuilder.Item(LocaleController.getString(R.string.InuTranslationProviderTelegram))) +
+            providers.map { RadioDialogBuilder.Item(it.name, LocaleController.formatString(R.string.InuTranslationProviderFromPlugin, it.session.manifest.name)) }
+        val selectedIndex = if (selected.isEmpty()) 0 else providers.indexOfFirst { it.key == selected }.let { if (it < 0) -1 else it + 1 }
+        val dialog = RadioDialogBuilder(context, resourceProvider)
+            .setTitle(LocaleController.getString(R.string.InuTranslationProvider))
+            .setItems(items, selectedIndex) { _, index ->
+                InuConfig.TRANSLATION_PROVIDER.value = if (index == 0) "" else providers[index - 1].key
+                listView?.adapter?.update(true)
+                NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.updateSearchSettings)
+            }
+            .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
+            .create()
+        showDialog(dialog)
+    }
+
+    private fun providerLabel(): String {
+        val selected = InuConfig.TRANSLATION_PROVIDER.value
+        if (selected.isEmpty()) return LocaleController.getString(R.string.InuTranslationProviderTelegram)
+        return PluginTranslation.findProvider(selected)?.name
+            ?: LocaleController.getString(R.string.InuTranslationProviderUnavailable)
     }
 
     private fun targetLangLabel(): String {
@@ -172,6 +218,7 @@ class TranslatorSettingsActivity : SettingsPageActivity() {
         private val TOGGLE_SHOW_TRANSLATE_CHAT_BUTTON = InuUtils.generateId()
         private val BUTTON_DO_NOT_TRANSLATE = InuUtils.generateId()
         private val BUTTON_TARGET_LANG = InuUtils.generateId()
+        private val BUTTON_PROVIDER = InuUtils.generateId()
 
         @JvmField val PAGE = SearchRegistry.Page(
             slug = "translator",
@@ -179,6 +226,7 @@ class TranslatorSettingsActivity : SettingsPageActivity() {
             iconRes = R.drawable.msg_translate,
             factory = ::TranslatorSettingsActivity,
             entries = listOf(
+                SearchRegistry.Entry("translation-provider", R.string.InuTranslationProvider, BUTTON_PROVIDER),
                 SearchRegistry.Entry("show-translate-button", R.string.ShowTranslateButton, TOGGLE_SHOW_TRANSLATE_BUTTON),
                 SearchRegistry.Entry("show-translate-chat-button", R.string.ShowTranslateChatButton, TOGGLE_SHOW_TRANSLATE_CHAT_BUTTON),
                 SearchRegistry.Entry("translation-target", R.string.InuTranslationTarget, BUTTON_TARGET_LANG),
