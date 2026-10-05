@@ -6,6 +6,15 @@ Inugram is a **patchset**, not a fork. `worktree/` is stock Telegram with stgit
 patches applied. Fork sources are symlinked into it; `patches/` and `series` are
 exports, never the source of truth.
 
+Additionally, a separate checkout is prepared by `setup --pluginless` in `./worktree-pluginless/`.
+As the name suggests, it is the worktree excluding the Inugram plugin engine (specifically, the `plugins.patch` patch).
+In most cases, it should not be used for development, and is only used for CI builds.
+
+Setup writes the variant to ignored `inu-build.properties`; Android code reads
+`BuildConfig.INU_PLUGINLESS`. Gradle preprocesses `src/fork` through the
+`TMessagesProj/src/inu/kotlin` link into `build/generated/inu/kotlin` for both builds.
+Use `// #if PLUGINS`, `// #else`, and `// #endif` for conditional Kotlin; never edit generated output.
+
 `src/` is organized by role:
 
 | Directory | Purpose |
@@ -45,6 +54,7 @@ Explicit user instructions override these defaults.
 - Never edit `TLRPC.java`, stock database schema, or `LAST_DB_VERSION`.
 - Debug logs use `android.util.Log.d`, not `FileLog`. Prefer non-`_solar` icons.
 - Use `rg` to locate symbols; read small ranges in stock files over 2k lines.
+- When doing changes near the lines touched by `plugins.patch`, prefer putting them *below* the plugins patch in the stack, so that the patch can be removed without conflicts.
 
 ## Stock patches and helpers
 
@@ -142,6 +152,9 @@ crossing queues needs `disableFree` plus exactly one later free. Plugin-originat
 interceptors; interception runs after local send side effects, so a drop must unwind all of them.
 Host code logs through `PluginLog`, never `Log`.
 
+Keep all plugin-related code under `src/fork/helpers/plugins/`,
+and references to it gated using `#if PLUGINS` / `#endif`, for the pluginless build.
+
 ## Checks
 
 Run checks relevant to the change; no build for documentation-only edits.
@@ -149,6 +162,7 @@ Run checks relevant to the change; no build for documentation-only edits.
 | Change | Command |
 | --- | --- |
 | Android code | `pnpm run build-debug` |
+| Pluginless Android code | `pnpm run build-debug-pluginless` |
 | Plugin contract/bridge | `pnpm run typecheck-plugins` |
 | Rust engine | `cd src/native && cargo check` / `cargo test` |
 | JVM core | `cd worktree && ./gradlew :InuCore:test` |

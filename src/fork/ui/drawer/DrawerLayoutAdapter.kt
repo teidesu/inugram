@@ -8,7 +8,9 @@ import desu.inugram.helpers.dialogs.AccountOrderHelper
 import desu.inugram.helpers.dialogs.DialogsFabHelper
 import desu.inugram.helpers.dialogs.DrawerHelper
 import desu.inugram.helpers.dialogs.PullActionHelper
+// #if PLUGINS
 import desu.inugram.helpers.plugins.ui.PluginActions
+// #endif
 import desu.inugram.helpers.security.PasscodeHelper
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.LocaleController
@@ -230,6 +232,7 @@ class DrawerLayoutAdapter(
         items.add(Item(ITEM_PROXY, LocaleController.getString(R.string.ProxySettings), R.drawable.outline_shield_check))
         items.add(Item(8, LocaleController.getString(R.string.Settings), R.drawable.msg_settings_old))
 
+        // #if PLUGINS
         val pluginRows = DrawerHelper.globalActionRows
         if (pluginRows.isNotEmpty()) {
             items.add(null)
@@ -237,6 +240,7 @@ class DrawerLayoutAdapter(
                 items.add(Item(PluginActions.optionIdFor(row.key), row.text, R.drawable.msg_settings_old))
             }
         }
+        // #endif
     }
 
     companion object {

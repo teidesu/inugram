@@ -17,12 +17,15 @@ import desu.inugram.helpers.InuUtils
 import desu.inugram.helpers.menu.MenuOrderConfig
 import desu.inugram.helpers.menu.MenuOrderEntry
 import desu.inugram.helpers.menu.MenuOrderItem
+// #if PLUGINS
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.ui.ActionKey
 import desu.inugram.helpers.plugins.ui.ActionRow
 import desu.inugram.helpers.plugins.ui.PluginActions
 import desu.inugram.helpers.plugins.ui.PluginIcons
+// #endif
 import org.telegram.messenger.AndroidUtilities
+import org.telegram.messenger.BuildConfig
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
 import org.telegram.ui.ActionBar.Theme
@@ -36,15 +39,19 @@ import org.telegram.ui.Components.UniversalAdapter
 abstract class MenuOrderActivity<I : MenuOrderItem> : SettingsPageActivity() {
     protected var entries = config.value.toMutableList()
     protected val rows = HashMap<I, MenuOrderRow>()
+    // #if PLUGINS
     private val pluginRows = HashMap<ActionKey, MenuOrderRow>()
     private var renderedPluginRows = emptyList<ActionRow>()
+    // #endif
     private val reorderHandlers = HashMap<Int, (List<UItem>) -> Unit>()
 
     protected abstract val config: MenuOrderConfig<I>
     protected abstract val infoStringRes: Int
     protected abstract val headerStringRes: Int
     protected abstract val resetStringRes: Int
+    // #if PLUGINS
     protected open val pluginActionKind: Int? = null
+    // #endif
 
     data class SubCell(
         val label: CharSequence,
@@ -52,6 +59,8 @@ abstract class MenuOrderActivity<I : MenuOrderItem> : SettingsPageActivity() {
         val note: CharSequence? = null,
         val onClick: (MenuOrderRow) -> Unit,
     )
+
+    protected fun isAvailable(item: I): Boolean = !BuildConfig.INU_PLUGINLESS || item.key != "actions"
 
     /** override to attach a long-tap sub-cell to a row (e.g. Reply / Forward long-tap pickers) */
     protected open fun subCell(item: I): SubCell? = null
@@ -74,6 +83,7 @@ abstract class MenuOrderActivity<I : MenuOrderItem> : SettingsPageActivity() {
         listView.setReorderLongPressEnabled(false)
         listView.listenReorder { id, items -> reorderHandlers[id]?.invoke(items) }
         listView.allowReorder(true)
+        // #if PLUGINS
         if (InuConfig.PLUGINS_ENABLED.value) {
             pluginActionKind?.let { kind ->
                 PluginActions.renderSettings(kind) { actionRows ->
@@ -82,30 +92,40 @@ abstract class MenuOrderActivity<I : MenuOrderItem> : SettingsPageActivity() {
                 }
             }
         }
+        // #endif
         return view
     }
 
     override fun fillItems(items: ArrayList<UItem>, adapter: UniversalAdapter) {
         fillMainSection(items, adapter)
+        // #if PLUGINS
         fillPluginSection(items, adapter)
+        // #endif
         fillResetSection(items, adapter)
     }
 
     protected fun fillMainSection(items: ArrayList<UItem>, adapter: UniversalAdapter) {
         items.add(UItem.asShadow(LocaleController.getString(infoStringRes)))
         items.add(UItem.asHeader(LocaleController.getString(headerStringRes)))
+        // #if PLUGINS
         val kind = pluginActionKind
         val showActions = kind == null || InuConfig.PLUGINS_ENABLED.value &&
             renderedPluginRows.any { !PluginActions.isPinned(it.key) }
+        // #else
+        val showActions = false
+        // #endif
         val builtIns = entries.filter {
             !it.bottom && (it.item.key != "actions" || showActions)
         }
+        // #if PLUGINS
         val pinned = if (kind == null || !InuConfig.PLUGINS_ENABLED.value) {
             emptyList()
         } else {
             PluginActions.orderRows(kind, renderedPluginRows, true)
         }
+        // #endif
         openReorderSection(adapter, toBottom = false) { applyMainReorder(it) }
+        // #if PLUGINS
         if (kind == null) {
             for (entry in builtIns) items.add(buildRow(entry))
         } else {
@@ -118,9 +138,13 @@ abstract class MenuOrderActivity<I : MenuOrderItem> : SettingsPageActivity() {
                 }
             }
         }
+        // #else
+        for (entry in builtIns) items.add(buildRow(entry))
+        // #endif
         adapter.reorderSectionEnd()
     }
 
+    // #if PLUGINS
     protected fun fillPluginSection(items: ArrayList<UItem>, adapter: UniversalAdapter) {
         val kind = pluginActionKind ?: return
         if (!InuConfig.PLUGINS_ENABLED.value) return
@@ -134,6 +158,8 @@ abstract class MenuOrderActivity<I : MenuOrderItem> : SettingsPageActivity() {
         for (row in actionRows) items.add(buildPluginRow(row))
         adapter.reorderSectionEnd()
     }
+
+    // #endif
 
     protected fun fillResetSection(items: ArrayList<UItem>, adapter: UniversalAdapter) {
         items.add(UItem.asShadow(SHADOW_END, null))
@@ -164,17 +190,22 @@ abstract class MenuOrderActivity<I : MenuOrderItem> : SettingsPageActivity() {
     protected fun applyReorder(items: List<UItem>, toBottom: Boolean) {
         val byItem = entries.associateBy { it.item }
         val reordered = items.mapNotNull { byItem[it.`object` as? I] }
-        if (reordered.size != entries.count { it.bottom == toBottom }) return
-        val others = entries.filter { it.bottom != toBottom }
-        entries = (if (toBottom) others + reordered else reordered + others).toMutableList()
+        val visible = entries.filter { it.bottom == toBottom && isAvailable(it.item) }
+        if (reordered.size != visible.size) return
+        val next = reordered.iterator()
+        entries = entries.map { if (it in visible) next.next() else it }.toMutableList()
         config.value = entries
     }
 
     @Suppress("UNCHECKED_CAST")
     private fun applyMainReorder(items: List<UItem>) {
         val reordered = items.mapNotNull { it.`object` as? I }
+        // #if PLUGINS
         val showActions = pluginActionKind == null || InuConfig.PLUGINS_ENABLED.value &&
             renderedPluginRows.any { !PluginActions.isPinned(it.key) }
+        // #else
+        val showActions = false
+        // #endif
         val visible = entries.filter {
             !it.bottom && (it.item.key != "actions" || showActions)
         }
@@ -185,6 +216,7 @@ abstract class MenuOrderActivity<I : MenuOrderItem> : SettingsPageActivity() {
             if (!it.bottom && it in visible) reorderedEntries.next() else it
         }.toMutableList()
         config.value = entries
+        // #if PLUGINS
         val kind = pluginActionKind ?: return
         PluginActions.setMainOrder(kind, items.mapNotNull {
             when (val value = it.`object`) {
@@ -193,6 +225,7 @@ abstract class MenuOrderActivity<I : MenuOrderItem> : SettingsPageActivity() {
                 else -> null
             }
         })
+        // #endif
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -227,6 +260,7 @@ abstract class MenuOrderActivity<I : MenuOrderItem> : SettingsPageActivity() {
         return uitem
     }
 
+    // #if PLUGINS
     protected fun buildPluginRow(action: ActionRow): UItem {
         val row = pluginRows.getOrPut(action.key) {
             MenuOrderRow(context, PLUGIN_ROW_HEIGHT_DP).apply {
@@ -263,14 +297,19 @@ abstract class MenuOrderActivity<I : MenuOrderItem> : SettingsPageActivity() {
         }
     }
 
+    // #endif
+
     override fun onClick(item: UItem, view: View, position: Int, x: Float, y: Float) {
         if (item.id == BUTTON_RESET) {
             config.resetToDefault()
+            // #if PLUGINS
             pluginActionKind?.let(PluginActions::resetSettings)
+            // #endif
             entries = config.default.toMutableList()
             listView.adapter.update(true)
             return
         }
+        // #if PLUGINS
         @Suppress("UNCHECKED_CAST")
         val actionKey = item.`object` as? ActionKey
         if (actionKey != null) {
@@ -279,6 +318,7 @@ abstract class MenuOrderActivity<I : MenuOrderItem> : SettingsPageActivity() {
             pluginRows[actionKey]?.setChecked(PluginActions.isEnabled(actionKey))
             return
         }
+        // #endif
         val key = item.`object` as? I ?: return
         val row = rows[key]
         if (row != null && row.isInSubCell(y)) {
@@ -395,18 +435,23 @@ class MenuOrderRow(context: Context, val mainHeightDp: Int = 50) : LinearLayout(
     }
 
     fun bind(item: MenuOrderItem) {
+        // #if PLUGINS
         PluginIcons.clearIcon(icon)
+        // #endif
         icon.setImageResource(item.iconRes)
         text.text = LocaleController.getString(item.labelRes)
         subtitle.visibility = View.GONE
     }
 
+    // #if PLUGINS
     fun bind(label: CharSequence, subtitle: CharSequence, iconSpec: String?, owner: QuickJs, fallbackIcon: Int) {
         if (!PluginIcons.setIcon(icon, iconSpec, owner)) icon.setImageResource(fallbackIcon)
         text.text = label
         this.subtitle.text = subtitle
         this.subtitle.visibility = View.VISIBLE
     }
+
+    // #endif
 
     fun setChecked(checked: Boolean) {
         switch.setChecked(checked, isAttachedToWindow)

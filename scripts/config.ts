@@ -44,13 +44,14 @@ export interface ForkSyncFile {
   target: string
   directory?: boolean
   replace?: boolean
+  pluginsOnly?: boolean
 }
 
 export const forkSyncFiles: ForkSyncFile[] = [
   // code
   {
     source: 'src/fork',
-    target: 'TMessagesProj/src/main/kotlin/desu/inugram',
+    target: 'TMessagesProj/src/inu/kotlin/desu/inugram',
     directory: true,
   },
   {
@@ -62,6 +63,7 @@ export const forkSyncFiles: ForkSyncFile[] = [
   // `./gradlew :TMessagesProj:connectedDebugAndroidTest`
   {
     source: 'src/test/kotlin',
+    pluginsOnly: true,
     target: 'TMessagesProj/src/androidTest/kotlin/desu/inugram',
     directory: true,
   },
@@ -69,12 +71,14 @@ export const forkSyncFiles: ForkSyncFile[] = [
   // only - the app itself ships none of them, so a debug build starts with no plugins installed
   {
     source: 'src/test/plugins/*',
+    pluginsOnly: true,
     target: 'TMessagesProj/src/androidTest/assets/inu_plugins',
   },
   // src/test/kotlin is synced into a kotlin source root, so what the suite needs as a *file* is
   // kept beside it rather than in it
   {
     source: 'src/test/assets/*.{dex,gif,json}',
+    pluginsOnly: true,
     target: 'TMessagesProj/src/androidTest/assets/inu',
   },
   {
@@ -86,6 +90,7 @@ export const forkSyncFiles: ForkSyncFile[] = [
   // by a cargo-ndk Exec task wired in TMessagesProj_App/build.gradle
   {
     source: 'src/native',
+    pluginsOnly: true,
     target: 'TMessagesProj_App/native',
     directory: true,
   },
@@ -95,6 +100,7 @@ export const forkSyncFiles: ForkSyncFile[] = [
   // classes at install, through profileinstaller; the debuggable variant ignores it
   {
     source: 'src/profile/baseline-prof.txt',
+    pluginsOnly: true,
     target: 'TMessagesProj_App/src/main',
   },
   {

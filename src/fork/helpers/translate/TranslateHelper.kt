@@ -23,7 +23,9 @@ import org.telegram.messenger.UserConfig
 import org.telegram.tgnet.ConnectionsManager
 import org.telegram.tgnet.TLRPC
 import org.telegram.ui.Cells.TextSelectionHelper
+// #if PLUGINS
 import desu.inugram.helpers.plugins.ui.PluginChatHistory
+// #endif
 import org.telegram.ui.ChatActivity
 import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.ColoredImageSpan
@@ -123,7 +125,9 @@ object TranslateHelper {
         toLang: String?,
     ): Boolean {
         if (!InuConfig.IN_PLACE_TRANSLATION.value) return false
+        // #if PLUGINS
         if (activity.chatMode == ChatActivity.inu_MODE_PLUGIN_HISTORY) return false
+        // #endif
         if (selected == null || toLang == null) return false
         if (selected.isPoll) return false
 
@@ -160,10 +164,16 @@ object TranslateHelper {
         val toLangDefault = LocaleController.getInstance().currentLocale.language
         val messageIdToTranslate = intArrayOf(selected.id)
 
+        // #if PLUGINS
         val pluginHistory = activity.chatMode == ChatActivity.inu_MODE_PLUGIN_HISTORY
+        // #else
+        val pluginHistory = false
+        // #endif
         val inputPeer = if (selected.isPoll || selected.isVoiceTranscriptionOpen || selected.isSponsored ||
-            selected.scheduled || activity.chatMode == ChatActivity.MODE_QUICK_REPLIES ||
-            pluginHistory && !PluginChatHistory.showsInChat(activity, selected)
+            selected.scheduled || activity.chatMode == ChatActivity.MODE_QUICK_REPLIES
+            // #if PLUGINS
+            || pluginHistory && !PluginChatHistory.showsInChat(activity, selected)
+            // #endif
         ) {
             null
         } else {

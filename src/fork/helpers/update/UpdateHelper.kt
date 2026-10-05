@@ -45,7 +45,10 @@ object UpdateHelper {
             R.string.InuVersion,
             packageInfo.versionCode,
             stockVersionName,
-            BuildConfig.STOCK_VERSION_CODE
+            BuildConfig.STOCK_VERSION_CODE,
+            LocaleController.getString(
+                if (BuildConfig.INU_PLUGINLESS) R.string.InuBuildPluginless else R.string.InuBuildFull
+            )
         )
     }
 

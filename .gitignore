@@ -1,5 +1,6 @@
 node_modules/
 worktree/
+worktree-pluginless/
 .DS_Store
 src/core/build
 sdk/types/android.tl.d.ts

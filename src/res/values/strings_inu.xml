@@ -521,7 +521,9 @@
     <string name="InuFormattingPopupDivider">——————</string>
     <string name="InuCut">Cut</string>
     <string name="InuCodeLanguage">Code language</string>
-    <string name="InuVersion">Inugram v%1$s (based on %2$s, build %3$s)</string>
+    <string name="InuVersion">Inugram v%1$s (%4$s, based on %2$s, build %3$s)</string>
+    <string name="InuBuildFull">Full</string>
+    <string name="InuBuildPluginless">Pluginless</string>
 
     <string name="InuSearchFilter">Filter by media</string>
     <string name="InuSearchFilterPhotos">Photos</string>

@@ -32,7 +32,7 @@ index 0000000..0000000 100644
 -    implementation 'com.google.android.recaptcha:recaptcha:18.7.1'
  }
  
- android {
+ def inuSourceDir = file('src/inu/kotlin')
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/CaptchaController.java b/TMessagesProj/src/main/java/org/telegram/messenger/CaptchaController.java
 deleted file mode 100644
 index 0000000..0000000

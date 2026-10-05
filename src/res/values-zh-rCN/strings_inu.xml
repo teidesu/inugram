@@ -409,7 +409,7 @@
     <string name="InuFormattingPopupDivider">——————</string>
     <string name="InuCut">剪切</string>
     <string name="InuCodeLanguage">代码语言</string>
-    <string name="InuVersion">Inugram v%1$s (基于 %2$s, 构建 %3$s)</string>
+    <string name="InuVersion">Inugram v%1$s (%4$s, 基于 %2$s, 构建 %3$s)</string>
 
     <string name="InuSearchFilter">按媒体过滤</string>
     <string name="InuSearchFilterPhotos">照片</string>

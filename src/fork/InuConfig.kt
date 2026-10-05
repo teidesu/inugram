@@ -8,7 +8,9 @@ import desu.inugram.helpers.chat.PinnedReactionsHelper
 import desu.inugram.helpers.font.FontConfig
 import desu.inugram.helpers.menu.ChatMenuConfig
 import desu.inugram.helpers.menu.MessageMenuConfig
+// #if PLUGINS
 import desu.inugram.helpers.plugins.ui.PluginActionSettingsConfig
+// #endif
 import desu.inugram.ui.FormattingPopupConfig
 
 object InuConfig {
@@ -761,8 +763,10 @@ object InuConfig {
     @JvmField
     val MESSAGE_MENU_ITEMS = MessageMenuConfig("message_menu_items")
 
+    // #if PLUGINS
     @JvmField
     val MESSAGE_PLUGIN_ACTIONS = PluginActionSettingsConfig("message_plugin_actions")
+    // #endif
 
     @JvmField
     val MESSAGE_MENU_BOTTOM_ROW = BoolItem("message_menu_bottom_row", false)
@@ -774,8 +778,10 @@ object InuConfig {
     @JvmField
     val CHAT_MENU_ITEMS = ChatMenuConfig("chat_menu_items")
 
+    // #if PLUGINS
     @JvmField
     val CHAT_PLUGIN_ACTIONS = PluginActionSettingsConfig("chat_plugin_actions")
+    // #endif
 
     class ForwardLongTapItem : IntItem("forward_long_tap_action", CHOOSE_MODE) {
         companion object {

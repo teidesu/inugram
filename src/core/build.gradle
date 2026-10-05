@@ -1,5 +1,7 @@
 apply plugin: 'org.jetbrains.kotlin.jvm'
 
+layout.buildDirectory = rootProject.layout.buildDirectory.dir('InuCore')
+
 repositories {
     mavenCentral()
 }
@@ -31,3 +33,9 @@ test {
     useJUnit()
 }
 
+
+if (rootProject.ext.inuPluginless) {
+    sourceSets.main.kotlin.exclude('desu/inugram/core/plugins/**')
+    sourceSets.main.resources.exclude('tl_tables.txt')
+    sourceSets.test.kotlin.exclude('desu/inugram/core/plugins/**')
+}

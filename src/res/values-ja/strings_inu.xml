@@ -410,7 +410,7 @@
     <string name="InuFormattingPopupDivider">——————</string>
     <string name="InuCut">切り取り</string>
     <string name="InuCodeLanguage">コードの言語</string>
-    <string name="InuVersion">Inugram v%1$s (%2$s ベース, ビルド %3$s)</string>
+    <string name="InuVersion">Inugram v%1$s (%4$s, %2$s ベース, ビルド %3$s)</string>
 
     <string name="InuSearchFilter">メディアで絞り込み</string>
     <string name="InuSearchFilterPhotos">写真</string>

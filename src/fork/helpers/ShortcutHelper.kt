@@ -7,7 +7,9 @@ import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
 import desu.inugram.InuConfig
+// #if PLUGINS
 import desu.inugram.helpers.plugins.PluginManager
+// #endif
 import desu.inugram.helpers.security.ParanoiaHelper
 import desu.inugram.helpers.security.PasscodeHelper
 import desu.inugram.ui.AccountPickerActivity
@@ -64,6 +66,7 @@ object ShortcutHelper {
             shouldShow = { InuConfig.ACCOUNT_SWITCH_SHORTCUT.value && countSelectableAccounts() > 1 },
             onClick = { activity -> showAccountPicker(activity) },
         ),
+        // #if PLUGINS
         Entry(
             id = "inu_plugins_safe_mode",
             action = PluginManager.SAFE_MODE_ACTION,
@@ -74,6 +77,7 @@ object ShortcutHelper {
             shouldShow = PluginManager::isEngineEnabled,
             onClick = { PluginManager.requestSafeMode() },
         ),
+        // #endif
     )
 
     @JvmStatic

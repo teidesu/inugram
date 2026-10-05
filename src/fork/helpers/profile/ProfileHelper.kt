@@ -15,14 +15,16 @@ import android.widget.Toast
 import androidx.collection.LongSparseArray
 import androidx.core.graphics.ColorUtils
 import desu.inugram.InuConfig
+// #if PLUGINS
 import desu.inugram.helpers.plugins.ui.ActionKey
 import desu.inugram.helpers.plugins.ui.ActionRow
+import desu.inugram.helpers.plugins.ui.ActionSurface
+import desu.inugram.helpers.plugins.ui.PluginActions
+// #endif
 import desu.inugram.helpers.WebAppHelper
 import desu.inugram.helpers.chat.BlockedMessagesHelper
 import desu.inugram.helpers.chat.ChatHelper
 import desu.inugram.helpers.chat.ForumDisplayHelper
-import desu.inugram.helpers.plugins.ui.ActionSurface
-import desu.inugram.helpers.plugins.ui.PluginActions
 import java.util.Date
 import java.util.WeakHashMap
 import org.json.JSONArray
@@ -257,9 +259,12 @@ object ProfileHelper {
                 "Debug: clear profile cache",
             )
         }
+        // #if PLUGINS
         addPluginItems(otherItem, currentAccount, dialogId)
+        // #endif
     }
 
+    // #if PLUGINS
     // --- plugin rows (inu.registerProfileAction) ---
 
     /**
@@ -335,6 +340,8 @@ object ProfileHelper {
         return true
     }
 
+    // #endif
+
     private fun canHideMessagesFrom(currentAccount: Int, dialogId: Long): Boolean {
         if (dialogId > 0) return dialogId != UserConfig.getInstance(currentAccount).clientUserId
         val chat = MessagesController.getInstance(currentAccount).getChat(-dialogId)
@@ -349,7 +356,9 @@ object ProfileHelper {
 
     @JvmStatic
     fun handleMenuClick(id: Int, otherItem: ActionBarMenuItem?, currentAccount: Int, dialogId: Long): Boolean {
+        // #if PLUGINS
         if (id >= PluginActions.OPTION_BASE) return dispatchPluginItem(id, otherItem, currentAccount, dialogId)
+        // #endif
         when (id) {
             ACTION_TOGGLE_HIDE_WALLPAPER -> ChatHelper.toggleRemoveWallpaper(currentAccount, dialogId)
             ACTION_TOGGLE_HIDE_THEME -> ChatHelper.toggleRemoveTheme(currentAccount, dialogId)

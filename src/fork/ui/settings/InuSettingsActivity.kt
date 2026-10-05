@@ -72,6 +72,7 @@ class InuSettingsActivity : SettingsPageActivity() {
                 LocaleController.getString(R.string.InuTranslator)
             )
         )
+        // #if PLUGINS
         items.add(
             UItem.asButton(
                 BUTTON_PLUGINS,
@@ -79,6 +80,7 @@ class InuSettingsActivity : SettingsPageActivity() {
                 addExperimentalSpan(LocaleController.getString(R.string.InuPlugins))
             )
         )
+        // #endif
         items.add(
             UItem.asButton(
                 BUTTON_PRIVACY,
@@ -115,7 +117,9 @@ class InuSettingsActivity : SettingsPageActivity() {
             BUTTON_ANNOYANCES -> presentFragment(AnnoyancesSettingsActivity())
             BUTTON_BEHAVIOR -> presentFragment(BehaviorSettingsActivity())
             BUTTON_TRANSLATOR -> presentFragment(TranslatorSettingsActivity())
+            // #if PLUGINS
             BUTTON_PLUGINS -> presentFragment(PluginsActivity())
+            // #endif
             BUTTON_PRIVACY -> presentFragment(PrivacySecurityActivity())
             BUTTON_ABOUT -> presentFragment(AboutActivity())
             BUTTON_BACKUP -> presentFragment(BackupSettingsActivity())

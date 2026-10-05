@@ -5,7 +5,9 @@ import desu.inugram.InuConfig
 import desu.inugram.helpers.InuUtils
 import desu.inugram.helpers.menu.MenuOrderEntry
 import desu.inugram.helpers.menu.MessageMenuConfig
+// #if PLUGINS
 import desu.inugram.helpers.plugins.ui.PluginActions
+// #endif
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
 import org.telegram.ui.Components.BulletinFactory
@@ -18,7 +20,9 @@ class MessageMenuOrderActivity : MenuOrderActivity<MessageMenuConfig.Item>() {
     override val infoStringRes = R.string.InuMessageMenuOrderInfo
     override val headerStringRes = R.string.InuMessageMenuItems
     override val resetStringRes = R.string.InuMessageMenuReset
+    // #if PLUGINS
     override val pluginActionKind = PluginActions.KIND_MESSAGE
+    // #endif
 
     override fun getTitle(): CharSequence = LocaleController.getString(R.string.InuMessageMenuOrder)
 
@@ -50,7 +54,7 @@ class MessageMenuOrderActivity : MenuOrderActivity<MessageMenuConfig.Item>() {
                 )
             )
             openReorderSection(adapter, toBottom = true)
-            for (entry in entries.filter { it.bottom }) {
+            for (entry in entries.filter { it.bottom && isAvailable(it.item) }) {
                 items.add(buildRow(entry) { row ->
                     if (canToggle(entry)) return@buildRow
                     row.setSwitchVisible(false)
@@ -60,7 +64,9 @@ class MessageMenuOrderActivity : MenuOrderActivity<MessageMenuConfig.Item>() {
             adapter.reorderSectionEnd()
         }
 
+        // #if PLUGINS
         fillPluginSection(items, adapter)
+        // #endif
         fillResetSection(items, adapter)
     }
 
@@ -98,7 +104,7 @@ class MessageMenuOrderActivity : MenuOrderActivity<MessageMenuConfig.Item>() {
     override fun onRowToggle(entry: MenuOrderEntry<MessageMenuConfig.Item>, row: MenuOrderRow?) {
         if (!canToggle(entry)) return
         // bottom row is capped — block re-enabling a slot when there's no room
-        if (!entry.enabled && entry.bottom && entries.count { it.bottom && it.enabled } >= MAX_BOTTOM) {
+        if (!entry.enabled && entry.bottom && entries.count { it.bottom && it.enabled && isAvailable(it.item) } >= MAX_BOTTOM) {
             BulletinFactory.of(this).createErrorBulletin(LocaleController.getString(R.string.InuMenuBottomRowFull)).show()
             return
         }
@@ -117,7 +123,7 @@ class MessageMenuOrderActivity : MenuOrderActivity<MessageMenuConfig.Item>() {
         if (entry.bottom) return false
 
         if (!bottomEnabled()) return false
-        if (entries.count { it.bottom && it.enabled } >= MAX_BOTTOM) {
+        if (entries.count { it.bottom && it.enabled && isAvailable(it.item) } >= MAX_BOTTOM) {
             BulletinFactory.of(this).createErrorBulletin(LocaleController.getString(R.string.InuMenuBottomRowFull)).show()
             return true
         }
@@ -185,7 +191,7 @@ class MessageMenuOrderActivity : MenuOrderActivity<MessageMenuConfig.Item>() {
     private fun bottomGroupLabel(): CharSequence {
         val title = LocaleController.getString(R.string.InuMessageMenuBottomGroup)
         if (!bottomEnabled()) return title
-        val count = entries.count { it.bottom && it.enabled }
+        val count = entries.count { it.bottom && it.enabled && isAvailable(it.item) }
         return "$title · $count/$MAX_BOTTOM"
     }
 

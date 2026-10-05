@@ -4,7 +4,9 @@ import android.view.View
 import desu.inugram.InuConfig
 import desu.inugram.SearchRegistry
 import desu.inugram.helpers.InuUtils
+// #if PLUGINS
 import desu.inugram.helpers.plugins.telegram.PluginTranslation
+// #endif
 import desu.inugram.helpers.translate.TranslationProviderHelper
 import desu.inugram.ui.settings.TranslationTargetActivity
 import org.telegram.messenger.AndroidUtilities
@@ -32,6 +34,7 @@ class TranslatorSettingsActivity : SettingsPageActivity() {
     }
 
     override fun fillItems(items: ArrayList<UItem>, adapter: UniversalAdapter) {
+        // #if PLUGINS
         items.add(
             UItem.asButton(
                 BUTTON_PROVIDER,
@@ -49,6 +52,7 @@ class TranslatorSettingsActivity : SettingsPageActivity() {
                 )
             )
         )
+        // #endif
         items.add(
             UItem.asCheck(
                 TOGGLE_SHOW_TRANSLATE_BUTTON,
@@ -161,12 +165,15 @@ class TranslatorSettingsActivity : SettingsPageActivity() {
 
             BUTTON_DO_NOT_TRANSLATE -> presentFragment(RestrictedLanguagesSelectActivity())
 
+            // #if PLUGINS
             BUTTON_PROVIDER -> showProviderDialog()
+            // #endif
 
             BUTTON_TARGET_LANG -> presentFragment(TranslationTargetActivity())
         }
     }
 
+    // #if PLUGINS
     private fun showProviderDialog() {
         val providers = PluginTranslation.providers
         val selected = InuConfig.TRANSLATION_PROVIDER.value
@@ -191,6 +198,8 @@ class TranslatorSettingsActivity : SettingsPageActivity() {
         return PluginTranslation.findProvider(selected)?.name
             ?: LocaleController.getString(R.string.InuTranslationProviderUnavailable)
     }
+
+    // #endif
 
     private fun targetLangLabel(): String {
         if (!MessagesController.getGlobalMainSettings().contains("translate_to_language")) {
@@ -226,7 +235,9 @@ class TranslatorSettingsActivity : SettingsPageActivity() {
             iconRes = R.drawable.msg_translate,
             factory = ::TranslatorSettingsActivity,
             entries = listOf(
+                // #if PLUGINS
                 SearchRegistry.Entry("translation-provider", R.string.InuTranslationProvider, BUTTON_PROVIDER),
+                // #endif
                 SearchRegistry.Entry("show-translate-button", R.string.ShowTranslateButton, TOGGLE_SHOW_TRANSLATE_BUTTON),
                 SearchRegistry.Entry("show-translate-chat-button", R.string.ShowTranslateChatButton, TOGGLE_SHOW_TRANSLATE_CHAT_BUTTON),
                 SearchRegistry.Entry("translation-target", R.string.InuTranslationTarget, BUTTON_TARGET_LANG),

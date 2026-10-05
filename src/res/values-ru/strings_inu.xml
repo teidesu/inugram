@@ -409,7 +409,7 @@
     <string name="InuFormattingPopupDivider">——————</string>
     <string name="InuCut">Вырезать</string>
     <string name="InuCodeLanguage">Язык кода</string>
-    <string name="InuVersion">Inugram v%1$s (на основе %2$s, сборка %3$s)</string>
+    <string name="InuVersion">Inugram v%1$s (%4$s, на основе %2$s, сборка %3$s)</string>
 
     <string name="InuSearchFilter">Фильтр по медиа</string>
     <string name="InuSearchFilterPhotos">Фото</string>

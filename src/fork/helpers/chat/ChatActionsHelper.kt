@@ -11,15 +11,17 @@ import android.view.View
 import android.widget.FrameLayout
 import androidx.core.content.edit
 import desu.inugram.InuConfig
+// #if PLUGINS
 import desu.inugram.helpers.plugins.ui.ActionKey
 import desu.inugram.helpers.plugins.ui.ActionRow
-import desu.inugram.helpers.menu.ChatMenuConfig
-import desu.inugram.helpers.menu.reorderByMenu
-import desu.inugram.helpers.menu.reorderByKeys
 import desu.inugram.helpers.plugins.ui.ActionSurface
 import desu.inugram.helpers.plugins.ui.MessageActionSource
 import desu.inugram.helpers.plugins.ui.PluginActions
 import desu.inugram.helpers.plugins.ui.PluginIcons
+// #endif
+import desu.inugram.helpers.menu.ChatMenuConfig
+import desu.inugram.helpers.menu.reorderByMenu
+import desu.inugram.helpers.menu.reorderByKeys
 import desu.inugram.helpers.translate.TranslateHelper
 import desu.inugram.ui.showInputDialog
 import java.util.WeakHashMap
@@ -94,6 +96,7 @@ object ChatActionsHelper {
     fun reorder(lazyList: ArrayList<ActionBarMenuItem.Item>) {
         val entries = InuConfig.CHAT_MENU_ITEMS.value
         val enabledRows = reorderByMenu(lazyList, entries) { ChatMenuConfig.Item.forId(it.id) }
+        // #if PLUGINS
         val pluginKeys = enabledRows.mapNotNull { PluginActions.keyForOption(it.id) }
         val order = PluginActions.mainOrder(
             PluginActions.KIND_CHAT,
@@ -104,6 +107,9 @@ object ChatActionsHelper {
             ChatMenuConfig.Item.forId(item.id)?.let { PluginActions.builtInOrderKey(it.key) }
                 ?: PluginActions.keyForOption(item.id)?.let(PluginActions::pluginOrderKey)
         }
+        // #else
+        val ordered = enabledRows
+        // #endif
         lazyList.clear()
         lazyList.addAll(ordered)
     }
@@ -159,9 +165,12 @@ object ChatActionsHelper {
                 LocaleController.getString(R.string.InviteLinks),
             )
         }
+        // #if PLUGINS
         addPluginItems(activity, headerItem)
+        // #endif
     }
 
+    // #if PLUGINS
     // --- plugin rows (inu.registerChatAction) ---
 
     // one entry per open chat; the rows a menu drew are what a click on it resolves against
@@ -352,6 +361,8 @@ object ChatActionsHelper {
         state.swipeBackShown = true
     }
 
+    // #endif
+
     /** the send-button long-press sheet: its fork rows, and the sheet's own `show()` */
     @JvmStatic
     fun showSendPreview(enterView: ChatActivityEnterView, options: ItemOptions, preview: MessageSendPreview) {
@@ -377,6 +388,7 @@ object ChatActionsHelper {
         }
     }
 
+    // #if PLUGINS
     private fun pluginSurface(activity: ChatActivity) = ActionSurface.chat(
         activity.currentAccount,
         activity.dialogId,
@@ -399,9 +411,13 @@ object ChatActionsHelper {
         return true
     }
 
+    // #endif
+
     @JvmStatic
     fun handleClick(id: Int, activity: ChatActivity): Boolean {
+        // #if PLUGINS
         if (id >= PluginActions.OPTION_BASE) return dispatchPluginItem(id, activity)
+        // #endif
         when (id) {
             ACTION_SHOW_PINNED_PANEL -> showPinnedPanel(activity)
             ACTION_RECENT_ACTIONS -> {
@@ -601,6 +617,7 @@ object ChatActionsHelper {
             R.drawable.msg_unpin,
             LocaleController.getString(R.string.UnpinMessage),
         )
+        // #if PLUGINS
         val cells = HashMap<ActionKey, ActionBarMenuSubItem>()
         if (InuConfig.PLUGINS_ENABLED.value) {
             val registered = PluginActions.registeredRows(
@@ -634,6 +651,7 @@ object ChatActionsHelper {
         val pluginMenu = SelectionPluginMenu(overflow, submenu, actionsCell)
         pluginMenu.cells.putAll(cells)
         selectionPluginMenus[activity] = pluginMenu
+        // #endif
         activity.actionModeViews.add(overflow)
     }
 
@@ -681,19 +699,20 @@ object ChatActionsHelper {
         overflow.setSubItemShown(ACTION_SEL_GALLERY, hasMedia)
         overflow.setSubItemShown(ACTION_SEL_PIN, canPin)
         overflow.setSubItemShown(ACTION_SEL_UNPIN, canUnpin)
-        updateSelectionPluginItems(
-            activity,
-            actionMode,
-            overflow,
-            canSave || canForward || canTranslate || hasMedia || canPin || canUnpin,
+        actionMode.setItemVisibility(
+            ACTION_SELECTION_MENU,
+            if (canSave || canForward || canTranslate || hasMedia || canPin || canUnpin) View.VISIBLE else View.GONE,
         )
+        // #if PLUGINS
+        updateSelectionPluginItems(activity, actionMode, overflow)
+        // #endif
     }
 
+    // #if PLUGINS
     private fun updateSelectionPluginItems(
         activity: ChatActivity,
         actionMode: ActionBarMenu,
         overflow: ActionBarMenuItem,
-        builtInsVisible: Boolean,
     ) {
         val state = selectionPluginMenus[activity] ?: return
         state.generation++
@@ -704,7 +723,6 @@ object ChatActionsHelper {
         state.surface = null
         for (key in state.cells.keys) overflow.setSubItemShown(PluginActions.optionIdFor(key), false)
         state.actionsCell.visibility = View.GONE
-        actionMode.setItemVisibility(ACTION_SELECTION_MENU, if (builtInsVisible) View.VISIBLE else View.GONE)
 
         if (!InuConfig.PLUGINS_ENABLED.value) return
         if (!PluginActions.hasRows(PluginActions.KIND_MESSAGE, PluginActions.MESSAGE_PLACEMENT_SELECTION)) return
@@ -761,15 +779,14 @@ object ChatActionsHelper {
                     }
                 }
                 state.actionsCell.visibility = if (submenuRows.isEmpty()) View.GONE else View.VISIBLE
-                actionMode.setItemVisibility(
-                    ACTION_SELECTION_MENU,
-                    if (builtInsVisible || enabled.isNotEmpty()) View.VISIBLE else View.GONE,
-                )
+                if (enabled.isNotEmpty()) actionMode.setItemVisibility(ACTION_SELECTION_MENU, View.VISIBLE)
             }
         }
         state.pending = pending
         AndroidUtilities.runOnUIThread(pending, SELECTION_RENDER_DEBOUNCE_MS)
     }
+
+    // #endif
 
     private inline fun forEachSelectedMessage(activity: ChatActivity, action: (MessageObject) -> Unit) {
         // index 1 (merged dialog) first, then 0; SparseArray iteration is id-ascending within each

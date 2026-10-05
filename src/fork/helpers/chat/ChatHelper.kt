@@ -24,8 +24,18 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import androidx.core.content.edit
 import desu.inugram.InuConfig
+// #if PLUGINS
 import desu.inugram.helpers.plugins.ui.ActionKey
 import desu.inugram.helpers.plugins.ui.ActionRow
+import desu.inugram.helpers.plugins.PluginImportHelper
+import desu.inugram.helpers.plugins.PluginManager
+import desu.inugram.helpers.plugins.ui.MessageActionSource
+import desu.inugram.helpers.plugins.ui.ActionSurface
+import desu.inugram.helpers.plugins.ui.PluginActions
+import desu.inugram.helpers.plugins.ui.PluginChatHistory
+import desu.inugram.helpers.plugins.ui.PluginIcons
+import desu.inugram.helpers.plugins.ui.RegisteredActionRow
+// #endif
 import desu.inugram.helpers.InuUtils
 import desu.inugram.helpers.StickerDownloadHelper
 import desu.inugram.helpers.WebAppHelper
@@ -35,14 +45,6 @@ import desu.inugram.helpers.media.MediaSendDebugHelper
 import desu.inugram.helpers.menu.MessageMenuConfig
 import desu.inugram.helpers.menu.reorderByMenu
 import desu.inugram.helpers.menu.reorderByKeys
-import desu.inugram.helpers.plugins.PluginImportHelper
-import desu.inugram.helpers.plugins.PluginManager
-import desu.inugram.helpers.plugins.ui.MessageActionSource
-import desu.inugram.helpers.plugins.ui.ActionSurface
-import desu.inugram.helpers.plugins.ui.PluginActions
-import desu.inugram.helpers.plugins.ui.PluginChatHistory
-import desu.inugram.helpers.plugins.ui.PluginIcons
-import desu.inugram.helpers.plugins.ui.RegisteredActionRow
 import desu.inugram.helpers.translate.TranslateHelper
 import desu.inugram.ui.MessageDetailsActivity
 import desu.inugram.ui.showInputDialog
@@ -268,7 +270,11 @@ object ChatHelper {
         noforwards: Boolean,
         allowSendActions: Boolean
     ) {
-        if (allowSendActions && !noforwards && activity.currentChat != null && !ChatObject.isChannelAndNotMegaGroup(activity.currentChat) || PluginChatHistory.showsInChat(activity, selectedObject)) {
+        if (allowSendActions && !noforwards && activity.currentChat != null && !ChatObject.isChannelAndNotMegaGroup(activity.currentChat)
+            // #if PLUGINS
+            || PluginChatHistory.showsInChat(activity, selectedObject)
+            // #endif
+        ) {
             items.add(LocaleController.getString(R.string.InuReplyIn))
             options.add(OPTION_REPLY_IN)
             icons.add(R.drawable.menu_reply)
@@ -324,7 +330,11 @@ object ChatHelper {
             icons.add(R.drawable.msg_stats)
         }
 
-        if (activity.isFiltered || PluginChatHistory.showsInChat(activity, selectedObject)) {
+        if (activity.isFiltered
+            // #if PLUGINS
+            || PluginChatHistory.showsInChat(activity, selectedObject)
+            // #endif
+        ) {
             items.add(LocaleController.getString(R.string.InuShowInChat))
             options.add(OPTION_SHOW_IN_CHAT)
             icons.add(R.drawable.msg_openin)
@@ -375,14 +385,17 @@ object ChatHelper {
         options.add(OPTION_DETAILS)
         icons.add(R.drawable.msg_info)
 
+        // #if PLUGINS
         if (activity.chatMode == ChatActivity.inu_MODE_PLUGIN_HISTORY) {
             PluginChatHistory.filterMessageMenu(activity, selectedObject, selectedObjectGroup, items, options, icons)
         }
 
         reservePluginItems(items, options, icons, activity, selectedObject, selectedObjectGroup)
+        // #endif
         applyMessageMenuOrder(items, options, icons)
     }
 
+    // #if PLUGINS
     /**
      * one message menu's plugin rows, from the gesture that reserved them to the tap that
      * dispatches one.
@@ -529,6 +542,8 @@ object ChatHelper {
     }
 
 
+    // #endif
+
     private fun applyMessageMenuOrder(
         items: ArrayList<CharSequence>,
         options: ArrayList<Int>,
@@ -541,6 +556,7 @@ object ChatHelper {
         val enabledRows = reorderByMenu(rows, entries) {
             MessageMenuConfig.Item.forOption(it.option)
         }
+        // #if PLUGINS
         val pluginKeys = enabledRows.mapNotNull { PluginActions.keyForOption(it.option) }
         val mainOrder = PluginActions.mainOrder(
             PluginActions.KIND_MESSAGE,
@@ -551,6 +567,9 @@ object ChatHelper {
             MessageMenuConfig.Item.forOption(row.option)?.let { PluginActions.builtInOrderKey(it.key) }
                 ?: PluginActions.keyForOption(row.option)?.let(PluginActions::pluginOrderKey)
         }
+        // #else
+        val ordered = enabledRows
+        // #endif
 
         items.clear(); options.clear(); icons.clear()
         for (row in ordered) {
@@ -721,7 +740,9 @@ object ChatHelper {
         selectedObject: MessageObject,
         selectedObjectGroup: MessageObject.GroupedMessages?
     ): Boolean {
+        // #if PLUGINS
         if (option >= PluginActions.OPTION_BASE) return dispatchPluginItem(option)
+        // #endif
         when (option) {
             OPTION_SAVE -> {
                 val messages = ArrayList<MessageObject>()
@@ -730,9 +751,11 @@ object ChatHelper {
                 } else {
                     messages.add(selectedObject)
                 }
+                // #if PLUGINS
                 if (activity.chatMode == ChatActivity.inu_MODE_PLUGIN_HISTORY) {
                     PluginChatHistory.realMessages(messages)
                 }
+                // #endif
                 forwardToSavedMessages(activity, messages)
             }
 
@@ -744,9 +767,11 @@ object ChatHelper {
                         replyMsg = group.captionMessage ?: replyMsg
                     }
                 }
+                // #if PLUGINS
                 if (activity.chatMode == ChatActivity.inu_MODE_PLUGIN_HISTORY) {
                     replyMsg = PluginChatHistory.realMessage(replyMsg)
                 }
+                // #endif
                 val args = Bundle().apply {
                     putBoolean("onlySelect", true)
                     putInt("dialogsType", DialogsActivity.DIALOGS_TYPE_FORWARD)
@@ -825,11 +850,13 @@ object ChatHelper {
                 clearMessageCaches(activity, targets)
             }
 
-            OPTION_SHOW_IN_CHAT -> if (activity.chatMode == ChatActivity.inu_MODE_PLUGIN_HISTORY) {
-                openInNewChat(activity, selectedObject.dialogId, selectedObject.realId)
-            } else {
+            OPTION_SHOW_IN_CHAT ->
+                // #if PLUGINS
+                if (activity.chatMode == ChatActivity.inu_MODE_PLUGIN_HISTORY) {
+                    openInNewChat(activity, selectedObject.dialogId, selectedObject.realId)
+                } else
+                // #endif
                 openInNewChat(activity, activity.dialogId, selectedObject.id)
-            }
 
             OPTION_REPEAT -> {
                 val available = availableRepeatModes(activity, selectedObject, selectedObjectGroup)
@@ -1145,7 +1172,9 @@ object ChatHelper {
         if (activity.isReport) return false
         val chatMode = activity.chatMode
         if (chatMode == ChatActivity.MODE_PINNED) return InuConfig.HIDE_BOTTOM_BAR_PINNED.value
+        // #if PLUGINS
         if (chatMode == ChatActivity.inu_MODE_PLUGIN_HISTORY) return PluginChatHistory.buttonText(activity) == null
+        // #endif
 
         val user = activity.currentUser
         if (user != null && UserObject.isReplyUser(user) && InuConfig.HIDE_BOTTOM_BAR_REPLIES.value) return true
@@ -1259,7 +1288,11 @@ object ChatHelper {
     fun maybeHandleFileClick(activity: ChatActivity, message: MessageObject): Boolean {
         val name = message.documentName ?: return false
         val isSettings = name.endsWith(SettingsBackupHelper.FILENAME_SUFFIX)
+        // #if PLUGINS
         val isPlugin = !isSettings && PluginManager.isEngineEnabled() && PluginImportHelper.isPluginFileName(name)
+        // #else
+        val isPlugin = false
+        // #endif
         val isFont = !isSettings && !isPlugin && FontImportHelper.isFontFileName(name)
         if (!isSettings && !isPlugin && !isFont) return false
         val attach = message.messageOwner?.attachPath?.takeIf { it.isNotEmpty() }?.let { File(it) }
@@ -1269,7 +1302,9 @@ object ChatHelper {
             ?: return false
         when {
             isSettings -> SettingsBackupHelper.startImportFromFile(activity, file)
+            // #if PLUGINS
             isPlugin -> PluginImportHelper.startImportFromFile(activity, file)
+            // #endif
             else -> FontImportHelper.startImportFromFile(activity, message, file, name)
         }
         return true
@@ -1502,7 +1537,9 @@ object ChatHelper {
 
     @JvmStatic
     fun onFragmentDestroy(activity: ChatActivity) {
+        // #if PLUGINS
         ChatActionsHelper.onFragmentDestroy(activity)
+        // #endif
         TranslateHelper.resetForDialog(activity.dialogId)
     }
 
@@ -1582,6 +1619,7 @@ object ChatHelper {
         group: MessageObject.GroupedMessages?,
     ): Boolean {
         if (message == null) return false
+        // #if PLUGINS
         if (option == OPTION_PLUGIN_ACTIONS) {
             val menu = messageMenu ?: return true
             val rows = PluginActions.orderRows(
@@ -1605,6 +1643,7 @@ object ChatHelper {
                 }
             }
         }
+        // #endif
         if (option != OPTION_REPEAT) return false
         if (InuConfig.REPEAT_MODE.value != InuConfig.RepeatModeItem.ASK) return false
         // with a single mode available there's nothing to ask about

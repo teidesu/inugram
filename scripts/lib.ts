@@ -103,14 +103,15 @@ export async function ensureUpstreamRemote(repoDir: string) {
   await git`git remote add upstream ${upstreamUrl}`
 }
 
-export async function syncSubmodules(repoDir: string) {
+export async function syncSubmodules(repoDir: string, excludedSubmodules: string[] = []) {
   if (!existsSync(join(repoDir, '.gitmodules'))) {
     return false
   }
 
   const git = cd(repoDir)
+  const paths = ['.', ...excludedSubmodules.map(path => `:(exclude)${path}`)]
   // status prefixes: ' ' in sync, '-' uninitialized, '+' sha mismatch, 'U' conflicted
-  const stale = (await git`git submodule status`)
+  const stale = (await git`git submodule status -- ${paths}`)
     .stdout
     .split(/\r?\n/)
     .filter(line => line.length > 0 && line[0] !== ' ')
@@ -121,14 +122,15 @@ export async function syncSubmodules(repoDir: string) {
 
   step(`Syncing ${stale.length} submodule(s), this will take a while`)
   const skips = skippedSubmodules.flatMap(name => ['-c', `submodule.${name}.update=none`])
-  await git`git ${skips} submodule update --init --recursive --filter=blob:none`
+  await git`git ${skips} submodule update --init --recursive --filter=blob:none -- ${paths}`
   return true
 }
 
-export async function applySubmodulePatches(repoDir: string) {
+export async function applySubmodulePatches(repoDir: string, excludedSubmodules: string[] = []) {
   let appliedAny = false
 
   for (const { submodule, patch } of submodulePatches) {
+    if (excludedSubmodules.includes(submodule)) continue
     const dir = join(repoDir, submodule)
     if (!existsSync(dir)) continue
 
@@ -211,8 +213,14 @@ interface ResolvedLink {
   replace?: boolean
 }
 
-async function linkForkEntry(repoDir: string, entry: ResolvedLink) {
+async function linkForkEntry(repoDir: string, entry: ResolvedLink, skip = false) {
   const targetPath = join(repoDir, entry.repoRelativeTarget)
+  if (skip) {
+    const stat = await fs.lstat(targetPath).catch(() => null)
+    if (!stat?.isSymbolicLink() || resolve(dirname(targetPath), await fs.readlink(targetPath)) !== entry.sourcePath) return false
+    await fs.unlink(targetPath)
+    return true
+  }
   const created = await ensureSymlink(targetPath, entry.sourcePath, entry.type)
   if (created) {
     step(`Symlinking ${targetPath}`)
@@ -226,8 +234,15 @@ async function linkForkEntry(repoDir: string, entry: ResolvedLink) {
   return created
 }
 
-export async function linkForkSource(repoDir: string) {
+export async function linkForkSource(repoDir: string, pluginless = false) {
   let dirty = false
+  const oldSourceRoot = join(repoDir, 'TMessagesProj/src/main/kotlin/desu/inugram')
+  const oldSourceStat = await fs.lstat(oldSourceRoot).catch(() => null)
+  if (oldSourceStat?.isSymbolicLink()
+    && resolve(dirname(oldSourceRoot), await fs.readlink(oldSourceRoot)) === join(rootDir, 'src/fork')) {
+    await fs.unlink(oldSourceRoot)
+    dirty = true
+  }
 
   for (const entry of forkSyncFiles) {
     if (entry.directory) {
@@ -236,7 +251,7 @@ export async function linkForkSource(repoDir: string) {
         repoRelativeTarget: entry.target,
         type: 'dir',
         replace: entry.replace,
-      })
+      }, pluginless && entry.pluginsOnly)
       dirty ||= created
       continue
     }
@@ -248,7 +263,7 @@ export async function linkForkSource(repoDir: string) {
         repoRelativeTarget: join(entry.target, basename(sourcePath)),
         type: 'file',
         replace: entry.replace,
-      })
+      }, pluginless && entry.pluginsOnly)
       dirty ||= created
     }
   }

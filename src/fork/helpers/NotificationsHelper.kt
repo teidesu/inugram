@@ -5,7 +5,9 @@ import androidx.collection.LongSparseArray
 import androidx.core.content.edit
 import desu.inugram.InuConfig
 import desu.inugram.helpers.chat.BlockedMessagesHelper
+// #if PLUGINS
 import desu.inugram.helpers.plugins.platform.PluginNotifications
+// #endif
 import desu.inugram.helpers.security.ParanoiaHelper
 import desu.inugram.helpers.security.PasscodeHelper
 import org.telegram.messenger.ApplicationLoader
@@ -27,8 +29,10 @@ object NotificationsHelper {
     @JvmStatic
     fun shouldSuppressNotifications(account: Int): Boolean =
         PasscodeHelper.isAccountHidden(account) ||
-            ParanoiaHelper.shouldSuppressNotifications() ||
-            PluginNotifications.areNotificationsSuppressed(account)
+            ParanoiaHelper.shouldSuppressNotifications()
+            // #if PLUGINS
+            || PluginNotifications.areNotificationsSuppressed(account)
+            // #endif
 
     @JvmStatic
     fun shouldSuppressMessageNotification(messageObject: MessageObject?): Boolean {

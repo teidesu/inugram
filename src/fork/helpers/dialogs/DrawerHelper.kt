@@ -12,10 +12,12 @@ import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import desu.inugram.InuConfig
+// #if PLUGINS
 import desu.inugram.helpers.plugins.ui.ActionRow
-import desu.inugram.helpers.dialogs.DrawerHelper.setupMainFragment
 import desu.inugram.helpers.plugins.ui.ActionSurface
 import desu.inugram.helpers.plugins.ui.PluginActions
+// #endif
+import desu.inugram.helpers.dialogs.DrawerHelper.setupMainFragment
 import desu.inugram.helpers.update.UpdateHelper
 import desu.inugram.ui.drawer.DrawerAddCell
 import desu.inugram.ui.drawer.DrawerLayoutAdapter
@@ -138,7 +140,9 @@ object DrawerHelper {
         drawerLayoutContainer: DrawerLayoutContainer,
         actionBarLayout: INavigationLayout,
     ) {
+        // #if PLUGINS
         watchGlobalActions()
+        // #endif
         val sm = object : RecyclerListView(context) {
             override fun findChildViewUnder(x: Float, y: Float): View? {
                 for (i in 0 until childCount) {
@@ -577,6 +581,7 @@ object DrawerHelper {
         }
 
         val itemId = adapter.getId(position)
+        // #if PLUGINS
         if (itemId >= PluginActions.OPTION_BASE) {
             PluginActions.rowAt(globalActionRows, itemId)?.let {
                 PluginActions.dispatch(it, ActionSurface.global(account))
@@ -584,6 +589,7 @@ object DrawerHelper {
             close()
             return
         }
+        // #endif
 
         when (itemId) {
             ITEM_MY_PROFILE -> {
@@ -671,9 +677,12 @@ object DrawerHelper {
     @JvmStatic
     fun notifyDataChanged() {
         adapter?.notifyDataSetChanged()
+        // #if PLUGINS
         refreshGlobalActionRows()
+        // #endif
     }
 
+    // #if PLUGINS
     private var watchingActions = false
 
     private fun watchGlobalActions() {
@@ -704,6 +713,8 @@ object DrawerHelper {
             adapter?.notifyDataSetChanged()
         }
     }
+
+    // #endif
 
     /** Old Layout back-button hook: toggles the side drawer. Returns false if unavailable. */
     @JvmStatic
