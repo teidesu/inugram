@@ -81,6 +81,8 @@ It is bumped only for major breaking changes to the API. Pure additions
 
 Apps are expected to only support the latest `@plugin-api`, i.e. plugins written for the old API **will not** work under the new versions.
 
+Note that `@experimental` APIs are not covered by this number, and may change at any time.
+
 ### Build options
 
 `esbuild` on a plugin or on the whole config lets you change esbuild options:

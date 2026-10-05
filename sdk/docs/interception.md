@@ -87,6 +87,8 @@ to what all of them return. For methods with different response types, register 
 
 ## interceptSendMessage
 
+`interceptSendMessage`, its outgoing-message/media types, and `account.createLocalMedia` are [experimental](README.md#api-stability).
+
 `interceptSendMessage` runs when the user sends a message: text, files and albums, stickers, gifs,
 locations, contacts and forwards. It hands you an `OutgoingMessage` with the fields you usually care
 about, and you answer `'send'` or `'drop'`.

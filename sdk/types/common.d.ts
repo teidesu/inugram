@@ -427,6 +427,8 @@ declare namespace inu {
      * get an app-owned file representing the attachment of a message
      *
      * @needs-grant account.read(messages)
+     *
+     * @experimental Subject to breaking changes between releases.
      */
     getMessageFile(message: Message | tl.TypeMessage): { path: string, exists: boolean } | null
 
@@ -444,6 +446,8 @@ declare namespace inu {
      * download a message's attachment to a file, and return the path
      *
      * @needs-grant account.read(messages)
+     *
+     * @experimental Subject to breaking changes between releases.
      */
     downloadMediaToFile(message: Message | tl.TypeMessage, options?: {
       onProgress?: ProgressCallback
@@ -472,6 +476,8 @@ declare namespace inu {
      * **Limits: 256 MB per staged copy, for all write operations.**
      *
      * @needs-grant account.write(send)
+     *
+     * @experimental Subject to breaking changes between releases.
      */
     createLocalMedia(file: Blob | Uint8Array | { path: string }, options?: {
       /** customize the file name */
@@ -654,6 +660,8 @@ declare namespace inu {
        * incompatible with `sendAs` and in some cases `replyToMessageId`
        *
        * @default true
+       *
+       * @experimental Subject to breaking changes between releases.
        */
       optimistic?: boolean
     }): Promise<Message>
@@ -664,6 +672,8 @@ declare namespace inu {
      * @needs-grant account.write(send)
      * @param peer the dialog
      * @param file the media file. `{ path }` names a file the way {@link fs} does, and needs its grant
+     *
+     * @experimental Subject to breaking changes between releases.
      */
     sendMedia(
       peer: InputPeerLike, file: Blob | Uint8Array | tl.TypeInputFile | tl.TypeInputMedia | { path: string },
@@ -695,6 +705,8 @@ declare namespace inu {
          * incompatible with `sendAs` and in some cases `replyToMessageId`
          *
          * @default true
+         *
+         * @experimental Subject to breaking changes between releases.
          */
         optimistic?: boolean
       }): Promise<Message>
@@ -705,6 +717,8 @@ declare namespace inu {
      * @needs-grant account.write(send)
      * @param peer the dialog
      * @param items the media files
+     *
+     * @experimental Subject to breaking changes between releases.
      */
     sendMultiMedia(
       peer: InputPeerLike,
@@ -1083,6 +1097,7 @@ declare namespace inu {
     /** open a stock commonly used page */
     function openPage(screen: PageTarget): void
 
+    /** @experimental Subject to breaking changes between releases. */
     interface ChatHistoryMenuItem {
       text: InputText
       icon?: UIIcon
@@ -1093,7 +1108,11 @@ declare namespace inu {
       onClick(): void
     }
 
-    /** A single entry in a custom chat history page */
+    /**
+     * A single entry in a custom chat history page
+     *
+     * @experimental Subject to breaking changes between releases.
+     */
     interface ChatHistoryEntry {
       /** Message represented by this entry */
       message: tl.TypeMessage
@@ -1115,6 +1134,7 @@ declare namespace inu {
       synthetic?: boolean
     }
 
+    /** @experimental Subject to breaking changes between releases. */
     interface ChatHistoryPage {
       /** Items in the history, newest first, max 200 */
       entries: ChatHistoryEntry[]
@@ -1149,6 +1169,7 @@ declare namespace inu {
       unreadCount?: number
     }
 
+    /** @experimental Subject to breaking changes between releases. */
     interface ChatHistory {
       /**
        * Add items to the page content
@@ -1190,6 +1211,8 @@ declare namespace inu {
      * Every item in the dataset gets its own ID, so the same server message can appear more than once
      *
      * @throws `not-found` when `account` is not logged in.
+     *
+     * @experimental Subject to breaking changes between releases.
      */
     function openChatHistory(options: {
       /** Title of the page */
@@ -1344,7 +1367,11 @@ declare namespace inu {
       allowEmpty?: boolean
     }): Promise<number[] | null>
 
-    /** Info about the currently visible screen */
+    /**
+     * Info about the currently visible screen
+     *
+     * @experimental Subject to breaking changes between releases.
+     */
     interface CurrentScreen {
       type: 'chat' | 'profile' | 'dialogs' | 'settings' | 'other'
       /** @needs-grant account.read(dialogs) */
@@ -1354,10 +1381,18 @@ declare namespace inu {
       account: Account
     }
 
-    /** Get the currently visible screen */
+    /**
+     * Get the currently visible screen
+     *
+     * @experimental Subject to breaking changes between releases.
+     */
     function getCurrentScreen(): CurrentScreen | null
 
-    /** Info about a navigation event */
+    /**
+     * Info about a navigation event
+     *
+     * @experimental Subject to breaking changes between releases.
+     */
     interface ScreenChange {
       screen: CurrentScreen | null
       previous: CurrentScreen | null
@@ -1365,7 +1400,11 @@ declare namespace inu {
       readonly stack: CurrentScreen[]
     }
 
-    /** Subscribe to navigation changes */
+    /**
+     * Subscribe to navigation changes
+     *
+     * @experimental Subject to breaking changes between releases.
+     */
     function onScreenChanged(callback: (change: ScreenChange) => void): Disposer
 
     /** Prompt a user for some text input */
@@ -1776,13 +1815,21 @@ declare namespace inu {
    */
   function registerTranslationProvider(provider: TranslationProvider): Disposer
 
-  /** Quoted part of a replied-to message */
+  /**
+   * Quoted part of a replied-to message
+   *
+   * @experimental Subject to breaking changes between releases.
+   */
   interface ReplyQuote extends TextWithEntities {
     /** Where the quote starts in the replied-to message's text, in UTF-16 code units */
     offset: number | null
   }
 
-  /** What an {@link OutgoingMessage} replies to */
+  /**
+   * What an {@link OutgoingMessage} replies to
+   *
+   * @experimental Subject to breaking changes between releases.
+   */
   interface PendingReply {
     /** ID of the replied-to message */
     messageId: number
@@ -1797,10 +1844,16 @@ declare namespace inu {
    * - `normal`: with the original sender
    * - `hide-sender`: as if sent by the user
    * - `hide-caption`: as if sent by the user, with media captions removed
+   *
+   * @experimental Subject to breaking changes between releases.
    */
   type ForwardMode = 'normal' | 'hide-sender' | 'hide-caption'
 
-  /** Messages forwarded along with an {@link OutgoingMessage} */
+  /**
+   * Messages forwarded along with an {@link OutgoingMessage}
+   *
+   * @experimental Subject to breaking changes between releases.
+   */
   interface PendingForward {
     /** Marked peer id of the chat the messages are forwarded from */
     peer: number
@@ -1814,6 +1867,8 @@ declare namespace inu {
    *
    * It is a snapshot: edits are applied once the middleware returns `'send'`, and one that
    * cannot be applied fails the send then.
+   *
+   * @experimental Subject to breaking changes between releases.
    */
   interface OutgoingMessage {
     /** Marked peer id of the message's chat */
@@ -1849,7 +1904,11 @@ declare namespace inu {
     media: OutgoingMedia[]
   }
 
-  /** A file the app uploads once the send is decided, see {@link OutgoingMessage.media} */
+  /**
+   * A file the app uploads once the send is decided, see {@link OutgoingMessage.media}
+   *
+   * @experimental Subject to breaking changes between releases.
+   */
   interface LocalMedia {
     readonly _: 'localMedia'
     readonly kind: 'photo' | 'video' | 'gif' | 'music' | 'voice' | 'roundVideo' | 'sticker' | 'document'
@@ -1880,8 +1939,10 @@ declare namespace inu {
     blob(): Promise<File>
   }
 
+  /** @experimental Subject to breaking changes between releases. */
   type OutgoingMedia = LocalMedia | tl.TypeInputMedia
 
+  /** @experimental Subject to breaking changes between releases. */
   interface SendMessageContext {
     message: OutgoingMessage
     account: Account
@@ -1892,8 +1953,10 @@ declare namespace inu {
     readonly signal: AbortSignal
   }
 
+  /** @experimental Subject to breaking changes between releases. */
   type SendMessagePeer = number | 'user' | 'group' | 'broadcast'
 
+  /** @experimental Subject to breaking changes between releases. */
   interface SendMessageFilter {
     /**
      * Regex the message is supposed to match for the hook to fire, or whether it is supposed to have
@@ -1930,6 +1993,8 @@ declare namespace inu {
    * This overload registers one in the `compose` stage.
    *
    * @needs-grant interceptSendMessage
+   *
+   * @experimental Subject to breaking changes between releases.
    */
   function interceptSendMessage(
     middleware: (context: SendMessageContext) => MaybePromise<'send' | 'drop'>,
@@ -1943,6 +2008,8 @@ declare namespace inu {
    * Additionally, this overload allows configuring the stage the hook runs on.
    *
    * @needs-grant interceptSendMessage
+   *
+   * @experimental Subject to breaking changes between releases.
    */
   function interceptSendMessage(
     filter: SendMessageFilter,

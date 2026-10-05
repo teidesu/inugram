@@ -174,7 +174,11 @@ declare interface FontEntry {
   readonly hidden: boolean
 }
 
-/** one frame of an {@link AnimatedImage} */
+/**
+ * one frame of an {@link AnimatedImage}
+ *
+ * @experimental Subject to breaking changes between releases.
+ */
 declare interface AnimationFrame extends ImageBitmap {
   /** ms from the start of the animation */
   readonly timestamp: number
@@ -190,6 +194,8 @@ declare interface AnimationFrame extends ImageBitmap {
  * ```js
  * for await (using frame of animation) ctx.drawImage(frame, 0, 0)
  * ```
+ *
+ * @experimental Subject to breaking changes between releases.
  */
 declare interface AnimatedImage extends AsyncIterableIterator<AnimationFrame> {
   /** frame width (note: will match the one asked for, if any) */
@@ -228,6 +234,8 @@ declare interface AnimatedImage extends AsyncIterableIterator<AnimationFrame> {
  * Encodes video one frame at a time. Only silent MP4 output is supported.
  *
  * **Limits: 2 encoders per plugin, 3600 frames per video.**
+ *
+ * @experimental Subject to breaking changes between releases.
  */
 declare interface VideoEncoder {
   readonly width: number
@@ -263,6 +271,8 @@ declare namespace inu {
      * Opens an animated source (tgs/webm/mp4) for reading.
      *
      * @needs-grant fs to name a file
+     *
+     * @experimental Subject to breaking changes between releases.
      */
     function decodeAnimation(
       source: Blob | Uint8Array | { path: string },
@@ -280,7 +290,11 @@ declare namespace inu {
       },
     ): Promise<AnimatedImage>
 
-    /** create a video encoder */
+    /**
+     * create a video encoder
+     *
+     * @experimental Subject to breaking changes between releases.
+     */
     function createEncoder(options: {
       /** mime type of the output file */
       type?: 'video/mp4'

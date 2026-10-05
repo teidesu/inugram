@@ -1,5 +1,7 @@
 # Routines
 
+The routine APIs and their source-language semantics are [experimental](README.md#api-stability).
+
 A routine is a small function, written in a subset of JS, that runs **on the Java thread that
 calls it, without entering the JS engine**.
 

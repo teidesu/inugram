@@ -112,6 +112,8 @@ While highly discouraged, you can use `unsafe.disableApiFiltering` grant to disa
 
 ## Reads
 
+`account.getMessageFile` and `account.downloadMediaToFile` are [experimental](README.md#api-stability).
+
 Account-related reads need `account.read(...)` grants. See type definitions for the exact scopes.
 
 In general, there are two kinds of reads - sync and async. In most cases, the peers you
@@ -175,6 +177,9 @@ async function greet(username: string) {
 ```
 
 ### Sending messages
+
+`sendMedia`, `sendMultiMedia`, and `createLocalMedia` are [experimental](README.md#api-stability),
+as is the `optimistic` option on sends.
 
 `sendMessage`, `sendMedia` and `sendMultiMedia` resolve with the sent `Message`.
 

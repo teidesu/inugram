@@ -239,6 +239,8 @@ See [io.md](io.md) for more info on blobs and paths.
 
 ## Chat history
 
+`openChatHistory` and its data-source and controller types are [experimental](README.md#api-stability).
+
 `inu.ui.openChatHistory(options)` allows plugins to open a chat
 history view, with the data fully supplied by the plugin.
 
@@ -268,6 +270,8 @@ The full API is described in the `d.ts` files, but a quick overview:
 - `append`, `replace` and `remove` on the handle allow imperative updates to the page
 
 ## Current screen
+
+`getCurrentScreen`, `onScreenChanged`, and their screen/event types are [experimental](README.md#api-stability).
 
 `inu.ui.getCurrentScreen()` returns what the user is looking at, and `onScreenChanged` reports
 navigation with the whole back stack.

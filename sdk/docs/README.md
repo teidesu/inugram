@@ -8,6 +8,27 @@ before they can use most of the APIs.
 These docs explain the concepts, the reasons behind them and the quirks.
 For exact signatures, read the typings in `@inugram/plugin-types`.
 
+## Stability
+
+Plugins in Inugram are **experimental** as a whole,
+and can be considered as a *developer preview* more than
+anything else. Bugs, crashes, and potentially even exploits are all to be expected.
+
+**Do not** rely on them for mission-critical tasks,
+and prefer the pluginless build if you aren't using them
+
+### API stability
+
+APIs marked `@experimental` in the typings may change signatures or documented behavior, or be removed, between releases.
+Breaking changes will be called out in release notes, and plugins using these APIs may need updates.
+
+It doesn't mean you shouldn't use them (in fact, we
+actively encourage you to do so!), just beware that your
+plugin may break with future updates.
+
+Inugram API stability does not freeze Telegram's internals: Java classes/methods can
+change with upstream updates, as well as the TL schema.
+
 ## TOC
 
 - [getting-started.md](getting-started.md): how to get up and running with the plugins SDK

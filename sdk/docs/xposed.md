@@ -1,5 +1,8 @@
 # Xposed-style method hooking
 
+Hook registration, contexts, filters, routines, and `callOriginalMethod` are
+[experimental](README.md#api-stability), including callback timing and composition rules.
+
 `inu.xposed` provides Xposed-style method hooking, letting you run custom code before and/or after
 the original, change its arguments, and replace its result.
 
@@ -156,4 +159,3 @@ const off = inu.xposed.hookAllOverloads(TextView, 'setText', {
 - `inu.xposed.allocateInstance(cls)` creates an object without running any constructor.
 - `inu.xposed.disableProfileSaver()` turns off the ART profile saver for the process. Only
   use this if you notice hooks not running on an ART-optimized method. It is rarely needed.
-

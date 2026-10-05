@@ -5,6 +5,10 @@ Guides are in the [plugin docs](https://github.com/teidesu/inugram/tree/main/sdk
 
 Package versions follow app releases, keeping the types, TL layer, and grant catalogue in sync.
 
+APIs tagged `@experimental` may change signatures or documented behavior, or be removed,
+between releases. Breaking changes will be called out in release notes; plugins using them
+may need updates. See the [API stability policy](https://github.com/teidesu/inugram/blob/main/sdk/docs/README.md#api-stability) for the scope.
+
 ```bash
 pnpm add -D @inugram/plugin-types
 ```

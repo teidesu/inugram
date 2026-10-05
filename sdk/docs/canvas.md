@@ -64,6 +64,8 @@ and you can also use `inu.canvas.loadFont(family, source)` to load a custom font
 
 ## Animations and videos
 
+`decodeAnimation`, `createEncoder`, and their frame/reader/encoder types are [experimental](README.md#api-stability).
+
 `inu.canvas.decodeAnimation(source)` opens an animated sticker (tgs), a video (webm, mp4) or a
 GIF for reading frame by frame. A still image opens as a one-frame animation.
 

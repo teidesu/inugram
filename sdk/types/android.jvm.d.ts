@@ -64,17 +64,33 @@ declare type JavaClass = OpaqueType<'JVMClass'> & {
   isInstance: (value: unknown) => boolean
 }
 
-/** The class returned by {@link inu.jvm.defineClass}, including its generated or supplied name. */
+/**
+ * The class returned by {@link inu.jvm.defineClass}, including its generated or supplied name.
+ *
+ * @experimental Subject to breaking changes between releases.
+ */
 declare type DefinedClass = JavaClass & {
   readonly name: string
 }
 
-/** Body of a "cold" (i.e. ran in JS) method */
+/**
+ * Body of a "cold" (i.e. ran in JS) method
+ *
+ * @experimental Subject to breaking changes between releases.
+ */
 declare type JvmMethodImpl = (self: JavaObject, ...args: any[]) => any
-/** Body of a "cold" (i.e. ran in JS) static method */
+/**
+ * Body of a "cold" (i.e. ran in JS) static method
+ *
+ * @experimental Subject to breaking changes between releases.
+ */
 declare type JvmStaticMethodImpl = (self: JavaClass, ...args: any[]) => any
 
-/** Definition of a member method for {@link inu.jvm.defineClass}. An array of these defines overloads, each with explicit `params` */
+/**
+ * Definition of a member method for {@link inu.jvm.defineClass}. An array of these defines overloads, each with explicit `params`
+ *
+ * @experimental Subject to breaking changes between releases.
+ */
 declare interface JvmMethodSpec {
   /** Params of the method, like you would write them in Java (e.g. `float`, `int[]`) */
   params?: string[]
@@ -84,7 +100,11 @@ declare interface JvmMethodSpec {
   body: JvmMethodImpl | JvmRoutineRunnable
 }
 
-/** Definition of a static method for {@link inu.jvm.defineClass} */
+/**
+ * Definition of a static method for {@link inu.jvm.defineClass}
+ *
+ * @experimental Subject to breaking changes between releases.
+ */
 declare interface JvmStaticMethodSpec {
   /** Params of the method, like you would write them in Java (e.g. `float`, `int[]`) */
   params?: string[]
@@ -93,7 +113,11 @@ declare interface JvmStaticMethodSpec {
   body: JvmStaticMethodImpl | JvmRoutineRunnable
 }
 
-/** Definition of a constructor for {@link inu.jvm.defineClass} */
+/**
+ * Definition of a constructor for {@link inu.jvm.defineClass}
+ *
+ * @experimental Subject to breaking changes between releases.
+ */
 declare interface JvmConstructorSpec {
   /** Params of the method, like you would write them in Java (e.g. `float`, `int[]`) */
   params?: string[]
@@ -114,7 +138,11 @@ declare interface JvmConstructorSpec {
   init?: ((self: JavaObject, ...args: any[]) => void) | JvmRoutineRunnable
 }
 
-/** Definition of a class for {@link inu.jvm.defineClass} */
+/**
+ * Definition of a class for {@link inu.jvm.defineClass}
+ *
+ * @experimental Subject to breaking changes between releases.
+ */
 declare interface JvmClassSpec {
   /** Super class of the newly created class */
   superclass?: JavaClass
@@ -133,7 +161,11 @@ declare interface JvmClassSpec {
 }
 
 declare const __jvmRoutineRunnable__: unique symbol
-/** `Runnable` that was compiled from {@link inu.jvm.routine} */
+/**
+ * `Runnable` that was compiled from {@link inu.jvm.routine}
+ *
+ * @experimental Subject to breaking changes between releases.
+ */
 declare type JvmRoutineRunnable = JavaObject & { readonly [__jvmRoutineRunnable__]: true }
 
 /**
@@ -143,6 +175,8 @@ declare type JvmRoutineRunnable = JavaObject & { readonly [__jvmRoutineRunnable_
  * Values and members are Java values and members (`s.length()`, not `s.length`).
  *
  * Use a function expression to access `this`; arrows cannot access it.
+ *
+ * @experimental Subject to breaking changes between releases.
  */
 declare type JvmRoutineBody = (this: JavaObject, ...args: any[]) => any
 
@@ -181,6 +215,8 @@ declare namespace inu {
      * Unload cancels running routines, but cannot interrupt a Java call already in progress.
      *
      * **Limits: 1024 instructions, 256 slots, 256 captures, 512 live routines, 1 MB of captures, 250 ms per run.**
+     *
+     * @experimental Subject to breaking changes between releases.
      */
     function routine(body: JvmRoutineBody): JvmRoutineRunnable
 
@@ -194,6 +230,8 @@ declare namespace inu {
      * Do not wait synchronously for another thread that may call into the same plugin.
      *
      * **Limits: 2 s to acquire the engine.**
+     *
+     * @experimental Subject to breaking changes between releases.
      */
     function runnable(callback: () => void): JavaObject
 
@@ -239,8 +277,11 @@ declare namespace inu {
      * If you pass a specific class name, a full app restart will be required for the changes to take effect
      *
      * **Limits: 128 classes per engine, 256 fields and 256 methods per class (including constructors and covariant bridges), 64 interfaces, 64 parameters, 1 MB for definitions/captures, 64 nested calls sharing a 250 ms admission budget.**
+     *
+     * @experimental Subject to breaking changes between releases.
      */
     function defineClass(spec: JvmClassSpec): DefinedClass
+    /** @experimental Subject to breaking changes between releases. */
     function defineClass(name: string, spec: JvmClassSpec): DefinedClass
 
     /**
@@ -253,6 +294,8 @@ declare namespace inu {
      * Throws a `TypeError` if `cls` has no superclass, or the picked method is abstract.
      *
      * @example `inu.jvm.callSuper(MySpan, self, 'updateDrawState', paint)`
+     *
+     * @experimental Subject to breaking changes between releases.
      */
     function callSuper(cls: JavaClass, self: JavaObject, method: string, ...args: any[]): any
 
@@ -265,6 +308,8 @@ declare namespace inu {
      * A routine run outside a defineClass body throws there.
      *
      * @example `inu.jvm.routine(function (paint) { inu.jvm.getSuper(this).updateDrawState(paint) })`
+     *
+     * @experimental Subject to breaking changes between releases.
      */
     function getSuper(self: JavaObject): any
   }

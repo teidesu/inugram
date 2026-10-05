@@ -1,5 +1,9 @@
 declare const __xposedRoutineRunnable__: unique symbol
-/** `Consumer<PluginHookContext>` that was compiled from {@link inu.xposed.routine} */
+/**
+ * `Consumer<PluginHookContext>` that was compiled from {@link inu.xposed.routine}
+ *
+ * @experimental Subject to breaking changes between releases.
+ */
 declare type XposedRoutineRunnable = JavaObject & { readonly [__xposedRoutineRunnable__]: true }
 
 declare namespace inu {
@@ -18,6 +22,8 @@ declare namespace inu {
      *
      * Avoid retaining this value outside the hook closure, unread values will throw `handle-expired`.
      * Read values before `await` or `setTimeout` if you need them later.
+     *
+     * @experimental Subject to breaking changes between releases.
      */
     interface MethodHookContext {
       /** Reference to the method being hooked */
@@ -47,6 +53,8 @@ declare namespace inu {
     /**
      * The hook context used inside routines. Like {@link MethodHookContext}, but inside the compiled routines.
      * Fields contain Java values, and are not currently properly typed, thus `any`
+     *
+     * @experimental Subject to breaking changes between releases.
      */
     interface RoutineContext {
       readonly args: any[]
@@ -65,6 +73,8 @@ declare namespace inu {
      *
      * Set results through `setReturnValue`; `return` cannot take a value, and `this` is unavailable.
      * Both arrows and function expressions are supported.
+     *
+     * @experimental Subject to breaking changes between releases.
      */
     function routine(body: (ctx: RoutineContext) => void): XposedRoutineRunnable
 
@@ -89,6 +99,8 @@ declare namespace inu {
      * APIs requiring the plugin thread are unavailable in these callbacks.
      *
      * A plugin cannot mix JS and Java (`inu.xposed.routine`) hooks on the same method
+     *
+     * @experimental Subject to breaking changes between releases.
      */
     type MethodHook = {
       /** `before` phase of the hook, called before the original implementation */
@@ -126,16 +138,30 @@ declare namespace inu {
      *
      * Recursive calls during a callback skip that plugin's hooks. Calls made by the original
      * method still run hooks normally. Disposing your hook leaves other plugins' hooks active.
+     *
+     * @experimental Subject to breaking changes between releases.
      */
     function hookMethod(method: JavaMethod, hook: MethodHook): Disposer
 
-    /** Hook all overloads of a class method by its name */
+    /**
+     * Hook all overloads of a class method by its name
+     *
+     * @experimental Subject to breaking changes between releases.
+     */
     function hookAllOverloads(cls: JavaClass, name: string, hook: MethodHook): Disposer
 
-    /** Hook all constructors of a class */
+    /**
+     * Hook all constructors of a class
+     *
+     * @experimental Subject to breaking changes between releases.
+     */
     function hookAllConstructors(cls: JavaClass, hook: MethodHook): Disposer
 
-    /** Calls the original member, bypassing all plugins' hooks. */
+    /**
+     * Calls the original member, bypassing all plugins' hooks.
+     *
+     * @experimental Subject to breaking changes between releases.
+     */
     function callOriginalMethod(method: JavaMethod | JavaConstructor, thisObject: JavaObject | null, args: any[]): any
 
     /** Create an instance of the class without running any constructor, via JNI `AllocObject`. */

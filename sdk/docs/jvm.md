@@ -142,6 +142,9 @@ const view = inu.jvm.toTl(bold)
 
 ## Callbacks into JS
 
+`inu.jvm.runnable` and JS bodies in `defineClass` have [experimental](README.md#api-stability)
+callback contracts, including threading and reentrancy behavior.
+
 Java code often wants a callback: a `Runnable`, a listener, an overridden method.
 
 The API provides two ways to declare one:
@@ -182,6 +185,8 @@ A runnable only skips when another app thread sits on your engine for over 2 s, 
 stopping. For hot paths, and for anything that must hold even then, use a routine.
 
 ## Defining classes
+
+`defineClass`, its specification types, `callSuper`, and `getSuper` are [experimental](README.md#api-stability).
 
 `inu.jvm.defineClass` generates a real Java class at runtime. Use it to implement an interface,
 subclass something, or pass Java a listener.
