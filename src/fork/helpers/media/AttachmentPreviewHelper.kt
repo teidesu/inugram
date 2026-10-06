@@ -4,6 +4,7 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import desu.inugram.InuConfig
 import org.telegram.messenger.AndroidUtilities
+import org.telegram.messenger.ImageLocation
 import org.telegram.messenger.ImageReceiver
 import org.telegram.messenger.MediaController
 import org.telegram.ui.Components.AnimatedFileDrawable
@@ -11,7 +12,7 @@ import org.telegram.ui.PhotoViewer
 
 /**
  * Keeps initial attachment bitmaps small to reduce memory, resize and texture-upload work.
- * The viewer also loads neighboring photos; zooming or editing requests the larger bitmap.
+ * The viewer also loads neighboring photos; the larger bitmap loads once the current photo settles.
  */
 object AttachmentPreviewHelper {
     private class AttachmentPreviewState(fullSize: Int) {
@@ -20,6 +21,7 @@ object AttachmentPreviewHelper {
         val fullQualityRequested = HashMap<MediaController.PhotoEntry, Boolean>()
         var pendingEdit: PendingAttachmentEdit? = null
         var preserveZoomEntry: MediaController.PhotoEntry? = null
+        var pendingUpgrade: Runnable? = null
     }
 
     private class PendingAttachmentEdit(
@@ -55,7 +57,7 @@ object AttachmentPreviewHelper {
         selectionType: Int,
         fullSize: Int,
     ): Int {
-        if (!InuConfig.FAST_ATTACHMENT_PREVIEWS.value || entry.isVideo || !AttachmentAnimationHelper.isAttachmentMediaPreview(viewer, entry, selectionType)) return fullSize
+        if (!InuConfig.OPTIMIZED_ATTACHMENT_MENU.value || entry.isVideo || !AttachmentAnimationHelper.isAttachmentMediaPreview(viewer, entry, selectionType)) return fullSize
 
         val state = attachmentPreviews.getOrPut(viewer) { AttachmentPreviewState(fullSize) }
         if (state.fullQualityRequested[entry] == true) return fullSize
@@ -63,8 +65,7 @@ object AttachmentPreviewHelper {
         return (AndroidUtilities.getPhotoSize(false) / AndroidUtilities.density).toInt()
     }
 
-    @JvmStatic
-    fun upgradeAttachmentPreview(viewer: PhotoViewer) {
+    private fun upgradeAttachmentPreview(viewer: PhotoViewer) {
         val state = attachmentPreviews[viewer] ?: return
         val entry = viewer.imagesArrLocals.getOrNull(viewer.currentIndex) as? MediaController.PhotoEntry ?: return
         if (entry.isVideo || state.fullQualityRequested[entry] != false) return
@@ -76,7 +77,7 @@ object AttachmentPreviewHelper {
         // Keep the guard through later image callbacks until the photo changes.
         state.preserveZoomEntry = entry
         try {
-            receiver.setImage(entry.path, state.fullFilter, preview, null, 0)
+            receiver.setImage(ImageLocation.getForPath(entry.path), state.fullFilter, null, null, preview, 0, null, attachmentTextureRequest, 1)
         } finally {
             receiver.setCrossfadeWithOldImage(false)
         }
@@ -105,6 +106,7 @@ object AttachmentPreviewHelper {
     @JvmStatic
     fun onAttachmentPreviewLoaded(viewer: PhotoViewer) {
         val state = attachmentPreviews[viewer] ?: return
+        scheduleAttachmentUpgrade(viewer, state)
         val pending = state.pendingEdit ?: return
         if (viewer.centerImage.imageFilter != state.fullFilter || !viewer.centerImage.hasImageLoaded()) return
         AndroidUtilities.runOnUIThread {
@@ -116,9 +118,28 @@ object AttachmentPreviewHelper {
         }
     }
 
+    private fun scheduleAttachmentUpgrade(viewer: PhotoViewer, state: AttachmentPreviewState) {
+        val entry = viewer.imagesArrLocals.getOrNull(viewer.currentIndex) as? MediaController.PhotoEntry ?: return
+        if (state.fullQualityRequested[entry] != false) return
+        state.pendingUpgrade?.let(AndroidUtilities::cancelRunOnUIThread)
+        val upgrade = object : Runnable {
+            override fun run() {
+                if (attachmentPreviews[viewer] !== state || state.pendingUpgrade !== this || !viewer.isVisible) return
+                if (viewer.animationInProgress != 0) {
+                    AndroidUtilities.runOnUIThread(this, UPGRADE_DELAY_MS)
+                    return
+                }
+                state.pendingUpgrade = null
+                upgradeAttachmentPreview(viewer)
+            }
+        }
+        state.pendingUpgrade = upgrade
+        AndroidUtilities.runOnUIThread(upgrade, UPGRADE_DELAY_MS)
+    }
+
     @JvmStatic
     fun shouldKeepAttachmentZoom(viewer: PhotoViewer): Boolean {
-        if (!InuConfig.FAST_ATTACHMENT_PREVIEWS.value) return false
+        if (!InuConfig.OPTIMIZED_ATTACHMENT_MENU.value) return false
         val entry = attachmentPreviews[viewer]?.preserveZoomEntry ?: return false
         return viewer.imagesArrLocals.getOrNull(viewer.currentIndex) === entry
     }
@@ -128,10 +149,15 @@ object AttachmentPreviewHelper {
         val state = attachmentPreviews[viewer] ?: return
         state.pendingEdit = null
         state.preserveZoomEntry = null
+        state.pendingUpgrade?.let(AndroidUtilities::cancelRunOnUIThread)
+        state.pendingUpgrade = null
+        scheduleAttachmentUpgrade(viewer, state)
     }
 
     @JvmStatic
     fun clearAttachmentPreviews(viewer: PhotoViewer) {
-        attachmentPreviews.remove(viewer)
+        attachmentPreviews.remove(viewer)?.pendingUpgrade?.let(AndroidUtilities::cancelRunOnUIThread)
     }
+
+    private const val UPGRADE_DELAY_MS = 200L
 }

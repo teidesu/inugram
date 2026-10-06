@@ -1,24 +1,34 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dubzer <me@dubzer.dev>
 Date: Sat, 3 Oct 2026 18:17:25 +0300
-Subject: Load full-size attachment photos only when zooming or editing
+Subject: Open attachment photos with a smaller preview first
 
-Use smaller photo previews when choosing attachments to reduce decoding,
+Use smaller photo previews when opening attachments to reduce decoding,
 resizing and texture-upload work. Request the normal full-size viewer
-image when the user zooms in or starts editing, keeping the preview visible
-until it is ready and deferring editing until loading completes.
+image once the current photo settles after opening or swiping, or right
+away when the user starts editing, keeping the preview visible until it
+is ready and deferring editing until loading completes.
 
 Preserve zoom through asynchronous image replacement, retain already
 edited bitmaps, and clear preview state when the photo changes or the
 viewer closes or is destroyed.
 ---
- .../java/org/telegram/ui/PhotoViewer.java     | 20 ++++++++++++++++++-
- 1 file changed, 19 insertions(+), 1 deletion(-)
+ .../main/java/org/telegram/ui/PhotoViewer.java   | 16 ++++++++++++++--
+ 1 file changed, 14 insertions(+), 2 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+@@ -1923,7 +1923,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+ //    private boolean mentionListViewVisible;
+ //    private boolean allowMentions;
+ 
+-    private int animationInProgress;
++    public int animationInProgress;
+     private boolean openAnimationInProgress;
+     private long transitionAnimationStartTime;
+     private Runnable animationEndRunnable;
 @@ -7800,8 +7800,10 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                      containerView.requestLayout();
                  }
@@ -83,23 +93,3 @@ index 0000000..0000000 100644
          if (doneButtonPressed) {
              releasePlayer(true);
          }
-@@ -19280,6 +19292,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
-                     rotate = (float) ((Math.atan2(ev.getY(1) - ev.getY(0), ev.getX(1) - ev.getX(0)) - pinchStartAngle) / Math.PI * 180 + pinchStartRotate);
-                 }
-                 scale = (float) Math.hypot(ev.getX(1) - ev.getX(0), ev.getY(1) - ev.getY(0)) / pinchStartDistance * pinchStartScale;
-+                if (scale > 1.0f) {
-+                    desu.inugram.helpers.media.AttachmentPreviewHelper.upgradeAttachmentPreview(this);
-+                }
-                 translationX = (pinchCenterX - getContainerViewWidth() / 2) - ((pinchCenterX - getContainerViewWidth() / 2) - pinchStartX) * (scale / pinchStartScale);
-                 translationY = (pinchCenterY - getContainerViewHeight() / 2) - ((pinchCenterY - getContainerViewHeight() / 2) - pinchStartY) * (scale / pinchStartScale);
-                 updateMinMax(scale);
-@@ -19566,6 +19581,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
-         if (scale == newScale && translationX == newTx && translationY == newTy) {
-             return;
-         }
-+        if (isZoom && newScale > scale) {
-+            desu.inugram.helpers.media.AttachmentPreviewHelper.upgradeAttachmentPreview(this);
-+        }
-         zoomAnimation = isZoom;
-         animateToScale = newScale;
-         animateToX = newTx;

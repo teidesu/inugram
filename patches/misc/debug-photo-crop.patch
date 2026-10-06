@@ -72,7 +72,7 @@ index 0000000..0000000 100644
                      if (bitmap != null || isCurrentVideo) {
                          photoCropView.setBitmap(bitmap, centerImage.getOrientation(), sendPhotoType != SELECT_TYPE_AVATAR, false, paintingOverlay, cropTransform, isCurrentVideo ? (VideoEditTextureView) videoTextureView : null, editState.cropState);
                          photoCropView.onDisappear();
-@@ -19687,6 +19691,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -19681,6 +19685,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
      }
  
      public void inu_reloadCurrentPhoto(MediaController.PhotoEntry entry, boolean reloadImage) {
