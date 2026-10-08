@@ -662,6 +662,9 @@ object InuConfig {
     val DISABLE_SCRIM_BLUR = BoolItem("disable_scrim_blur", false)
 
     @JvmField
+    val FIX_SCRIM_MENU_THEME = BoolItem("fix_scrim_menu_theme", true)
+
+    @JvmField
     val DISABLE_GLASS_GLARE = BoolItem("disable_glass_glare", true)
 
     @JvmField

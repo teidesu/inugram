@@ -342,3 +342,4 @@ feature/attachment-preview-resolution.patch
 feature/optimized-attachment-menu.patch
 bugfix/sticker-mask-alpha.patch
 misc/debug-photo-crop.patch
+bugfix/scrim-menu-theme.patch

@@ -1,0 +1,22 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Nika Krasnova <nika@nikableh.moe>
+Date: Thu, 8 Oct 2026 10:55:06 +0200
+Subject: Respect popup menu themes
+
+---
+ .../drawable/color/impl/BlurredBackgroundProviderImpl.java      | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/blur3/drawable/color/impl/BlurredBackgroundProviderImpl.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/blur3/drawable/color/impl/BlurredBackgroundProviderImpl.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/blur3/drawable/color/impl/BlurredBackgroundProviderImpl.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/blur3/drawable/color/impl/BlurredBackgroundProviderImpl.java
+@@ -114,7 +114,7 @@ public class BlurredBackgroundProviderImpl {
+     public static BlurredBackgroundProvider scrimMenuBackground(Theme.ResourcesProvider resourcesProvider) {
+         return new BlurredBackgroundProviderBuilder(resourcesProvider)
+             .setBackgroundColor((r, isDark) ->
+-                Theme.multAlpha(Theme.getColor(Theme.key_actionBarDefaultSubmenuBackground), isDark ? 0.85f : 0.825f))
++                Theme.multAlpha(Theme.getColor(Theme.key_actionBarDefaultSubmenuBackground, desu.inugram.InuConfig.FIX_SCRIM_MENU_THEME.getValue() ? r : null), isDark ? 0.85f : 0.825f))
+             .setStrokeColorTop(0x44FFFFFF, 0)
+             .setStrokeColorBottom(0x22FFFFFF, 0)
+             .setShadowColor(0x26000000, 0)
