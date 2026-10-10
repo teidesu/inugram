@@ -81,6 +81,20 @@ object M3SliderHelper {
 
     private fun stateFor(view: View) = states.getOrPut(view) { State() }
 
+    private fun inactiveColor(themed: Int): Int =
+        resolveColor(themed, Theme.key_player_progressBackground, "monet_secondary_container_")
+
+    private fun bufferedColor(themed: Int): Int =
+        resolveColor(themed, Theme.key_player_progressCachedBackground, "monet_secondary_", "(a=25)")
+
+    private fun resolveColor(themed: Int, key: Int, tokenPrefix: String, modifiers: String = ""): Int {
+        val theme = Theme.getActiveTheme() ?: return themed
+        if (!theme.inu_isMonet() || themed != Theme.getColor(key)) return themed
+        val token = tokenPrefix + (if (theme.inu_isMonetNight()) "dark" else "light") + modifiers
+        val color = MonetHelper.getColor(token)
+        return if (color == 0) themed else color
+    }
+
     /** Current animated handle width in px; narrows while dragging like the M3 pressed state. */
     private fun handleWidth(view: View, dragging: Boolean): Float {
         val anim = stateFor(view).handleWidth
@@ -134,7 +148,7 @@ object M3SliderHelper {
         }
 
         val activeColor = view.outerPaint1.color
-        val inactiveColor = view.getThemedColor(Theme.key_player_progressBackground)
+        val inactiveColor = inactiveColor(view.getThemedColor(Theme.key_player_progressBackground))
         val cy = view.measuredHeight / 2f
         val left = view.selectorWidth / 2f
         val right = width - view.selectorWidth / 2f
@@ -153,7 +167,7 @@ object M3SliderHelper {
         if (view.bufferedProgress > 0f) {
             val bufferedRight = left + view.bufferedProgress * (right - left)
             if (bufferedRight > inactiveLeft + 1f) {
-                trackPaint.color = view.getThemedColor(Theme.key_player_progressCachedBackground)
+                trackPaint.color = bufferedColor(view.getThemedColor(Theme.key_player_progressCachedBackground))
                 val endR = if (bufferedRight >= right - 1f) outerR else innerR
                 drawRounded(canvas, inactiveLeft, min(bufferedRight, right), cy, innerR, endR, trackPaint)
             }
@@ -203,7 +217,7 @@ object M3SliderHelper {
         val trackLeft = centerX(0f) - outerR
         val trackRight = centerX((count - 1).toFloat()) + outerR
         val activeColor = view.getThemedColor(Theme.key_player_progress)
-        val inactiveColor = view.getThemedColor(Theme.key_player_progressBackground)
+        val inactiveColor = inactiveColor(view.getThemedColor(Theme.key_player_progressBackground))
 
         // stock: options at/below minIndex show at half alpha; dashed region beyond dashedFrom
         // (approximate/auto values) rendered dimmed instead of dashed
@@ -309,7 +323,7 @@ object M3SliderHelper {
         val outerR = AndroidUtilities.dpf2(OUTER_RADIUS)
         val innerR = AndroidUtilities.dpf2(INNER_RADIUS)
         val activeColor = Theme.getColor(Theme.key_player_progress)
-        val inactiveColor = Theme.getColor(Theme.key_player_progressBackground)
+        val inactiveColor = inactiveColor(Theme.getColor(Theme.key_player_progressBackground))
 
         val inactiveLeft = cx + hw + gap
         drawSpan(canvas, left, cx - hw - gap, cy, outerR, innerR, activeColor, -Float.MAX_VALUE, Float.MAX_VALUE)
