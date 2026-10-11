@@ -1,0 +1,24 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dubzer <me@dubzer.dev>
+Date: Sun, 11 Oct 2026 03:43:24 +0300
+Subject: Respect Power Saving blur setting in the emoji panel
+
+---
+ .../drawable/color/impl/BlurredBackgroundProviderImpl.java    | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/blur3/drawable/color/impl/BlurredBackgroundProviderImpl.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/blur3/drawable/color/impl/BlurredBackgroundProviderImpl.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/blur3/drawable/color/impl/BlurredBackgroundProviderImpl.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/blur3/drawable/color/impl/BlurredBackgroundProviderImpl.java
+@@ -64,6 +64,10 @@ public class BlurredBackgroundProviderImpl {
+     public static BlurredBackgroundProvider emojiViewButton(Theme.ResourcesProvider resourcesProvider) {
+         return new BlurredBackgroundProviderBuilder(resourcesProvider)
+                 .setBackgroundColor((r, isDark) -> {
++                    if (!LiteMode.isEnabled(LiteMode.FLAG_CHAT_BLUR)) {
++                        return ColorUtils.setAlphaComponent(Theme.getColor(Theme.key_windowBackgroundWhite, r), 255);
++                    }
++
+                     final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.85f : 0.76f;
+                     final int colorBg = Theme.getColor(Theme.key_windowBackgroundWhite, r);
+                     return Theme.multAlpha(colorBg, alpha);
