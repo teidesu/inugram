@@ -1,0 +1,25 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Sun, 11 Oct 2026 17:41:40 +0200
+Subject: fix deleted bot bottom overlay
+
+---
+ TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -28285,7 +28285,11 @@ public class ChatActivity extends BaseFragment implements
+                     sentBotStart = true;
+                 }
+             } else {
++                if (bottomOverlayStartButton != null) {
++                    bottomOverlayStartButton.setVisibility(View.INVISIBLE);
++                }
+                 bottomOverlayChatText.setText(LocaleController.getString(R.string.DeleteThisChat));
++                bottomOverlayChatText.setVisibility(View.VISIBLE);
+             }
+         }
+ 

@@ -162,7 +162,7 @@ object UpdateHelper {
                 }
                 loadRichMessage(account, messageId) { msg ->
                     if (!isPendingStart) return@loadRichMessage
-                    val freshDoc = msg?.let { extractApkInfo(it)?.document }
+                    val freshDoc = msg?.let { extractApkInfo(it, currentVariant())?.document }
                     if (msg == null || freshDoc == null) {
                         beginLoad(account, doc, sourceMessageParent(messageId))
                     } else {
@@ -212,13 +212,82 @@ object UpdateHelper {
     }
 
     fun check(callback: ((CheckResult) -> Unit)?) {
+        if (BuildConfig.INU_BUILD_TYPE == "debug") {
+            callback?.invoke(CheckResult.UpToDate)
+            return
+        }
+        check(currentVariant(), callback)
+    }
+
+    fun prepareVariantSwitch(callback: (VariantSwitchResult) -> Unit) {
+        if (BuildConfig.INU_BUILD_TYPE == "debug") {
+            callback(VariantSwitchResult.Unavailable)
+            return
+        }
+        val account = UserConfig.selectedAccount
+        if (!UserConfig.getInstance(account).isClientActivated) {
+            callback(VariantSwitchResult.Error("Not logged in"))
+            return
+        }
+        val now = System.currentTimeMillis()
+        if (inflight && now - inflightSince < INFLIGHT_TIMEOUT_MS) {
+            callback(VariantSwitchResult.InFlight)
+            return
+        }
+        inflight = true
+        inflightSince = now
+        MessagesController.getInstance(account).userNameResolver.resolve(USERNAME) { id ->
+            if (id == null || id == 0L || id == Long.MAX_VALUE) {
+                finishVariantSwitch(callback, VariantSwitchResult.Error("resolve failed"))
+                return@resolve
+            }
+            val req = TLRPC.TL_messages_search().apply {
+                peer = MessagesController.getInstance(account).getInputPeer(id)
+                q = "#release"
+                filter = TLRPC.TL_inputMessagesFilterEmpty()
+                limit = 10
+            }
+            ConnectionsManager.getInstance(account).sendRequest(req) { resp, err ->
+                AndroidUtilities.runOnUIThread {
+                    if (err != null || resp !is TLRPC.messages_Messages) {
+                        finishVariantSwitch(callback, VariantSwitchResult.Error(err?.text ?: "no response"))
+                        return@runOnUIThread
+                    }
+                    val latest = resp.messages.filter { it.rich_message != null }.maxByOrNull { it.id }
+                    fun onLoaded(msg: TLRPC.Message?) {
+                        val info = msg?.let {
+                            extractApkInfo(it, if (BuildConfig.INU_PLUGINLESS) "full" else "pluginless")
+                        }
+                        finishVariantSwitch(
+                            callback,
+                            if (msg == null || info == null || info.verCode < currentBuild().versionCode) VariantSwitchResult.Unavailable
+                            else VariantSwitchResult.Ready(VariantSwitch(info.document, msg)),
+                        )
+                    }
+                    if (latest?.rich_message?.part == true) loadRichMessage(account, latest.id, ::onLoaded)
+                    else onLoaded(latest)
+                }
+            }
+        }
+    }
+
+    fun startVariantSwitchDownload(account: Int, variantSwitch: VariantSwitch) {
+        FileLoader.getInstance(account).loadFile(
+            variantSwitch.document,
+            MessageObject(account, variantSwitch.sourceMessage, false, false),
+            FileLoader.PRIORITY_NORMAL,
+            1,
+        )
+    }
+
+    fun cancelVariantSwitchDownload(account: Int, variantSwitch: VariantSwitch) {
+        FileLoader.getInstance(account).cancelLoadFile(variantSwitch.document)
+    }
+
+    private fun check(variant: String, callback: ((CheckResult) -> Unit)?) {
         val account = UserConfig.selectedAccount
         if (!UserConfig.getInstance(account).isClientActivated) {
             callback?.invoke(CheckResult.Error("Not logged in"))
-            return
-        }
-        if (BuildConfig.INU_BUILD_TYPE == "debug") {
-            callback?.invoke(CheckResult.UpToDate)
             return
         }
         val now = System.currentTimeMillis()
@@ -233,11 +302,16 @@ object UpdateHelper {
                 finish(callback, CheckResult.Error("resolve failed"))
                 return@resolve
             }
-            performSearch(account, id, callback)
+            performSearch(account, id, variant, callback)
         }
     }
 
-    private fun performSearch(account: Int, peerId: Long, callback: ((CheckResult) -> Unit)?) {
+    private fun performSearch(
+        account: Int,
+        peerId: Long,
+        variant: String,
+        callback: ((CheckResult) -> Unit)?,
+    ) {
         val mc = MessagesController.getInstance(account)
         val req = TLRPC.TL_messages_search().apply {
             peer = mc.getInputPeer(peerId)
@@ -253,14 +327,14 @@ object UpdateHelper {
                 }
                 val latest = resp.messages.filter { it.rich_message != null }.maxByOrNull { it.id }
                 fun onLoaded(msg: TLRPC.Message?) {
-                    val info = msg?.let(::extractApkInfo)
+                    val info = msg?.let { extractApkInfo(it, variant) }
                     val current = currentBuild()
                     if (info == null || !isNewer(info, current)) {
                         clearPending()
                         finish(callback, CheckResult.UpToDate)
                         return
                     }
-                    finish(callback, CheckResult.Updated(applyUpdate(msg, info, current)))
+                    finish(callback, CheckResult.Updated(applyUpdate(msg, info, current, variant)))
                 }
                 if (latest?.rich_message?.part == true) loadRichMessage(account, latest.id, ::onLoaded)
                 else onLoaded(latest)
@@ -287,10 +361,11 @@ object UpdateHelper {
         if (msg.peer_id?.channel_id != CHANNEL_ID) return
         val rich = msg.rich_message ?: return
         fun onLoaded(full: TLRPC.Message?) {
-            val info = full?.let(::extractApkInfo) ?: return
+            val variant = currentVariant()
+            val info = full?.let { extractApkInfo(it, variant) } ?: return
             val current = currentBuild()
             if (!isNewer(info, current)) return
-            applyUpdate(full, info, current)
+            applyUpdate(full, info, current, variant)
             revealPendingUpdate()
             InuConfig.UPDATE_LAST_CHECK_MS.value = System.currentTimeMillis()
         }
@@ -300,11 +375,16 @@ object UpdateHelper {
         }
     }
 
-    private fun applyUpdate(msg: TLRPC.Message, info: ApkInfo, current: CurrentBuild): TLRPC.TL_help_appUpdate {
+    private fun applyUpdate(
+        msg: TLRPC.Message,
+        info: ApkInfo,
+        current: CurrentBuild,
+        variant: String,
+    ): TLRPC.TL_help_appUpdate {
         var skipping = false
         val blocks = msg.rich_message.blocks.filterIsInstance<TL_iv.pageBlockDetails>().firstOrNull()?.blocks.orEmpty().filterTo(ArrayList()) {
             if (it is TL_iv.pageBlockHeading2) {
-                skipping = BuildConfig.INU_PLUGINLESS && RichMessageLayout.getString(it.text).trim() == "Plugins"
+                skipping = variant == "pluginless" && RichMessageLayout.getString(it.text).trim() == "Plugins"
             }
             !skipping
         }
@@ -340,11 +420,18 @@ object UpdateHelper {
         callback?.invoke(result)
     }
 
+    private fun finishVariantSwitch(
+        callback: (VariantSwitchResult) -> Unit,
+        result: VariantSwitchResult,
+    ) {
+        inflight = false
+        callback(result)
+    }
+
     @Suppress("DEPRECATION")
     private fun currentBuild(): CurrentBuild = CurrentBuild(packageInfo.versionCode)
 
-    private fun extractApkInfo(msg: TLRPC.Message): ApkInfo? {
-        val variant = if (BuildConfig.INU_PLUGINLESS) "pluginless" else "full"
+    private fun extractApkInfo(msg: TLRPC.Message, variant: String): ApkInfo? {
         val (match, doc) = msg.rich_message?.documents.orEmpty().firstNotNullOfOrNull { doc ->
             APK_RE.matchEntire(FileLoader.getDocumentFileName(doc))
                 ?.takeIf { it.groupValues[3] == variant }
@@ -356,6 +443,8 @@ object UpdateHelper {
         return ApkInfo(verCode, appVerName, doc)
     }
 
+    private fun currentVariant(): String = if (BuildConfig.INU_PLUGINLESS) "pluginless" else "full"
+
     private fun isNewer(remote: ApkInfo, current: CurrentBuild): Boolean {
         return remote.verCode > current.versionCode
     }
@@ -366,6 +455,18 @@ object UpdateHelper {
         data class Updated(val update: TLRPC.TL_help_appUpdate) : CheckResult()
         data class Error(val message: String) : CheckResult()
     }
+
+    sealed class VariantSwitchResult {
+        object InFlight : VariantSwitchResult()
+        object Unavailable : VariantSwitchResult()
+        data class Ready(val variantSwitch: VariantSwitch) : VariantSwitchResult()
+        data class Error(val message: String) : VariantSwitchResult()
+    }
+
+    class VariantSwitch internal constructor(
+        val document: TLRPC.Document,
+        internal val sourceMessage: TLRPC.Message,
+    )
 
     private data class ApkInfo(
         val verCode: Int,

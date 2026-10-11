@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Outline
 import android.graphics.PorterDuff
 import android.graphics.drawable.LayerDrawable
+import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
@@ -24,6 +25,7 @@ import desu.inugram.helpers.update.UpdateHelper
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.AndroidUtilities.dp
 import org.telegram.messenger.ApplicationLoader
+import org.telegram.messenger.BuildConfig
 import org.telegram.messenger.FileLoader
 import org.telegram.messenger.FileLog
 import org.telegram.messenger.LocaleController
@@ -83,7 +85,7 @@ class AboutActivity : SettingsPageActivity(), NotificationCenter.NotificationCen
                 LocaleController.getString(R.string.InuUpdateCheckNow),
             )
         )
-        items.add(UItem.asShadow(lastCheckLabel()))
+        items.add(UItem.asShadow(updateInfoLabel()))
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.InuLogs)))
         items.add(
@@ -213,6 +215,116 @@ class AboutActivity : SettingsPageActivity(), NotificationCenter.NotificationCen
         }
     }
 
+    private fun updateInfoLabel(): CharSequence {
+        if (BuildConfig.INU_BUILD_TYPE == "debug") return lastCheckLabel()
+        val build = LocaleController.getString(
+            if (BuildConfig.INU_PLUGINLESS) R.string.InuUpdateBuildPluginlessInfo
+            else R.string.InuUpdateBuildFullInfo
+        )
+        return TextUtils.concat(
+            AndroidUtilities.replaceArrows(
+                AndroidUtilities.replaceSingleTag(build) { confirmVariantSwitch() },
+                true,
+            ),
+            "\n",
+            lastCheckLabel(),
+        )
+    }
+
+    private var variantSwitch: UpdateHelper.VariantSwitch? = null
+    private var isPreparingVariantSwitch = false
+    private var variantSwitchDownloadDialog: AlertDialog? = null
+
+    private fun confirmVariantSwitch() {
+        val ctx = context ?: return
+        AlertDialog.Builder(ctx)
+            .setTitle(
+                LocaleController.getString(
+                    if (BuildConfig.INU_PLUGINLESS) R.string.InuSwitchConfirmFull
+                    else R.string.InuSwitchConfirmPluginless
+                )
+            )
+            .setPositiveButton(LocaleController.getString(R.string.OK)) { _, _ -> prepareVariantSwitch() }
+            .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
+            .show()
+    }
+
+    private fun prepareVariantSwitch() {
+        val ctx = context ?: return
+        isPreparingVariantSwitch = true
+        variantSwitchDownloadDialog = AlertDialog(ctx, AlertDialog.ALERT_TYPE_LOADING).apply {
+            setMessage(LocaleController.getString(R.string.InuSwitchPreparing))
+            setCanceledOnTouchOutside(false)
+            setCancelable(true)
+            setOnCancelListener {
+                isPreparingVariantSwitch = false
+                variantSwitch?.let {
+                    UpdateHelper.cancelVariantSwitchDownload(UserConfig.selectedAccount, it)
+                }
+                variantSwitch = null
+                variantSwitchDownloadDialog = null
+            }
+            show()
+        }
+        UpdateHelper.prepareVariantSwitch { result ->
+            AndroidUtilities.runOnUIThread {
+                if (!isPreparingVariantSwitch) return@runOnUIThread
+                isPreparingVariantSwitch = false
+                when (result) {
+                    UpdateHelper.VariantSwitchResult.InFlight -> finishVariantSwitchPreparation(
+                        LocaleController.getString(R.string.Checking)
+                    )
+                    UpdateHelper.VariantSwitchResult.Unavailable -> finishVariantSwitchPreparation(
+                        LocaleController.getString(R.string.InuSwitchUnavailable)
+                    )
+                    is UpdateHelper.VariantSwitchResult.Error -> finishVariantSwitchPreparation(
+                        LocaleController.formatString(R.string.InuUpdateError, result.message)
+                    )
+                    is UpdateHelper.VariantSwitchResult.Ready -> startVariantSwitchDownload(result.variantSwitch)
+                }
+            }
+        }
+    }
+
+    private fun startVariantSwitchDownload(value: UpdateHelper.VariantSwitch) {
+        val account = UserConfig.selectedAccount
+        UpdateHelper.cancelDownload(account)
+        UpdateHelper.clearPending()
+        val file = FileLoader.getInstance(account).getPathToAttach(value.document, true)
+        if (file?.exists() == true) {
+            variantSwitchDownloadDialog?.dismiss()
+            variantSwitchDownloadDialog = null
+            installVariantSwitch(value)
+            return
+        }
+        variantSwitch = value
+        variantSwitchDownloadDialog?.setMessage(
+            LocaleController.getString(
+                if (BuildConfig.INU_PLUGINLESS) R.string.InuSwitchDownloadingFull
+                else R.string.InuSwitchDownloadingPluginless
+            )
+        )
+        UpdateHelper.startVariantSwitchDownload(account, value)
+    }
+
+    private fun finishVariantSwitchPreparation(message: CharSequence) {
+        variantSwitchDownloadDialog?.dismiss()
+        variantSwitchDownloadDialog = null
+        showVariantSwitchMessage(message)
+    }
+
+    private fun installVariantSwitch(value: UpdateHelper.VariantSwitch) {
+        variantSwitch = null
+        val activity = parentActivity ?: return
+        val loader = ApplicationLoader.applicationLoaderInstance ?: return
+        if (loader.checkApkInstallPermissions(activity)) loader.openApkInstall(activity, value.document)
+    }
+
+    private fun showVariantSwitchMessage(message: CharSequence) {
+        if (context == null) return
+        BulletinFactory.of(this).createSimpleBulletin(R.raw.chats_infotip, message).show()
+    }
+
     override fun onFragmentCreate(): Boolean {
         val ok = super.onFragmentCreate()
         val global = NotificationCenter.getGlobalInstance()
@@ -233,12 +345,44 @@ class AboutActivity : SettingsPageActivity(), NotificationCenter.NotificationCen
         acct.removeObserver(this, NotificationCenter.fileLoadProgressChanged)
         acct.removeObserver(this, NotificationCenter.fileLoaded)
         acct.removeObserver(this, NotificationCenter.fileLoadFailed)
+        variantSwitch?.let { UpdateHelper.cancelVariantSwitchDownload(UserConfig.selectedAccount, it) }
+        variantSwitch = null
+        isPreparingVariantSwitch = false
+        variantSwitchDownloadDialog?.dismiss()
+        variantSwitchDownloadDialog = null
         super.onFragmentDestroy()
     }
 
     override fun didReceivedNotification(id: Int, account: Int, vararg args: Any?) {
-        val ul = updateLayout ?: return
         val acct = UserConfig.selectedAccount
+        val switching = variantSwitch
+        if (switching != null) {
+            val name = args.getOrNull(0) as? String
+            if (name == FileLoader.getAttachFileName(switching.document)) {
+                when (id) {
+                    NotificationCenter.fileLoadProgressChanged -> {
+                        val loaded = args.getOrNull(1) as? Long ?: return
+                        val total = args.getOrNull(2) as? Long ?: return
+                        if (total > 0) variantSwitchDownloadDialog?.setProgress((loaded * 100 / total).toInt())
+                        return
+                    }
+                    NotificationCenter.fileLoaded -> {
+                        variantSwitchDownloadDialog?.dismiss()
+                        variantSwitchDownloadDialog = null
+                        installVariantSwitch(switching)
+                        return
+                    }
+                    NotificationCenter.fileLoadFailed -> {
+                        variantSwitchDownloadDialog?.dismiss()
+                        variantSwitchDownloadDialog = null
+                        variantSwitch = null
+                        showVariantSwitchMessage(LocaleController.getString(R.string.InuSwitchDownloadFailed))
+                        return
+                    }
+                }
+            }
+        }
+        val ul = updateLayout ?: return
         when (id) {
             NotificationCenter.appUpdateAvailable -> {
                 val animated = args.getOrNull(0) as? Boolean ?: true

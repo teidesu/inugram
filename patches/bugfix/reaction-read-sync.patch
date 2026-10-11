@@ -1,12 +1,13 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.pet>
 Date: Sat, 10 Oct 2026 03:34:51 +0200
-Subject: report each read reaction to server
+Subject: various fixes for stale unread reactions
 
 ---
- .../messenger/MessagesController.java         | 58 ++++++++++++++++++-
- .../java/org/telegram/ui/ChatActivity.java    |  6 +-
- 2 files changed, 60 insertions(+), 4 deletions(-)
+ .../messenger/MessagesController.java         | 83 ++++++++++++++++++-
+ .../telegram/messenger/MessagesStorage.java   | 47 +++++++++++
+ .../java/org/telegram/ui/ChatActivity.java    | 20 ++++-
+ 3 files changed, 144 insertions(+), 6 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 index 0000000..0000000 100644
@@ -90,14 +91,119 @@ index 0000000..0000000 100644
                  boolean isDialogCreated = createdDialogIds.contains(message.dialog_id);
                  MessageObject obj = new MessageObject(currentAccount, message, usersDict, chatsDict, isDialogCreated, isDialogCreated);
                  getTranslateController().invalidateTranslation(obj);
-@@ -19672,6 +19727,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -19672,7 +19727,7 @@ public class MessagesController extends BaseController implements NotificationCe
                      FileLog.d("InuRx update reactions did=" + dialogId + " mid=" + update.msg_id + " top=" + update.top_msg_id + " updateUnread=" + update.updateUnreadState + " " + desu.inugram.helpers.chat.ReactionDebugHelper.describe(update.reactions) + " from " + desu.inugram.helpers.chat.ReactionDebugHelper.caller());
                  }
  
+-                getMessagesStorage().updateMessageReactions(dialogId, update.msg_id, update.reactions);
 +                inu_ignorePendingReadReactions(dialogId, update.msg_id, update.reactions);
-                 getMessagesStorage().updateMessageReactions(dialogId, update.msg_id, update.reactions);
  
                  if (update.updateUnreadState) {
+                     SparseBooleanArray sparseBooleanArray = new SparseBooleanArray();
+@@ -19683,6 +19738,7 @@ public class MessagesController extends BaseController implements NotificationCe
+                     }
+                     checkUnreadReactions(dialogId, topicId, sparseBooleanArray);
+                 }
++                getMessagesStorage().updateMessageReactions(dialogId, update.msg_id, update.reactions);
+                 if (updatesOnMainThread == null) {
+                     updatesOnMainThread = new ArrayList<>();
+                 }
+@@ -21430,8 +21486,11 @@ public class MessagesController extends BaseController implements NotificationCe
+                         newUnreadCount += hasUnreadReaction ? 1 : -1;
+                         changed = true;
+                     }
+-                } else {
++                } else if (!isReactions || inu_needReactionsReloadForUnknownRow(dialogId, topicId, messageId, hasUnreadReaction)) {
+                     needReload = true;
++                } else if (hasUnreadReaction) {
++                    newUnreadCount++;
++                    changed = true;
+                 }
+                 if (hasUnreadReaction) {
+                     newUnreadMessages.add(messageId);
+@@ -21473,6 +21532,24 @@ public class MessagesController extends BaseController implements NotificationCe
+         });
+     }
+ 
++    private boolean inu_needReactionsReloadForUnknownRow(long dialogId, long topicId, int messageId, boolean hasUnreadReaction) {
++        final boolean needReload;
++        final Object stored;
++        if (hasUnreadReaction) {
++            Boolean storedUnread = getMessagesStorage().inu_hasStoredUnreadReactionsSync(dialogId, topicId, messageId);
++            needReload = storedUnread == null || storedUnread;
++            stored = storedUnread;
++        } else {
++            int count = getMessagesStorage().inu_getUnreadReactionsCountSync(dialogId, topicId);
++            needReload = count != 0;
++            stored = count;
++        }
++        if (desu.inugram.helpers.chat.ReactionDebugHelper.isEnabled()) {
++            FileLog.d("InuRx unknown row did=" + dialogId + " topic=" + topicId + " mid=" + messageId + " unread=" + hasUnreadReaction + (hasUnreadReaction ? " storedUnread=" : " localCount=") + stored + " reload=" + needReload);
++        }
++        return needReload;
++    }
++
+     private void checkUnreadReactionsInternal2(long dialogId, long topicId, boolean needReload, boolean changed, int newUnreadCount, ArrayList<Integer> newUnreadMessages) {
+         if (needReload) {
+             if (topicId == 0) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
+@@ -18777,6 +18777,53 @@ public class MessagesStorage extends BaseController {
+         return "[" + result.toString().trim() + "]";
+     }
+ 
++    public int inu_getUnreadReactionsCountSync(long dialogId, long topicId) {
++        SQLiteCursor cursor = null;
++        try {
++            if (topicId == 0) {
++                cursor = database.queryFinalized(String.format(Locale.US, "SELECT unread_reactions FROM dialogs WHERE did = %d", dialogId));
++            } else {
++                cursor = database.queryFinalized(String.format(Locale.US, "SELECT unread_reactions FROM topics WHERE did = %d AND topic_id = %d", dialogId, topicId));
++            }
++            return cursor.next() ? cursor.intValue(0) : 0;
++        } catch (Exception e) {
++            checkSQLException(e);
++            return 0;
++        } finally {
++            if (cursor != null) {
++                cursor.dispose();
++            }
++        }
++    }
++
++    public Boolean inu_hasStoredUnreadReactionsSync(long dialogId, long topicId, int messageId) {
++        SQLiteCursor cursor = null;
++        try {
++            if (topicId == 0) {
++                cursor = database.queryFinalized(String.format(Locale.US, "SELECT data FROM messages_v2 WHERE uid = %d AND mid = %d", dialogId, messageId));
++            } else {
++                cursor = database.queryFinalized(String.format(Locale.US, "SELECT data FROM messages_topics WHERE uid = %d AND mid = %d LIMIT 1", dialogId, messageId));
++            }
++            if (!cursor.next()) {
++                return null;
++            }
++            NativeByteBuffer data = cursor.byteBufferValue(0);
++            if (data == null) {
++                return null;
++            }
++            TLRPC.Message message = TLRPC.Message.TLdeserialize(data, data.readInt32(false), false);
++            data.reuse();
++            return message != null ? MessageObject.hasUnreadReactions(message) : null;
++        } catch (Exception e) {
++            checkSQLException(e);
++            return null;
++        } finally {
++            if (cursor != null) {
++                cursor.dispose();
++            }
++        }
++    }
++
+     private void markMessageReactionsAsReadInternal(String tableMentionsForDialogs, String tableMentionsForTopics, long dialogId, long topicId, int messageId, boolean updateReactions) {
+         if (desu.inugram.helpers.chat.ReactionDebugHelper.isEnabled()) {
+             FileLog.d("InuRx db markRead table=" + tableMentionsForDialogs + " did=" + dialogId + " topic=" + topicId + " mid=" + messageId + " statesBefore=" + inu_debugMentionStates(tableMentionsForDialogs, tableMentionsForTopics, dialogId, messageId) + " from " + desu.inugram.helpers.chat.ReactionDebugHelper.caller());
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
@@ -120,7 +226,28 @@ index 0000000..0000000 100644
                      if (reactionsMentionCount <= 0) {
                          getMessagesController().markReactionsAsRead(dialog_id, getTopicId());
                      }
-@@ -24527,7 +24527,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -24511,6 +24511,20 @@ public class ChatActivity extends BaseFragment implements
+             long topicId = (long) args[1];
+             if (dialogId == dialog_id && ((!isTopic && (!ChatObject.isMonoForum(currentChat) || getTopicId() == 0)) || topicId == getTopicId())) {
+                 reactionsMentionCount = (int) args[2];
++                if (topicId == 0) {
++                    TLRPC.Dialog dialog = getMessagesController().dialogs_dict.get(dialogId);
++                    if (dialog != null) {
++                        reactionsMentionCount = dialog.unread_reactions_count;
++                    }
++                } else {
++                    TLRPC.TL_forumTopic topic = getMessagesController().getTopicsController().findTopic(-dialogId, topicId);
++                    if (topic != null) {
++                        reactionsMentionCount = topic.unread_reactions_count;
++                    }
++                }
++                if (reactionsMentionCount != (int) args[2] && desu.inugram.helpers.chat.ReactionDebugHelper.isEnabled()) {
++                    FileLog.d("InuRx[" + classGuid + "] counter notification stale did=" + dialogId + " topic=" + topicId + " posted=" + args[2] + " current=" + reactionsMentionCount);
++                }
+                 if (desu.inugram.helpers.chat.ReactionDebugHelper.isEnabled()) {
+                     FileLog.d("InuRx[" + classGuid + "] counter notification did=" + dialogId + " topic=" + topicId + " count=" + reactionsMentionCount + " messages=" + args[3]);
+                 }
+@@ -24527,7 +24541,7 @@ public class ChatActivity extends BaseFragment implements
                          }
                          if (cell != null && reactionsMentionCount > 0) {
                              reactionsMentionCount--;

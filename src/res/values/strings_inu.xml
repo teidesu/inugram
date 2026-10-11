@@ -565,6 +565,15 @@
     <string name="InuUpdates">Updates</string>
     <string name="InuUpdatesEnabled">Check for updates automatically</string>
     <string name="InuUpdateCheckNow">Check now</string>
+    <string name="InuUpdateBuildFullInfo">You are on the full build. **Switch to pluginless >**</string>
+    <string name="InuUpdateBuildPluginlessInfo">You are on the pluginless build. **Switch to full >**</string>
+    <string name="InuSwitchConfirmFull">Switch to the full build?</string>
+    <string name="InuSwitchConfirmPluginless">Switch to the pluginless build?</string>
+    <string name="InuSwitchPreparing">Finding build</string>
+    <string name="InuSwitchDownloadingFull">Downloading full build</string>
+    <string name="InuSwitchDownloadingPluginless">Downloading pluginless build</string>
+    <string name="InuSwitchDownloadFailed">Couldn\'t download the selected build</string>
+    <string name="InuSwitchUnavailable">No build found in the updates channel</string>
     <string name="InuUpdateLastChecked">Last checked: %1$s</string>
     <string name="InuUpdateUpToDate">You are on the latest version</string>
     <string name="InuUpdateError">Update check failed: %1$s</string>
