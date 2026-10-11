@@ -356,3 +356,4 @@ hooks/code-highlight-spans.patch
 feature/shared-media-selection-menu.patch
 bugfix/extended-grid-layout-cache.patch
 bugfix/forum-bot-menu-layering.patch
+feature/sticker-transform-controls.patch

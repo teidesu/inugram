@@ -96,6 +96,14 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
         )
         items.add(
             mkTwoLineCheckItem(
+                TOGGLE_STICKER_TRANSFORM_CONTROLS,
+                R.string.InuStickerTransformControls,
+                R.string.InuStickerTransformControlsInfo,
+                InuConfig.STICKER_TRANSFORM_CONTROLS.value,
+            )
+        )
+        items.add(
+            mkTwoLineCheckItem(
                 TOGGLE_SEND_MP4_DOCUMENT_AS_VIDEO,
                 R.string.InuSendMp4DocumentAsVideo,
                 R.string.InuSendMp4DocumentAsVideoInfo,
@@ -273,6 +281,11 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
                 (view as? NotificationsCheckCell)?.isChecked = new
             }
 
+            TOGGLE_STICKER_TRANSFORM_CONTROLS -> {
+                val new = InuConfig.STICKER_TRANSFORM_CONTROLS.toggle()
+                (view as? NotificationsCheckCell)?.isChecked = new
+            }
+
             TOGGLE_SEND_MP4_DOCUMENT_AS_VIDEO -> {
                 val new = InuConfig.SEND_MP4_DOCUMENT_AS_VIDEO.toggle()
                 (view as? NotificationsCheckCell)?.isChecked = new
@@ -410,6 +423,7 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
         private val TOGGLE_HD_BLUETOOTH_CALL_AUDIO = InuUtils.generateId()
         private val TOGGLE_CONFIRM_INTERNAL_LINKS = InuUtils.generateId()
         private val TOGGLE_DISABLE_BROWSER_SWIPE_COLLAPSE = InuUtils.generateId()
+        private val TOGGLE_STICKER_TRANSFORM_CONTROLS = InuUtils.generateId()
         private val TOGGLE_GIF_SEEKBAR = InuUtils.generateId()
         private val TOGGLE_KEEP_CHATS_IN_STACK = InuUtils.generateId()
         private val TOGGLE_SEND_MP4_DOCUMENT_AS_VIDEO = InuUtils.generateId()
@@ -449,6 +463,7 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("hd-bluetooth-call-audio", R.string.InuHdBluetoothCallAudio, TOGGLE_HD_BLUETOOTH_CALL_AUDIO),
                 SearchRegistry.Entry("confirm-internal-links", R.string.InuConfirmInternalLinks, TOGGLE_CONFIRM_INTERNAL_LINKS),
                 SearchRegistry.Entry("disable-browser-swipe-collapse", R.string.InuDisableBrowserSwipeCollapse, TOGGLE_DISABLE_BROWSER_SWIPE_COLLAPSE),
+                SearchRegistry.Entry("sticker-transform-controls", R.string.InuStickerTransformControls, TOGGLE_STICKER_TRANSFORM_CONTROLS),
                 SearchRegistry.Entry("gif-seekbar", R.string.InuGifSeekbar, TOGGLE_GIF_SEEKBAR),
                 SearchRegistry.Entry("keep-chats-in-stack", R.string.InuKeepChatsInStack, TOGGLE_KEEP_CHATS_IN_STACK),
                 SearchRegistry.Entry("send-mp4-document-as-video", R.string.InuSendMp4DocumentAsVideo, TOGGLE_SEND_MP4_DOCUMENT_AS_VIDEO),

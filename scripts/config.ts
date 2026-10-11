@@ -205,6 +205,7 @@ export const ICON_SELECTION: { pack: IconifyJSON, icons: string[], options?: Svg
       'text-wrap',
       'text-wrap-disabled',
       'alert-triangle-filled',
+      'maximize',
     ],
   },
 ]
