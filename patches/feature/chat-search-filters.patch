@@ -1,0 +1,542 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.su>
+Date: Thu, 23 Apr 2026 08:35:17 +0300
+Subject: support sender + media filters and "show only matches" in chat search
+
+Add a media type filter and "show only matches" to chat search.
+Allow combining sender and media filters with demand-driven local pagination.
+
+Co-authored-by: Dubzer <me@dubzer.dev>
+---
+ .../messenger/MediaDataController.java        |  69 ++++++++++-
+ .../ui/Adapters/MessagesSearchAdapter.java    |   6 +
+ .../java/org/telegram/ui/ChatActivity.java    | 108 +++++++++++++++---
+ 3 files changed, 160 insertions(+), 23 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
+@@ -3687,6 +3687,34 @@ public class MediaDataController extends BaseController {
+     private boolean loadingSearchLocal;
+     private boolean loadedPredirectedSearchLocal;
+ 
++    public desu.inugram.helpers.search.SearchMediaScan inu_searchScan;
++
++    public void inu_cancelSearchScan(int guid) {
++        desu.inugram.helpers.search.SearchFilterHelper.cancelRepliesForGuid(guid);
++        if (inu_searchScan != null && inu_searchScan.guid == guid) {
++            inu_searchScan.cancel();
++            inu_searchScan = null;
++            lastReqId++;
++        }
++    }
++
++    public void inu_publishSearchScan(desu.inugram.helpers.search.SearchMediaScan scan, ArrayList<MessageObject> added, boolean jump) {
++        if (inu_searchScan != scan) return;
++        for (MessageObject message : added) {
++            int index = message.getDialogId() == scan.dialogId ? 0 : 1;
++            if (searchServerResultMessagesMap[index].indexOfKey(message.getId()) >= 0) continue;
++            searchServerResultMessagesMap[index].put(message.getId(), message);
++            searchServerResultMessages.add(message);
++            searchResultMessages.add(message);
++        }
++        messagesSearchCount[0] = searchResultMessages.size();
++        MessageObject selected = searchResultMessages.isEmpty() ? null : searchResultMessages.get(Math.min(lastReturnedNum, searchResultMessages.size() - 1));
++        boolean inu_loadingStateOnly = added.isEmpty() && !searchResultMessages.isEmpty();
++        getNotificationCenter().postNotificationName(NotificationCenter.chatSearchResultsAvailable, scan.guid,
++            selected == null ? 0 : selected.getId(), getMask(), selected == null ? scan.dialogId : selected.getDialogId(),
++            lastReturnedNum, getSearchCount(), jump, inu_loadingStateOnly);
++    }
++
+     public void removeMessageFromResults(int id) {
+         for (int i = 0; i < searchResultMessages.size(); ++i) {
+             MessageObject m = searchResultMessages.get(i);
+@@ -3776,6 +3804,7 @@ public class MediaDataController extends BaseController {
+ 
+     public int getMask() {
+         int mask = 0;
++        if (inu_searchScan != null && inu_searchScan.getHasMore()) mask |= 1;
+         if (lastReturnedNum < searchResultMessages.size() - 1 || !messagesSearchEndReached[0] || !messagesSearchEndReached[1]) {
+             mask |= 1;
+         }
+@@ -3831,10 +3860,15 @@ public class MediaDataController extends BaseController {
+     }
+ 
+     public boolean searchEndReached() {
++        if (inu_searchScan != null) return !inu_searchScan.getHasMore();
+         return messagesSearchEndReached[0] && lastMergeDialogId == 0 && messagesSearchEndReached[1] || (loadingSearchLocal || loadedPredirectedSearchLocal);
+     }
+ 
+     public void loadMoreSearchMessages(boolean fromList) {
++        if (inu_searchScan != null) {
++            inu_searchScan.loadMore();
++            return;
++        }
+         if (loadingMoreSearchMessages || reqId != 0 || messagesSearchEndReached[0] && lastMergeDialogId == 0 && messagesSearchEndReached[1]) {
+             return;
+         }
+@@ -3846,6 +3880,7 @@ public class MediaDataController extends BaseController {
+     }
+ 
+     public boolean isSearchLoading() {
++        if (inu_searchScan != null) return inu_searchScan.getLoading();
+         return reqId != 0;
+     }
+ 
+@@ -3862,6 +3897,29 @@ public class MediaDataController extends BaseController {
+             getConnectionsManager().cancelRequest(mergeReqId, true);
+             mergeReqId = 0;
+         }
++        if (query != null && !internal) {
++            inu_cancelSearchScan(lastGuid);
++            inu_searchScan = desu.inugram.helpers.search.SearchFilterHelper.createScan(query, dialogId, mergeDialogId, guid, replyMessageId, user, chat, reaction, jumpToMessage);
++            if (inu_searchScan != null) {
++                lastReqId++;
++                lastGuid = guid;
++                lastSearchQuery = query;
++                lastReturnedNum = 0;
++                loadingMoreSearchMessages = loadingSearchLocal = loadedPredirectedSearchLocal = false;
++                clearFoundMessageObjects();
++                searchServerResultMessagesMap[0].clear();
++                searchServerResultMessagesMap[1].clear();
++                messagesSearchCount[0] = messagesSearchCount[1] = messagesLocalSearchCount = 0;
++                // The scan owns pagination and exposes whether more matches can be requested.
++                messagesSearchEndReached[0] = messagesSearchEndReached[1] = true;
++                inu_searchScan.start();
++                return;
++            }
++        }
++        if (inu_searchScan != null) {
++            if (query == null) inu_searchScan.navigate(direction);
++            return;
++        }
+         if (query == null) {
+             if (searchResultMessages.isEmpty()) {
+                 loadingMoreSearchMessages = false;
+@@ -3955,7 +4013,7 @@ public class MediaDataController extends BaseController {
+                     req.saved_reaction.add(reaction.toTLReaction());
+                     req.flags |= 8;
+                 }
+-                req.filter = new TLRPC.TL_inputMessagesFilterEmpty();
++                req.filter = desu.inugram.helpers.search.SearchFilterHelper.filterForGuid(guid);
+                 mergeReqId = getConnectionsManager().sendRequest(req, (response, error) -> AndroidUtilities.runOnUIThread(() -> {
+                     if (lastMergeDialogId == mergeDialogId) {
+                         mergeReqId = 0;
+@@ -3990,7 +4048,7 @@ public class MediaDataController extends BaseController {
+         lastSearchChat = chat;
+         lastReplyMessageId = replyMessageId;
+         lastReaction = reaction;
+-        req.limit = 21;
++        req.limit = desu.inugram.helpers.search.SearchFilterHelper.isOnlyMatchesForGuid(guid) ? 100 : 21;
+         req.q = query != null ? query : "";
+         req.offset_id = max_id;
+         if (user != null) {
+@@ -4040,7 +4098,7 @@ public class MediaDataController extends BaseController {
+             req.saved_reaction.add(reaction.toTLReaction());
+             req.flags |= 8;
+         }
+-        req.filter = new TLRPC.TL_inputMessagesFilterEmpty();
++        req.filter = desu.inugram.helpers.search.SearchFilterHelper.filterForGuid(guid);
+         lastSearchQuery = query;
+         long queryWithDialogFinal = queryWithDialog;
+         String finalQuery = query;
+@@ -4079,6 +4137,7 @@ public class MediaDataController extends BaseController {
+                         getMessagesController().putUsers(res.users, false);
+                         getMessagesController().putChats(res.chats, false);
+                         Runnable done = () -> {
++                            if (currentReqId != lastReqId) return;
+                             if (req.offset_id == 0 && queryWithDialogFinal == dialogId) {
+                                 lastReturnedNum = 0;
+                                 searchServerResultMessages.clear();
+@@ -4115,8 +4174,8 @@ public class MediaDataController extends BaseController {
+                                 searchMessagesInChat(lastSearchQuery, dialogId, mergeDialogId, guid, 0, replyMessageId, true, user, chat, jumpToMessage, lastReaction);
+                             }
+                         };
+-                        if (isSaved) {
+-                            loadReplyMessagesForMessages(messageObjects, dialogId, 0, lastReplyMessageId, done, guid, null);
++                        if (isSaved || desu.inugram.helpers.search.SearchFilterHelper.isOnlyMatchesForGuid(guid)) {
++                            desu.inugram.helpers.search.SearchFilterHelper.loadRepliesForGuid(currentAccount, messageObjects, dialogId, lastReplyMessageId, done, guid);
+                         } else {
+                             done.run();
+                         }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/MessagesSearchAdapter.java b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/MessagesSearchAdapter.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/MessagesSearchAdapter.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/MessagesSearchAdapter.java
+@@ -176,6 +176,12 @@ public class MessagesSearchAdapter extends RecyclerListView.SelectionAdapter imp
+             flickerCount = hasMore && loadedCount != 0 ? Utilities.clamp(MediaDataController.getInstance(currentAccount).getSearchCount() - loadedCount, 3, 0) : 0;
+         }
+ 
++        if (searchType == 0) {
++            desu.inugram.helpers.search.SearchMediaScan inu_scan = desu.inugram.helpers.search.SearchFilterHelper.scanForGuid(currentAccount, fragment.getClassGuid());
++            if (inu_scan != null) {
++                flickerCount = inu_scan.getLoading() ? 3 : 0;
++            }
++        }
+         final int newItemsCount = getItemCount();
+ 
+         if (oldItemsCount < newItemsCount) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -365,6 +365,7 @@ import me.vkryl.core.reference.ReferenceList;
+ import desu.inugram.InuConfig;
+ import desu.inugram.helpers.chat.ChatHelper;
+ import desu.inugram.helpers.chat.ChatActionsHelper;
++import desu.inugram.helpers.search.SearchFilterHelper;
+ 
+ @SuppressWarnings("unchecked")
+ public class ChatActivity extends BaseFragment implements
+@@ -462,7 +463,7 @@ public class ChatActivity extends BaseFragment implements
+     private ClippingImageView animatingImageView;
+     private ThanosEffect chatListThanosEffect;
+     private ChatListViewPaddingsAnimator chatListViewPaddingsAnimator;
+-    private ChatListRecyclerView chatListView;
++    public ChatListRecyclerView chatListView;
+     private ChatListItemAnimator chatListItemAnimator;
+     private GridLayoutManagerFixed chatLayoutManager;
+     private ChatActivityAdapter chatAdapter;
+@@ -609,6 +610,7 @@ public class ChatActivity extends BaseFragment implements
+     private FrameLayout searchContainer;
+     private ImageView searchCalendarButton;
+     private ImageView searchUserButton;
++    private SearchFilterHelper inu_searchFilter;
+     private AnimatedTextView searchCountText;
+     private AnimatedTextView searchExpandList;
+     private AnimatedTextView searchOtherButton;
+@@ -630,8 +632,8 @@ public class ChatActivity extends BaseFragment implements
+     private boolean scrollingChatListView;
+     private boolean checkTextureViewPosition;
+     private boolean searchingForUser;
+-    private TLRPC.User searchingUserMessages;
+-    private TLRPC.Chat searchingChatMessages;
++    public TLRPC.User searchingUserMessages;
++    public TLRPC.Chat searchingChatMessages;
+     public static boolean scrolling;
+     public ReactionsLayoutInBubble.VisibleReaction searchingReaction;
+     public ReactionsLayoutInBubble.VisibleReaction getFilterTag() {
+@@ -648,7 +650,7 @@ public class ChatActivity extends BaseFragment implements
+     }
+     private boolean searchingFiltered;
+     private boolean searching;
+-    private String searchingQuery;
++    public String searchingQuery;
+     private String searchingHashtag;
+     private int hashtagSearchSelectedIndex;
+     private int searchLastCount;
+@@ -3382,6 +3384,7 @@ public class ChatActivity extends BaseFragment implements
+             getNotificationCenter().removeObserver(commentsMessagesObserver, NotificationCenter.messagesDidLoad);
+             commentsMessagesObserver = null;
+         }
++        if (inu_searchFilter != null) inu_searchFilter.cancelScan();
+         ReactionsEffectOverlay.dismissByFragment(this);
+         if (messageMetricsView != null) {
+             messageMetricsView.finish();
+@@ -6973,7 +6976,11 @@ public class ChatActivity extends BaseFragment implements
+                     }
+                     showFloatingTopicView(true);
+                 }
+-                checkScrollForLoad(true);
++                boolean inu_localMediaSearch = chatAdapter.isFiltered && SearchFilterHelper.scanForGuid(currentAccount, classGuid) != null;
++                boolean inu_scrollingToOlderMessages = reversed ? dy > 0 : dy < 0;
++                if (!inu_localMediaSearch || inu_scrollingToOlderMessages) {
++                    checkScrollForLoad(true);
++                }
+                 if (firstVisibleItem != RecyclerView.NO_POSITION) {
+                     int totalItemCount = chatAdapter.getItemCount();
+                     if (firstVisibleItem == 0 && forwardEndReached[0]) {
+@@ -7744,7 +7751,7 @@ public class ChatActivity extends BaseFragment implements
+                             waitingForLoad.add(lastLoadIndex);
+                             HashtagSearchController.getInstance(currentAccount).searchHashtag(searchingHashtag, classGuid, searchType, lastLoadIndex++);
+                         }
+-                    } else {
++                    } else if (SearchFilterHelper.scanForGuid(currentAccount, classGuid) == null || dy > 0 && recyclerView.getScrollState() != RecyclerView.SCROLL_STATE_IDLE) {
+                         getMediaDataController().loadMoreSearchMessages(true);
+                     }
+                 }
+@@ -9298,10 +9305,10 @@ public class ChatActivity extends BaseFragment implements
+ 
+     }
+ 
+-    private void setFilterMessages(boolean filter) {
++    public void setFilterMessages(boolean filter) {
+         setFilterMessages(filter, false, true);
+     }
+-    private void setFilterMessages(boolean filter, boolean ignoreMessageNotFound, boolean animated) {
++    public void setFilterMessages(boolean filter, boolean ignoreMessageNotFound, boolean animated) {
+         if (chatAdapter == null || chatAdapter.isFiltered == filter) return;
+         chatAdapter.isFiltered = filter;
+         createEmptyView(true);
+@@ -9520,7 +9527,7 @@ public class ChatActivity extends BaseFragment implements
+         hint3MessageObject.contentType = 1;
+     }
+ 
+-    private void updateFilteredMessages(boolean notify) {
++    public void updateFilteredMessages(boolean notify) {
+         ArrayList<MessageObject> results = new ArrayList<>(MediaDataController.getInstance(currentAccount).getFoundMessageObjects());
+         if (filteredMessagesDict == null) {
+             filteredMessagesDict = new LongSparseArray<>();
+@@ -9565,7 +9572,7 @@ public class ChatActivity extends BaseFragment implements
+                 msg.stableId = lastStableId++;
+             }
+             msg.isOutOwnerCached = null;
+-            if (msg.messageOwner != null) {
++            if (msg.messageOwner != null && dialog_id == getUserConfig().getClientUserId()) {
+                 msg.messageOwner.out = true;
+             }
+             msg.isOutOwner();
+@@ -10639,6 +10646,9 @@ public class ChatActivity extends BaseFragment implements
+                     if (searchUserButton != null && searchUserButton.getVisibility() != GONE) {
+                         leftMargin += 48;
+                     }
++                    if (inu_searchFilter != null && inu_searchFilter.getButton().getVisibility() != GONE) {
++                        leftMargin += 48;
++                    }
+                     ((MarginLayoutParams) child.getLayoutParams()).leftMargin = AndroidUtilities.dp(leftMargin);
+                 }
+                 super.measureChildWithMargins(child, parentWidthMeasureSpec, widthUsed, parentHeightMeasureSpec, heightUsed);
+@@ -10705,7 +10715,9 @@ public class ChatActivity extends BaseFragment implements
+                 }
+                 searchCalendarButton.setVisibility(View.GONE);
+                 searchUserButton.setVisibility(View.GONE);
++                if (inu_searchFilter != null) inu_searchFilter.setCompact(true);
+                 searchingForUser = true;
++                if (inu_searchFilter != null) inu_searchFilter.cancelScan();
+                 searchingUserMessages = null;
+                 searchingChatMessages = null;
+                 searchItem.setSearchFieldHint(LocaleController.getString(R.string.SearchMembers));
+@@ -10739,6 +10751,8 @@ public class ChatActivity extends BaseFragment implements
+             });
+             searchCalendarButton.setContentDescription(LocaleController.getString(R.string.JumpToDate));
+         }
++
++        inu_searchFilter = new SearchFilterHelper(this, searchContainer, searchUserButton != null ? 93.34f : 48f);
+     }
+ 
+     private void showSearchShowOther(boolean show) {
+@@ -12006,6 +12020,11 @@ public class ChatActivity extends BaseFragment implements
+         }
+         if (DISABLE_PROGRESS_VIEW && !AndroidUtilities.isTablet() && !isComments && currentUser == null && getLiteModeChat()) {
+             animateProgressViewTo = show;
++            if (show && chatAdapter.isFiltered && SearchFilterHelper.scanForGuid(currentAccount, classGuid) != null) {
++                // Reset the previous fade-out so the draw loop shows skeletons while waiting for the first match.
++                startMessageAppearTransitionMs = 0;
++                chatListView.invalidate();
++            }
+             return;
+         }
+         if (fragmentOpened && SharedConfig.animationsEnabled()) {
+@@ -13943,6 +13962,12 @@ public class ChatActivity extends BaseFragment implements
+             }
+         }
+         if (chatAdapter.isFiltered) {
++            if (SearchFilterHelper.scanForGuid(currentAccount, classGuid) != null) {
++                if (scroll && (chatListView.getScrollState() == RecyclerView.SCROLL_STATE_DRAGGING || scrollByTouch && chatListView.getScrollState() == RecyclerView.SCROLL_STATE_SETTLING) && chatAdapter.loadingUpRow >= 0 && lastVisibleItem >= chatAdapter.loadingUpRow - 5) {
++                    getMediaDataController().loadMoreSearchMessages(false);
++                }
++                return;
++            }
+             if (chatAdapter.loadingUpRow >= 0 && firstVisibleItem >= 0 && chatAdapter.loadingUpRow >= firstVisibleItem && chatAdapter.loadingUpRow <= lastVisibleItem) {
+                 getMediaDataController().loadMoreSearchMessages(false);
+             }
+@@ -17289,7 +17314,7 @@ public class ChatActivity extends BaseFragment implements
+         if (sideControlsButtonsLayout == null) {
+             return;
+         }
+-        boolean show = !getMediaDataController().searchResultMessages.isEmpty() && searching && !searchingFiltered || chatMode == MODE_SEARCH && searchType == SEARCH_PUBLIC_POSTS && !messages.isEmpty();
++        boolean show = !getMediaDataController().searchResultMessages.isEmpty() && searching && !searchingFiltered && (inu_searchFilter == null || !inu_searchFilter.getOnlyMatches()) || chatMode == MODE_SEARCH && searchType == SEARCH_PUBLIC_POSTS && !messages.isEmpty();
+ 
+         sideControlsButtonsLayout.showButton(ChatActivitySideControlsButtonsLayout.BUTTON_SEARCH_UP, show, animated);
+         sideControlsButtonsLayout.showButton(ChatActivitySideControlsButtonsLayout.BUTTON_SEARCH_DOWN, show, animated);
+@@ -20704,6 +20729,12 @@ public class ChatActivity extends BaseFragment implements
+         }
+ 
+         boolean visible = (!endReached[0] || mergeDialogId != 0 && !endReached[1] || messages.isEmpty()) && loading && maxTop > chatListViewPaddingTop && (messages.isEmpty() ? animateProgressViewTo : childHeight != 0);
++        if (chatAdapter.isFiltered && SearchFilterHelper.scanForGuid(currentAccount, classGuid) != null) {
++            visible = getMediaDataController().isSearchLoading() && chatAdapter.filteredMessages.isEmpty();
++            if (visible) {
++                startMessageAppearTransitionMs = 0;
++            }
++        }
+         if (visible && inTransitionAnimation && emptyViewContainer != null && emptyViewContainer.getVisibility() == View.VISIBLE && emptyViewContainer.getChildCount() > 0) {
+             return false;
+         }
+@@ -22569,6 +22600,7 @@ public class ChatActivity extends BaseFragment implements
+             }
+             ArrayList<Integer> markAsDeletedMessages = (ArrayList<Integer>) args[0];
+             long channelId = (Long) args[1];
++            if (inu_searchFilter != null && (channelId == 0 || -channelId == dialog_id || -channelId == mergeDialogId)) inu_searchFilter.invalidateCacheForDeletion(markAsDeletedMessages);
+             boolean update = args.length > 2 && (boolean) args[2];
+             boolean sent = args.length > 3 && (boolean) args[3];
+             int scheduledMessageId = args.length > 5 ? (int) args[5] : 0;
+@@ -23669,6 +23701,7 @@ public class ChatActivity extends BaseFragment implements
+             if (did != dialog_id && did != mergeDialogId) {
+                 return;
+             }
++            if (inu_searchFilter != null) inu_searchFilter.invalidateCacheForEdits(messageObjects);
+             int loadIndex = did == dialog_id ? 0 : 1;
+             doOnIdle(() -> {
+                 replaceMessageObjects(messageObjects, loadIndex, false);
+@@ -23980,11 +24013,30 @@ public class ChatActivity extends BaseFragment implements
+             if (classGuid == (Integer) args[0]) {
+                 updateSearchUpDownButtonVisibility(true);
+                 boolean jumpToMessage = (Boolean) args[6];
++                // Local scans append this flag when only pagination state changed.
++                boolean inu_loadingStateOnly = args.length > 7 && Boolean.TRUE.equals(args[7]);
+                 updateSearchButtons((Integer) args[2], (Integer) args[4], (Integer) args[5]);
++                if (inu_loadingStateOnly) {
++                    boolean inu_endReached = getMediaDataController().searchEndReached();
++                    if (chatAdapter.isFiltered && chatAdapter.filteredEndReached != inu_endReached) {
++                        chatAdapter.filteredEndReached = inu_endReached;
++                        chatAdapter.updateRowsSafe();
++                    }
++                    if (messagesSearchAdapter != null) {
++                        boolean inu_showSkeletons = getMediaDataController().isSearchLoading();
++                        boolean inu_skeletonsVisible = messagesSearchAdapter.flickerCount > 0;
++                        if (inu_skeletonsVisible != inu_showSkeletons) {
++                            // Loading can start inside a scroll callback; defer the adapter update.
++                            messagesSearchListView.post(messagesSearchAdapter::notifyDataSetChanged);
++                        }
++                    }
++                    // Keep the existing messages and scroll position when results have not changed.
++                    return;
++                }
+                 if (jumpToMessage) {
+                     int messageId = (Integer) args[1];
+                     long did = (Long) args[3];
+-                    if (searchingReaction != null && searchingFiltered) {
++                    if ((searchingReaction != null && searchingFiltered) || (inu_searchFilter != null && inu_searchFilter.getOnlyMatches())) {
+                         if (chatAdapter.isFiltered) {
+                             updateFilteredMessages(true);
+                         } else {
+@@ -24003,7 +24055,7 @@ public class ChatActivity extends BaseFragment implements
+                         updateVisibleRows();
+                     }
+                     onSearchLoadingUpdate(false);
+-                } else if (searchingReaction != null) {
++                } else if (searchingReaction != null || (inu_searchFilter != null && inu_searchFilter.getOnlyMatches())) {
+                     if (chatAdapter.isFiltered) {
+                         updateFilteredMessages(true);
+                     } else {
+@@ -27385,14 +27437,21 @@ public class ChatActivity extends BaseFragment implements
+         searchLastIndex = num;
+         updateSearchCountText();
+         if (searchExpandList != null) {
+-            searchExpandList.setClickable(count > 0);
+-            searchExpandList.animate().alpha(count > 0 ? 1f : 0.5f).start();
++            desu.inugram.helpers.search.SearchMediaScan inu_scan = SearchFilterHelper.scanForGuid(currentAccount, classGuid);
++            boolean inu_canShowList = count > 0 || inu_scan != null && inu_scan.getLoading();
++            searchExpandList.setClickable(inu_canShowList);
++            searchExpandList.animate().alpha(inu_canShowList ? 1f : 0.5f).start();
+         }
+     }
+ 
+     private void updateSearchCountText() {
+         if (searchCountText != null) {
+             boolean animated = !LocaleController.isRTL;
++            desu.inugram.helpers.search.SearchMediaScan inu_scan = SearchFilterHelper.scanForGuid(currentAccount, classGuid);
++            if (inu_scan != null && (inu_scan.getLoading() || searchLastCount > 0)) {
++                searchCountText.setText("", animated);
++                return;
++            }
+             if (searchLastCount < 0) {
+                 searchCountText.setText("", animated);
+             } else if (searchLastCount == 0) {
+@@ -35617,6 +35676,7 @@ public class ChatActivity extends BaseFragment implements
+             if (searchUserButton != null) {
+                 searchUserButton.setVisibility(View.GONE);
+             }
++            if (inu_searchFilter != null) inu_searchFilter.setCompact(true);
+         }
+         if (searchItem != null) {
+             preventReopenSearchWithText = true;
+@@ -35676,6 +35736,7 @@ public class ChatActivity extends BaseFragment implements
+             if (searchUserButton != null) {
+                 searchUserButton.setVisibility(View.GONE);
+             }
++            if (inu_searchFilter != null) inu_searchFilter.setCompact(true);
+         }
+         if (searchItem != null) {
+             preventReopenSearchWithText = true;
+@@ -37811,7 +37872,7 @@ public class ChatActivity extends BaseFragment implements
+                 infoView.set(dialogId, getMessagesController().getPeerSettings(dialogId));
+             } else if (position == loadingDownRow || position == loadingUpRow) {
+                 ChatLoadingCell loadingCell = (ChatLoadingCell) holder.itemView;
+-                loadingCell.setProgressVisible(loadsCount > 1);
++                loadingCell.setProgressVisible(loadsCount > 1 || isFiltered && SearchFilterHelper.scanForGuid(currentAccount, classGuid) != null);
+             } else if (position == userNameTimeRow) {
+                 final TLRPC.PeerSettings settings = getMessagesController().getPeerSettings(getDialogId());
+                 if (settings == null) return;
+@@ -38857,6 +38918,7 @@ public class ChatActivity extends BaseFragment implements
+ 
+         @Override
+         public void onSearchFilterCleared(FiltersView.MediaFilterData filterData) {
++            if (inu_searchFilter != null) inu_searchFilter.cancelScan();
+             super.onSearchFilterCleared(filterData);
+             if (actionBarSearchTags != null) {
+                 actionBarSearchTags.clear();
+@@ -38878,6 +38940,11 @@ public class ChatActivity extends BaseFragment implements
+             if (searchUserButton != null) {
+                 searchUserButton.setVisibility(View.VISIBLE);
+             }
++            if (inu_searchFilter != null) {
++                inu_searchFilter.reset();
++                inu_searchFilter.setCompact(false);
++                setFilterMessages(false, true, false);
++            }
+             if (searchingForUser) {
+                 mentionContainer.getAdapter().searchUsernameOrHashtag(null, 0, null, false, true);
+                 searchingForUser = false;
+@@ -39117,6 +39184,7 @@ public class ChatActivity extends BaseFragment implements
+ 
+         @Override
+         public void onTextChanged(EditText editText) {
++            if (inu_searchFilter != null) inu_searchFilter.cancelScan();
+             if (searchingHashtag == null) {
+                 showMessagesSearchListView(false);
+             }
+@@ -39151,6 +39219,7 @@ public class ChatActivity extends BaseFragment implements
+ 
+         @Override
+         public void onCaptionCleared() {
++            if (inu_searchFilter != null) inu_searchFilter.cancelScan();
+             createSearchContainer();
+             if (searchingUserMessages != null || searchingChatMessages != null) {
+                 if (searchUserButton != null) {
+@@ -39167,6 +39236,7 @@ public class ChatActivity extends BaseFragment implements
+                 if (searchUserButton != null) {
+                     searchUserButton.setVisibility(View.VISIBLE);
+                 }
++                if (inu_searchFilter != null) inu_searchFilter.setCompact(false);
+                 searchingUserMessages = null;
+                 searchingChatMessages = null;
+             }
+@@ -41384,6 +41454,8 @@ public class ChatActivity extends BaseFragment implements
+                 } else if (chatMode == MODE_PINNED || chatMode == MODE_SCHEDULED) {
+                     chatActivityDelegate.openReplyMessage(id);
+                     finishFragment();
++                } else if (inu_searchFilter != null && inu_searchFilter.getOnlyMatches()) {
++                    ChatHelper.openInNewChat(ChatActivity.this, dialog_id, id);
+                 } else {
+                     if (option_id != null) {
+                         highlightPollOptionId = option_id;
+@@ -44677,7 +44749,7 @@ public class ChatActivity extends BaseFragment implements
+         int lastBottom;
+     }
+ 
+-    private class RecyclerListViewInternal extends RecyclerListView implements StoriesListPlaceProvider.ClippedView {
++    public class RecyclerListViewInternal extends RecyclerListView implements StoriesListPlaceProvider.ClippedView {
+         public RecyclerListViewInternal(Context context, ThemeDelegate themeDelegate) {
+             super(context, themeDelegate);
+         }
+@@ -47684,7 +47756,7 @@ public class ChatActivity extends BaseFragment implements
+         );
+     }
+ 
+-    private abstract class ChatListRecyclerView extends RecyclerListViewInternal {
++    public abstract class ChatListRecyclerView extends RecyclerListViewInternal {
+ 
+         public ChatListRecyclerView(Context context, ThemeDelegate themeDelegate) {
+             super(context, themeDelegate);

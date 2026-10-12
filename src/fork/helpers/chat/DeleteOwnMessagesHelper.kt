@@ -8,6 +8,7 @@ import android.view.Gravity
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
+import desu.inugram.helpers.InuUtils
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.ChatObject
 import org.telegram.messenger.LocaleController
@@ -150,7 +151,7 @@ object DeleteOwnMessagesHelper {
             }
             if (error != null) {
                 val text = error.text.orEmpty()
-                val floodSecs = parseFloodWait(text)
+                val floodSecs = InuUtils.parseFloodWaitSeconds(text)
                 if (floodSecs != null) {
                     Log.d(TAG, "search FLOOD_WAIT dialog=$dialogId offset=$addOffset ${floodSecs}s ($text)")
                     handleFloodWait(floodSecs) {
@@ -309,7 +310,7 @@ object DeleteOwnMessagesHelper {
             if (cancelled) return
             if (error != null) {
                 val text = error.text.orEmpty()
-                val floodSecs = parseFloodWait(text)
+                val floodSecs = InuUtils.parseFloodWaitSeconds(text)
                 if (floodSecs != null) {
                     Log.d(TAG, "delete FLOOD_WAIT dialog=${batch.dialogId} ${floodSecs}s ($text)")
                     handleFloodWait(floodSecs) { sendDeleteBatch() }
@@ -413,15 +414,6 @@ object DeleteOwnMessagesHelper {
         fun cancel() {
             cancelled = true
             dismissDialog()
-        }
-
-        fun parseFloodWait(text: String): Int? {
-            val prefix = when {
-                text.startsWith("FLOOD_WAIT_") -> "FLOOD_WAIT_"
-                text.startsWith("FLOOD_PREMIUM_WAIT_") -> "FLOOD_PREMIUM_WAIT_"
-                else -> return null
-            }
-            return text.removePrefix(prefix).toIntOrNull()?.coerceAtLeast(1)
         }
 
         fun inFloodWait(): Boolean = System.currentTimeMillis() < floodWaitUntilMs

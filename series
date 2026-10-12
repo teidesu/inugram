@@ -76,7 +76,6 @@ debloat/motion-photos.patch
 feature/long-press-reply-in-replies.patch
 feature/animation-multiplier.patch
 feature/predictive-back.patch
-feature/search-media-type-filter.patch
 debloat/disable-bg-parallax.patch
 feature/no-join-discuss.patch
 feature/voice-recorder.patch
@@ -367,3 +366,4 @@ bugfix/sticker-pack-edit.patch
 bugfix/forum-title-overlay.patch
 bugfix/animated-drawable-recycle-interrupt.patch
 bugfix/story-reactions-window-keyboard.patch
+feature/chat-search-filters.patch
