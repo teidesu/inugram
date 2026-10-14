@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- These names are persisted by Android; keep them stable across app updates. -->
+    <style name="InuSplashStock" parent="Theme.TMessages.Start">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_stock</item>
+    </style>
+    <style name="InuSplashVintage" parent="Theme.TMessages.Start">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_vintage</item>
+    </style>
+    <style name="InuSplashAqua" parent="Theme.TMessages.Start">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_aqua</item>
+    </style>
+    <style name="InuSplashPremium" parent="Theme.TMessages.Start">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_premium</item>
+    </style>
+    <style name="InuSplashTurbo" parent="Theme.TMessages.Start">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_turbo</item>
+    </style>
+    <style name="InuSplashNox" parent="Theme.TMessages.Start">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_nox</item>
+    </style>
+
+    <style name="InuSplashMonetLight" parent="Theme.TMessages.Start">
+        <item name="android:windowBackground">@color/inu_splash_monet_light</item>
+        <item name="android:windowSplashScreenBackground">?android:windowBackground</item>
+    </style>
+    <style name="InuSplashStockMonetLight" parent="InuSplashMonetLight">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_stock</item>
+    </style>
+    <style name="InuSplashVintageMonetLight" parent="InuSplashMonetLight">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_vintage</item>
+    </style>
+    <style name="InuSplashAquaMonetLight" parent="InuSplashMonetLight">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_aqua</item>
+    </style>
+    <style name="InuSplashPremiumMonetLight" parent="InuSplashMonetLight">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_premium</item>
+    </style>
+    <style name="InuSplashTurboMonetLight" parent="InuSplashMonetLight">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_turbo</item>
+    </style>
+    <style name="InuSplashNoxMonetLight" parent="InuSplashMonetLight">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_nox</item>
+    </style>
+
+    <style name="InuSplashMonetDark" parent="Theme.TMessages.Start">
+        <item name="android:windowBackground">@color/inu_splash_monet_dark</item>
+        <item name="android:windowSplashScreenBackground">?android:windowBackground</item>
+    </style>
+    <style name="InuSplashStockMonetDark" parent="InuSplashMonetDark">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_stock</item>
+    </style>
+    <style name="InuSplashVintageMonetDark" parent="InuSplashMonetDark">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_vintage</item>
+    </style>
+    <style name="InuSplashAquaMonetDark" parent="InuSplashMonetDark">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_aqua</item>
+    </style>
+    <style name="InuSplashPremiumMonetDark" parent="InuSplashMonetDark">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_premium</item>
+    </style>
+    <style name="InuSplashTurboMonetDark" parent="InuSplashMonetDark">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_turbo</item>
+    </style>
+    <style name="InuSplashNoxMonetDark" parent="InuSplashMonetDark">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_nox</item>
+    </style>
+
+    <style name="InuSplashMonetAmoled" parent="Theme.TMessages.Start">
+        <item name="android:windowBackground">@android:color/system_neutral1_1000</item>
+        <item name="android:windowSplashScreenBackground">?android:windowBackground</item>
+    </style>
+    <style name="InuSplashStockMonetAmoled" parent="InuSplashMonetAmoled">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_stock</item>
+    </style>
+    <style name="InuSplashVintageMonetAmoled" parent="InuSplashMonetAmoled">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_vintage</item>
+    </style>
+    <style name="InuSplashAquaMonetAmoled" parent="InuSplashMonetAmoled">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_aqua</item>
+    </style>
+    <style name="InuSplashPremiumMonetAmoled" parent="InuSplashMonetAmoled">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_premium</item>
+    </style>
+    <style name="InuSplashTurboMonetAmoled" parent="InuSplashMonetAmoled">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_turbo</item>
+    </style>
+    <style name="InuSplashNoxMonetAmoled" parent="InuSplashMonetAmoled">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_nox</item>
+    </style>
+
+    <style name="InuSplashMonetAuto" parent="Theme.TMessages.Start">
+        <item name="android:windowBackground">@color/inu_splash_monet_auto</item>
+        <item name="android:windowSplashScreenBackground">?android:windowBackground</item>
+    </style>
+    <style name="InuSplashStockMonetAuto" parent="InuSplashMonetAuto">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_stock</item>
+    </style>
+    <style name="InuSplashVintageMonetAuto" parent="InuSplashMonetAuto">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_vintage</item>
+    </style>
+    <style name="InuSplashAquaMonetAuto" parent="InuSplashMonetAuto">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_aqua</item>
+    </style>
+    <style name="InuSplashPremiumMonetAuto" parent="InuSplashMonetAuto">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_premium</item>
+    </style>
+    <style name="InuSplashTurboMonetAuto" parent="InuSplashMonetAuto">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_turbo</item>
+    </style>
+    <style name="InuSplashNoxMonetAuto" parent="InuSplashMonetAuto">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_nox</item>
+    </style>
+
+    <style name="InuSplashMonetAutoAmoled" parent="Theme.TMessages.Start">
+        <item name="android:windowBackground">@color/inu_splash_monet_auto_amoled</item>
+        <item name="android:windowSplashScreenBackground">?android:windowBackground</item>
+    </style>
+    <style name="InuSplashStockMonetAutoAmoled" parent="InuSplashMonetAutoAmoled">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_stock</item>
+    </style>
+    <style name="InuSplashVintageMonetAutoAmoled" parent="InuSplashMonetAutoAmoled">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_vintage</item>
+    </style>
+    <style name="InuSplashAquaMonetAutoAmoled" parent="InuSplashMonetAutoAmoled">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_aqua</item>
+    </style>
+    <style name="InuSplashPremiumMonetAutoAmoled" parent="InuSplashMonetAutoAmoled">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_premium</item>
+    </style>
+    <style name="InuSplashTurboMonetAutoAmoled" parent="InuSplashMonetAutoAmoled">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_turbo</item>
+    </style>
+    <style name="InuSplashNoxMonetAutoAmoled" parent="InuSplashMonetAutoAmoled">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/inu_splash_nox</item>
+    </style>
+</resources>

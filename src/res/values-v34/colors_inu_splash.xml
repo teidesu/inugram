@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="inu_splash_monet_light">@android:color/system_surface_bright_light</color>
+    <color name="inu_splash_monet_dark">@android:color/system_surface_bright_dark</color>
+</resources>

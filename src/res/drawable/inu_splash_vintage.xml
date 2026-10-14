@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+    <aapt:attr name="android:drawable">
+        <vector
+            android:name="splash"
+            android:width="320dp"
+            android:height="320dp"
+            android:viewportWidth="320"
+            android:viewportHeight="320"
+            android:alpha="0">
+            <group
+                android:name="icon"
+                android:pivotX="160"
+                android:pivotY="160"
+                android:scaleX="0.5"
+                android:scaleY="0.5">
+                <clip-path android:pathData="M160,60 A100,100 0,1 1,160,260 A100,100 0,1 1,160,60" />
+                <path android:pathData="M160,60 A100,100 0,1 1,160,260 A100,100 0,1 1,160,60">
+                    <aapt:attr name="android:fillColor">
+                        <gradient android:type="linear" android:startX="160" android:startY="310" android:endX="160" android:endY="10">
+                            <item android:offset="0" android:color="#1D93D2" />
+                            <item android:offset="1" android:color="#37AFE3" />
+                        </gradient>
+                    </aapt:attr>
+                </path>
+                <!-- Original paths: Logo_old.ai from https://telegram.org/tour/screenshots (Download Telegram Logos). -->
+                <group android:translateX="60.0056" android:translateY="260.2887" android:scaleX="0.7407" android:scaleY="-0.7407">
+                    <path android:fillColor="#C8DAEA" android:pathData="M95.7777,123.3735 L109.7777,84.6235 C109.7777,84.6235 111.5277,80.9985 113.4027,80.9985 C115.2777,80.9985 143.1527,109.9985 143.1527,109.9985 L174.1527,169.8735 L96.2777,133.3735 Z" />
+                    <path android:fillColor="#A9C6D8" android:pathData="M114.3402,113.436 L111.6522,84.874 C111.6522,84.874 110.5272,76.123 119.2772,84.874 C128.0272,93.624 136.4022,100.373 136.4022,100.373" />
+                    <path android:fillColor="#FFFFFF" android:pathData="M96.031,121.9909 L67.236,131.3739 C67.236,131.3739 63.799,132.7689 64.903,135.9359 C65.131,136.5889 65.59,137.1439 66.965,138.1029 C73.347,142.5499 185.069,182.7069 185.069,182.7069 C185.069,182.7069 188.224,183.7689 190.088,183.0629 C190.94,182.7399 191.484,182.3749 191.942,181.0419 C192.109,180.5569 192.205,179.5259 192.192,178.4999 C192.183,177.7609 192.092,177.0749 192.026,175.9999 C191.345,165.0209 170.986,83.0819 170.986,83.0819 C170.986,83.0819 169.768,78.2869 165.403,78.1239 C163.811,78.0639 161.879,78.3869 159.569,80.3739 C151.004,87.7419 121.397,107.6389 114.856,112.0149 C114.487,112.2609 114.382,112.5819 114.319,112.8939 C114.227,113.3549 114.729,113.9279 114.729,113.9279 C114.729,113.9279 166.281,159.7529 167.653,164.5609 C167.759,164.9339 167.36,165.1179 166.819,164.9569 C163.395,163.6969 104.039,126.2159 97.488,122.0769 C97.105,121.8349 96.031,121.9909 96.031,121.9909" />
+                </group>
+            </group>
+        </vector>
+    </aapt:attr>
+    <target android:name="splash" android:animation="@animator/inu_splash_fade" />
+    <target android:name="icon" android:animation="@animator/inu_splash_scale" />
+</animated-vector>

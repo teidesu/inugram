@@ -15,6 +15,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - 🐶 classic ui mode for folders bar, shared media tabs, global search and chat elements (reverts the >12.6 "liquid glass" look)
 - icon replacement (solar pack by [480 Design](https://t.me/Design480) - *ported from [NagramX](https://github.com/risin42/NagramX)*; vkui pack by [VK](https://github.com/VKCOM/icons) - *ported from [Catogram](https://github.com/Catogram/Catogram)*)
 - notification icon: Telegram (default) or Inugram
+- 🐶 animated splash screen follows the selected app icon and Monet theme (Android 12+)
 - show seconds in timestamps
 - override Telegram's detected device performance class
 - 🐶 customizable animation speed multiplier (incl. instant)

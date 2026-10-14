@@ -1,0 +1,34 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dubzer <me@dubzer.dev>
+Date: Wed, 14 Oct 2026 19:37:05 +0300
+Subject: match splash screen to the selected app icon and monet theme
+
+---
+ TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java  | 1 +
+ .../src/main/java/org/telegram/ui/LauncherIconController.java    | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
+@@ -7421,6 +7421,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+                 checkNavigationBarColor = (boolean) args[1];
+             }
+             checkSystemBarColors(args.length > 2 && (boolean) args[2], true, checkNavigationBarColor && !isNavigationBarColorFrozen && !actionBarLayout.isTransitionAnimationInProgress());
++            desu.inugram.helpers.SplashScreenHelper.sync(this);
+         } else if (id == NotificationCenter.needSetDayNightTheme) {
+             boolean instant = false;
+             if (args[2] != null) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LauncherIconController.java b/TMessagesProj/src/main/java/org/telegram/ui/LauncherIconController.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/LauncherIconController.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/LauncherIconController.java
+@@ -31,6 +31,7 @@ public class LauncherIconController {
+             pm.setComponentEnabledSetting(i.getComponentName(ctx), i == icon ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED :
+                     PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP);
+         }
++        desu.inugram.helpers.SplashScreenHelper.sync(LaunchActivity.instance);
+     }
+ 
+     public enum LauncherIcon {

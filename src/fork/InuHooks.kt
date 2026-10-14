@@ -7,6 +7,7 @@ import desu.inugram.helpers.CrashReporter
 import desu.inugram.helpers.LoginHelper
 import desu.inugram.helpers.ProxyVpnHelper
 import desu.inugram.helpers.ShortcutHelper
+import desu.inugram.helpers.SplashScreenHelper
 import desu.inugram.helpers.UrlCleanerHelper
 import desu.inugram.helpers.cloud.CloudSettingsHelper
 import desu.inugram.helpers.dialogs.DrawerHelper
@@ -144,6 +145,7 @@ object InuHooks {
 
     @JvmStatic
     fun onResume(launchActivity: LaunchActivity) {
+        SplashScreenHelper.sync(launchActivity)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             MonetHelper.refreshMonetThemeIfChanged()
         }

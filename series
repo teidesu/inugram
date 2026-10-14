@@ -372,3 +372,4 @@ feature/join-request-open-profile.patch
 feature/join-request-open-page.patch
 feature/chat-search-filters.patch
 bugfix/scrim-menu-theme.patch
+feature/app-icon-splash.patch

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Match Monet's windowBackgroundWhite, including its Android 12/13 fallback. -->
+    <color name="inu_splash_monet_light">@android:color/system_neutral1_10</color>
+    <color name="inu_splash_monet_dark">@android:color/system_neutral1_800</color>
+    <!-- Resource qualifiers let automatic modes update even while the app is closed. -->
+    <color name="inu_splash_monet_auto">@color/inu_splash_monet_light</color>
+    <color name="inu_splash_monet_auto_amoled">@color/inu_splash_monet_light</color>
+</resources>
