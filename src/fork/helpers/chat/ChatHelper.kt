@@ -1318,6 +1318,60 @@ object ChatHelper {
     }
 
     @JvmStatic
+    fun hasCachedDocument(currentAccount: Int, document: TLRPC.Document): Boolean {
+        val loader = FileLoader.getInstance(currentAccount)
+        val attach = loader.getPathToAttach(document, true)
+        if (attach != null && attach.exists()) return true
+        val stored = loader.getPathToAttach(document, false)
+        if (stored != null && stored.exists()) return true
+        val cacheDir = FileLoader.getDirectory(FileLoader.MEDIA_DIR_CACHE) ?: return false
+        val base = "${document.dc_id}_${document.id}"
+        return File(cacheDir, "$base.temp").exists() || File(cacheDir, "$base.temp.enc").exists()
+    }
+
+    @JvmStatic
+    fun clearDocumentCache(activity: ChatActivity, cell: ChatMessageCell, document: TLRPC.Document) {
+        val account = activity.currentAccount
+        val loader = FileLoader.getInstance(account)
+        loader.cancelLoadFile(document, true)
+        val files = ArrayList<File>(4)
+        loader.getPathToAttach(document, false)?.let { files.add(it) }
+        loader.getPathToAttach(document, true)?.let { files.add(it) }
+        files.addAll(partialDownloadFiles(document))
+
+        Utilities.globalQueue.postRunnable {
+            for (file in files) {
+                runCatching {
+                    MediaSendDebugHelper.onLocalFileDeleted(file, "clearDocumentCache")
+                    if (file.exists() && !file.delete()) file.deleteOnExit()
+                }
+            }
+            AndroidUtilities.runOnUIThread {
+                val richLayout = cell.messageObject?.richLayout
+                if (richLayout != null) {
+                    for (block in richLayout.blocks) {
+                        if (block is org.telegram.messenger.RichMessageLayout.RichDocumentBlock && block.block?.document_id == document.id) {
+                            block.updateButtonState(true)
+                        }
+                    }
+                }
+                BulletinFactory.of(activity)
+                    .createSimpleBulletin(R.raw.ic_delete, LocaleController.getString(R.string.InuCacheRemoved))
+                    .show()
+            }
+        }
+    }
+
+    @JvmStatic
+    fun populateRichDocumentOptions(activity: ChatActivity, cell: ChatMessageCell, document: TLRPC.Document, options: ItemOptions) {
+        if (isMenuItemEnabled(MessageMenuConfig.Item.REMOVE_FROM_CACHE) && hasCachedDocument(activity.currentAccount, document)) {
+            options.add(R.drawable.msg_clear, LocaleController.getString(R.string.InuRemoveFromCache)) {
+                clearDocumentCache(activity, cell, document)
+            }
+        }
+    }
+
+    @JvmStatic
     fun maybeHandleFileClick(fragment: BaseFragment, message: MessageObject): Boolean {
         val name = message.documentName ?: return false
         return maybeHandleFile(fragment, name, message.mimeType) {
