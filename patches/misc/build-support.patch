@@ -6,22 +6,22 @@ Subject: build support stuff for fork-specific code: - added kotlin - bumped min
 ---
  .gitmodules                                   |   3 +
  TMessagesProj/build.gradle                    | 176 ++++++++------
- TMessagesProj/google-services.json            |  76 ++-----
+ TMessagesProj/google-services.json            |  76 +-----
  TMessagesProj/proguard-rules.pro              |  15 ++
  TMessagesProj/src/main/AndroidManifest.xml    |   7 +
  .../org/telegram/messenger/BuildVars.java     |  12 +-
  .../telegram/tgnet/ConnectionsManager.java    |   2 +-
- .../org/telegram/ui/PaymentFormActivity.java  |  28 ++-
+ .../org/telegram/ui/PaymentFormActivity.java  |  28 +--
  .../org/telegram/ui/SettingsActivity.java     |  24 +-
- TMessagesProj_App/build.gradle                | 214 +++++++++++-------
- TMessagesProj_App/google-services.json        |  76 ++-----
+ TMessagesProj_App/build.gradle                | 227 +++++++++++-------
+ TMessagesProj_App/google-services.json        |  76 +-----
  TMessagesProj_App/jni/CMakeLists.txt          |  10 +
  TMessagesProj_App/jni/lsplant                 |   1 +
  TMessagesProj_AppTests/build.gradle           |   5 +-
- build.gradle                                  |  19 +-
+ build.gradle                                  |  23 +-
  gradle.properties                             |   2 +-
- settings.gradle                               |  40 +++-
- 17 files changed, 379 insertions(+), 331 deletions(-)
+ settings.gradle                               |  40 ++-
+ 17 files changed, 396 insertions(+), 331 deletions(-)
  create mode 100644 TMessagesProj_App/jni/CMakeLists.txt
  create mode 160000 TMessagesProj_App/jni/lsplant
 
@@ -746,9 +746,8 @@ index 0000000..0000000 100644
  
      sourceSets.release {
 -        manifest.srcFile '../TMessagesProj/config/release/AndroidManifest.xml'
-+        manifest.srcFile '../TMessagesProj/config/release/AndroidManifest_SDK23.xml'
-     }
- 
+-    }
+-
 -    flavorDimensions "minApi"
 -
 -    productFlavors {
@@ -779,8 +778,9 @@ index 0000000..0000000 100644
 -            }
 -            buildConfigField "boolean", "BUNDLE", "false"
 -        }
--    }
--
++        manifest.srcFile '../TMessagesProj/config/release/AndroidManifest_SDK23.xml'
+     }
+ 
 -    defaultConfig.versionCode = Integer.parseInt(APP_VERSION_CODE)
 +    defaultConfig.versionCode = rootProject.ext.verCode
  
@@ -805,11 +805,11 @@ index 0000000..0000000 100644
          targetSdkVersion 36
 -        versionName APP_VERSION_NAME
 -        ndkVersion "27.2.12479018"
+-
+-        multiDexEnabled true
 +        versionName rootProject.ext.verName
 +        ndkVersion "29.0.14206865"
  
--        multiDexEnabled true
--
 -        vectorDrawables.generatedDensities = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi']
 +        ndk {
 +            abiFilters "arm64-v8a"
@@ -840,7 +840,7 @@ index 0000000..0000000 100644
      buildFeatures {
          buildConfig = true
      }
-@@ -192,6 +148,98 @@ android {
+@@ -192,6 +148,111 @@ android {
      lintOptions {
          checkReleaseBuilds false
      }
@@ -874,6 +874,7 @@ index 0000000..0000000 100644
 +def rustModuleDir = file("$projectDir/native")
 +def rustJniLibsDir = file("$buildDir/rustJniLibs")
 +def userHome = System.getProperty('user.home')
++def windowsHost = System.getProperty('os.name').startsWith('Windows')
 +def cargoHome = System.getenv('CARGO_HOME') ?: "$userHome/.cargo"
 +def cargoCandidates = [
 +    System.getenv('CARGO'),
@@ -897,23 +898,35 @@ index 0000000..0000000 100644
 +    tasks.register(taskName, Exec) {
 +        workingDir rustModuleDir
 +        environment 'ANDROID_NDK_HOME', android.ndkDirectory.absolutePath
-+        environment 'PATH', (cargoPathDirs + [System.getenv('PATH') ?: '']).join(File.pathSeparator)
 +        def prebuilt = file("${android.ndkDirectory}/toolchains/llvm/prebuilt")
 +        def ndkHost = prebuilt.listFiles()?.find { it.isDirectory() }
++        def ndkBin = ndkHost ? new File(ndkHost, 'bin').absolutePath : null
 +        def libclangCandidates = [
 +            project.findProperty('libclang.path'),
++            System.getenv('LIBCLANG_PATH'),
++            ndkBin,
 +            ndkHost ? new File(ndkHost, 'lib').absolutePath : null,
 +            ndkHost ? new File(ndkHost, 'lib64').absolutePath : null,
 +            '/Library/Developer/CommandLineTools/usr/lib',
 +            '/opt/homebrew/opt/llvm/lib', '/usr/local/opt/llvm/lib',
 +            '/run/current-system/sw/lib', "${System.getProperty('user.home')}/.nix-profile/lib",
 +            '/usr/lib/llvm/lib', '/usr/lib',
-+        ]
-+        def libclangDir = libclangCandidates.findAll { it }.find { dir ->
-+            def d = file(dir)
-+            d.isDirectory() && d.listFiles()?.any { it.name ==~ /libclang\.(dylib|so)(\..*)?/ }
++        ] + (windowsHost ? [System.getenv('ProgramW6432'), System.getenv('ProgramFiles')]
++            .findAll { it }.collect { new File(it, 'LLVM/bin').absolutePath } : []) +
++            (System.getenv('PATH') ?: '').tokenize(File.pathSeparator)
++        def libclangPattern = windowsHost ? ~/(?i)(lib)?clang\.dll/ : ~/libclang\.(dylib|so)(\..*)?/
++        def libclangDir = libclangCandidates.findAll { it }.findResult { path ->
++            def location = file(path)
++            if (location.isFile() && location.name ==~ libclangPattern) return location.parent
++            location.isDirectory() && location.listFiles()?.any { it.isFile() && it.name ==~ libclangPattern }
++                ? location.absolutePath : null
 +        }
 +        if (libclangDir != null) environment 'LIBCLANG_PATH', libclangDir
++        def inuNativePath = ((windowsHost && libclangDir != null ? [libclangDir] : []) + cargoPathDirs + [ndkBin, System.getenv('PATH') ?: '']).findAll { it }.join(File.pathSeparator)
++        if (windowsHost) {
++            environment.keySet().findAll { it.equalsIgnoreCase('PATH') }.each { environment.remove(it) }
++        }
++        environment(windowsHost ? 'Path' : 'PATH', inuNativePath)
 +        commandLine cargoExe, 'ndk', '-t', 'arm64-v8a', '-o', outputDir.absolutePath, 'build', '--profile', cargoProfile
 +    }
 +
@@ -1108,7 +1121,7 @@ index 0000000..0000000 100644
      }
  }
  repositories {
-@@ -52,4 +52,19 @@ subprojects {
+@@ -52,4 +52,23 @@ subprojects {
              }
          }
      }
@@ -1121,6 +1134,7 @@ index 0000000..0000000 100644
 +if (inuBuildFile.exists()) inuBuildFile.withInputStream { inuBuildProperties.load(it) }
 +
 +def commitId = System.getenv('COMMIT_ID')
++def ccacheName = System.getProperty('os.name').startsWith('Windows') ? 'ccache.exe' : 'ccache'
 +
 +ext {
 +  inuPluginless = (findProperty('inu.pluginless') ?: inuBuildProperties.getProperty('inu.pluginless', 'false')).toBoolean()
@@ -1128,7 +1142,10 @@ index 0000000..0000000 100644
 +  verCode = Integer.parseInt(System.getenv('INU_BUILD') ?: '1000000')
 +  stockVerCode = Integer.parseInt(APP_VERSION_CODE)
 +  buildDate = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ISO_DATE)
-+  ccachePath = ['sh', '-c', 'command -v ccache'].execute().text.trim() ?: null
++  ccachePath = (System.getenv('PATH') ?: '').tokenize(File.pathSeparator).findResult { dir ->
++    def executable = new File(dir, ccacheName)
++    executable.isFile() && executable.canExecute() ? executable.absolutePath : null
++  }
 +}
 diff --git a/gradle.properties b/gradle.properties
 index 0000000..0000000 100644

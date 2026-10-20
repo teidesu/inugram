@@ -89,6 +89,13 @@ It also works with `--ci` and `--no-submodules`. Build it with `pnpm run build-d
 The plain build excludes the plugin engine, native hooking libraries, plugin screens, and plugin test assets.
 Other scripts continue to target `worktree/`.
 
+Windows native builds find `libclang.dll` or `clang.dll` in the selected Android
+NDK, a standard LLVM installation, or `PATH`, and add its directory to Cargo's
+`PATH` so dependent DLLs can load. To select another LLVM installation, set
+`LIBCLANG_PATH` or pass `-Plibclang.path=<directory-or-DLL>` to Gradle; the Gradle
+property takes precedence. If your NDK has no libclang, install LLVM or point
+one of these settings to an existing installation.
+
 Setup writes the checkout's build variant to the ignored `inu-build.properties` file.
 Gradle exposes it as `BuildConfig.INU_PLUGINLESS` in both Android modules.
 
