@@ -227,6 +227,10 @@
     <string name="InuHideAllChatsTab">\"Tüm Sohbetler\" sekmesini gizle</string>
     <string name="InuFolderTabsAtBottom">Sekmeleri altta göster</string>
     <string name="InuFolderTabsAtBottomInfo">Klasik klasörler çubuğu yalnızca Material 3 alt sekmeleriyle veya alt sekmeler kapalıyken alta taşınabilir.</string>
+    <string name="InuSuggestFolderAfterJoin">Katıldıktan sonra klasör öner</string>
+    <string name="InuSuggestFolderAfterJoinInfo">Yeni katıldığınız herkese açık kanalları ve grupları bir klasöre eklemeyi önerir.</string>
+    <string name="InuAddChannelToFolderSuggestion">Kanalı klasörünüze ekleyebilirsiniz</string>
+    <string name="InuAddGroupToFolderSuggestion">Grubu klasörünüze ekleyebilirsiniz</string>
     <string name="InuCommunityDisplayMode">Topluluklar</string>
     <string name="InuCommunityDisplayModeRegular">Normal</string>
     <string name="InuCommunityDisplayModeLongTap">Uzun basınca aç</string>

@@ -227,6 +227,10 @@
     <string name="InuHideAllChatsTab">Приховати вкладку «Усі чати»</string>
     <string name="InuFolderTabsAtBottom">Показувати вкладки внизу</string>
     <string name="InuFolderTabsAtBottomInfo">Класичну панель папок можна перемістити вниз лише з нижніми вкладками Material 3 або з вимкненими нижніми вкладками.</string>
+    <string name="InuSuggestFolderAfterJoin">Пропонувати папку після приєднання</string>
+    <string name="InuSuggestFolderAfterJoinInfo">Пропонувати додати до папки публічні канали й групи, до яких ви приєдналися.</string>
+    <string name="InuAddChannelToFolderSuggestion">Ви можете додати канал до папки</string>
+    <string name="InuAddGroupToFolderSuggestion">Ви можете додати групу до папки</string>
     <string name="InuCommunityDisplayMode">Спільноти</string>
     <string name="InuCommunityDisplayModeRegular">Звичайний</string>
     <string name="InuCommunityDisplayModeLongTap">Відкривати за тривалим дотиком</string>

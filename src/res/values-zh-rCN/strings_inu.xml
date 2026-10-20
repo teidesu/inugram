@@ -128,6 +128,10 @@
     <string name="InuHideAllChatsTab">隐藏「所有聊天」标签</string>
     <string name="InuFolderTabsAtBottom">在底部显示标签</string>
     <string name="InuFolderTabsAtBottomInfo">仅在使用 Material 3 底部标签或禁用底部标签时，才能将经典文件夹栏移至底部。</string>
+    <string name="InuSuggestFolderAfterJoin">加入后建议添加到文件夹</string>
+    <string name="InuSuggestFolderAfterJoinInfo">建议将新加入的公开频道和群组添加到文件夹。</string>
+    <string name="InuAddChannelToFolderSuggestion">你可以将该频道添加到文件夹</string>
+    <string name="InuAddGroupToFolderSuggestion">你可以将该群组添加到文件夹</string>
     <string name="InuHideCallActionButton">隐藏标题中的通话按钮</string>
     <string name="InuDisableProfileScrollSnap">禁用资料滚动吸附</string>
     <string name="InuDisableProfileScrollSnapInfo">滚动时不让资料头部吸附到固定位置</string>

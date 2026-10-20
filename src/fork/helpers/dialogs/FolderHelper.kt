@@ -3,21 +3,34 @@ package desu.inugram.helpers.dialogs
 import android.graphics.Canvas
 import android.graphics.ColorFilter
 import android.graphics.drawable.Drawable
+import android.os.SystemClock
 import android.text.TextPaint
 import android.util.Pair
 import androidx.core.content.edit
 import androidx.core.graphics.withSave
 import desu.inugram.InuConfig
 import desu.inugram.helpers.security.ParanoiaHelper
+import org.telegram.messenger.AccountInstance
 import org.telegram.messenger.AndroidUtilities
+import org.telegram.messenger.ChatObject
 import org.telegram.messenger.LocaleController.getString
 import org.telegram.messenger.MessagesController
 import org.telegram.messenger.MessagesStorage
 import org.telegram.messenger.R
 import org.telegram.messenger.UserConfig
 import org.telegram.tgnet.TLRPC
+import org.telegram.ui.ActionBar.BaseFragment
+import org.telegram.ui.ChatActivity
+import org.telegram.ui.Components.Bulletin
+import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.FilterTabsView
+import org.telegram.ui.Components.FiltersListBottomSheet
+import org.telegram.ui.Components.Premium.LimitReachedBottomSheet
+import org.telegram.ui.FilterCreateActivity
+import org.telegram.ui.LaunchActivity
+import org.telegram.ui.ProfileActivity
 import org.telegram.ui.Stories.recorder.HintView2
+import java.lang.ref.WeakReference
 import kotlin.math.ceil
 
 object FolderHelper {
@@ -62,6 +75,136 @@ object FolderHelper {
     )
 
     const val ICON_GAP = 4
+
+    @JvmStatic
+    fun capturePublicJoinOrigin(account: Int, chatId: Long, fragment: BaseFragment?): BaseFragment? {
+        if (!InuConfig.SUGGEST_FOLDER_AFTER_JOIN.value || ParanoiaHelper.shouldHideFolders()) return null
+        val controller = MessagesController.getInstance(account)
+        if (!ChatObject.isPublic(controller.getChat(chatId)) || controller.dialogFilters.none { !it.isDefault }) return null
+        val origin = fragment ?: LaunchActivity.getLastFragment()?.takeIf {
+            when (it) {
+                is ChatActivity -> it.dialogId == -chatId
+                is ProfileActivity -> it.dialogId == -chatId
+                else -> false
+            }
+        }
+        return origin?.takeIf { isJoinOriginAvailable(it, account) }
+    }
+
+    @JvmStatic
+    fun onPublicChatJoined(account: Int, chatId: Long, origin: BaseFragment?) {
+        if (origin == null || !InuConfig.SUGGEST_FOLDER_AFTER_JOIN.value) return
+        val reference = WeakReference(origin)
+        val deadline = SystemClock.uptimeMillis() + 5000
+        object : Runnable {
+            override fun run() {
+                val fragment = reference.get() ?: return
+                if (!isJoinOriginAvailable(fragment, account) || SystemClock.uptimeMillis() >= deadline) return
+                if (fragment.parentLayout?.isTransitionAnimationInProgress == true) {
+                    AndroidUtilities.runOnUIThread(this, 250)
+                    return
+                }
+                if (!isJoinOriginActive(fragment, account)) return
+                val controller = fragment.messagesController
+                val chat = controller.getChat(chatId) ?: return
+                if (!ChatObject.isPublic(chat)) return
+                if (fragment.bulletinLayoutContainer == null) return
+                if (ChatObject.isNotInChat(chat) ||
+                    Bulletin.getVisibleBulletin() != null || fragment.visibleDialog?.isShowing == true
+                ) {
+                    AndroidUtilities.runOnUIThread(this, 250)
+                    return
+                }
+                val accountInstance = AccountInstance.getInstance(account)
+                val dialog = joinedDialog(fragment, chatId)
+                if (controller.dialogFilters.none { !it.isDefault && !it.includesDialog(accountInstance, -chatId, dialog) }) return
+                val text = if (ChatObject.isChannelAndNotMegaGroup(chat)) {
+                    R.string.InuAddChannelToFolderSuggestion
+                } else {
+                    R.string.InuAddGroupToFolderSuggestion
+                }
+                BulletinFactory.of(fragment).createSimpleBulletin(
+                    R.raw.folder_in, getString(text), getString(R.string.FilterChoose), 3000,
+                ) {
+                    reference.get()?.let { showJoinFolderPicker(it, account, chatId) }
+                }.show()
+            }
+        }.run()
+    }
+
+    private fun isJoinOriginAvailable(fragment: BaseFragment, account: Int): Boolean {
+        return InuConfig.SUGGEST_FOLDER_AFTER_JOIN.value && !ParanoiaHelper.shouldHideFolders() &&
+            (fragment is ChatActivity || fragment is ProfileActivity) &&
+            fragment.currentAccount == account && UserConfig.selectedAccount == account &&
+            !fragment.isFinished
+    }
+
+    private fun isJoinOriginActive(fragment: BaseFragment, account: Int): Boolean {
+        return isJoinOriginAvailable(fragment, account) && !fragment.isPaused && fragment.isLastFragment &&
+            !fragment.isInPreviewMode && fragment.fragmentView?.isAttachedToWindow == true &&
+            fragment.articleViewer == null
+    }
+
+    @JvmStatic
+    fun canCreateFolder(fragment: BaseFragment): Boolean {
+        val controller = fragment.messagesController
+        val limit = if (fragment.userConfig.isPremium) controller.dialogFiltersLimitPremium else controller.dialogFiltersLimitDefault
+        return controller.dialogFilters.count { !it.isDefault } < limit
+    }
+
+    private fun joinedDialog(fragment: BaseFragment, chatId: Long): TLRPC.Dialog {
+        return fragment.messagesController.dialogs_dict[-chatId] ?: TLRPC.TL_dialog().apply {
+            id = -chatId
+            peer = fragment.messagesController.getPeer(id)
+            flags = 1
+        }
+    }
+
+    private fun showJoinFolderPicker(fragment: BaseFragment, account: Int, chatId: Long) {
+        if (!isJoinOriginActive(fragment, account)) return
+        val chat = fragment.messagesController.getChat(chatId) ?: return
+        if (!ChatObject.isPublic(chat) || ChatObject.isNotInChat(chat)) return
+        val selectedDialogs = arrayListOf(-chatId)
+        val sheet = FiltersListBottomSheet.inu_forFragment(fragment, selectedDialogs, joinedDialog(fragment, chatId))
+        sheet.setDelegate { selectedFilter, _ ->
+            if (!isJoinOriginActive(fragment, account)) return@setDelegate
+            if (selectedFilter == null) {
+                if (canCreateFolder(fragment)) {
+                    val editor = FilterCreateActivity(null, selectedDialogs)
+                    editor.setCurrentAccount(account)
+                    fragment.presentFragment(editor)
+                } else {
+                    showFolderLimit(fragment, LimitReachedBottomSheet.TYPE_FOLDERS)
+                }
+                return@setDelegate
+            }
+            val filter = fragment.messagesController.dialogFilters.find { it.id == selectedFilter.id } ?: return@setDelegate
+            val checked = filter.includesDialog(AccountInstance.getInstance(account), -chatId, joinedDialog(fragment, chatId))
+            val alwaysShow = ArrayList(filter.alwaysShow)
+            val neverShow = ArrayList(filter.neverShow)
+            val targetDialogs = if (checked) neverShow else alwaysShow
+            val sourceDialogs = if (checked) alwaysShow else neverShow
+            sourceDialogs.remove(-chatId)
+            if (!targetDialogs.contains(-chatId)) targetDialogs.add(-chatId)
+            val controller = fragment.messagesController
+            val limit = if (fragment.userConfig.isPremium) controller.dialogFiltersChatsLimitPremium else controller.dialogFiltersChatsLimitDefault
+            if (targetDialogs.size > limit) {
+                showFolderLimit(fragment, LimitReachedBottomSheet.TYPE_CHATS_IN_FOLDER)
+                return@setDelegate
+            }
+            if (checked) filter.pinnedDialogs.delete(-chatId)
+            FilterCreateActivity.saveFilterToServer(
+                filter, filter.flags, filter.name, filter.entities, filter.title_noanimate, filter.color,
+                alwaysShow, neverShow, filter.pinnedDialogs, false, false, true, true, false, fragment, null,
+            )
+        }
+        fragment.showDialog(sheet)
+    }
+
+    // shown on top instead of via showDialog, which would dismiss the open folder picker
+    private fun showFolderLimit(fragment: BaseFragment, type: Int) {
+        LimitReachedBottomSheet(fragment, fragment.parentActivity, type, fragment.currentAccount, fragment.resourceProvider).show()
+    }
 
     private fun getIconSize(): Int {
         return if (isIconsOnly()) 28 else 24

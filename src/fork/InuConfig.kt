@@ -544,6 +544,9 @@ object InuConfig {
     @JvmField
     val FOLDER_TABS_AT_BOTTOM = BoolItem("folder_tabs_at_bottom", false)
 
+    @JvmField
+    val SUGGEST_FOLDER_AFTER_JOIN = BoolItem("suggest_folder_after_join", true)
+
     class CommunityDisplayModeItem : IntItem("community_display_mode", REGULAR) {
         companion object {
             const val REGULAR = 1

@@ -1,0 +1,130 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Nika Krasnova <nika@nikableh.moe>
+Date: Thu, 26 Nov 2026 18:54:35 +0100
+Subject: Suggest adding newly joined chats to folders
+
+---
+ .../messenger/MessagesController.java         |  4 +++
+ .../ui/Components/FiltersListBottomSheet.java | 35 +++++++++++++++----
+ 2 files changed, 32 insertions(+), 7 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
+@@ -16292,6 +16292,7 @@ public class MessagesController extends BaseController implements NotificationCe
+             request = req;
+         }
+ 
++        final BaseFragment inu_folderJoinOrigin = request instanceof TLRPC.TL_channels_joinChannel ? desu.inugram.helpers.dialogs.FolderHelper.capturePublicJoinOrigin(currentAccount, chatId, fragment) : null;
+         getConnectionsManager().sendRequest(request, (response, error) -> {
+             if (isChannel && inputUser instanceof TLRPC.TL_inputUserSelf) {
+                 AndroidUtilities.runOnUIThread(() -> joiningToChannels.remove(chatId));
+@@ -16427,6 +16428,9 @@ public class MessagesController extends BaseController implements NotificationCe
+                     getNotificationCenter().postNotificationName(NotificationCenter.joinedGroup, chatId);
+                 });
+             }
++            if (inu_folderJoinOrigin != null) {
++                AndroidUtilities.runOnUIThread(() -> desu.inugram.helpers.dialogs.FolderHelper.onPublicChatJoined(currentAccount, chatId, inu_folderJoinOrigin));
++            }
+         });
+     }
+ 
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/FiltersListBottomSheet.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/FiltersListBottomSheet.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/FiltersListBottomSheet.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/FiltersListBottomSheet.java
+@@ -86,13 +86,24 @@ public class FiltersListBottomSheet extends BottomSheet implements NotificationC
+     }
+ 
+     private final ArrayList<Long> selectedDialogs;
+-    private final DialogsActivity fragment;
++    private final BaseFragment fragment;
++    private final TLRPC.Dialog inu_dialogFallback;
+ 
+     public FiltersListBottomSheet(DialogsActivity baseFragment, ArrayList<Long> selectedDialogs) {
+-        super(baseFragment.getParentActivity(), false);
++        this(baseFragment, selectedDialogs, null, null);
++    }
++
++    public static FiltersListBottomSheet inu_forFragment(BaseFragment baseFragment, ArrayList<Long> selectedDialogs, TLRPC.Dialog dialogFallback) {
++        return new FiltersListBottomSheet(baseFragment, selectedDialogs, baseFragment.getResourceProvider(), dialogFallback);
++    }
++
++    private FiltersListBottomSheet(BaseFragment baseFragment, ArrayList<Long> selectedDialogs, Theme.ResourcesProvider resourcesProvider, TLRPC.Dialog dialogFallback) {
++        super(baseFragment.getParentActivity(), false, resourcesProvider);
++        currentAccount = baseFragment.getCurrentAccount();
+         fixNavigationBar();
+         this.selectedDialogs = selectedDialogs;
+         this.fragment = baseFragment;
++        this.inu_dialogFallback = dialogFallback;
+ //        dialogFilters = getCanAddDialogFilters(baseFragment, selectedDialogs);
+         dialogFilters = new ArrayList<>(baseFragment.getMessagesController().dialogFilters);
+         for (int i = 0; i < dialogFilters.size(); ++i) {
+@@ -183,13 +194,13 @@ public class FiltersListBottomSheet extends BottomSheet implements NotificationC
+                 shadowDrawable.draw(canvas);
+ 
+                 if (radProgress != 1.0f) {
+-                    Theme.dialogs_onlineCirclePaint.setColor(Theme.getColor(Theme.key_dialogBackground));
++                    Theme.dialogs_onlineCirclePaint.setColor(getThemedColor(Theme.key_dialogBackground));
+                     rect.set(backgroundPaddingLeft, backgroundPaddingTop + top, getMeasuredWidth() - backgroundPaddingLeft, backgroundPaddingTop + top + AndroidUtilities.dp(24));
+                     canvas.drawRoundRect(rect, AndroidUtilities.dp(12) * radProgress, AndroidUtilities.dp(12) * radProgress, Theme.dialogs_onlineCirclePaint);
+                 }
+ 
+                 if (statusBarHeight > 0) {
+-                    Theme.dialogs_onlineCirclePaint.setColor(Theme.getColor(Theme.key_dialogBackground));
++                    Theme.dialogs_onlineCirclePaint.setColor(getThemedColor(Theme.key_dialogBackground));
+                     canvas.drawRect(backgroundPaddingLeft, AndroidUtilities.statusBarHeight - statusBarHeight, getMeasuredWidth() - backgroundPaddingLeft, AndroidUtilities.statusBarHeight, Theme.dialogs_onlineCirclePaint);
+                 }
+                 updateLightStatusBar(statusBarHeight > AndroidUtilities.statusBarHeight / 2);
+@@ -242,6 +253,10 @@ public class FiltersListBottomSheet extends BottomSheet implements NotificationC
+         });
+         listView.setOnItemClickListener((view, position) -> {
+             delegate.didSelectFilter(adapter.getItem(position), view instanceof BottomSheet.BottomSheetCell ? ((BottomSheet.BottomSheetCell) view).isChecked() : false);
++            if (inu_dialogFallback != null && adapter.getItem(position) != null) {
++                adapter.notifyItemChanged(position);
++                return;
++            }
+             dismiss();
+         });
+         containerView.addView(listView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.TOP | Gravity.LEFT, 0, 48, 0, 0));
+@@ -265,6 +280,9 @@ public class FiltersListBottomSheet extends BottomSheet implements NotificationC
+ 
+     @Override
+     protected boolean canDismissWithSwipe() {
++        if (inu_dialogFallback != null) {
++            return listView != null && !listView.canScrollVertically(-1);
++        }
+         return false;
+     }
+ 
+@@ -407,7 +425,7 @@ public class FiltersListBottomSheet extends BottomSheet implements NotificationC
+         @Override
+         public int getItemCount() {
+             int count = dialogFilters.size();
+-            if (count < 10) {
++            if (fragment instanceof DialogsActivity ? count < 10 : desu.inugram.helpers.dialogs.FolderHelper.canCreateFolder(fragment)) {
+                 count++;
+             }
+             return count;
+@@ -425,7 +443,7 @@ public class FiltersListBottomSheet extends BottomSheet implements NotificationC
+ 
+         @Override
+         public RecyclerView.ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+-            BottomSheet.BottomSheetCell cell = new BottomSheet.BottomSheetCell(context, 0);
++            BottomSheet.BottomSheetCell cell = new BottomSheet.BottomSheetCell(context, 0, resourcesProvider);
+             cell.setBackground(null);
+             cell.setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+             return new RecyclerListView.Holder(cell);
+@@ -462,7 +480,10 @@ public class FiltersListBottomSheet extends BottomSheet implements NotificationC
+                 boolean isChecked = true;
+                 for (int i = 0; i < selectedDialogs.size(); ++i) {
+                     long did = selectedDialogs.get(i);
+-                    if (!filter.includesDialog(AccountInstance.getInstance(currentAccount), did)) {
++                    boolean included = inu_dialogFallback != null && inu_dialogFallback.id == did && fragment.getMessagesController().dialogs_dict.get(did) == null
++                        ? filter.includesDialog(AccountInstance.getInstance(currentAccount), did, inu_dialogFallback)
++                        : filter.includesDialog(AccountInstance.getInstance(currentAccount), did);
++                    if (!included) {
+                         isChecked = false;
+                     }
+                 }

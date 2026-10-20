@@ -52,6 +52,14 @@ class DialogsSettingsActivity : SettingsPageActivity() {
                 LocaleController.getString(R.string.InuHideAllChatsTab),
             ).setChecked(InuConfig.HIDE_ALL_CHATS_TAB.value)
         )
+        items.add(
+            mkTwoLineCheckItem(
+                TOGGLE_SUGGEST_FOLDER_AFTER_JOIN,
+                R.string.InuSuggestFolderAfterJoin,
+                R.string.InuSuggestFolderAfterJoinInfo,
+                InuConfig.SUGGEST_FOLDER_AFTER_JOIN.value,
+            )
+        )
         val canShowTabsAtBottom = FolderHelper.canShowTabsAtBottom()
         items.add(
             UItem.asCheck(
@@ -206,6 +214,11 @@ class DialogsSettingsActivity : SettingsPageActivity() {
                 val new = InuConfig.HIDE_ALL_CHATS_TAB.toggle()
                 (view as? TextCheckCell)?.isChecked = new
                 postNotificationForAllAccounts(NotificationCenter.dialogFiltersUpdated)
+            }
+
+            TOGGLE_SUGGEST_FOLDER_AFTER_JOIN -> {
+                val new = InuConfig.SUGGEST_FOLDER_AFTER_JOIN.toggle()
+                (view as? NotificationsCheckCell)?.isChecked = new
             }
 
             TOGGLE_BOT_WEBVIEW_BUTTON -> {
@@ -367,6 +380,7 @@ class DialogsSettingsActivity : SettingsPageActivity() {
         private val TOGGLE_INTERACTIVE_CHAT_PREVIEW = InuUtils.generateId()
         private val TOGGLE_HIDE_ALL_CHATS_TAB = InuUtils.generateId()
         private val TOGGLE_FOLDER_TABS_AT_BOTTOM = InuUtils.generateId()
+        private val TOGGLE_SUGGEST_FOLDER_AFTER_JOIN = InuUtils.generateId()
         private val BUTTON_COMMUNITY_DISPLAY_MODE = InuUtils.generateId()
         private val BUTTON_TITLE_TEXT = InuUtils.generateId()
         private val TOGGLE_LINKED_CHATS = InuUtils.generateId()
@@ -404,6 +418,7 @@ class DialogsSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("folders-unread-counter", R.string.InuFoldersUnreadCounter, BUTTON_FOLDERS_UNREAD_COUNTER_MODE),
                 SearchRegistry.Entry("hide-all-chats-tab", R.string.InuHideAllChatsTab, TOGGLE_HIDE_ALL_CHATS_TAB),
                 SearchRegistry.Entry("folder-tabs-at-bottom", R.string.InuFolderTabsAtBottom, TOGGLE_FOLDER_TABS_AT_BOTTOM),
+                SearchRegistry.Entry("suggest-folder-after-join", R.string.InuSuggestFolderAfterJoin, TOGGLE_SUGGEST_FOLDER_AFTER_JOIN),
                 SearchRegistry.Entry("title-text", R.string.InuTitleText, BUTTON_TITLE_TEXT),
                 SearchRegistry.Entry("old-mention-indicator", R.string.InuOldMentionIndicator, TOGGLE_OLD_MENTION_INDICATOR),
                 SearchRegistry.Entry("pull-down-action", R.string.InuPullDownAction, BUTTON_PULL_DOWN_ACTION),
