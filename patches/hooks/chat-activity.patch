@@ -398,7 +398,14 @@ index 0000000..0000000 100644
          }
          selectedObject = null;
          selectedObjectGroup = null;
-@@ -39849,7 +39869,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -39664,6 +39684,7 @@ public class ChatActivity extends BaseFragment implements
+             ItemOptions.makeOptions(ChatActivity.this, cell)
+                 .add(R.drawable.msg_download, getString(R.string.SaveToDownloads), () -> saveRichDocument(cell, document))
++                .apply(options -> ChatHelper.populateRichDocumentOptions(ChatActivity.this, cell, document, options))
+                 .setDrawScrim(false)
+                 .show();
+         }
+@@ -39849,7 +39871,8 @@ public class ChatActivity extends BaseFragment implements
              if (isAvatarPreviewerEnabled()) {
                  final boolean enableMention = currentChat != null && (bottomChannelButtonsLayout == null || bottomChannelButtonsLayout.getVisibility() != View.VISIBLE) && (bottomOverlay == null || bottomOverlay.getVisibility() != View.VISIBLE);
                  final boolean enableSearchMessages = currentChat != null && (threadMessageId == 0 || isTopic) && (!ChatObject.isChannel(currentChat) || currentChat.megagroup);
@@ -408,7 +415,7 @@ index 0000000..0000000 100644
                  int a = 0;
                  menuItems[a++] = AvatarPreviewer.MenuItem.OPEN_PROFILE;
                  menuItems[a++] = AvatarPreviewer.MenuItem.SEND_MESSAGE;
-@@ -39859,6 +39880,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -39859,6 +39881,9 @@ public class ChatActivity extends BaseFragment implements
                  if (enableSearchMessages) {
                      menuItems[a++] = AvatarPreviewer.MenuItem.SEARCH_MESSAGES;
                  }
@@ -418,7 +425,7 @@ index 0000000..0000000 100644
                  final TLRPC.UserFull userFull = getMessagesController().getUserFull(user.id);
                  AvatarPreviewer.Data data;
                  if (userFull != null) {
-@@ -39871,6 +39895,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -39871,6 +39896,7 @@ public class ChatActivity extends BaseFragment implements
                  }
                  if (AvatarPreviewer.canPreview(data)) {
                      AvatarPreviewer.getInstance().show((ViewGroup) fragmentView, themeDelegate, data, item -> {
@@ -426,7 +433,7 @@ index 0000000..0000000 100644
                          switch (item) {
                              case SEND_MESSAGE:
                                  openDialog(cell, user);
-@@ -39888,7 +39913,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -39888,7 +39914,7 @@ public class ChatActivity extends BaseFragment implements
                      });
                      return true;
                  } else {
@@ -435,7 +442,7 @@ index 0000000..0000000 100644
                          .add(R.drawable.msg_openprofile, getString(R.string.OpenProfile), () -> {
                              openProfile(user);
                          })
-@@ -39900,7 +39925,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -39900,7 +39926,7 @@ public class ChatActivity extends BaseFragment implements
                          })
                          .addIf(enableSearchMessages, R.drawable.msg_search, getString(R.string.AvatarPreviewSearchMessages), () -> {
                              openSearchWithUser(user);
@@ -444,7 +451,7 @@ index 0000000..0000000 100644
                          .setDrawScrim(false)
                          .setGravity(Gravity.LEFT)
                          .forceBottom(true)
-@@ -39973,7 +39998,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -39973,7 +39999,8 @@ public class ChatActivity extends BaseFragment implements
                  final boolean enableMention = !TextUtils.isEmpty(ChatObject.getPublicUsername(chat)) && currentChat != null && (bottomChannelButtonsLayout == null || bottomChannelButtonsLayout.getVisibility() != View.VISIBLE) && (bottomOverlay == null || bottomOverlay.getVisibility() != View.VISIBLE);
                  final boolean enableSearchMessages = currentChat != null && (threadMessageId == 0 || isTopic) && (!ChatObject.isChannel(currentChat) || currentChat.megagroup);
                  final boolean openChannel = currentChat == null || currentChat.id != chat.id || isThreadChat();
@@ -454,7 +461,7 @@ index 0000000..0000000 100644
                  int a = 0;
                  menuItems[a++] = AvatarPreviewer.MenuItem.OPEN_PROFILE;
                  if (openChannel) {
-@@ -39985,6 +40011,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -39985,6 +40012,9 @@ public class ChatActivity extends BaseFragment implements
                  if (enableSearchMessages) {
                      menuItems[a++] = AvatarPreviewer.MenuItem.SEARCH_MESSAGES;
                  }
@@ -464,7 +471,7 @@ index 0000000..0000000 100644
                  final TLRPC.ChatFull chatFull = getMessagesController().getChatFull(chat.id);
                  final AvatarPreviewer.Data data;
                  if (chatFull != null) {
-@@ -39994,6 +40023,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -39994,6 +40024,7 @@ public class ChatActivity extends BaseFragment implements
                  }
                  if (AvatarPreviewer.canPreview(data)) {
                      AvatarPreviewer.getInstance().show((ViewGroup) fragmentView, themeDelegate, data, item -> {
@@ -472,7 +479,7 @@ index 0000000..0000000 100644
                          switch (item) {
                              case OPEN_PROFILE:
                                  openProfile(chat);
-@@ -40012,7 +40042,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -40012,7 +40043,7 @@ public class ChatActivity extends BaseFragment implements
                      });
                      return true;
                  } else {
@@ -481,7 +488,7 @@ index 0000000..0000000 100644
                          .add(R.drawable.msg_openprofile, getString(R.string.OpenProfile), () -> {
                              openProfile(chat);
                          })
-@@ -40024,7 +40054,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -40024,7 +40055,7 @@ public class ChatActivity extends BaseFragment implements
                          })
                          .addIf(enableSearchMessages, R.drawable.msg_search, getString(R.string.AvatarPreviewSearchMessages), () -> {
                              openSearchWithChat(chat);
@@ -490,7 +497,7 @@ index 0000000..0000000 100644
                          .setDrawScrim(false)
                          .setGravity(Gravity.LEFT)
                          .forceBottom(true)
-@@ -40339,6 +40369,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -40339,6 +40370,7 @@ public class ChatActivity extends BaseFragment implements
                  return;
              }
  
@@ -498,7 +505,7 @@ index 0000000..0000000 100644
              if (buttonTypeCopy != null) {
                  didLongPressCopyButton(buttonTypeCopy.copy_text);
                  return;
-@@ -41722,6 +41753,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -41722,6 +41754,7 @@ public class ChatActivity extends BaseFragment implements
                      presentFragment(fragment);
                  }
              } else if (message.type == MessageObject.TYPE_FILE || message.type == MessageObject.TYPE_TEXT) {
@@ -506,7 +513,7 @@ index 0000000..0000000 100644
                  if (message.getDocumentName().toLowerCase().endsWith("attheme")) {
                      File locFile = null;
                      if (message.messageOwner.attachPath != null && message.messageOwner.attachPath.length() != 0) {
-@@ -44654,6 +44686,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -44654,6 +44687,8 @@ public class ChatActivity extends BaseFragment implements
              });
          }
  
@@ -515,7 +522,7 @@ index 0000000..0000000 100644
          if (customTabs && !isHashtag || isMail) {
              options.add(R.drawable.msg_openin, getString(R.string.OpenInSystemBrowser2), () -> {
                  if (MessagesController.getInstance(currentAccount).isWebBrowserExceptionsLimitReached(true)) {
-@@ -46079,6 +46113,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -46079,6 +46114,7 @@ public class ChatActivity extends BaseFragment implements
                  options.add(OPTION_DELETE);
                  icons.add(deleteIconRes);
              }
@@ -523,7 +530,7 @@ index 0000000..0000000 100644
          } else if (type == 20) {
              items.add(LocaleController.getString(R.string.Retry));
              options.add(OPTION_RETRY);
-@@ -46508,6 +46543,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -46508,6 +46544,7 @@ public class ChatActivity extends BaseFragment implements
                  options.add(OPTION_DELETE);
                  icons.add(deleteIconRes);
              }
