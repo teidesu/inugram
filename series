@@ -386,3 +386,4 @@ bugfix/settings-camera-button-clip.patch
 bugfix/settings-header-avatar.patch
 feature/animated-avatars.patch
 misc/experimental-settings-in-release.patch
+bugfix/search-everywhere-crash.patch

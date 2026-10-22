@@ -293,6 +293,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - long-tap scrims (link / date / card / username / phone menus) block chat touches while open — the lifted text is pinned to screen coords captured on open, so scrolling, swipe-to-reply or swipe-back behind it detached it from its bubble
 - dead zones in list rows where a hidden clickable child kept stale bounds from a previous binding (e.g. top-right corner of a member row in profile after a tagged member was recycled)
 - share sheet search results unclickable near the top (the touch dead zone under the search field double-counted the status bar inset, swallowing taps on the first row of results)
+- switching from an empty filtered message search to Search Everywhere refreshes the whole list and shows loading rows, avoiding RecyclerView inconsistencies; result refreshes during layout are deferred
 - chat list crash while flinging when RecyclerView exposes a stale child without a ViewHolder
 - dialogs list pull-to-reveal-archive glitches
 - inline code in dialog previews no longer inherits chat-bubble colors

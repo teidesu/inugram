@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: motya <mmotyaa@proton.me>
+Date: Thu, 22 Oct 2026 16:42:12 +0500
+Subject: Fix crashes when switching to Search Everywhere
+
+---
+ .../org/telegram/ui/Adapters/DialogsSearchAdapter.java    | 6 +++---
+ .../java/org/telegram/ui/Components/SearchViewPager.java  | 8 ++++++++
+ 2 files changed, 11 insertions(+), 3 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java
+@@ -1714,9 +1714,9 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+                 view = messagesEmptyLayout = new EmptyLayout(mContext, resourcesProvider, () -> {
+                     currentMessagesFilter = Filter.All;
+                     searchResultMessages.clear();
+-                    if (messagesSectionPosition >= 0 && messagesSectionPosition < getItemCount()) {
+-                        notifyItemChanged(messagesSectionPosition);
+-                    }
++                    forceLoadingMessages = true;
++                    // Switching filters replaces the empty row with loading rows.
++                    notifyDataSetChanged();
+                     loadMoreSearchMessages();
+                 });
+                 messagesEmptyLayout.setQuery(lastMessagesSearchString);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SearchViewPager.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/SearchViewPager.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/SearchViewPager.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/SearchViewPager.java
+@@ -176,8 +176,16 @@ public class SearchViewPager extends ViewPagerFixed implements FilteredSearchVie
+         itemAnimator.setTranslationInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
+ 
+         dialogsSearchAdapter = new DialogsSearchAdapter(context, fragment, type, initialDialogsType, itemAnimator, fragment.getAllowGlobalSearch(), null) {
++            private final Runnable inu_notifyDataSetChanged = this::notifyDataSetChanged;
++
+             @Override
+             public void notifyDataSetChanged() {
++                AndroidUtilities.cancelRunOnUIThread(inu_notifyDataSetChanged);
++                if (searchListView != null && searchListView.isComputingLayout()) {
++                    // Retry after layout; keep scrolling and empty-state updates with the notification.
++                    AndroidUtilities.runOnUIThread(inu_notifyDataSetChanged);
++                    return;
++                }
+                 int itemCount = getCurrentItemCount();
+                 super.notifyDataSetChanged();
+                 if (!lastSearchScrolledToTop && searchListView != null) {
