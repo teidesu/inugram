@@ -157,6 +157,8 @@
     <string name="InuBlockedMessagesModeHide">Hide</string>
     <string name="InuBlockedMessagesExtra">Also hide messages from</string>
     <string name="InuBlockedMessagesExtraCount">%1$d peers</string>
+    <string name="InuBlockedMessagesHideReplies">Also hide replies to them</string>
+    <string name="InuBlockedMessagesHideRepliesInfo">Incoming messages that reply to a message from a blocked user</string>
     <string name="InuHideMessages">Hide messages</string>
     <string name="InuShowHiddenMessages">Show messages</string>
     <string name="InuSpoilers">Spoilers</string>

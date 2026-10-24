@@ -150,6 +150,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - 🐶 restrict/ban menu items the avatar long-tap menu
 - hide messages from blocked users: with a spoiler or completely - *partially ported from [Nekogram](https://github.com/Nekogram/Nekogram)*
   - also hide messages from a custom list of users/channels without blocking them (via settings picker or profile menu)
+  - optionally also hide replies to those users
 
 ## message input / formatting
 

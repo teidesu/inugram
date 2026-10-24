@@ -28,6 +28,11 @@ object BlockedMessagesHelper {
             extraHiddenCache[account] = HashSet(ids)
         }
         InuConfig.prefs.edit { putStringSet(getExtraHiddenKey(account), ids.map(Long::toString).toHashSet()) }
+        notifyChanged(account)
+    }
+
+    @JvmStatic
+    fun notifyChanged(account: Int) {
         NotificationCenter.getInstance(account).postNotificationName(NotificationCenter.blockedUsersDidLoad)
     }
 
@@ -141,8 +146,20 @@ object BlockedMessagesHelper {
     private fun isBlockedMessage(messageObject: MessageObject?): Boolean {
         if (messageObject?.messageOwner == null || messageObject.storyItem != null) return false
         if (isBlockedPeer(messageObject.currentAccount, messageObject.fromChatId)) return true
+        if (InuConfig.BLOCKED_MESSAGES_HIDE_REPLIES.value && !messageObject.isOutOwner() && isReplyToBlocked(messageObject)) return true
         val forwardedFrom = messageObject.messageOwner.fwd_from?.from_id ?: return false
         return isBlockedPeer(messageObject.currentAccount, MessageObject.getPeerId(forwardedFrom))
+    }
+
+    private fun isReplyToBlocked(messageObject: MessageObject): Boolean {
+        val reply = messageObject.replyMessageObject
+        if (reply != null && reply.messageOwner != null && reply.messageOwner !is TLRPC.TL_messageEmpty &&
+            isBlockedPeer(messageObject.currentAccount, reply.fromChatId)
+        ) {
+            return true
+        }
+        val from = messageObject.messageOwner.reply_to?.reply_from?.from_id ?: return false
+        return isBlockedPeer(messageObject.currentAccount, MessageObject.getPeerId(from))
     }
 
     private fun isBlockedPeer(currentAccount: Int, peerId: Long): Boolean {

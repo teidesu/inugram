@@ -242,6 +242,9 @@ object InuConfig {
     @JvmField
     val BLOCKED_MESSAGES_MODE = BlockedMessagesModeItem()
 
+    @JvmField
+    val BLOCKED_MESSAGES_HIDE_REPLIES = BoolItem("blocked_messages_hide_replies", false)
+
     class AttachCameraModeItem : IntItem("attach_camera_mode", STATIC) {
         // Migrate the old `disable_instant_camera` boolean toggle: on → static, off → instant.
         override fun read(prefs: SharedPreferences): Int {
