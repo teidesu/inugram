@@ -1,18 +1,53 @@
 package desu.inugram.helpers.media
 
 import android.graphics.Bitmap
+import android.media.MediaCodecList
+import android.media.MediaExtractor
 import android.media.MediaMetadataRetriever
 import android.provider.MediaStore
+import android.util.Log
 import desu.inugram.InuConfig
 import org.telegram.messenger.FileLoader
 import org.telegram.messenger.FileLog
 import org.telegram.messenger.ImageLoader
+import org.telegram.messenger.MediaController
 import org.telegram.messenger.MessageObject
 import org.telegram.messenger.SendMessagesHelper
 import org.telegram.tgnet.TLRPC
+import org.telegram.ui.Components.voip.AnimatedFileInfo
 import java.io.File
+import java.io.FileInputStream
 
 object MediaSendHelper {
+    @JvmStatic
+    fun updateVideoConversionSupport(path: String, params: IntArray, fileOffset: Long) {
+        if (params[AnimatedFileInfo.PARAM_NUM_SUPPORTED_VIDEO_CODEC] != 0 ||
+            params[AnimatedFileInfo.PARAM_NUM_WIDTH] <= 0 ||
+            params[AnimatedFileInfo.PARAM_NUM_HEIGHT] <= 0
+        ) return
+
+        val extractor = MediaExtractor()
+        try {
+            if (fileOffset > 0) {
+                FileInputStream(path).use { input ->
+                    extractor.setDataSource(input.fd, fileOffset, input.channel.size() - fileOffset)
+                }
+            } else {
+                extractor.setDataSource(path)
+            }
+            val videoIndex = MediaController.findTrack(extractor, false)
+            if (videoIndex < 0) return
+            val format = extractor.getTrackFormat(videoIndex)
+            if (MediaCodecList(MediaCodecList.REGULAR_CODECS).findDecoderForFormat(format) != null) {
+                params[AnimatedFileInfo.PARAM_NUM_SUPPORTED_VIDEO_CODEC] = 1
+            }
+        } catch (e: Exception) {
+            Log.d("Inugram", "Unable to check video conversion support", e)
+        } finally {
+            extractor.release()
+        }
+    }
+
     @JvmStatic
     fun prepareMp4Document(
         document: TLRPC.TL_document?,
