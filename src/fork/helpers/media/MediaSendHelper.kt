@@ -31,11 +31,17 @@ object MediaSendHelper {
         }
         val attribute = createVideoAttribute(path, isEncrypted) ?: return false
         document.attributes.add(attribute)
-        if (document.thumbs.isEmpty()) {
-            createVideoThumb(path, isEncrypted)?.let {
-                document.thumbs.add(it)
-                document.flags = document.flags or 1
-            }
+        // A cached file must be uploaded again for Telegram to receive its video attributes.
+        document.id = 0
+        document.access_hash = 0
+        document.file_reference = ByteArray(0)
+        document.dc_id = 0
+        document.thumbs.clear()
+        document.flags = document.flags and 1.inv()
+        val thumb = createVideoThumb(path, isEncrypted)
+        if (thumb != null) {
+            document.thumbs.add(thumb)
+            document.flags = document.flags or 1
         }
         return true
     }
