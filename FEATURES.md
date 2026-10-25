@@ -235,6 +235,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - auto-disable the configured proxy while a VPN is active
 - batch import proxy links from clipboard (one per line)
 - send MP4 files attached through Files as playable videos without conversion
+- enable muting, quality changes, and cropping for AV1 and other video formats when Android provides a compatible decoder
 - sort attach panel albums by photo count instead of recency
 - 🐶 optimized attachment menu setting: [smoother animations](https://github.com/teidesu/inugram/pull/56) when opening photos and videos, large photos open at up to 1920px, with full quality loaded when zooming or editing; disables background blur in the media viewer
 - 🐶 "Minimize" option in the attach panel discard prompt to keep the selection (e.g. to choose a message to reply to)

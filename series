@@ -410,3 +410,4 @@ bugfix/frozen-overlay-search.patch
 bugfix/rich-table-emoji-height.patch
 misc/adaptive-action-bar-shadow.patch
 bugfix/search-all-chats-crash.patch
+bugfix/video-codec-support.patch

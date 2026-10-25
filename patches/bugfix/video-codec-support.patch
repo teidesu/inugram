@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dubzer <me@dubzer.dev>
+Date: Mon, 26 Oct 2026 01:08:17 +0300
+Subject: Enable video editing when Android provides a decoder
+
+---
+ .../java/org/telegram/ui/Components/AnimatedFileNative.java   | 1 +
+ TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java  | 4 ++++
+ 2 files changed, 5 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedFileNative.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedFileNative.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedFileNative.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedFileNative.java
+@@ -191,6 +191,7 @@ public class AnimatedFileNative {
+         Trace.beginSection("AnimatedFileNative#getVideoInfo");
+         try {
+             nGetVideoInfo(src, params, fileOffset);
++            desu.inugram.helpers.media.MediaSendHelper.updateVideoConversionSupport(src, params, fileOffset);
+         } finally {
+             Trace.endSection();
+         }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+@@ -15253,6 +15253,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                         animateCaption = false;
+                     }
+                     isCurrentVideo = false;
++                    cropItem.setEnabled(true);
++                    cropItem.setAlpha(1f);
+                     if (object instanceof MediaController.PhotoEntry && !((MediaController.PhotoEntry) object).isVideo) {
+                         final MediaController.PhotoEntry entry = (MediaController.PhotoEntry) object;
+                         if (!entry.isVideo && sendPhotoType != SELECT_TYPE_STICKER && sendPhotoType != SELECT_TYPE_QR && (currentIndex == index ? getCurrentVideoEditedInfo() : entry.editedInfo) == null) {
+@@ -22118,6 +22120,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                     }
+ 
+                     updateVideoInfo();
++                    cropItem.setEnabled(videoConvertSupported);
++                    cropItem.setAlpha(videoConvertSupported ? 1f : 0.5f);
+                     updateMuteButton();
+                 });
+             }

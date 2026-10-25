@@ -1,18 +1,51 @@
 package desu.inugram.helpers.media
 
 import android.graphics.Bitmap
+import android.media.MediaCodecList
+import android.media.MediaExtractor
 import android.media.MediaMetadataRetriever
 import android.provider.MediaStore
+import android.util.Log
 import desu.inugram.InuConfig
 import org.telegram.messenger.FileLoader
 import org.telegram.messenger.FileLog
 import org.telegram.messenger.ImageLoader
+import org.telegram.messenger.MediaController
 import org.telegram.messenger.MessageObject
 import org.telegram.messenger.SendMessagesHelper
 import org.telegram.tgnet.TLRPC
+import org.telegram.ui.Components.voip.AnimatedFileInfo
 import java.io.File
+import java.io.FileInputStream
 
 object MediaSendHelper {
+    @JvmStatic
+    fun updateVideoConversionSupport(path: String, params: IntArray, fileOffset: Long) {
+        if (params[AnimatedFileInfo.PARAM_NUM_SUPPORTED_VIDEO_CODEC] != 0 ||
+            params[AnimatedFileInfo.PARAM_NUM_WIDTH] <= 0 ||
+            params[AnimatedFileInfo.PARAM_NUM_HEIGHT] <= 0
+        ) return
+
+        val extractor = MediaExtractor()
+        try {
+            if (fileOffset > 0) {
+                FileInputStream(path).use { extractor.setDataSource(it.fd, fileOffset, Long.MAX_VALUE) }
+            } else {
+                extractor.setDataSource(path)
+            }
+            val videoIndex = MediaController.findTrack(extractor, false)
+            if (videoIndex < 0) return
+            val format = extractor.getTrackFormat(videoIndex)
+            if (MediaCodecList(MediaCodecList.REGULAR_CODECS).findDecoderForFormat(format) != null) {
+                params[AnimatedFileInfo.PARAM_NUM_SUPPORTED_VIDEO_CODEC] = 1
+            }
+        } catch (e: Exception) {
+            Log.d("Inugram", "Unable to check video conversion support", e)
+        } finally {
+            extractor.release()
+        }
+    }
+
     @JvmStatic
     fun prepareMp4Document(
         document: TLRPC.TL_document?,
@@ -31,11 +64,17 @@ object MediaSendHelper {
         }
         val attribute = createVideoAttribute(path, isEncrypted) ?: return false
         document.attributes.add(attribute)
-        if (document.thumbs.isEmpty()) {
-            createVideoThumb(path, isEncrypted)?.let {
-                document.thumbs.add(it)
-                document.flags = document.flags or 1
-            }
+        // A cached file must be uploaded again for Telegram to receive its video attributes.
+        document.id = 0
+        document.access_hash = 0
+        document.file_reference = ByteArray(0)
+        document.dc_id = 0
+        document.thumbs.clear()
+        document.flags = document.flags and 1.inv()
+        val thumb = createVideoThumb(path, isEncrypted)
+        if (thumb != null) {
+            document.thumbs.add(thumb)
+            document.flags = document.flags or 1
         }
         return true
     }
