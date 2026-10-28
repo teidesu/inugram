@@ -6,18 +6,18 @@ Subject: translator-related features
 ---
  .../messenger/MediaDataController.java        |   2 +-
  .../org/telegram/messenger/MessageObject.java |  13 +-
- .../messenger/TranslateController.java        |  45 ++--
+ .../messenger/TranslateController.java        |  73 +++++--
  .../telegram/tgnet/ConnectionsManager.java    |   9 +
  .../java/org/telegram/ui/ArticleViewer.java   |  17 +-
  .../telegram/ui/Cells/ChatMessageCell.java    |  42 +++-
  .../ui/Cells/TextSelectionHelper.java         |   1 +
  .../java/org/telegram/ui/ChatActivity.java    | 202 +++---------------
- .../ui/Components/TranslateAlert2.java        |  20 +-
+ .../ui/Components/TranslateAlert2.java        |  38 ++--
  .../ui/Components/TranslateAlert3.java        |   5 +-
  .../ui/Components/TranslateButton.java        |   4 +-
  .../telegram/ui/LanguageSelectActivity.java   |   2 +-
  .../org/telegram/ui/web/WebActionBar.java     |   3 +
- 13 files changed, 149 insertions(+), 216 deletions(-)
+ 13 files changed, 186 insertions(+), 225 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
 index 0000000..0000000 100644
@@ -142,16 +142,35 @@ index 0000000..0000000 100644
          final long dialogId = messageObject.getDialogId();
          if (!isFeatureAvailable(dialogId)) {
              return;
-@@ -1021,7 +1025,7 @@ public class TranslateController extends BaseController {
+@@ -1014,6 +1018,7 @@ public class TranslateController extends BaseController {
+         ArrayList<TLRPC.TL_textWithEntities> messageTexts = new ArrayList<>();
+         ArrayList<Utilities.Callback4<Boolean, Integer, TLRPC.TL_textWithEntities, String>> callbacks = new ArrayList<>();
+         String language;
++        String inu_provider;
+ 
+         int delay = GROUPING_TRANSLATIONS_TIMEOUT;
+         int symbolsCount;
+@@ -1021,9 +1026,18 @@ public class TranslateController extends BaseController {
          int reqId = -1;
      }
  
 -    private void pushToTranslate(
 +    public void pushToTranslate(
++        MessageObject message,
++        String language,
++        Utilities.Callback4<Boolean, Integer, TLRPC.TL_textWithEntities, String> callback
++    ) {
++        inu_pushToTranslate(message, language, null, callback);
++    }
++
++    public void inu_pushToTranslate(
          MessageObject message,
          String language,
++        String inu_provider,
          Utilities.Callback4<Boolean, Integer, TLRPC.TL_textWithEntities, String> callback
-@@ -1043,6 +1047,7 @@ public class TranslateController extends BaseController {
+     ) {
+         if (message == null || message.messageOwner == null || message.getId() < 0 || callback == null) {
+@@ -1043,6 +1057,7 @@ public class TranslateController extends BaseController {
          } else {
              source.text = message.messageOwner.message;
              source.entities = message.messageOwner.entities;
@@ -159,33 +178,60 @@ index 0000000..0000000 100644
          }
  
          PendingTranslation pendingTranslation;
-@@ -1103,7 +1108,7 @@ public class TranslateController extends BaseController {
+@@ -1052,7 +1067,7 @@ public class TranslateController extends BaseController {
+                 pendingTranslations.put(dialogId, dialogPendingTranslations = new ArrayList<>());
+             }
+ 
+-            if (dialogPendingTranslations.isEmpty()) {
++            if (dialogPendingTranslations.isEmpty() || !TextUtils.equals(dialogPendingTranslations.get(dialogPendingTranslations.size() - 1).inu_provider, inu_provider)) {
+                 dialogPendingTranslations.add(pendingTranslation = new PendingTranslation());
+             } else {
+                 pendingTranslation = dialogPendingTranslations.get(dialogPendingTranslations.size() - 1);
+@@ -1089,6 +1104,7 @@ public class TranslateController extends BaseController {
+             pendingTranslation.messageTexts.add(source);
+             pendingTranslation.callbacks.add(callback);
+             pendingTranslation.language = language;
++            pendingTranslation.inu_provider = inu_provider;
+             pendingTranslation.symbolsCount += messageSymbolsCount;
+             final PendingTranslation pendingTranslation1 = pendingTranslation;
+             pendingTranslation.runnable = () -> {
+@@ -1103,7 +1119,7 @@ public class TranslateController extends BaseController {
                  }
  
                  final String method = getMessagesController().translationsAutoEnabled;
 -                if ("alternative".equals(method) || "system".equals(method)) {
-+                if (!desu.inugram.helpers.translate.TranslationProviderHelper.isActive() && ("alternative".equals(method) || "system".equals(method))) {
++                if (!desu.inugram.helpers.translate.TranslationProviderHelper.isActive(pendingTranslation1.inu_provider) && ("alternative".equals(method) || "system".equals(method))) {
                      final String toLanguage = pendingTranslation1.language;
                      for (int i = 0; i < pendingTranslation1.messageIds.size(); ++i) {
                          final int id = pendingTranslation1.messageIds.get(i);
-@@ -1142,7 +1147,7 @@ public class TranslateController extends BaseController {
+@@ -1142,7 +1158,7 @@ public class TranslateController extends BaseController {
                  }*/
  
                  final TLRPC.TL_messages_translateText req = new TLRPC.TL_messages_translateText();
 -                if (isTranscription) {
-+                if (isTranscription || desu.inugram.helpers.translate.TranslationProviderHelper.isActive()) {
++                if (isTranscription || desu.inugram.helpers.translate.TranslationProviderHelper.isActive(pendingTranslation1.inu_provider)) {
                      req.flags |= 2;
                      req.text.addAll(pendingTranslation1.messageTexts);
                  } else {
-@@ -1486,6 +1491,7 @@ public class TranslateController extends BaseController {
+@@ -1151,6 +1167,7 @@ public class TranslateController extends BaseController {
+                     req.id = pendingTranslation1.messageIds;
+                 }
+                 req.to_lang = normalizeLanguage(pendingTranslation1.language);
++                desu.inugram.helpers.translate.TranslationProviderHelper.setRequestProvider(req, pendingTranslation1.inu_provider);
+ 
+                 final int reqId = getConnectionsManager().sendRequest(req, (res, err) -> AndroidUtilities.runOnUIThread(() -> {
+                     final ArrayList<Integer> ids;
+@@ -1486,18 +1503,29 @@ public class TranslateController extends BaseController {
      private static class PendingRichTranslation {
          Runnable runnable;
          ArrayList<Integer> messageIds = new ArrayList<>();
 +        ArrayList<MessageObject> messages = new ArrayList<>();
          ArrayList<Utilities.Callback3<Integer, TL_iv.RichMessage, String>> callbacks = new ArrayList<>();
          String language;
++        String inu_provider;
  
-@@ -1494,7 +1500,7 @@ public class TranslateController extends BaseController {
+         int delay = GROUPING_TRANSLATIONS_TIMEOUT;
+ 
          int reqId = -1;
      }
  
@@ -194,7 +240,28 @@ index 0000000..0000000 100644
          MessageObject message,
          String language,
          Utilities.Callback3<Integer, TL_iv.RichMessage, String> callback
-@@ -1536,6 +1542,7 @@ public class TranslateController extends BaseController {
++    ) {
++        inu_pushRichMessageToTranslate(message, language, null, callback);
++    }
++
++    public void inu_pushRichMessageToTranslate(
++        MessageObject message,
++        String language,
++        String inu_provider,
++        Utilities.Callback3<Integer, TL_iv.RichMessage, String> callback
+     ) {
+         if (message == null || message.messageOwner == null || message.getId() < 0 || callback == null) {
+             return;
+@@ -1515,7 +1543,7 @@ public class TranslateController extends BaseController {
+                 pendingRichTranslations.put(dialogId, dialogPendingTranslations = new ArrayList<>());
+             }
+ 
+-            if (dialogPendingTranslations.isEmpty()) {
++            if (dialogPendingTranslations.isEmpty() || !TextUtils.equals(dialogPendingTranslations.get(dialogPendingTranslations.size() - 1).inu_provider, inu_provider)) {
+                 dialogPendingTranslations.add(pendingTranslation = new PendingRichTranslation());
+             } else {
+                 pendingTranslation = dialogPendingTranslations.get(dialogPendingTranslations.size() - 1);
+@@ -1536,9 +1564,11 @@ public class TranslateController extends BaseController {
              }
              loadingTranslations.add(message.getId());
              pendingTranslation.messageIds.add(message.getId());
@@ -202,7 +269,11 @@ index 0000000..0000000 100644
              FileLog.d("pending translation +" + message.getId() + " rich message");
              pendingTranslation.callbacks.add(callback);
              pendingTranslation.language = language;
-@@ -1551,11 +1558,17 @@ public class TranslateController extends BaseController {
++            pendingTranslation.inu_provider = inu_provider;
+             final PendingRichTranslation pendingTranslation1 = pendingTranslation;
+             pendingTranslation.runnable = () -> {
+                 synchronized (TranslateController.this) {
+@@ -1551,11 +1581,18 @@ public class TranslateController extends BaseController {
                      }
                  }
  
@@ -212,7 +283,7 @@ index 0000000..0000000 100644
 -                req.id = pendingTranslation1.messageIds;
 -                req.to_lang = normalizeLanguage(pendingTranslation1.language);
 +                final TLObject req;
-+                if (desu.inugram.helpers.translate.TranslationProviderHelper.isActive()) {
++                if (desu.inugram.helpers.translate.TranslationProviderHelper.isActive(pendingTranslation1.inu_provider)) {
 +                    req = desu.inugram.helpers.translate.TranslationProviderHelper.createRichRequest(pendingTranslation1.messages, normalizeLanguage(pendingTranslation1.language));
 +                } else {
 +                    final TLRPC.TL_messages_translateRichMessage serverReq = new TLRPC.TL_messages_translateRichMessage();
@@ -222,10 +293,11 @@ index 0000000..0000000 100644
 +                    serverReq.to_lang = normalizeLanguage(pendingTranslation1.language);
 +                    req = serverReq;
 +                }
++                desu.inugram.helpers.translate.TranslationProviderHelper.setRequestProvider(req, pendingTranslation1.inu_provider);
  
                  final int reqId = getConnectionsManager().sendRequest(req, (res, err) -> AndroidUtilities.runOnUIThread(() -> {
                      final ArrayList<Integer> ids;
-@@ -1606,7 +1619,7 @@ public class TranslateController extends BaseController {
+@@ -1606,7 +1643,7 @@ public class TranslateController extends BaseController {
                  (messageObject.messageOwner.voiceTranscriptionOpen && messageObject.messageOwner.voiceTranscriptionFinal ?
                      loadingTranscriptionTranslations : loadingTranslations
                  ).contains(messageObject.getId()) &&
@@ -234,7 +306,7 @@ index 0000000..0000000 100644
              );
          }
      }
-@@ -1615,7 +1628,7 @@ public class TranslateController extends BaseController {
+@@ -1615,7 +1652,7 @@ public class TranslateController extends BaseController {
          if (messageObject == null) {
              return false;
          }
@@ -243,7 +315,7 @@ index 0000000..0000000 100644
              return false;
          }
          final boolean isTranscription = messageObject.messageOwner != null && messageObject.messageOwner.voiceTranscriptionOpen && messageObject.messageOwner.voiceTranscriptionFinal;
-@@ -1940,6 +1953,7 @@ public class TranslateController extends BaseController {
+@@ -1940,6 +1977,7 @@ public class TranslateController extends BaseController {
          final TLRPC.TL_textWithEntities text = new TLRPC.TL_textWithEntities();
          text.text = storyItem.caption;
          text.entities = storyItem.entities;
@@ -251,7 +323,7 @@ index 0000000..0000000 100644
          req.text.add(text);
          req.to_lang = normalizeLanguage(toLang);
          getConnectionsManager().sendRequest(req, (res, err) -> {
-@@ -2077,6 +2091,7 @@ public class TranslateController extends BaseController {
+@@ -2077,6 +2115,7 @@ public class TranslateController extends BaseController {
          if (text.entities == null) {
              text.entities = new ArrayList<>();
          }
@@ -797,7 +869,49 @@ index 0000000..0000000 100644
  import org.telegram.tgnet.TLRPC;
  import org.telegram.tgnet.tl.TL_iv;
  import org.telegram.ui.ActionBar.ActionBarMenuSubItem;
-@@ -331,11 +332,17 @@ public class TranslateAlert2 extends BottomSheet implements NotificationCenter.N
+@@ -120,6 +121,7 @@ public class TranslateAlert2 extends BottomSheet implements NotificationCenter.N
+     private BaseFragment fragment;
+     private Utilities.CallbackReturn<URLSpan, Boolean> onLinkPress;
+     private boolean firstTranslation = true;
++    private String inu_provider;
+ 
+     public TranslateAlert2(
+         Context context,
+@@ -127,14 +129,14 @@ public class TranslateAlert2 extends BottomSheet implements NotificationCenter.N
+         CharSequence text, ArrayList<TLRPC.MessageEntity> entities,
+         Theme.ResourcesProvider resourcesProvider
+     ) {
+-        this(context, fromLanguage, toLanguage, text, entities, null, 0, false, null, resourcesProvider);
++        this(context, fromLanguage, toLanguage, text, entities, null, 0, false, null, null, resourcesProvider);
+     }
+ 
+     private TranslateAlert2(
+         Context context,
+         String fromLanguage, String toLanguage,
+         CharSequence text, ArrayList<TLRPC.MessageEntity> entities, TLRPC.InputPeer peer, int messageId, boolean sum,
+-        TL_iv.RichMessage richMessage,
++        TL_iv.RichMessage richMessage, String inu_provider,
+         Theme.ResourcesProvider resourcesProvider
+     ) {
+         super(context, false, resourcesProvider);
+@@ -148,6 +150,7 @@ public class TranslateAlert2 extends BottomSheet implements NotificationCenter.N
+         this.reqMessageId = messageId;
+         this.reqSum = sum;
+         this.reqRichMessage = richMessage;
++        this.inu_provider = inu_provider;
+ 
+         this.fromLanguage = fromLanguage;
+         this.toLanguage = toLanguage;
+@@ -314,7 +317,7 @@ public class TranslateAlert2 extends BottomSheet implements NotificationCenter.N
+         }
+ 
+         final String method = MessagesController.getInstance(currentAccount).translationsManualEnabled;
+-        if ("alternative".equalsIgnoreCase(method)) {
++        if (!desu.inugram.helpers.translate.TranslationProviderHelper.isActive(inu_provider) && "alternative".equalsIgnoreCase(method)) {
+             translateAlt();
+             return;
+         }/* else if ("system".equalsIgnoreCase(method)) {
+@@ -331,11 +334,18 @@ public class TranslateAlert2 extends BottomSheet implements NotificationCenter.N
          }
  
          if (reqRichMessage != null && reqPeer != null) {
@@ -807,7 +921,7 @@ index 0000000..0000000 100644
 -            req.id.add(reqMessageId);
 -            req.to_lang = normalizeLanguage(lang);
 +            final TLObject req;
-+            if (desu.inugram.helpers.translate.TranslationProviderHelper.isActive()) {
++            if (desu.inugram.helpers.translate.TranslationProviderHelper.isActive(inu_provider)) {
 +                req = desu.inugram.helpers.translate.TranslationProviderHelper.createRichRequest(reqRichMessage, fromLanguage, normalizeLanguage(lang));
 +            } else {
 +                TLRPC.TL_messages_translateRichMessage serverReq = new TLRPC.TL_messages_translateRichMessage();
@@ -817,15 +931,16 @@ index 0000000..0000000 100644
 +                serverReq.to_lang = normalizeLanguage(lang);
 +                req = serverReq;
 +            }
++            desu.inugram.helpers.translate.TranslationProviderHelper.setRequestProvider(req, inu_provider);
              reqId = ConnectionsManager.getInstance(currentAccount).sendRequest(req, (res, err) -> {
                  AndroidUtilities.runOnUIThread(() -> {
                      reqId = null;
-@@ -398,12 +405,13 @@ public class TranslateAlert2 extends BottomSheet implements NotificationCenter.N
+@@ -398,12 +408,13 @@ public class TranslateAlert2 extends BottomSheet implements NotificationCenter.N
          }
  
          TLRPC.TL_messages_translateText req = new TLRPC.TL_messages_translateText();
 -        if (reqPeer != null) {
-+        if (reqPeer != null && !desu.inugram.helpers.translate.TranslationProviderHelper.isActive()) {
++        if (reqPeer != null && !desu.inugram.helpers.translate.TranslationProviderHelper.isActive(inu_provider)) {
              req.flags |= 1;
              req.peer = reqPeer;
              req.id.add(reqMessageId);
@@ -835,6 +950,39 @@ index 0000000..0000000 100644
              req.text.add(textWithEntities);
          }
  //        if (fromLanguage != null && !"und".equals(fromLanguage)) {
+@@ -411,6 +422,7 @@ public class TranslateAlert2 extends BottomSheet implements NotificationCenter.N
+ //            req.from_lang = fromLanguage;
+ //        }
+         req.to_lang = normalizeLanguage(lang);
++        desu.inugram.helpers.translate.TranslationProviderHelper.setRequestProvider(req, inu_provider);
+         reqId = ConnectionsManager.getInstance(currentAccount).sendRequest(req, (res, err) -> {
+             AndroidUtilities.runOnUIThread(() -> {
+                 reqId = null;
+@@ -1769,8 +1781,8 @@ public class TranslateAlert2 extends BottomSheet implements NotificationCenter.N
+         }
+     }
+ 
+-    public static TranslateAlert2 showAlert(Context context, BaseFragment fragment, int currentAccount, TLRPC.InputPeer peer, int msgId, boolean sum, String fromLanguage, String toLanguage, CharSequence text, ArrayList<TLRPC.MessageEntity> entities, boolean noforwards, Utilities.CallbackReturn<URLSpan, Boolean> onLinkPress, Runnable onDismiss) {
+-        TranslateAlert2 alert = new TranslateAlert2(context, fromLanguage, toLanguage, text, entities, peer, msgId, sum, null, null) {
++    public static TranslateAlert2 showAlert(Context context, BaseFragment fragment, int currentAccount, TLRPC.InputPeer peer, int msgId, boolean sum, String fromLanguage, String toLanguage, CharSequence text, ArrayList<TLRPC.MessageEntity> entities, boolean noforwards, Utilities.CallbackReturn<URLSpan, Boolean> onLinkPress, Runnable onDismiss, String inu_provider) {
++        TranslateAlert2 alert = new TranslateAlert2(context, fromLanguage, toLanguage, text, entities, peer, msgId, sum, null, inu_provider, null) {
+             @Override
+             public void dismiss() {
+                 super.dismiss();
+@@ -1792,11 +1804,11 @@ public class TranslateAlert2 extends BottomSheet implements NotificationCenter.N
+         return alert;
+     }
+ 
+-    public static TranslateAlert2 showAlert(Context context, BaseFragment fragment, int currentAccount, TLRPC.InputPeer peer, int msgId, String fromLanguage, String toLanguage, TL_iv.RichMessage richMessage, boolean noforwards, Utilities.CallbackReturn<URLSpan, Boolean> onLinkPress, Runnable onDismiss) {
++    public static TranslateAlert2 showAlert(Context context, BaseFragment fragment, int currentAccount, TLRPC.InputPeer peer, int msgId, String fromLanguage, String toLanguage, TL_iv.RichMessage richMessage, boolean noforwards, Utilities.CallbackReturn<URLSpan, Boolean> onLinkPress, Runnable onDismiss, String inu_provider) {
+         if (context == null) {
+             return null;
+         }
+-        TranslateAlert2 alert = new TranslateAlert2(context, fromLanguage, toLanguage, null, null, peer, msgId, false, richMessage, null) {
++        TranslateAlert2 alert = new TranslateAlert2(context, fromLanguage, toLanguage, null, null, peer, msgId, false, richMessage, inu_provider, null) {
+             @Override
+             public void dismiss() {
+                 super.dismiss();
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/TranslateAlert3.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/TranslateAlert3.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/TranslateAlert3.java

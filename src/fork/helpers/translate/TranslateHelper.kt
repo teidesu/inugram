@@ -124,6 +124,7 @@ object TranslateHelper {
         group: MessageObject.GroupedMessages?,
         fromLang: String?,
         toLang: String?,
+        provider: String? = null,
     ): Boolean {
         if (!InuConfig.IN_PLACE_TRANSLATION.value) return false
         // #if PLUGINS
@@ -147,9 +148,9 @@ object TranslateHelper {
 
         activity.dimBehindView(false)
         originals.computeIfAbsent(target.dialogId) { ConcurrentHashMap() }[target.id] = owner.message.orEmpty()
-        if (hasBody) startBodyTranslate(activity, target, owner, fromLang, toLang)
-        if (hasWebPage) startWebPageTranslate(activity, target, webPage!!, toLang)
-        if (hasRichMessage) startRichMessageTranslate(activity, target, owner, fromLang, toLang)
+        if (hasBody) startBodyTranslate(activity, target, owner, fromLang, toLang, provider)
+        if (hasWebPage) startWebPageTranslate(activity, target, webPage!!, toLang, provider)
+        if (hasRichMessage) startRichMessageTranslate(activity, target, owner, fromLang, toLang, provider)
         return true
     }
 
@@ -158,6 +159,7 @@ object TranslateHelper {
         activity: ChatActivity,
         selected: MessageObject?,
         group: MessageObject.GroupedMessages?,
+        provider: String? = null,
     ) {
         if (selected == null) return
         val parent = activity.parentActivity ?: return
@@ -204,14 +206,15 @@ object TranslateHelper {
         if (richMessage != null) {
             val fromLang = selected.messageOwner?.originalLanguage
             val toLangValue = if (fromLang != null && fromLang == toLang) toLangDefault else toLang
-            if (startTranslate(activity, selected, group, fromLang, toLangValue)) {
+            if (startTranslate(activity, selected, group, fromLang, toLangValue, provider)) {
                 updateTranslateHint()
                 return
             }
             val alert = TranslateAlert2.showAlert(
                 parent, activity, account, inputPeer, messageIdToTranslate[0],
                 fromLang, toLangValue, richMessage, noforwards, null,
-            ) { activity.dimBehindView(false) }
+                { activity.dimBehindView(false) }, provider,
+            )
             alert?.setDimBehind(false)
             updateTranslateHint()
             return
@@ -229,13 +232,13 @@ object TranslateHelper {
                     .show()
                 return
             }
-            if (!startTranslate(activity, selected, group, fromLang ?: "und", toLangValue)) {
+            if (!startTranslate(activity, selected, group, fromLang ?: "und", toLangValue, provider)) {
                 activity.dimBehindView(false)
                 val alert = TranslateAlert2.showAlert(
                     parent, activity, account, inputPeer, messageIdToTranslate[0], selected.summarized,
                     fromLang ?: "und", toLangValue, text, selected.messageOwner?.entities,
-                    noforwards, null,
-                ) { activity.dimBehindView(false) }
+                    noforwards, null, { activity.dimBehindView(false) }, provider,
+                )
                 alert.setDimBehind(false)
             }
             updateTranslateHint()
@@ -315,6 +318,7 @@ object TranslateHelper {
         owner: TLRPC.Message,
         fromLang: String?,
         toLang: String,
+        provider: String?,
     ) {
         val srcLang = fromLang?.takeIf { it != "und" } ?: owner.originalLanguage
         if (srcLang != null && srcLang == toLang) return
@@ -332,15 +336,15 @@ object TranslateHelper {
         }
         NotificationCenter.getInstance(account).postNotificationName(NotificationCenter.messageTranslating, target)
 
-        controller.pushToTranslate(target, toLang) { isTranscription, id, text, lang ->
-            if (id != target.id) return@pushToTranslate
+        controller.inu_pushToTranslate(target, toLang, provider) { isTranscription, id, text, lang ->
+            if (id != target.id) return@inu_pushToTranslate
             if (text == null || text.text.isNullOrEmpty()) {
                 manual[dialogId]?.remove(target.id)
                 NotificationCenter.getInstance(account).postNotificationName(NotificationCenter.messageTranslated, target)
                 BulletinFactory.of(activity)
                     .createErrorBulletin(LocaleController.getString(R.string.TranslationFailedAlert1))
                     .show()
-                return@pushToTranslate
+                return@inu_pushToTranslate
             }
             owner.translatedToLanguage = lang
             if (isTranscription) {
@@ -361,6 +365,7 @@ object TranslateHelper {
         owner: TLRPC.Message,
         fromLang: String?,
         toLang: String,
+        provider: String?,
     ) {
         val account = activity.currentAccount
         val dialogId = target.dialogId
@@ -369,14 +374,14 @@ object TranslateHelper {
             owner.originalLanguage = fromLang
         }
         NotificationCenter.getInstance(account).postNotificationName(NotificationCenter.messageTranslating, target)
-        MessagesController.getInstance(account).translateController.pushRichMessageToTranslate(target, toLang) { id, rich, lang ->
+        MessagesController.getInstance(account).translateController.inu_pushRichMessageToTranslate(target, toLang, provider) { id, rich, lang ->
             if (id != target.id || rich == null) {
                 manual[dialogId]?.remove(target.id)
                 NotificationCenter.getInstance(account).postNotificationName(NotificationCenter.messageTranslated, target)
                 BulletinFactory.of(activity)
                     .createErrorBulletin(LocaleController.getString(R.string.TranslationFailedAlert1))
                     .show()
-                return@pushRichMessageToTranslate
+                return@inu_pushRichMessageToTranslate
             }
             owner.translatedToLanguage = lang
             owner.translatedText = null
@@ -393,6 +398,7 @@ object TranslateHelper {
         target: MessageObject,
         webPage: TLRPC.TL_webPage,
         toLang: String,
+        provider: String?,
     ) {
         val account = activity.currentAccount
         markLoading(target, true)
@@ -403,7 +409,7 @@ object TranslateHelper {
             .joinToString("\n")
             .trim()
         val proceed: (String?) -> Unit = { srcLang ->
-            sendWebPageTranslateRequest(activity, target, webPage, toLang, srcLang)
+            sendWebPageTranslateRequest(activity, target, webPage, toLang, srcLang, provider)
         }
         if (sample.isEmpty() || !LanguageDetector.hasSupport()) {
             proceed(null)
@@ -439,6 +445,7 @@ object TranslateHelper {
         original: TLRPC.TL_webPage,
         toLang: String,
         srcLang: String?,
+        provider: String?,
     ) {
         val parts = mutableListOf<Pair<Char, String>>()
         original.title?.takeIf { it.isNotBlank() }?.let { parts += 't' to it }
@@ -460,6 +467,7 @@ object TranslateHelper {
             twe.text = p
             req.text.add(twe)
         }
+        TranslationProviderHelper.setRequestProvider(req, provider)
         ConnectionsManager.getInstance(account).sendRequest(req) { res, _ ->
             AndroidUtilities.runOnUIThread {
                 markLoading(target, false)

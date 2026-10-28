@@ -35,6 +35,7 @@ import desu.inugram.helpers.plugins.ui.PluginActions
 import desu.inugram.helpers.plugins.ui.PluginChatHistory
 import desu.inugram.helpers.plugins.ui.PluginIcons
 import desu.inugram.helpers.plugins.ui.RegisteredActionRow
+import desu.inugram.helpers.plugins.telegram.PluginTranslation
 import desu.inugram.ui.settings.PluginsActivity
 // #else
 import desu.inugram.ui.settings.AboutActivity
@@ -1812,6 +1813,23 @@ object ChatHelper {
                 activity.processSelectedOption(OPTION_SHOW_JSON)
                 true
             }
+
+            // #if PLUGINS
+            ChatActivity.OPTION_TRANSLATE -> {
+                val providers = PluginTranslation.providers.filter { it.session.canDispatch() }
+                if (!InuConfig.PLUGINS_ENABLED.value || providers.isEmpty()) return false
+                openLongTapSubmenu(activity, popupLayout, cell) { swb ->
+                    val names = listOf("" to LocaleController.getString(R.string.InuTranslationProviderTelegram)) +
+                        providers.map { it.key to it.name }
+                    for ((key, name) in names) {
+                        swb.add(R.drawable.msg_translate, name) {
+                            TranslateHelper.triggerTranslate(activity, message, group, key)
+                            activity.closeMenu()
+                        }
+                    }
+                }
+            }
+            // #endif
 
             ChatActivity.OPTION_REPLY -> {
                 val noforwards = activity.isPeerNoForwards || (message.messageOwner != null && message.messageOwner.noforwards)
