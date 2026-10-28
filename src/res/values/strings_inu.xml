@@ -538,6 +538,12 @@
     <string name="InuTextClassifierModeOff">Off</string>
     <string name="InuTextClassifierModeOffInfo">Disabling text classifier improves text selection responsiveness</string>
 
+    <string name="InuSelectionProcessText">Extra text actions</string>
+    <string name="InuWebSearch">Web search</string>
+    <string name="InuSelectionProcessTextInfo">Show actions provided by other apps in the message text selection menu</string>
+    <string name="InuSelectionProcessTextItems">Actions</string>
+    <string name="InuSelectionProcessTextReset">Reset to defaults</string>
+
     <string name="InuSuggestCustomEmojiAfter">Suggest custom emoji after regular</string>
     <string name="InuSuggestCustomEmojiAfterInfo">In the \":shortcode\" suggestion popup, show animated/custom emoji after the regular ones instead of before</string>
 

@@ -9,6 +9,7 @@ import desu.inugram.helpers.ProxyVpnHelper
 import desu.inugram.helpers.ShortcutHelper
 import desu.inugram.helpers.chat.WebPreviewHelper
 import desu.inugram.helpers.maps.MapsHelper
+import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
 import org.telegram.messenger.SharedConfig
@@ -204,6 +205,14 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
                 )
             )
         }
+        items.add(
+            mkSplitCheckItem(
+                BUTTON_SELECTION_PROCESS_TEXT,
+                R.string.InuSelectionProcessText,
+                R.string.InuSelectionProcessTextInfo,
+                InuConfig.SELECTION_PROCESS_TEXT.value,
+            )
+        )
         if (UserConfig.getActivatedAccountsCount() > 1) {
             items.add(
                 mkTwoLineCheckItem(
@@ -303,6 +312,19 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
                 val new = InuConfig.ACCOUNT_SWITCH_SHORTCUT.toggle()
                 (view as? NotificationsCheckCell)?.isChecked = new
                 parentActivity?.let { ShortcutHelper.sync(it) }
+            }
+
+            BUTTON_SELECTION_PROCESS_TEXT -> {
+                val isSwitch = if (LocaleController.isRTL)
+                    x < AndroidUtilities.dp(76f)
+                else
+                    x > view.measuredWidth - AndroidUtilities.dp(76f)
+                if (isSwitch) {
+                    val new = InuConfig.SELECTION_PROCESS_TEXT.toggle()
+                    (view as? NotificationsCheckCell)?.isChecked = new
+                } else {
+                    presentFragment(ProcessTextActivity())
+                }
             }
 
             TOGGLE_DISABLE_ROUNDING -> {
@@ -406,6 +428,7 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
 
         private val DOWNLOAD_DIRECTORIES = listOf("Inugram", "Telegram")
         private val BUTTON_TEXT_CLASSIFIER_MODE = InuUtils.generateId()
+        private val BUTTON_SELECTION_PROCESS_TEXT = InuUtils.generateId()
         private val TOGGLE_CALL_CONFIRMATION = InuUtils.generateId()
         private val TOGGLE_HD_BLUETOOTH_CALL_AUDIO = InuUtils.generateId()
         private val TOGGLE_CONFIRM_INTERNAL_LINKS = InuUtils.generateId()
@@ -445,6 +468,7 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("disable-chat-bubbles", R.string.InuDisableChatBubbles, TOGGLE_DISABLE_CHAT_BUBBLES),
                 SearchRegistry.Entry("performance-class", R.string.InuPerformanceClass, BUTTON_PERFORMANCE_CLASS),
                 SearchRegistry.Entry("text-classifier-mode", R.string.InuTextClassifierMode, BUTTON_TEXT_CLASSIFIER_MODE),
+                SearchRegistry.Entry("selection-process-text", R.string.InuSelectionProcessText, BUTTON_SELECTION_PROCESS_TEXT),
                 SearchRegistry.Entry("call-confirmation", R.string.InuCallConfirmation, TOGGLE_CALL_CONFIRMATION),
                 SearchRegistry.Entry("hd-bluetooth-call-audio", R.string.InuHdBluetoothCallAudio, TOGGLE_HD_BLUETOOTH_CALL_AUDIO),
                 SearchRegistry.Entry("confirm-internal-links", R.string.InuConfirmInternalLinks, TOGGLE_CONFIRM_INTERNAL_LINKS),

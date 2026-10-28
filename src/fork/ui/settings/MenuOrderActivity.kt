@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
+import android.graphics.drawable.Drawable
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.TextUtils
@@ -446,6 +447,23 @@ class MenuOrderRow(context: Context, val mainHeightDp: Int = 50) : LinearLayout(
         // #endif
         icon.setImageResource(item.iconRes)
         text.text = LocaleController.getString(item.labelRes)
+        subtitle.visibility = View.GONE
+    }
+
+    fun bind(label: CharSequence, appIcon: Drawable?, fallbackIcon: Int) {
+        // #if PLUGINS
+        PluginIcons.clearIcon(icon)
+        // #endif
+        if (appIcon != null) {
+            icon.colorFilter = null
+            icon.scaleType = ImageView.ScaleType.FIT_CENTER
+            icon.setImageDrawable(appIcon)
+        } else {
+            icon.colorFilter = PorterDuffColorFilter(Theme.getColor(Theme.key_windowBackgroundWhiteGrayIcon), PorterDuff.Mode.MULTIPLY)
+            icon.scaleType = ImageView.ScaleType.CENTER
+            icon.setImageResource(fallbackIcon)
+        }
+        text.text = label
         subtitle.visibility = View.GONE
     }
 

@@ -241,6 +241,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - choose the media save folder (Inugram/Telegram) used for saved photos, videos, music and downloads
 - original video quality option in quality picker, including audio removal without re-encoding video
 - remember last used settings in polls + reasonable defaults
+- 🐶 "Web search" (stock in-app browser search engine) and actions from other apps (e.g. "Ask Claude") in the message text selection overflow menu (reorderable, toggleable)
 
 ## annoyances
 

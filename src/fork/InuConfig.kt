@@ -3,6 +3,7 @@ package desu.inugram
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
+import desu.inugram.helpers.ProcessTextConfig
 import desu.inugram.helpers.chat.DoubleTapActionHelper
 import desu.inugram.helpers.chat.PinnedReactionsHelper
 import desu.inugram.helpers.font.FontConfig
@@ -796,6 +797,12 @@ object InuConfig {
 
     @JvmField
     val TEXT_CLASSIFIER_MODE = TextClassifierModeItem()
+
+    @JvmField
+    val SELECTION_PROCESS_TEXT = BoolItem("selection_process_text", true)
+
+    @JvmField
+    val SELECTION_PROCESS_TEXT_ITEMS = ProcessTextConfig("selection_process_text_items")
 
     @JvmField
     val FORMATTING_POPUP_ITEMS = FormattingPopupConfig("formatting_popup_items")

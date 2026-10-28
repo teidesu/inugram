@@ -2,4 +2,5 @@
     <item name="inu_merge_with_prev" type="id"/>
     <item name="inu_merge_with_next" type="id"/>
     <item name="inu_own_sections" type="id"/>
+    <item name="inu_process_text" type="id"/>
 </resources>
