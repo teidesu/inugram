@@ -196,7 +196,7 @@ index 0000000..0000000 100644
      }
  
      private Action hit = null;
-@@ -952,7 +980,7 @@ public class ProfileActionsView extends View {
+@@ -956,7 +984,7 @@ public class ProfileActionsView extends View {
              int c = actions.size();
              final float betweenPadding = xpadding / 2f;
              final float width = getItemWidth();
@@ -205,7 +205,7 @@ index 0000000..0000000 100644
  
              for (int i = 0; i < c; i++) {
                  Action action = actions.get(i);
-@@ -966,7 +994,7 @@ public class ProfileActionsView extends View {
+@@ -970,7 +998,7 @@ public class ProfileActionsView extends View {
  
              updateBounds(callAction);
  
@@ -214,7 +214,7 @@ index 0000000..0000000 100644
                      + callAction.bounds.centerY()
                      - callView.getMeasuredHeight() / 2f
                      - callAnimateFromY;
-@@ -1038,8 +1066,8 @@ public class ProfileActionsView extends View {
+@@ -1042,8 +1070,8 @@ public class ProfileActionsView extends View {
          }
  
          public void setText(CharSequence cs) {

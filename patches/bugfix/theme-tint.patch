@@ -217,7 +217,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/RLottieDrawa
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/RLottieDrawable.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/RLottieDrawable.java
-@@ -893,6 +893,10 @@ public class RLottieDrawable extends BitmapDrawable implements Animatable, Bitma
+@@ -904,6 +904,10 @@ public class RLottieDrawable extends BitmapDrawable implements Animatable, Bitma
      }
  
      public final void setLayerColor(String layerName, int color) {

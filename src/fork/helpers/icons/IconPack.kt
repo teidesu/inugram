@@ -1,7 +1,6 @@
 package desu.inugram.helpers.icons
 
 import android.content.res.Resources
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.drawable.Drawable
 import android.util.SparseArray
@@ -17,7 +16,6 @@ import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.ZipFile
 import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.roundToInt
 
 class IconPack private constructor(
@@ -35,49 +33,53 @@ class IconPack private constructor(
     // ponytail: decoded icons are never evicted, fine for vector packs; add an LruCache if huge raster packs show up
     private val sources = ConcurrentHashMap<String, Any>()
 
-    private class SvgSource(val content: BitmapIconDrawable.Content.Svg, val widthDp: Float, val heightDp: Float, val aspect: Float)
+    private val lottieFrames: Map<String, List<Pair<Int, String>>> by lazy {
+        icons.entries
+            .filter { it.key.startsWith(LOTTIE_PREFIX) }
+            .mapNotNull { (key, path) ->
+                val name = key.substring(LOTTIE_PREFIX.length).substringBefore('@')
+                val frame = if ('@' in key) key.substringAfter('@').toIntOrNull()?.takeIf { it >= 0 } ?: return@mapNotNull null else 0
+                Triple(name, frame, path)
+            }
+            .groupBy({ it.first }, { it.second to it.third })
+            .mapValues { (_, frames) -> frames.sortedBy { it.first } }
+    }
 
     fun loadLottieJson(resources: Resources, id: Int): String? {
         val path = getEntry(resources, id) ?: return null
         return loadSource(path) as? String
     }
 
-    fun hasLottie(resources: Resources, id: Int) = getEntry(resources, id)?.endsWith(".json", ignoreCase = true) == true
+    fun hasLottie(name: String) = name in lottieFrames
+
+    fun getLottieFrames(name: String) = lottieFrames[name]
 
     fun loadDrawable(resources: Resources, id: Int, density: Int, theme: Resources.Theme?): Drawable? {
         val path = getEntry(resources, id) ?: return null
-        return when (val source = loadSource(path)) {
-            is VectorIcon -> {
-                val (width, height) = getSvgSize(resources, id, density, theme, source.widthDp, source.heightDp, source.aspect)
-                VectorIcon.Drawable(source, width, height)
-            }
-
-            is SvgSource -> {
-                val (width, height) = getSvgSize(resources, id, density, theme, source.widthDp, source.heightDp, source.aspect)
-                BitmapIconDrawable(source.content, width, height)
-            }
-
-            is Bitmap -> {
-                val (width, height) = fitOriginal(resources, id, density, theme, source.width.toFloat() / source.height)
-                BitmapIconDrawable(BitmapIconDrawable.Content.Raster(source), width, height)
-            }
-
-            else -> null
-        }
+        return createDrawable(resources, path, id, density, theme)
     }
 
-    private fun getSvgSize(
-        resources: Resources,
-        id: Int,
-        density: Int,
-        theme: Resources.Theme?,
-        widthDp: Float,
-        heightDp: Float,
-        aspect: Float,
-    ): Pair<Int, Int> {
-        if (widthDp <= 0 || heightDp <= 0) return fitOriginal(resources, id, density, theme, aspect)
-        val displayDpi = resources.displayMetrics.densityDpi
-        return convertDpToPx(widthDp, displayDpi, density) to convertDpToPx(heightDp, displayDpi, density)
+    fun loadDrawable(resources: Resources, name: String, id: Int): Drawable? {
+        val path = icons[name] ?: return null
+        return createDrawable(resources, path, id, 0, null)
+    }
+
+    fun loadLottieFrame(resources: Resources, path: String) = createDrawable(resources, path, 0, 0, null)
+
+    private fun createDrawable(resources: Resources, path: String, id: Int, density: Int, theme: Resources.Theme?): Drawable? {
+        val source = loadSource(path) ?: return null
+        val size = getOriginalSize(resources, id, density, theme)
+        var width = size shr SIZE_SHIFT
+        var height = size and SIZE_MASK
+        if (width <= 0 || height <= 0) {
+            width = convertDpToPx(FALLBACK_SIZE_DP, resources.displayMetrics.densityDpi, density)
+            height = width
+        }
+        return when (source) {
+            is VectorIcon -> VectorIcon.Drawable(source, width, height)
+            is BitmapIconDrawable.Content -> BitmapIconDrawable(source, width, height)
+            else -> null
+        }
     }
 
     fun prewarm() {
@@ -122,36 +124,23 @@ class IconPack private constructor(
         VectorIcon.parse(bytes)?.let { return it }
 
         val svg = SVG.getFromInputStream(ByteArrayInputStream(bytes))
-        val widthDp = svg.documentWidth
-        val heightDp = svg.documentHeight
-        if (svg.documentViewBox == null && widthDp > 0 && heightDp > 0) svg.setDocumentViewBox(0f, 0f, widthDp, heightDp)
-        val viewBox = svg.documentViewBox
-        val aspect = if (viewBox != null && viewBox.width() > 0 && viewBox.height() > 0) viewBox.width() / viewBox.height() else 1f
+        val width = svg.documentWidth
+        val height = svg.documentHeight
+        if (svg.documentViewBox == null && width > 0 && height > 0) svg.setDocumentViewBox(0f, 0f, width, height)
         // androidsvg renders at the declared size inside the viewport; make it fill whatever we draw into
         svg.setDocumentWidth("100%")
         svg.setDocumentHeight("100%")
-        return SvgSource(BitmapIconDrawable.Content.Svg(svg), widthDp, heightDp, aspect)
+        return BitmapIconDrawable.Content.Svg(svg)
     }
 
-    private fun decodeBitmap(bytes: ByteArray): Bitmap? {
+    private fun decodeBitmap(bytes: ByteArray): BitmapIconDrawable.Content? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
         var sampleSize = 1
         while (max(bounds.outWidth, bounds.outHeight) / sampleSize > MAX_BITMAP_SIDE) sampleSize *= 2
-        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sampleSize })
-    }
-
-    private fun fitOriginal(resources: Resources, id: Int, density: Int, theme: Resources.Theme?, aspect: Float): Pair<Int, Int> {
-        val size = getOriginalSize(resources, id, density, theme)
-        var boxWidth = size shr SIZE_SHIFT
-        var boxHeight = size and SIZE_MASK
-        if (boxWidth <= 0 || boxHeight <= 0) {
-            boxWidth = convertDpToPx(FALLBACK_SIZE_DP, resources.displayMetrics.densityDpi, density)
-            boxHeight = boxWidth
-        }
-        val width = min(boxWidth.toFloat(), boxHeight * aspect)
-        return width.roundToInt().coerceAtLeast(1) to (width / aspect).roundToInt().coerceAtLeast(1)
+        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sampleSize }) ?: return null
+        return BitmapIconDrawable.Content.Raster(bitmap)
     }
 
     private fun getOriginalSize(resources: Resources, id: Int, density: Int, theme: Resources.Theme?): Int {

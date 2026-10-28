@@ -101,9 +101,14 @@ object IconPackHelper {
     }
 
     @JvmStatic
-    fun isLottieReplaced(rawRes: Int): Boolean {
+    fun shouldPlayLottie(rawRes: Int, vararg staticRes: Int): Boolean {
+        val packs = getActivePacks()
+        if (packs.isEmpty()) return true
         val resources = ApplicationLoader.applicationContext.resources
-        return getActivePacks().any { it.hasLottie(resources, rawRes) }
+        val name = resources.getResourceEntryName(rawRes)
+        if (packs.any { it.hasLottie(name) }) return true
+        val staticNames = staticRes.map(resources::getResourceEntryName)
+        return packs.none { pack -> staticNames.any { it in pack.iconNames } }
     }
 
     private fun invalidateActivePacks() = synchronized(this) {

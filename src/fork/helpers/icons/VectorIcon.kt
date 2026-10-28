@@ -14,14 +14,10 @@ import kotlin.math.roundToInt
 
 /** the subset of svg that VectorDrawable can express, drawn natively instead of through androidsvg */
 class VectorIcon private constructor(
-    val widthDp: Float,
-    val heightDp: Float,
     private val viewBox: FloatArray,
     private val stretch: Boolean,
     private val root: Group,
 ) {
-    val aspect get() = viewBox[2] / viewBox[3]
-
     private class Group(val clip: Path?, val children: List<Any>)
 
     private class Shape(
@@ -152,7 +148,7 @@ class VectorIcon private constructor(
             }
             val box = viewBox ?: if (width > 0 && height > 0) floatArrayOf(0f, 0f, width, height) else throw Unsupported()
             val clips = HashMap<String, Path>()
-            return VectorIcon(width, height, box, stretch, Group(null, parseChildren(parser, clips)))
+            return VectorIcon(box, stretch, Group(null, parseChildren(parser, clips)))
         }
 
         private fun parseChildren(parser: XmlPullParser, clips: MutableMap<String, Path>): List<Any> {

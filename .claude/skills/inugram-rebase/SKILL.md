@@ -189,7 +189,7 @@ done and what to re-check.
 
 ## End of rebase
 
-`stg push -a` exits 0 with no conflict when done. Then run **all eight** checks —
+`stg push -a` exits 0 with no conflict when done. Then run **all nine** checks —
 a rebase is not finished until they pass.
 
 ### 1. Stack fully applied, no leftovers
@@ -300,7 +300,25 @@ hint if none fits. When upstream changes the columns of a hinted index (or of th
 statement), recheck that the hint is still a win: it only helps when the index
 seeks to the rows the statement touches instead of scanning the dialog.
 
-### 8. The app actually builds
+### 8. Static lottie icon table
+
+`StaticLottie.COMPAT` (`src/fork/helpers/icons`) replaces stock lotties with static
+pack icons, keyed by animation progress. It breaks silently when upstream re-cuts a
+lottie or reworks the view playing it. Check every lottie it names:
+
+```bash
+cd worktree/TMessagesProj/src/main/res/raw && for f in tab_chats tab_contacts tab_calls tab_settings smile_to_sticker voice_and_video msg_emoji_cat; do
+  python3 -c "import json; d=json.load(open('$f.json')); print('$f', d['op'] - d['ip'], d['fr'])"; done
+```
+
+Expected: tabs 6 frames, input transitions 12, `voice_and_video` 60 (played 0..30
+and 30..60 by `ChatActivityEnterViewAnimatedIconView`), all at 60fps. On a change,
+re-derive the progress keys from how the view plays the lottie (`GlassTabView`,
+`ChatActivityEnterViewAnimatedIconView`, `EmojiTabsStrip`). Also check that the
+mapped stock drawables still exist, and look for new upstream lotties in those
+views that have a static twin worth adding.
+
+### 9. The app actually builds
 
 Compile errors are the main thing a marker-free resolution still gets wrong:
 upstream renames a class, moves a package, or changes a signature, and both the
