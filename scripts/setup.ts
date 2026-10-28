@@ -269,7 +269,7 @@ const patchedSubmodules = noSubmodules ? false : await applySubmodulePatches(wor
 await ensureAdGuardFilter()
 await ensureGitExclude(worktreeDir, '.kotlin')
 await ensureGitExclude(worktreeDir, '.cxx')
-if (!pluginless) await cd(worktreeDir)`git config submodule.TMessagesProj_App/jni/lsplant.ignore all`
+if (!pluginless) await cd(worktreeDir)`git config submodule.TMessagesProj_App/jni/lsplant.ignore dirty`
 const linkedAny = await linkForkSource(worktreeDir, pluginless)
 const generatedAny = await generateIconDrawables(worktreeDir)
 const generatedTl = pluginless ? false : await generateTl()

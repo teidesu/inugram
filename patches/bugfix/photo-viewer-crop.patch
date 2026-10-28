@@ -79,7 +79,7 @@ index 0000000..0000000 100644
 +
 +        int w = getCurrentWidth();
 +        int h = getCurrentHeight();
-+        float aspect = areaView.getAspectRatio();
++        float aspect = state.getBaseRotation() % 180 != 0 ? h / (float) w : w / (float) h;
 +        float stateWidth;
 +        float stateHeight;
 +        int rotatedW;
