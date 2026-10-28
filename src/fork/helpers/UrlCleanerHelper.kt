@@ -52,6 +52,8 @@ object UrlCleanerHelper {
         "||maps.yango.com/\$removeparam=si",
         "||google.*/maps/\$removeparam=entry",
         "||google.*/maps/\$removeparam=skid",
+        "||x.com/*/status/\$removeparam=a",
+        "||twitter.com/*/status/\$removeparam=a",
     )
     private val REDIRECT_HOSTS = setOf("vm.tiktok.com", "vt.tiktok.com", "on.soundcloud.com", "share.google", "pin.it", "spotify.link", "maps.app.goo.gl")
     private val REDDIT_SHARE_PATH = Regex("^/r/[^/]+/s/[^/]+/?$")
