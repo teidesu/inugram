@@ -36,12 +36,15 @@ Subject: non-island ui in various parts of the app
  .../ui/Components/glass/GlassTabView.java     |   5 +-
  .../java/org/telegram/ui/DialogsActivity.java | 160 ++++++++++++------
  .../java/org/telegram/ui/ProfileActivity.java |  28 +--
+ .../java/org/telegram/ui/QrShare/QrGlass.java |   3 +
+ .../org/telegram/ui/QrShare/QrShareView.java  |   1 +
+ .../org/telegram/ui/QrShare/RimPainter.java   |   1 +
  .../ui/SearchTabsAndFiltersLayout.java        |   6 +
  .../java/org/telegram/ui/bots/BotAdView.java  |   2 +-
  .../ui/bots/BotCommandsMenuContainer.java     |   4 +-
  .../bots/ChatAttachAlertBotWebViewLayout.java |   5 +-
  .../java/org/telegram/ui/iv/RichEditor.java   |   4 +-
- 37 files changed, 776 insertions(+), 284 deletions(-)
+ 40 files changed, 781 insertions(+), 284 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -3126,6 +3129,58 @@ index 0000000..0000000 100644
              }
          }
      }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/QrShare/QrGlass.java b/TMessagesProj/src/main/java/org/telegram/ui/QrShare/QrGlass.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/QrShare/QrGlass.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/QrShare/QrGlass.java
+@@ -63,6 +63,7 @@ public final class QrGlass {
+ 
+     /** The sheen over the top of r, inside the caller's clip of the glass shape. */
+     static void drawSheen(Canvas c, RectF r, boolean light, float alpha) {
++        if (desu.inugram.InuConfig.DISABLE_GLASS_GLARE.getValue()) return;
+         sheenDst.set(r.left, r.top, r.right, r.top + Math.min(r.height(), dp(SHEEN_DP)));
+         sheenPaint.setAlpha(sheenAlpha(light, alpha));
+         c.drawBitmap(sheenRamp(), null, sheenDst, sheenPaint);
+@@ -70,6 +71,7 @@ public final class QrGlass {
+ 
+     /** The sheen of a rounded rect without a clip: the ramp as a shader of the rounded rect itself. */
+     public static void drawSheenRound(Canvas c, RectF r, float radius, boolean light, float alpha) {
++        if (desu.inugram.InuConfig.DISABLE_GLASS_GLARE.getValue()) return;
+         final Bitmap ramp = sheenRamp();
+         if (sheenShader == null) {
+             sheenShader = new BitmapShader(ramp, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP); // below the ramp: 0
+@@ -100,6 +102,7 @@ public final class QrGlass {
+      * there, the crescents are tinted per scene): the caller draws it itself.
+      */
+     public static boolean drawRim(Canvas c, RectF r, float radius, int grp, float alpha) {
++        if (desu.inugram.InuConfig.DISABLE_GLASS_GLARE.getValue()) return true;
+         if (!QrRender.hasNodes()) return false;
+         if (alpha <= 0.004f) return true;
+         ensureRims();
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/QrShare/QrShareView.java b/TMessagesProj/src/main/java/org/telegram/ui/QrShare/QrShareView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/QrShare/QrShareView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/QrShare/QrShareView.java
+@@ -4991,6 +4991,7 @@ public class QrShareView extends View {
+      * inset < 0 grows the rim geometry. shape == null → a round rect (r, radius).
+      */
+     private void drawDarkOut(Canvas c, Path shape, RectF r, float radius, float alpha) {
++        if (desu.inugram.InuConfig.DISABLE_GLASS_GLARE.getValue()) return;
+         if (shape == null && QrGlass.drawRim(c, r, radius, rimGroup(), alpha)) return; // baked (see QrGlass)
+         ensureRims();
+         final int grp = rimGroup();
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/QrShare/RimPainter.java b/TMessagesProj/src/main/java/org/telegram/ui/QrShare/RimPainter.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/QrShare/RimPainter.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/QrShare/RimPainter.java
+@@ -59,6 +59,7 @@ final class RimPainter {
+     /** layered = drawn into an offscreen layer without the real pixels beneath: no Plus (it would turn grey). */
+     void draw(Canvas c, RectF rect, float radius, int grp, float alpha, boolean layered) {
+         if (alpha <= 0.004f) return;
++        if (desu.inugram.InuConfig.DISABLE_GLASS_GLARE.getValue()) return;
+         if (QrGlass.drawRim(c, rect, radius, grp, alpha)) return; // baked: the same outline as the QR screen's
+         ensure();
+         final float[] gk = RimTune.g[grp];
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SearchTabsAndFiltersLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/SearchTabsAndFiltersLayout.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SearchTabsAndFiltersLayout.java
