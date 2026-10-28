@@ -1,0 +1,22 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Wed, 28 Oct 2026 17:42:39 +0400
+Subject: fix crash when emoji panel touch is cancelled during tab strip fake drag
+
+---
+ .../src/main/java/org/telegram/ui/Components/EmojiView.java     | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.java
+@@ -2583,7 +2583,7 @@ public class EmojiView extends FrameLayout implements
+         pager = new ViewPager(context) {
+             @Override
+             public boolean onInterceptTouchEvent(MotionEvent ev) {
+-                if (ignorePagerScroll) {
++                if (ignorePagerScroll || isFakeDragging()) {
+                     return false;
+                 }
+                 if (getParent() != null) {

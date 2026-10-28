@@ -413,3 +413,4 @@ bugfix/search-all-chats-crash.patch
 bugfix/private-reply-multiline.patch
 bugfix/reaction-order.patch
 feature/selection-process-text.patch
+bugfix/emoji-pager-fake-drag-crash.patch
