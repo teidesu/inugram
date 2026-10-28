@@ -12,6 +12,7 @@ package desu.inugram.core.urlcleaner
  *   ||host.tld.*^$removeparam=...            (TLD wildcard)
  *   ||host^/path*$removeparam=...
  *   /url-regex/$removeparam=...              (full-URL regex pattern)
+ *   |plain*pattern^|$removeparam=...         (full-URL wildcard pattern, `|` anchors)
  *   @@...$removeparam[=...]                  (allowlist / exception)
  *   ,domain=a.com|b.com|~c.com
  *   ,denyallow=a.com|b.com                   (excluded domains; upstream's preferred
@@ -40,7 +41,7 @@ internal sealed class UrlMatcher {
      */
     data class Host(val host: String, val hostRegex: Regex?, val pathRegex: Regex?) : UrlMatcher()
 
-    /** `/regex/` — matches against the full URL. */
+    /** `/regex/` or plain wildcard pattern — matches against the full URL. */
     data class FullRegex(val regex: Regex) : UrlMatcher()
 }
 
@@ -200,7 +201,11 @@ internal object AdGuardRuleParser {
             return runCatching { UrlMatcher.FullRegex(Regex(pattern.substring(1, pattern.length - 1))) }.getOrNull()
         }
 
-        if (!pattern.startsWith("||")) return null
+        if (!pattern.startsWith("||")) {
+            val anchored = pattern.startsWith("|")
+            val regex = wildcardToRegex(pattern.removePrefix("|"))
+            return UrlMatcher.FullRegex(if (anchored) Regex("^" + regex.pattern) else regex)
+        }
         val body = pattern.substring(2)
         val hostEnd = body.indexOfAny(charArrayOf('^', '/')).let { if (it < 0) body.length else it }
         val host = body.substring(0, hostEnd)
@@ -224,12 +229,14 @@ internal object AdGuardRuleParser {
     }.toRegex()
 
     private fun wildcardToRegex(glob: String): Regex = buildString {
-        for (c in glob) when {
+        val anchoredEnd = glob.endsWith("|")
+        for (c in glob.removeSuffix("|")) when {
             c == '*' -> append(".*")
             c == '^' -> append("(?:[^A-Za-z0-9._%~-]|$)")
             c in WILDCARD_META -> append('\\').append(c)
             else -> append(c)
         }
+        if (anchoredEnd) append('$')
     }.toRegex()
 
     private fun parseDomains(spec: String?): Pair<List<String>, List<String>> {
