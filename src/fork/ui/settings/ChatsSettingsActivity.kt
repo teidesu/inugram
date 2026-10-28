@@ -9,6 +9,7 @@ import desu.inugram.helpers.InuUtils
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
+import org.telegram.messenger.MessagesController
 import org.telegram.messenger.SharedConfig
 import org.telegram.ui.Cells.NotificationsCheckCell
 import org.telegram.ui.Cells.TextCheckCell
@@ -192,6 +193,10 @@ class ChatsSettingsActivity : SettingsPageActivity() {
                 AndroidUtilities.replaceArrows(
                     AndroidUtilities.replaceSingleTag(cameraApiText) {
                         SharedSettings.roundVideoCamera2Enabled.set(!newRecorder)
+                        if (newRecorder) {
+                            SharedConfig.useCamera2Force = null
+                            MessagesController.getGlobalMainSettings().edit().remove("useCamera2Force_2").apply()
+                        }
                         listView.adapter.update(true)
                     },
                     true,
