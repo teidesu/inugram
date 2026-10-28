@@ -1,0 +1,22 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Wed, 28 Oct 2026 16:34:53 +0400
+Subject: show full text of replies to inaccessible chats
+
+---
+ .../src/main/java/org/telegram/ui/Cells/ChatMessageCell.java    | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+@@ -19354,7 +19354,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+ 
+                 CharSequence name = null;
+                 hasReplyQuote = messageObject.messageOwner.reply_to != null && (messageObject.messageOwner.reply_to.flags & 64) != 0 && messageObject.messageOwner.reply_to.quote_text != null && !messageObject.inu_isReplyToDeletedMessage();
+-                isReplyQuote = hasReplyQuote && messageObject.messageOwner.reply_to.quote;
++                isReplyQuote = hasReplyQuote && (messageObject.messageOwner.reply_to.quote || desu.inugram.helpers.chat.ChatHelper.isReplyToInaccessibleChat(currentAccount, messageObject));
+                 final boolean showQuote = isReplyQuote && messageObject.messageOwner.reply_to.quote;
+                 if (isReplyQuote && showQuote && replyQuoteDrawable == null) {
+                     replyQuoteDrawable = getContext().getResources().getDrawable(R.drawable.mini_quote).mutate();
