@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -13180,7 +13180,6 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -13177,7 +13177,6 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
          if (textLayoutBlocks == null) {
              return;
          }
@@ -19,7 +19,7 @@ index 0000000..0000000 100644
          for (int c = 0; c < textLayoutBlocks.size(); c++) {
              MessageObject.TextLayoutBlock block = textLayoutBlocks.get(c);
              if (start >= block.charactersOffset && start < block.charactersEnd) {
-@@ -13189,22 +13188,21 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -13186,22 +13185,21 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                  try {
                      LinkPath path = obtainNewUrlPath();
                      path.setUseCornerPathImplementation(true);
@@ -47,7 +47,7 @@ index 0000000..0000000 100644
                                  break;
                              }
                          }
-@@ -13251,7 +13249,6 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -13248,7 +13246,6 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                  }
              }
              if (start >= 0 && end >= 0) {
@@ -55,7 +55,7 @@ index 0000000..0000000 100644
                  for (int c = 0; c < captionLayout.textLayoutBlocks.size(); c++) {
                      MessageObject.TextLayoutBlock block = captionLayout.textLayoutBlocks.get(c);
                      if (start >= block.charactersOffset && start < block.charactersEnd) {
-@@ -13260,16 +13257,15 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -13257,16 +13254,15 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                          resetUrlPaths();
                          try {
                              LinkPath path = obtainNewUrlPath();
@@ -77,7 +77,7 @@ index 0000000..0000000 100644
                                          break;
                                      }
                                  }
-@@ -13297,7 +13293,6 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -13294,7 +13290,6 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                  }
              }
              if (start >= 0 && end >= 0) {
@@ -85,7 +85,7 @@ index 0000000..0000000 100644
                  for (int c = 0; c < messageObject.textLayoutBlocks.size(); c++) {
                      MessageObject.TextLayoutBlock block = messageObject.textLayoutBlocks.get(c);
                      if (start >= block.charactersOffset && start < block.charactersEnd) {
-@@ -13306,16 +13301,15 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -13303,16 +13298,15 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                          resetUrlPaths();
                          try {
                              LinkPath path = obtainNewUrlPath();

@@ -49,7 +49,6 @@
     <string name="InuDisableRounding">数値の丸めを無効化</string>
     <string name="InuDisableRoundingInfo">1.2K → 1,234</string>
     <string name="InuShowAllRecentStickers">最近のスタンプをすべて表示</string>
-    <string name="InuNoStickerExtraPadding">下の余分な余白を削除</string>
     <string name="InuHideKeyboardOnScroll">スクロール時にキーボードを隠す</string>
     <string name="InuDisablePullToNext">次のチャンネルへの引き下げを無効化</string>
     <string name="InuDisableSensitive">センシティブフィルターを無効化</string>

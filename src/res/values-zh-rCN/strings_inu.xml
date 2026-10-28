@@ -49,7 +49,6 @@
     <string name="InuDisableRounding">禁用数字取整</string>
     <string name="InuDisableRoundingInfo">1.2K → 1,234</string>
     <string name="InuShowAllRecentStickers">显示全部最近贴纸</string>
-    <string name="InuNoStickerExtraPadding">去除底部多余的内边距</string>
     <string name="InuHideKeyboardOnScroll">滚动时隐藏键盘</string>
     <string name="InuDisablePullToNext">禁用下拉到下一个频道</string>
     <string name="InuDisableSensitive">禁用敏感内容过滤</string>

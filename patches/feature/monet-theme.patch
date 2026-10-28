@@ -309,7 +309,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -24082,7 +24082,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -24079,7 +24079,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
              if (currentMessageObject != null && currentMessageObject.sendPreview) {
                  alpha *= effectDrawable == null ? 0f : effectDrawable.isNotEmpty();
              }
@@ -318,7 +318,7 @@ index 0000000..0000000 100644
  
              int r;
              if (documentAttachType != DOCUMENT_ATTACH_TYPE_ROUND && documentAttachType != DOCUMENT_ATTACH_TYPE_STICKER && currentMessageObject.type != MessageObject.TYPE_EMOJIS) {
-@@ -24125,7 +24125,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -24122,7 +24122,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                      canvas.restore();
                      Paint dimPaint = getThemedPaint(Theme.key_paint_chatTimeBackground);
                      int oldAlpha2 = dimPaint.getAlpha();

@@ -476,7 +476,7 @@ index 0000000..0000000 100644
                          site_name = webPage.site_name;
                          title = drawInstantViewType != 6 && drawInstantViewType != 7 ? webPage.title : null;
                          if (instantViewTypeIsGiftAuction != null) {
-@@ -12451,6 +12456,27 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -12448,6 +12453,27 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
          }
      }
  
@@ -504,7 +504,7 @@ index 0000000..0000000 100644
      @Override
      public void invalidate() {
          if (currentMessageObject == null) {
-@@ -15569,7 +15595,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -15566,7 +15592,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
              restore = true;
  
              AndroidUtilities.rectTmp.set(linkX, linkPreviewY - dp(6), linkX + width, linkPreviewY + linkPreviewHeight + (drawInstantButtonInside && drawInstantView ? dp(42) : 0));
@@ -513,7 +513,7 @@ index 0000000..0000000 100644
              float rad = (float) Math.floor(SharedConfig.bubbleRadius / (currentMessageObject.isSponsored() ? 2f : 3f));
              linkLine
                  .offsetEmoji(0, drawPhotoImageBefore ? (1f - isSmallImage()) * (dp(18) + photoImage.getImageHeight() + (siteNameLayout != null ? siteNameLayout.getLineBottom(siteNameLayout.getLineCount() - 1) : 0)) : 0)
-@@ -15944,7 +15970,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -15941,7 +15967,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                  photoImage.setImageY(smallImageStartY);
              } else {
                  photoImage.setImageX(linkX + (hasInvoicePreview ? -dp(6.3f) : dp(10)));
@@ -522,7 +522,7 @@ index 0000000..0000000 100644
              }
              if (transitionParams != null && transitionParams.animateSmallImage) {
                  if (!isSmallImage && documentAttachType != DOCUMENT_ATTACH_TYPE_DOCUMENT) {
-@@ -16835,7 +16861,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -16832,7 +16858,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
  
          final TranslateController translateController = MessagesController.getInstance(currentAccount).getTranslateController();
          final boolean translating = translateController.isTranslating(currentMessageObject);
@@ -531,7 +531,7 @@ index 0000000..0000000 100644
          final boolean shouldSummarize = currentMessageObject != null && currentMessageObject.messageOwner.summarizedOpen;
          final boolean isFinal = shouldTranslate == (currentMessageObject != null && currentMessageObject.translated) && shouldSummarize == (currentMessageObject != null && currentMessageObject.summarized);
          if (origin == !isFinal) {
-@@ -18521,7 +18547,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -18518,7 +18544,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                  }
                  timeString = LocaleController.formatPmEditedDate(editDate);
              } else {
@@ -540,7 +540,7 @@ index 0000000..0000000 100644
              }
          } else if (currentMessageObject.isSaved && currentMessageObject.messageOwner.fwd_from != null && (currentMessageObject.messageOwner.fwd_from.date != 0 || currentMessageObject.messageOwner.fwd_from.saved_date != 0)) {
              int date = currentMessageObject.messageOwner.fwd_from.saved_date;
-@@ -18575,7 +18601,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -18572,7 +18598,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                  currentTimeString = TextUtils.concat(formatString(R.string.MessageScheduledRepeatSeconds, period), ", ", currentTimeString);
              }
          }
@@ -550,7 +550,7 @@ index 0000000..0000000 100644
          if (currentMessageObject.scheduled && currentMessageObject.messageOwner.date == 0x7FFFFFFE || currentMessageObject.notime) {
              timeWidth -= dp(8);
          }
-@@ -18673,6 +18700,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -18670,6 +18697,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
          } else {
              signWidth = 0;
          }

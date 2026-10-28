@@ -1,11 +1,11 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.su>
 Date: Thu, 9 Apr 2026 17:24:31 +0300
-Subject: customizable sticker size + hide sticker time overlay + remove extra bottom padding from sticker bubbles
+Subject: customizable sticker size + hide sticker time overlay
 
 ---
- .../telegram/ui/Cells/ChatMessageCell.java    | 29 +++++++++++++++----
- 1 file changed, 24 insertions(+), 5 deletions(-)
+ .../telegram/ui/Cells/ChatMessageCell.java    | 24 +++++++++++++++----
+ 1 file changed, 20 insertions(+), 4 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 index 0000000..0000000 100644
@@ -41,26 +41,7 @@ index 0000000..0000000 100644
                      if (!reactionsLayoutInBubble.isSmall) {
                          reactionsLayoutInBubble.measure(maxWidth + dp(36), currentMessageObject.isOutOwner() && (currentMessageObject.isAnimatedEmoji() || currentMessageObject.isAnyKindOfSticker()) ? Gravity.RIGHT : Gravity.LEFT);
                          reactionsLayoutInBubble.drawServiceShaderBackground = 1f;
-@@ -10503,6 +10507,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
-                     totalHeight += dp(21);
-                     additionalTimeOffsetY = dp(21);
-                 }
-+                if (InuConfig.NO_STICKER_EXTRA_PADDING.getValue() && currentMessageObject.isAnyKindOfSticker() && !currentMessageObject.hasReactions()) {
-+                    totalHeight -= dp(8);
-+                }
- 
-                 int additionalTop = 0;
-                 if (currentPosition != null && !currentMessageObject.isDocument()) {
-@@ -10964,7 +10971,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
-                     totalHeight -= dp(1);
-                 }
-             }
--            if (messageObject.type != MessageObject.TYPE_EMOJIS) {
-+            if (!InuConfig.NO_STICKER_EXTRA_PADDING.getValue() && messageObject.type != MessageObject.TYPE_EMOJIS) {
-                 if (messageObject.isAnyKindOfSticker() && totalHeight < dp(70)) {
-                     additionalTimeOffsetY = dp(70) - totalHeight;
-                     totalHeight += additionalTimeOffsetY;
-@@ -18658,6 +18665,11 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -18658,6 +18662,11 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
          } else {
              signWidth = 0;
          }
@@ -72,7 +53,7 @@ index 0000000..0000000 100644
      }
  
      protected boolean shouldDrawSelectionOverlay() {
-@@ -23900,6 +23912,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -23900,6 +23909,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
          if (!drawFromPinchToZoom && delegate != null && delegate.getPinchToZoomHelper() != null && delegate.getPinchToZoomHelper().isInOverlayModeFor(this) && shouldDrawTimeOnMedia()) {
              return;
          }
@@ -82,7 +63,7 @@ index 0000000..0000000 100644
          if (currentMessageObject != null && currentMessageObject.type == MessageObject.TYPE_JOINED_CHANNEL) {
              return;
          }
-@@ -23977,6 +23992,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -23977,6 +23989,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
          if ((!drawTime || groupPhotoInvisible) && shouldDrawTimeOnMedia() || timeLayout == null || (currentMessageObject.deleted && currentPosition != null) || currentMessageObject.type == MessageObject.TYPE_PHONE_CALL) {
              return;
          }
@@ -92,7 +73,7 @@ index 0000000..0000000 100644
          if (currentMessageObject.type == MessageObject.TYPE_ROUND_VIDEO) {
              Theme.chat_timePaint.setColor(
                  ColorUtils.blendARGB(
-@@ -24078,7 +24096,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -24078,7 +24093,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
              if (effectId != 0) {
                  timeX -= dp(14 + 4);
              }
@@ -102,7 +83,7 @@ index 0000000..0000000 100644
              float offsetX = (currentMessageObject != null && currentMessageObject.isAnyKindOfSticker()) ? dp(2) : 0;
              float timeY;
              if (documentAttachType == DOCUMENT_ATTACH_TYPE_ROUND && (currentMessageObject == null || !currentMessageObject.isRoundOnce())) {
-@@ -24088,7 +24107,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -24088,7 +24104,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
              }
              float y1 = timeY - dp(23);
              float timeHeight = Math.max(dp(17), Theme.chat_timePaint.getTextSize() + dp(5));

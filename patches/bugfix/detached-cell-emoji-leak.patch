@@ -72,7 +72,7 @@ index 0000000..0000000 100644
  
                              int height = descriptionLayout.getLineBottom(descriptionLayout.getLineCount() - 1);
                              linkPreviewHeight += height;
-@@ -11436,7 +11452,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -11433,7 +11449,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                          Theme.chat_replyNamePaint, maxWidth - dp(30), Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
                  explanationLayout = new MessageObject.TextLayoutBlocks(messageObject, currentExplanation, Theme.chat_quoteTextPaint, explanationWidth - dp(11));
                  explanationHeight = explanationLayout.textHeight() + dp(26 + 8 + 3) + (explanationContentHeight > 0 ? explanationContentHeight + dp(8 + 6) : 0);
@@ -83,7 +83,7 @@ index 0000000..0000000 100644
              }
          } else {
              TLRPC.TL_messageMediaToDo media = (TLRPC.TL_messageMediaToDo) m;
-@@ -11475,7 +11493,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -11472,7 +11490,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
              MessageObject.addEntitiesToText(questionText, title.entities, currentMessageObject.isOutOwner(), false, false, false);
          }
          titleLayout = new StaticLayout(questionText, Theme.chat_audioTitlePaint, maxWidth + dp(2) - getExtraTextX() * 2, Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
@@ -94,7 +94,7 @@ index 0000000..0000000 100644
          boolean titleRtl = false;
          if (titleLayout != null) {
              for (int a = 0, N = titleLayout.getLineCount(); a < N; a++) {
-@@ -11709,13 +11729,17 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -11706,13 +11726,17 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                  final int titleMaxWidth = maxWidth - dp(48 + (pollWithMediaInAnswers ? 48 : 0));
                  button.title = new StaticLayout(answerText, Theme.chat_audioPerformerPaint, titleMaxWidth, Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
                  button.moveTitleByCounter = false;
@@ -114,7 +114,7 @@ index 0000000..0000000 100644
                      button.animateY = prevButton.y;
                      button.animateHeight = prevButton.height;
                  }
-@@ -11915,13 +11939,17 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -11912,13 +11936,17 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                  }
                  button.task = task;
                  button.title = new StaticLayout(answerText, Theme.chat_audioPerformerPaint, maxWidth - dp(48 - 2), Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
@@ -134,7 +134,7 @@ index 0000000..0000000 100644
                      button.animateY = prevButton.y;
                      button.animateHeight = prevButton.height;
                  }
-@@ -19786,7 +19814,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -19783,7 +19811,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                          if (hasReplyQuote || getMessageObject().replyMessageObject != null && !getMessageObject().replyMessageObject.isSpoilersRevealed) {
                              SpoilerEffect.addSpoilers(this, replyTextLayout, replyTextOffset, replyTextOffset + (inu_isCustomSpoiler ? replySpoilerTextWidth : replyTextWidth), replySpoilersPool, replySpoilers);
                          }

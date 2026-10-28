@@ -63,12 +63,6 @@ class MessagesSettingsActivity : SettingsPageActivity() {
                 }
             )
         )
-        items.add(
-            UItem.asCheck(
-                TOGGLE_NO_STICKER_EXTRA_PADDING,
-                LocaleController.getString(R.string.InuNoStickerExtraPadding),
-            ).setChecked(InuConfig.NO_STICKER_EXTRA_PADDING.value)
-        )
         items.add(UItem.asShadow(null))
 
         if (reactionsInRowSlider == null) reactionsInRowSlider = SliderCell(
@@ -295,12 +289,6 @@ class MessagesSettingsActivity : SettingsPageActivity() {
                 stickerSizePreview?.invalidate()
             }
 
-            TOGGLE_NO_STICKER_EXTRA_PADDING -> {
-                val new = InuConfig.NO_STICKER_EXTRA_PADDING.toggle()
-                (view as? TextCheckCell)?.isChecked = new
-                stickerSizePreview?.invalidate()
-            }
-
             TOGGLE_REACTION_BAR_BELOW -> {
                 val new = InuConfig.REACTION_BAR_BELOW.toggle()
                 (view as? NotificationsCheckCell)?.isChecked = new
@@ -514,7 +502,6 @@ class MessagesSettingsActivity : SettingsPageActivity() {
 
     companion object {
         private val BUTTON_STICKER_TIME_MODE = InuUtils.generateId()
-        private val TOGGLE_NO_STICKER_EXTRA_PADDING = InuUtils.generateId()
         private val BUTTON_PINNED_REACTIONS = InuUtils.generateId()
         private val BUTTON_MESSAGE_MENU_ORDER = InuUtils.generateId()
         private val TOGGLE_REACTION_BAR_BELOW = InuUtils.generateId()
@@ -577,7 +564,6 @@ class MessagesSettingsActivity : SettingsPageActivity() {
             factory = ::MessagesSettingsActivity,
             entries = listOf(
                 SearchRegistry.Entry("sticker-time-mode", R.string.InuStickerTimeMode, BUTTON_STICKER_TIME_MODE),
-                SearchRegistry.Entry("no-sticker-extra-padding", R.string.InuNoStickerExtraPadding, TOGGLE_NO_STICKER_EXTRA_PADDING),
                 SearchRegistry.Entry("pinned-reactions", R.string.InuPinnedReactions, BUTTON_PINNED_REACTIONS),
                 SearchRegistry.Entry("reaction-bar-below", R.string.InuReactionBarBelow, TOGGLE_REACTION_BAR_BELOW),
                 SearchRegistry.Entry("chat-views-bottom", R.string.InuChatViewsBottom, TOGGLE_CHAT_VIEWS_BOTTOM),

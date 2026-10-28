@@ -76,7 +76,6 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 ## chats
 
 - customizable sticker size - *ported from [Nekogram](https://github.com/Nekogram/Nekogram)*
-- 🐶 remove extra bottom padding under stickers
 - 🐶 full-quality sticker previews in sticker sheets & emoji panel (instead of blurry 90px thumbs; only on unmetered network or when already downloaded)
 - show all recent stickers
 - minimize sticker creator button in recent stickers
@@ -268,6 +267,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 
 ## 🐶 bugfixes (vs stock)
 
+- no extra bottom padding under stickers
 - android 16 "expanded" dark theme no longer force-inverts the app
 - channel update queue no longer replays the same update indefinitely after an earlier queued update advances PTS
 - flaky networks: server time offset no longer reset to the epoch by a `bad_msg_notification` inside a container (messages sent meanwhile were dated 1 Jan 1970); session resets on old retransmitted server messages re-send pending requests with fresh msg_id/seqno instead of stale ones (which made the server reject them and cascaded into more resets)

@@ -125,7 +125,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -13472,7 +13472,12 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -13469,7 +13469,12 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                          path.addCircle(rect.centerX(), rect.centerY(), dp(selectorDrawableMaskType[num] == 3 ? 16 : 20), Path.Direction.CW);
                      } else if (selectorDrawableMaskType[num] == 2) {
                          boolean out = currentMessageObject != null && currentMessageObject.isOutOwner();
@@ -138,7 +138,7 @@ index 0000000..0000000 100644
                              if (!instantTextNewLine) {
                                  if (a == (out ? 3 : 2)) {
                                      radii[a * 2] = radii[a * 2 + 1] = dp(SharedConfig.bubbleRadius);
-@@ -13485,7 +13490,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -13482,7 +13487,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                              }
                              radii[a * 2] = radii[a * 2 + 1] = 0;
                          }
@@ -147,7 +147,7 @@ index 0000000..0000000 100644
                              path.moveTo(rect.left + dp(6), rect.top);
                              path.lineTo(rect.left + dp(6), rect.bottom - dp(6) - dp(2 + 3));
                              AndroidUtilities.rectTmp.set(
-@@ -23389,7 +23394,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -23386,7 +23391,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                  buttonX -= dp(10);
              }
              commentButtonRect.set(
@@ -156,7 +156,7 @@ index 0000000..0000000 100644
                      (int) buttonY,
                      endX - dp(14),
                      layoutHeight - dp(h) + 1
-@@ -26117,7 +26122,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -26114,7 +26119,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
  
                  instantButtonRect.set(textX, instantY, textX + instantWidth, instantY + dp(44));
                  if (selectorDrawable[0] != null && selectorDrawableMaskType[0] == 2) {

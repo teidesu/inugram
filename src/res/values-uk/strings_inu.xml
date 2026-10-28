@@ -85,7 +85,6 @@
     <string name="InuRoundRecorderCamera2Settings">Налаштування Camera2</string>
     <string name="InuRoundRecorderCameraApi">Запис відеоповідомлень використовує %1$s API. **Перемкнути на %2$s >**</string>
     <string name="InuShowAllRecentStickers">Показувати всі нещодавні наліпки</string>
-    <string name="InuNoStickerExtraPadding">Прибрати додатковий відступ знизу</string>
     <string name="InuHideKeyboardOnScroll">Ховати клавіатуру під час прокручування</string>
     <string name="InuDisablePullToNext">Вимкнути потягування до наступного каналу</string>
     <string name="InuDisableSensitive">Вимкнути фільтр делікатного контенту</string>

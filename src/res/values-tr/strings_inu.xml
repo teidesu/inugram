@@ -85,7 +85,6 @@
     <string name="InuRoundRecorderCamera2Settings">Camera2 ayarları</string>
     <string name="InuRoundRecorderCameraApi">Yuvarlak kaydedici %1$s API\'sini kullanıyor. **%2$s API\'sine geç >**</string>
     <string name="InuShowAllRecentStickers">Tüm son çıkartmaları göster</string>
-    <string name="InuNoStickerExtraPadding">Alt boşluğu kaldır</string>
     <string name="InuHideKeyboardOnScroll">Kaydırırken klavyeyi gizle</string>
     <string name="InuDisablePullToNext">Sonraki kanala geçmek için çekmeyi devre dışı bırak</string>
     <string name="InuDisableSensitive">Hassas içerik filtresini devre dışı bırak</string>
