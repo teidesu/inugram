@@ -14,7 +14,7 @@ Subject: non-island ui in various parts of the app
  .../ui/Components/ChatAttachAlert.java        |  20 +++
  .../ui/Components/ChatAvatarContainer.java    |   1 +
  .../ui/Components/ChatSearchTabs.java         |   2 +-
- .../DialogsActivityTopPanelLayout.java        |   8 +-
+ .../DialogsActivityTopPanelLayout.java        |  18 +-
  .../ui/Components/FilterTabsView.java         |  19 ++-
  .../ui/Components/FragmentContextView.java    |  11 +-
  .../FragmentContextViewWavesDrawable.java     |  29 +++-
@@ -41,7 +41,7 @@ Subject: non-island ui in various parts of the app
  .../ui/bots/BotCommandsMenuContainer.java     |   4 +-
  .../bots/ChatAttachAlertBotWebViewLayout.java |   5 +-
  .../java/org/telegram/ui/iv/RichEditor.java   |   4 +-
- 37 files changed, 766 insertions(+), 284 deletions(-)
+ 37 files changed, 776 insertions(+), 284 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -1259,7 +1259,17 @@ index 0000000..0000000 100644
          clipPath.rewind();
          clipPath.addRoundRect(clipRectF, r, r, Path.Direction.CW);
  
-@@ -100,7 +102,9 @@ public class DialogsActivityTopPanelLayout extends AnimatedLinearLayout {
+@@ -89,6 +91,9 @@ public class DialogsActivityTopPanelLayout extends AnimatedLinearLayout {
+     public void setCallFragmentContextView(FragmentContextView fragmentContextView) {
+         callFragmentContextView = fragmentContextView;
+         callFragmentContextView.getCapsuleBlobDrawable().setCallback(this);
++        if (inu_blurHelper != null) {
++            callFragmentContextView.inu_flat = true;
++        }
+     }
+ 
+     @Override
+@@ -100,7 +105,9 @@ public class DialogsActivityTopPanelLayout extends AnimatedLinearLayout {
      protected void dispatchDraw(@NonNull Canvas canvas) {
          if (getMetadata().getTotalVisibility() == 0) return;
  
@@ -1270,6 +1280,20 @@ index 0000000..0000000 100644
              backgroundDrawable.draw(canvas);
          }
  
+@@ -117,6 +124,13 @@ public class DialogsActivityTopPanelLayout extends AnimatedLinearLayout {
+                         continue;
+                     }
+ 
++                    if (inu_blurHelper != null) {
++                        if (Theme.getFragmentContextViewWavesDrawable().inu_drawBottomWaves(canvas, getPaddingLeft(), top, getMeasuredWidth() - getPaddingRight(), dp(36), alpha)) {
++                            invalidate();
++                        }
++                        continue;
++                    }
++
+                     final CapsuleBlobDrawable capsuleBlobDrawable = callFragmentContextView.getCapsuleBlobDrawable();
+                     final int p = capsuleBlobDrawable.getRequiredInset();
+                     final int h = dp(36) + p * 2;
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/FilterTabsView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/FilterTabsView.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/FilterTabsView.java
