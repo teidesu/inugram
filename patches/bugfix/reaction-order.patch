@@ -1,0 +1,41 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Wed, 28 Oct 2026 16:51:27 +0400
+Subject: order tied reactions deterministically so they don't swap
+
+---
+ .../Reactions/ReactionsLayoutInBubble.java         | 14 ++++++++++++--
+ 1 file changed, 12 insertions(+), 2 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionsLayoutInBubble.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionsLayoutInBubble.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionsLayoutInBubble.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionsLayoutInBubble.java
+@@ -1605,7 +1605,7 @@ public class ReactionsLayoutInBubble {
+                         return o1.choosenOrder - o2.choosenOrder;
+                     }
+                 }
+-                return o1.reactionCount.lastDrawnPosition - o2.reactionCount.lastDrawnPosition;
++                return inu_compareTied(o1, o2);
+             } else {
+                 if (o1.paid != o2.paid) {
+                     return o1.paid ? -1 : 1;
+@@ -1618,7 +1618,17 @@ public class ReactionsLayoutInBubble {
+ //            if (availableReaction1 != null && availableReaction2 != null) {
+ //                return availableReaction1.positionInList - availableReaction2.positionInList;
+ //            }
+-            return o1.reactionCount.lastDrawnPosition - o2.reactionCount.lastDrawnPosition;
++            return inu_compareTied(o1, o2);
++        }
++
++        private int inu_compareTied(ReactionButton o1, ReactionButton o2) {
++            int position = Integer.compare(inu_getReactionPosition(o1), inu_getReactionPosition(o2));
++            return position != 0 ? position : o1.key.compareTo(o2.key);
++        }
++
++        private int inu_getReactionPosition(ReactionButton button) {
++            TLRPC.TL_availableReaction reaction = button.reaction instanceof TLRPC.TL_reactionEmoji ? MediaDataController.getInstance(currentAccount).getReactionsMap().get(button.key) : null;
++            return reaction == null || reaction.inactive ? Integer.MAX_VALUE : reaction.positionInList;
+         }
+     }
+ 

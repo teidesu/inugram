@@ -411,3 +411,4 @@ bugfix/rich-table-emoji-height.patch
 misc/adaptive-action-bar-shadow.patch
 bugfix/search-all-chats-crash.patch
 bugfix/private-reply-multiline.patch
+bugfix/reaction-order.patch
