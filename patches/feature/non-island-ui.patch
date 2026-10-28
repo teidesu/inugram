@@ -24,7 +24,7 @@ Subject: non-island ui in various parts of the app
  .../ui/Components/RecyclerListView.java       |   7 +
  .../Components/ScrollSlidingTextTabStrip.java | 116 ++++++++++++-
  .../ui/Components/SearchTagsList.java         |   3 +
- .../ui/Components/SharedMediaLayout.java      |  78 +++++++--
+ .../ui/Components/SharedMediaLayout.java      |  84 +++++++--
  .../ui/Components/TopicsTabsView.java         |  78 ++++++---
  .../ui/Components/TranslateButton.java        |   4 +-
  .../ui/Components/ViewPagerFixed.java         |  12 +-
@@ -44,7 +44,7 @@ Subject: non-island ui in various parts of the app
  .../ui/bots/BotCommandsMenuContainer.java     |   4 +-
  .../bots/ChatAttachAlertBotWebViewLayout.java |   5 +-
  .../java/org/telegram/ui/iv/RichEditor.java   |   4 +-
- 40 files changed, 781 insertions(+), 284 deletions(-)
+ 40 files changed, 784 insertions(+), 287 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -1880,14 +1880,30 @@ index 0000000..0000000 100644
                          cell.isFirst = position % spanCount == 0;
                          cell.isLast = position % spanCount == spanCount - 1;
                          outRect.left = 0;
-@@ -3748,6 +3782,10 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -3709,10 +3743,10 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+             topPanelLayout.addView(fragmentContextViewWrapper);
+             topPanelLayout.setViewVisible(fragmentContextViewWrapper, true, false);
+             topPanelLayout.setOnAnimatedHeightChangedListener(() -> {
+-                topLayoutPadding = (int) topPanelLayout.getAnimatedHeightWithPadding(dp(14));
++                topLayoutPadding = (int) topPanelLayout.getAnimatedHeightWithPadding(inu_flatTabBar() ? 0 : dp(14));
+ 
+                 if (giftsContainer != null) {
+-                    giftsContainer.setPaddingTop(dp(48) + (int) topPanelLayout.getAnimatedHeightWithPadding(dp(7)));
++                    giftsContainer.setPaddingTop(dp(48) + (int) topPanelLayout.getAnimatedHeightWithPadding(inu_flatTabBar() ? 0 : dp(7)));
+                 }
+                 if (mediaPages != null) {
+                     for (MediaPage page : mediaPages) {
+@@ -3746,8 +3780,12 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+                 }
+             };
              fragmentContextViewWrapper.addView(fragmentContextView);
-             topPanelLayout.setCallFragmentContextView(fragmentContextView);
-             addView(topPanelLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP, 0, 48 -14, 0, 0));
 +            if (inu_flatTabBar()) {
 +                topPanelLayout.inu_blurHelper = desu.inugram.ui.BlurBehindHelper.create(topPanelLayout, sizeNotifierFrameLayout, Theme.key_windowBackgroundWhite);
 +                topPanelLayout.setPadding(0, 0, 0, 0);
 +            }
+             topPanelLayout.setCallFragmentContextView(fragmentContextView);
+-            addView(topPanelLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP, 0, 48 -14, 0, 0));
++            addView(topPanelLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP, 0, inu_flatTabBar() ? 44 : 48 -14, 0, 0));
  
              fragmentContextView.setDelegate((start, show) -> {
                  if (!start) {
