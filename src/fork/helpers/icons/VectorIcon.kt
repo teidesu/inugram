@@ -22,12 +22,26 @@ class VectorIcon private constructor(
 
     private class Shape(
         val path: Path,
+        val clipEvenOdd: Boolean,
         val fillColor: Int,
         val strokeColor: Int,
         val strokeWidth: Float,
         val cap: Paint.Cap,
         val join: Paint.Join,
         val miter: Float,
+    )
+
+    private data class Style(
+        val fill: Int = Color.BLACK,
+        val fillOpacity: Float = 1f,
+        val evenOdd: Boolean = false,
+        val clipEvenOdd: Boolean = false,
+        val stroke: Int = Color.TRANSPARENT,
+        val strokeOpacity: Float = 1f,
+        val strokeWidth: Float = 1f,
+        val cap: Paint.Cap = Paint.Cap.BUTT,
+        val join: Paint.Join = Paint.Join.MITER,
+        val miter: Float = 4f,
     )
 
     private class Unsupported : Exception()
@@ -114,6 +128,7 @@ class VectorIcon private constructor(
         private val IGNORED_ATTRS = setOf("xmlns", "xmlns:xlink", "version", "id", "xml:space")
         private val SKIPPED_ELEMENTS = setOf("title", "desc", "metadata")
         private val CLIP_URL = Regex("url\\(#([^)]+)\\)")
+        private val RECT_ATTRS = listOf("x", "y", "width", "height", "rx", "ry")
 
         /** null when the svg uses anything outside the supported subset */
         fun parse(bytes: ByteArray): VectorIcon? = try {
@@ -133,6 +148,7 @@ class VectorIcon private constructor(
             var height = -1f
             var viewBox: FloatArray? = null
             var stretch = false
+            var style = Style()
             forEachAttribute(parser) { name, value ->
                 when (name) {
                     "width" -> width = parseLength(value)
@@ -143,32 +159,36 @@ class VectorIcon private constructor(
                         "xMidYMid", "xMidYMid meet" -> false
                         else -> throw Unsupported()
                     }
-                    else -> throw Unsupported()
+                    else -> style = applyStyle(style, name, value)
                 }
             }
             val box = viewBox ?: if (width > 0 && height > 0) floatArrayOf(0f, 0f, width, height) else throw Unsupported()
             val clips = HashMap<String, Path>()
-            return VectorIcon(box, stretch, Group(null, parseChildren(parser, clips)))
+            return VectorIcon(box, stretch, Group(null, parseChildren(parser, clips, style)))
         }
 
-        private fun parseChildren(parser: XmlPullParser, clips: MutableMap<String, Path>): List<Any> {
+        private fun parseChildren(parser: XmlPullParser, clips: MutableMap<String, Path>, style: Style): List<Any> {
             val children = ArrayList<Any>()
             while (parser.next() != XmlPullParser.END_TAG) {
                 when (parser.eventType) {
                     XmlPullParser.END_DOCUMENT -> throw Unsupported()
                     XmlPullParser.TEXT -> if (!parser.isWhitespace) throw Unsupported()
                     XmlPullParser.START_TAG -> when (parser.name) {
-                        "path" -> {
-                            children.add(parseShape(parser))
+                        "path", "rect" -> {
+                            children.add(parseShape(parser, style))
                             if (parser.next() != XmlPullParser.END_TAG) throw Unsupported()
                         }
                         "g" -> {
                             var clip: Path? = null
+                            var groupStyle = style
                             forEachAttribute(parser) { name, value ->
-                                if (name != "clip-path") throw Unsupported()
-                                clip = clips[CLIP_URL.matchEntire(value.trim())?.groupValues?.get(1)] ?: throw Unsupported()
+                                if (name == "clip-path") {
+                                    clip = clips[CLIP_URL.matchEntire(value.trim())?.groupValues?.get(1)] ?: throw Unsupported()
+                                } else {
+                                    groupStyle = applyStyle(groupStyle, name, value)
+                                }
                             }
-                            children.add(Group(clip, parseChildren(parser, clips)))
+                            children.add(Group(clip, parseChildren(parser, clips, groupStyle)))
                         }
                         "defs" -> {
                             forEachAttribute(parser) { _, _ -> throw Unsupported() }
@@ -192,9 +212,11 @@ class VectorIcon private constructor(
                         val id = parser.getAttributeValue(null, "id") ?: throw Unsupported()
                         forEachAttribute(parser) { _, _ -> throw Unsupported() }
                         val clip = Path()
-                        for (child in parseChildren(parser, clips)) {
+                        for (child in parseChildren(parser, clips, Style())) {
                             if (child !is Shape) throw Unsupported()
-                            clip.addPath(child.path)
+                            val shapeClip = Path(child.path)
+                            shapeClip.fillType = if (child.clipEvenOdd) Path.FillType.EVEN_ODD else Path.FillType.WINDING
+                            clip.op(shapeClip, Path.Op.UNION)
                         }
                         clips[id] = clip
                     }
@@ -202,49 +224,73 @@ class VectorIcon private constructor(
             }
         }
 
-        private fun parseShape(parser: XmlPullParser): Shape {
+        private fun parseShape(parser: XmlPullParser, inherited: Style): Shape {
+            val isRect = parser.name == "rect"
             var path: Path? = null
-            var fill = Color.BLACK
-            var fillOpacity = 1f
-            var evenOdd = false
-            var stroke = Color.TRANSPARENT
-            var strokeOpacity = 1f
-            var strokeWidth = 1f
-            var cap = Paint.Cap.BUTT
-            var join = Paint.Join.MITER
-            var miter = 4f
+            val rect = FloatArray(6) { -1f }.also { it[0] = 0f; it[1] = 0f }
+            var opacity = 1f
+            var style = inherited
             forEachAttribute(parser) { name, value ->
-                when (name) {
-                    "d" -> path = PathParser.createPathFromPathData(value)
-                    "fill" -> fill = parseColor(value)
-                    "fill-opacity" -> fillOpacity = value.trim().toFloat()
-                    "fill-rule" -> evenOdd = when (value.trim()) {
-                        "evenodd" -> true
-                        "nonzero" -> false
-                        else -> throw Unsupported()
-                    }
-                    "stroke" -> stroke = parseColor(value)
-                    "stroke-opacity" -> strokeOpacity = value.trim().toFloat()
-                    "stroke-width" -> strokeWidth = parseLength(value).takeIf { it >= 0 } ?: throw Unsupported()
-                    "stroke-linecap" -> cap = when (value.trim()) {
-                        "butt" -> Paint.Cap.BUTT
-                        "round" -> Paint.Cap.ROUND
-                        "square" -> Paint.Cap.SQUARE
-                        else -> throw Unsupported()
-                    }
-                    "stroke-linejoin" -> join = when (value.trim()) {
-                        "miter" -> Paint.Join.MITER
-                        "round" -> Paint.Join.ROUND
-                        "bevel" -> Paint.Join.BEVEL
-                        else -> throw Unsupported()
-                    }
-                    "stroke-miterlimit" -> miter = value.trim().toFloat()
-                    else -> throw Unsupported()
+                when {
+                    !isRect && name == "d" -> path = PathParser.createPathFromPathData(value)
+                    isRect && name in RECT_ATTRS -> rect[RECT_ATTRS.indexOf(name)] = value.trim().removeSuffix("px").toFloat()
+                    name == "opacity" -> opacity = value.trim().toFloat()
+                    else -> style = applyStyle(style, name, value)
                 }
             }
-            val shapePath = path ?: throw Unsupported()
-            shapePath.fillType = if (evenOdd) Path.FillType.EVEN_ODD else Path.FillType.WINDING
-            return Shape(shapePath, applyOpacity(fill, fillOpacity), applyOpacity(stroke, strokeOpacity), strokeWidth, cap, join, miter)
+            val shapePath = if (isRect) createRect(rect) else path ?: throw Unsupported()
+            shapePath.fillType = if (style.evenOdd) Path.FillType.EVEN_ODD else Path.FillType.WINDING
+            val fill = applyOpacity(style.fill, style.fillOpacity * opacity)
+            val stroke = applyOpacity(style.stroke, style.strokeOpacity * opacity)
+            // element opacity composites fill and stroke together, which per-paint alpha only matches when one of them is drawn
+            if (opacity < 1f && fill != Color.TRANSPARENT && stroke != Color.TRANSPARENT && style.strokeWidth > 0) throw Unsupported()
+            return Shape(shapePath, style.clipEvenOdd, fill, stroke, style.strokeWidth, style.cap, style.join, style.miter)
+        }
+
+        private fun createRect(rect: FloatArray): Path {
+            val (x, y, width, height) = rect
+            if (width < 0 || height < 0) throw Unsupported()
+            var rx = rect[4]
+            var ry = rect[5]
+            if (rx < 0) rx = ry
+            if (ry < 0) ry = rx
+            return Path().apply {
+                if (rx > 0) {
+                    addRoundRect(x, y, x + width, y + height, min(rx, width / 2), min(ry, height / 2), Path.Direction.CW)
+                } else {
+                    addRect(x, y, x + width, y + height, Path.Direction.CW)
+                }
+            }
+        }
+
+        private fun applyStyle(style: Style, name: String, value: String): Style = when (name) {
+            "fill" -> style.copy(fill = parseColor(value))
+            "fill-opacity" -> style.copy(fillOpacity = value.trim().toFloat())
+            "fill-rule" -> style.copy(evenOdd = parseEvenOdd(value))
+            "clip-rule" -> style.copy(clipEvenOdd = parseEvenOdd(value))
+            "stroke" -> style.copy(stroke = parseColor(value))
+            "stroke-opacity" -> style.copy(strokeOpacity = value.trim().toFloat())
+            "stroke-width" -> style.copy(strokeWidth = parseLength(value).takeIf { it >= 0 } ?: throw Unsupported())
+            "stroke-linecap" -> style.copy(cap = when (value.trim()) {
+                "butt" -> Paint.Cap.BUTT
+                "round" -> Paint.Cap.ROUND
+                "square" -> Paint.Cap.SQUARE
+                else -> throw Unsupported()
+            })
+            "stroke-linejoin" -> style.copy(join = when (value.trim()) {
+                "miter" -> Paint.Join.MITER
+                "round" -> Paint.Join.ROUND
+                "bevel" -> Paint.Join.BEVEL
+                else -> throw Unsupported()
+            })
+            "stroke-miterlimit" -> style.copy(miter = value.trim().toFloat())
+            else -> throw Unsupported()
+        }
+
+        private fun parseEvenOdd(value: String) = when (value.trim()) {
+            "evenodd" -> true
+            "nonzero" -> false
+            else -> throw Unsupported()
         }
 
         private inline fun forEachAttribute(parser: XmlPullParser, block: (String, String) -> Unit) {
