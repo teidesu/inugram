@@ -16,6 +16,7 @@ import desu.inugram.helpers.maps.MapsHelper
 import desu.inugram.helpers.media.MediaSendDebugHelper
 // #if PLUGINS
 import desu.inugram.helpers.plugins.PluginManager
+import desu.inugram.ui.settings.PluginReposActivity
 // #endif
 import desu.inugram.helpers.security.PasscodeHelper
 import desu.inugram.helpers.theme.MonetHelper
@@ -120,6 +121,9 @@ object InuHooks {
     fun handleIntent(activity: LaunchActivity, intent: Intent?): Boolean {
         return PasscodeHelper.tryHandleDeepLink(activity, intent)
             || SearchRegistry.tryHandleDeepLink(activity, intent)
+            // #if PLUGINS
+            || PluginReposActivity.tryHandleDeepLink(activity, intent)
+            // #endif
             || tryHandleFunDeepLink(activity, intent)
             || ShortcutHelper.handleAction(activity, intent)
     }

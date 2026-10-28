@@ -842,6 +842,7 @@
     <string name="InuPluginReposUpToDate">No updates available</string>
     <string name="InuPluginReposErrorLink">Enter a channel username or link</string>
     <string name="InuPluginReposErrorNotChannel">This is not a public channel</string>
+    <string name="InuPluginReposAddConfirm">Add **%1$s** as a plugin repository?</string>
     <string name="InuPluginReposErrorExists">This repository is already added</string>
     <string name="InuPluginRepoEmpty">No plugins in this repository</string>
     <string name="InuPluginRepoErrorLoad">Could not load the repository</string>

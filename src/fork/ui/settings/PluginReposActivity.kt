@@ -3,6 +3,7 @@ package desu.inugram.ui.settings
 import android.annotation.SuppressLint
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.graphics.Canvas
 import android.text.TextUtils
 import android.view.Gravity
@@ -14,6 +15,7 @@ import desu.inugram.helpers.InuUtils
 import desu.inugram.helpers.plugins.PluginManager
 import desu.inugram.helpers.plugins.PluginRepo
 import desu.inugram.helpers.plugins.PluginRepos
+import desu.inugram.helpers.security.ParanoiaHelper
 import desu.inugram.helpers.theme.M3SectionsHelper
 import desu.inugram.ui.showInputDialog
 import org.telegram.messenger.AndroidUtilities
@@ -21,6 +23,7 @@ import org.telegram.messenger.LocaleController
 import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.R
 import org.telegram.tgnet.TLRPC
+import org.telegram.ui.ActionBar.AlertDialog
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Components.AvatarDrawable
 import org.telegram.ui.Components.BackupImageView
@@ -29,6 +32,7 @@ import org.telegram.ui.Components.LayoutHelper
 import org.telegram.ui.Components.LinkSpanDrawable
 import org.telegram.ui.Components.UItem
 import org.telegram.ui.Components.UniversalAdapter
+import org.telegram.ui.LaunchActivity
 
 class PluginReposActivity : SettingsPageActivity(), NotificationCenter.NotificationCenterDelegate {
     private val rows = HashMap<String, PluginRepoRow>()
@@ -181,6 +185,36 @@ class PluginReposActivity : SettingsPageActivity(), NotificationCenter.Notificat
         private val BUTTON_ADD = InuUtils.generateId()
         private const val ITEM_BASE = 20000
         private const val REPO_BASE = 90000
+
+        /** `tg://inurepo?domain=<channel>` */
+        @JvmStatic
+        fun tryHandleDeepLink(activity: LaunchActivity, intent: Intent?): Boolean {
+            if (ParanoiaHelper.shouldHideSettings()) return false
+            val uri = intent?.data ?: return false
+            if (uri.scheme != "tg" || uri.host != "inurepo") return false
+            val fragment = activity.actionBarLayout?.lastFragment ?: return false
+            val username = uri.getQueryParameter("domain")?.let { PluginRepos.parseUsername(it) } ?: return false
+            PluginRepos.getRepos().firstOrNull { it.username.equals(username, ignoreCase = true) }?.let {
+                fragment.presentFragment(PluginRepoActivity(it))
+                return true
+            }
+            val dialog = AlertDialog.Builder(activity, fragment.resourceProvider)
+                .setTitle(LocaleController.getString(R.string.InuPluginReposAdd))
+                .setMessage(AndroidUtilities.replaceTags(LocaleController.formatString(R.string.InuPluginReposAddConfirm, "@$username")))
+                .setPositiveButton(LocaleController.getString(R.string.Add)) { _, _ ->
+                    PluginRepos.addRepo(fragment.currentAccount, username) { error ->
+                        if (error != null) {
+                            BulletinFactory.of(fragment).createErrorBulletin(error).show()
+                            return@addRepo
+                        }
+                        PluginRepos.getRepos().lastOrNull()?.let { fragment.presentFragment(PluginRepoActivity(it)) }
+                    }
+                }
+                .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
+                .create()
+            fragment.showDialog(dialog)
+            return true
+        }
     }
 }
 
