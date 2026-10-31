@@ -9,14 +9,14 @@ Subject: various leaks related to NotificationCenter delegates not being unregis
  .../telegram/ui/Cells/DialogsRequestedEmptyCell.java  |  2 +-
  .../src/main/java/org/telegram/ui/ChatActivity.java   |  7 +++++++
  .../java/org/telegram/ui/Components/Bulletin.java     | 10 ++++++++--
- .../java/org/telegram/ui/Components/EmojiView.java    |  1 +
+ .../java/org/telegram/ui/Components/EmojiView.java    |  7 +++----
  .../Reactions/ChatCustomReactionsEditActivity.java    |  1 +
  .../src/main/java/org/telegram/ui/IntroActivity.java  | 11 +++++++++--
  .../org/telegram/ui/SelectAnimatedEmojiDialog.java    |  2 +-
  .../java/org/telegram/ui/SelectChatUserSheet.java     |  2 +-
  .../main/java/org/telegram/ui/bots/BotShareSheet.java |  4 ++--
  .../java/org/telegram/ui/web/BotWebViewContainer.java | 11 +++++++++--
- 12 files changed, 49 insertions(+), 13 deletions(-)
+ 12 files changed, 51 insertions(+), 17 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/FeedWidgetService.java b/TMessagesProj/src/main/java/org/telegram/messenger/FeedWidgetService.java
 index 0000000..0000000 100644
@@ -139,7 +139,31 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.ja
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.java
-@@ -6238,6 +6238,7 @@ public class EmojiView extends FrameLayout implements
+@@ -6174,11 +6174,11 @@ public class EmojiView extends FrameLayout implements
+             .createWeakObserversGroup(this)
+             .addGlobal(NotificationCenter.emojiLoaded)
+             .add(NotificationCenter.newEmojiSuggestionsAvailable)
+-            .add(NotificationCenter.groupPackUpdated);
++            .add(NotificationCenter.groupPackUpdated)
++            .add(NotificationCenter.stickersDidLoad);
+ 
+         if (stickersGridAdapter != null) {
+             observersGroup
+-                .add(NotificationCenter.stickersDidLoad)
+                 .add(NotificationCenter.recentDocumentsDidLoad)
+                 .add(NotificationCenter.featuredStickersDidLoad)
+                 .add(NotificationCenter.groupStickersDidLoad)
+@@ -6199,9 +6199,7 @@ public class EmojiView extends FrameLayout implements
+             if (visibility != GONE) {
+                 Emoji.sortEmoji();
+                 emojiAdapter.notifyDataSetChanged();
+-                NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.stickersDidLoad);
+                 if (stickersGridAdapter != null) {
+-                    NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.recentDocumentsDidLoad);
+                     updateStickerTabs(false);
+                     reloadStickersAdapter();
+                 /*if (gifGridView != null && delegate != null) {
+@@ -6238,6 +6236,7 @@ public class EmojiView extends FrameLayout implements
              colorPickerView.dismiss();
          }
          ContentPreviewViewer.getInstance().clearDelegate(contentPreviewViewerDelegate);
