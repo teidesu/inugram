@@ -520,7 +520,7 @@ class AboutActivity : SettingsPageActivity(), NotificationCenter.NotificationCen
         }
         heapUsageText = usage
         row.addView(usage, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        row.addView(buildLogsIconButton(ctx, R.drawable.msg_calls_minimize, R.string.InuLogsMakeHeapDump) {
+        row.addView(buildLogsIconButton(ctx, R.drawable.msg_calls_minimize, R.string.InuLogsRunGc) {
             val rt = Runtime.getRuntime()
             rt.gc()
             BulletinFactory.of(this).createErrorBulletin("Runtime GC finished").show()

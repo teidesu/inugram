@@ -7,18 +7,22 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.provider.DocumentsContract
 import androidx.core.app.NotificationCompat
 import desu.inugram.ui.CrashReportBottomSheet
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.BuildConfig
 import org.telegram.messenger.BuildVars
+import org.telegram.messenger.FileLog
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.R
+import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.LaunchActivity
 import android.os.Debug
 import java.io.File
+import java.io.IOException
 import java.io.PrintWriter
 import java.io.RandomAccessFile
 import java.io.StringWriter
@@ -27,6 +31,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 object CrashReporter {
     private const val LOG_FILE = "last_crash.log"
     private const val HEAP_DUMP_FILE = "last_heap_dump.hprof"
+    private const val TMP_HEAP_DUMP_PREFIX = "inugram-heap-dump-"
     private const val TAIL_BYTES = 200 * 1024L
     private const val RESTART_LOOP_GUARD_MS = 30_000L
     private const val RESTART_CHANNEL_ID = "inu_crash_restart"
@@ -114,7 +119,9 @@ object CrashReporter {
     }
 
     fun dumpAndSaveHeap(activity: LaunchActivity) {
-        val tmp = File(AndroidUtilities.getCacheDir().apply { mkdirs() }, "inugram-heap-dump.hprof")
+        val dir = AndroidUtilities.getCacheDir().apply { mkdirs() }
+        dir.listFiles { f -> f.name.startsWith(TMP_HEAP_DUMP_PREFIX) }?.forEach { it.delete() }
+        val tmp = File.createTempFile(TMP_HEAP_DUMP_PREFIX, ".hprof", dir)
         Debug.dumpHprofData(tmp.absolutePath)
         saveHprofFile(activity, tmp) { tmp.delete() }
     }
@@ -134,12 +141,25 @@ object CrashReporter {
                 Thread {
                     var ok = false
                     try {
-                        activity.contentResolver.openOutputStream(uri)?.use { out ->
-                            src.inputStream().use { inp -> inp.copyTo(out) }
-                        }
+                        val out = activity.contentResolver.openOutputStream(uri)
+                            ?: throw IOException("failed to open $uri")
+                        out.use { src.inputStream().use { inp -> inp.copyTo(it) } }
                         ok = true
-                    } catch (_: Throwable) {}
-                    AndroidUtilities.runOnUIThread { onDone(ok) }
+                    } catch (e: Throwable) {
+                        FileLog.e(e)
+                        try {
+                            DocumentsContract.deleteDocument(activity.contentResolver, uri)
+                        } catch (_: Throwable) {}
+                    }
+                    AndroidUtilities.runOnUIThread {
+                        val bulletins = BulletinFactory.global()
+                        if (ok) {
+                            bulletins.createSimpleBulletin(R.raw.done, LocaleController.getString(R.string.InuLogsHeapDumpSaved)).show()
+                        } else {
+                            bulletins.createErrorBulletin(LocaleController.getString(R.string.InuLogsHeapDumpSaveError)).show()
+                        }
+                        onDone(ok)
+                    }
                 }.start()
             }
         }

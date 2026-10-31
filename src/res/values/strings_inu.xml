@@ -788,8 +788,11 @@
     <string name="InuLogsCopySystemInfo">Copy system info</string>
     <string name="InuLogsSystemInfoCopied">System info copied to clipboard</string>
     <string name="InuLogsHeapUsage">Heap: %1$s / %2$s</string>
+    <string name="InuLogsRunGc">Run garbage collection</string>
     <string name="InuLogsMakeHeapDump">Make heap dump</string>
     <string name="InuLogsMakingHeapDump">Making a heap dump…</string>
+    <string name="InuLogsHeapDumpSaved">Heap dump saved</string>
+    <string name="InuLogsHeapDumpSaveError">Failed to save heap dump</string>
     <string name="InuLogsHeapDumpWarning">**NEVER** share the resulting .hprof file with anyone — it is a snapshot of the app\'s memory and **contains sensitive information** (messages, tokens, etc.).\n\nInspect it **ONLY** by yourself.\n\nThe app will freeze for a while.</string>
 
     <string name="InuDeleteOwnMessages">Delete my messages</string>
