@@ -53,8 +53,13 @@ pub(crate) fn arm(limit_ms: u64) -> Deadline {
 impl Deadline {
   #[cfg(test)]
   pub fn tripped(&self) -> bool {
-    TRIPPED.with(|t| t.get())
+    is_tripped()
   }
+}
+
+/// whether the innermost armed deadline has stopped JS; the handler already counted the strike
+pub(crate) fn is_tripped() -> bool {
+  TRIPPED.with(|t| t.get())
 }
 
 impl Drop for Deadline {

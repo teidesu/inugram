@@ -15,9 +15,9 @@ use crate::utils::qjs::{qjs_is_regexp, qjs_load_prelude, resolve_and_then};
 
 const SEND_PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/send_message.qbc"));
 const SEND_GRANT: &str = "interceptSendMessage";
-const MAX_SAFE_INTEGER: f64 = 9_007_199_254_740_991.0;
-const PEER_TYPES: &[&str] = &["user", "group", "broadcast"];
-const MEDIA_KINDS: &[&str] = &[
+pub(crate) const MAX_SAFE_INTEGER: f64 = 9_007_199_254_740_991.0;
+pub(crate) const PEER_TYPES: &[&str] = &["user", "group", "broadcast"];
+pub(crate) const MEDIA_KINDS: &[&str] = &[
   "photo",
   "video",
   "roundVideo",
@@ -219,7 +219,7 @@ fn read_filter<'js>(ctx: &Ctx<'js>, filter: &Value<'js>) -> JsResult<String> {
     regex.set("flags", flags)?;
     encoded.set("text", regex)?;
   }
-  let peers = read_one_or_many(ctx, filter, "peer")?;
+  let peers = read_one_or_many(ctx, SEND_GRANT, filter, "peer")?;
   if !peers.is_empty() {
     let (mut ids, mut types) = (Vec::new(), Vec::new());
     for peer in peers {
@@ -244,7 +244,7 @@ fn read_filter<'js>(ctx: &Ctx<'js>, filter: &Value<'js>) -> JsResult<String> {
   if let Some(media) = media.as_bool() {
     encoded.set("media", media)?;
   } else {
-    let kinds = read_one_or_many(ctx, filter, "media")?
+    let kinds = read_one_or_many(ctx, SEND_GRANT, filter, "media")?
       .iter()
       .map(|kind| read_name(kind, MEDIA_KINDS))
       .collect::<Option<Vec<_>>>()
@@ -266,7 +266,12 @@ fn read_filter<'js>(ctx: &Ctx<'js>, filter: &Value<'js>) -> JsResult<String> {
 }
 
 /// an empty array is refused, so an empty result means the field is absent
-fn read_one_or_many<'js>(ctx: &Ctx<'js>, filter: &Object<'js>, key: &str) -> JsResult<Vec<Value<'js>>> {
+pub(crate) fn read_one_or_many<'js>(
+  ctx: &Ctx<'js>,
+  what: &str,
+  filter: &Object<'js>,
+  key: &str,
+) -> JsResult<Vec<Value<'js>>> {
   let value: Value = filter.get(key)?;
   if value.is_undefined() {
     return Ok(Vec::new());
@@ -276,11 +281,11 @@ fn read_one_or_many<'js>(ctx: &Ctx<'js>, filter: &Object<'js>, key: &str) -> JsR
   };
   let values = values.iter::<Value>().collect::<JsResult<Vec<_>>>()?;
   if values.is_empty() {
-    return Err(Exception::throw_type(ctx, &format!("interceptSendMessage: filter.{key} must not be empty")));
+    return Err(Exception::throw_type(ctx, &format!("{what}: filter.{key} must not be empty")));
   }
   Ok(values)
 }
 
-fn read_name(value: &Value<'_>, names: &[&str]) -> Option<String> {
+pub(crate) fn read_name(value: &Value<'_>, names: &[&str]) -> Option<String> {
   value.as_string()?.to_string().ok().filter(|name| names.contains(&name.as_str()))
 }

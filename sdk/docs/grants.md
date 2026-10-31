@@ -29,7 +29,7 @@ The catalogue (`grants.json`) says which kind of scope each grant takes:
 
 | Kind | Grants | A scope is | Matching |
 | --- | --- | --- | --- |
-| none | `clipboard.*`, `openUrl`, `interceptSendMessage`, `takeout`, `unsafe.*`, ... | n/a | |
+| none | `clipboard.*`, `openUrl`, `interceptSendMessage`, `filterMessages`, `takeout`, `unsafe.*`, ... | n/a | |
 | list | `account.read`, `account.write` | pre-defined list of scopes | exact |
 | domain | `fetch` | a host name | the host or any subdomain of it, case-insensitive |
 | size | `fs` | a quota such as `200mb` (`kb`, `mb`, `gb`) | the default is 50 MB |

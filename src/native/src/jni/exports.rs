@@ -1,8 +1,8 @@
-use jni::objects::{JByteArray, JClass, JObject, JObjectArray, JString, JValue};
+use jni::objects::{JByteArray, JClass, JIntArray, JObject, JObjectArray, JString, JValue};
 use jni::refs::IntoAuto;
 use jni::signature::{MethodSignature, RuntimeMethodSignature};
 use jni::strings::JNIString;
-use jni::sys::{jboolean, jint, jlong, jobject, jstring};
+use jni::sys::{jboolean, jint, jintArray, jlong, jobject, jstring};
 use jni::{Env, EnvUnowned};
 use rquickjs::context::EvalOptions;
 use rquickjs::{Coerced, Context, Ctx, Persistent, Result as JsResult, Runtime, Value};
@@ -18,8 +18,8 @@ use super::env::{
 use super::eval::{evaluate_inspected, EvalReply};
 use super::log::{install_console, make_log, Inspect};
 use super::{
-  engine_jvm_refs, enter_engine, insert_engine, remove_engine, stop_engine_callbacks, try_enter_engine, CallerEntry,
-  Engine, EntryError, CALLER_LEASE_WAIT,
+  engine_jvm_refs, engine_message_filters, enter_engine, insert_engine, remove_engine, stop_engine_callbacks,
+  try_enter_engine, CallerEntry, Engine, EntryError, CALLER_LEASE_WAIT,
 };
 use crate::api::canvas::{install_canvas, CanvasHost};
 use crate::api::error::{describe_js_error, install_plugin_error, install_rejection_tracker};
@@ -35,6 +35,7 @@ use crate::api::platform::notifications::{install_notifications, NotificationHos
 use crate::api::platform::open_url::install_open_url;
 use crate::api::platform::xposed;
 use crate::api::telegram::account::{install_account, AccountHost};
+use crate::api::telegram::filters::{install_filters, FilterHost, Probe, FILTER_DEADLINE_MS};
 use crate::api::telegram::reads::{install_reads, ReadsHost};
 use crate::api::telegram::rpc::RpcHost;
 use crate::api::telegram::writes::{install_writes, WritesDeps, WritesHost};
@@ -297,6 +298,18 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
       let translation = install_part(&ctx, "inu.registerTranslationProvider", log.as_ref(), |ctx, globals| {
         install_translation(&ctx, translation_host, lifecycle.clone(), log.clone(), &globals)
       })?;
+      let filter_host: Rc<dyn FilterHost> = bridge.clone();
+      let filters = install_part(&ctx, "inu.filterMessages", log.as_ref(), |ctx, globals| {
+        install_filters(
+          &ctx,
+          filter_host,
+          grants.clone(),
+          lifecycle.clone(),
+          Some(account.clone()),
+          log.clone(),
+          &globals,
+        )
+      })?;
       // last onto the account prototype, since this installs before the reads and writes that build it
       install_part(&ctx, "Account.suppressNotifications", log.as_ref(), |ctx, _| {
         notifications.install_account_suppress(&ctx, &account)
@@ -316,6 +329,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
         history,
         actions,
         translation,
+        filters,
         account,
         reads,
         writes,
@@ -1159,6 +1173,70 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchR
     let method = jstring_to_string(env, &method);
     let request_wire = jstring_to_string(env, &request_wire);
     engine.rpc.dispatch(&engine.ctx, callback_id as u32, dispatch_id, &method, account_id, &request_wire);
+  })
+}
+
+/// Without the engine lease: the app asks about every message it builds, on whichever thread builds it
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeMatchMessageFilters<'local>(
+  mut env: EnvUnowned<'local>,
+  _this: JObject<'local>,
+  ptr: jlong,
+  text: JString<'local>,
+  entities_json: JString<'local>,
+  buttons: JString<'local>,
+  sender: jlong,
+  peer: jlong,
+  peer_type: jint,
+  media: JString<'local>,
+  forward: jboolean,
+) -> jintArray {
+  in_env(&mut env, std::ptr::null_mut(), |env| {
+    let Some(filters) = engine_message_filters(ptr) else {
+      return std::ptr::null_mut();
+    };
+    let (text, entities_json) = (jstring_to_string(env, &text), jstring_to_string(env, &entities_json));
+    let (buttons, media) = (jstring_to_string(env, &buttons), jstring_to_string(env, &media));
+    let matched = filters.matches(&Probe {
+      text: &text,
+      entities_json: &entities_json,
+      buttons: &buttons,
+      sender,
+      peer,
+      peer_type,
+      media: &media,
+      forward,
+    });
+    let Ok(array) = env.new_int_array(matched.len()) else {
+      return std::ptr::null_mut();
+    };
+    match array.set_region(env, 0, &matched) {
+      Ok(()) => array.into_raw(),
+      Err(_) => std::ptr::null_mut(),
+    }
+  })
+}
+
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeFilterMessage<'local>(
+  mut env: EnvUnowned<'local>,
+  _this: JObject<'local>,
+  ptr: jlong,
+  callback_ids: JIntArray<'local>,
+  account_id: jint,
+  message_json: JString<'local>,
+) -> jstring {
+  with_engine_env(&mut env, ptr, std::ptr::null_mut(), |env, engine| {
+    let mut ids = vec![0; callback_ids.len(env).unwrap_or_default()];
+    if callback_ids.get_region(env, 0, &mut ids).is_err() {
+      return std::ptr::null_mut();
+    }
+    let message_json = jstring_to_string(env, &message_json);
+    let verdict = {
+      let _deadline = arm(FILTER_DEADLINE_MS);
+      engine.filters.dispatch(&engine.ctx, &ids, account_id, &message_json)
+    };
+    new_jstring_raw(env, verdict)
   })
 }
 

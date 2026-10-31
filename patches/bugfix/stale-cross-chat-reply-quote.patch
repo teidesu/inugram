@@ -19,7 +19,7 @@ index 0000000..0000000 100644
                      chatActivity.forbidForwardingWithDismiss = false;
                      chatActivity.messagePreviewParams = new MessagePreviewParams(chatActivity.currentEncryptedChat != null, chatActivity.isPeerNoForwards(), ChatObject.isMonoForum(chatActivity.currentChat));
                      chatActivity.messagePreviewParams.updateReply(chatActivity.replyingMessageObject, chatActivity.getGroup(messageObject.getGroupId()), chatActivity.getDialogId(), chatActivity.replyingQuote);
-@@ -5155,6 +5156,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -5156,6 +5157,8 @@ public class ChatActivity extends BaseFragment implements
                                  }
                              }
                              replyingMessageObject = message;
@@ -28,7 +28,7 @@ index 0000000..0000000 100644
                              Bundle args = new Bundle();
                              args.putBoolean("onlySelect", true);
                              args.putInt("dialogsType", DialogsActivity.DIALOGS_TYPE_FORWARD);
-@@ -30539,7 +30542,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -30538,7 +30541,7 @@ public class ChatActivity extends BaseFragment implements
          CharSequence draftMessage = null;
          MessageObject replyMessage = null;
          boolean searchWebpage = true;
@@ -37,7 +37,7 @@ index 0000000..0000000 100644
              replyMessage = replyingMessageObject;
              draftMessage = AndroidUtilities.getTrimmedString(chatActivityEnterView.getDraftMessage());
              searchWebpage = chatActivityEnterView.isMessageWebPageSearchEnabled();
-@@ -34157,6 +34160,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -34156,6 +34159,7 @@ public class ChatActivity extends BaseFragment implements
                      }
                      replyingMessageObject = messageObject;
                      replyingQuote = null;

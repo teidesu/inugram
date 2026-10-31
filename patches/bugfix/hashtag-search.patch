@@ -54,7 +54,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -12320,7 +12320,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -12321,7 +12321,7 @@ public class ChatActivity extends BaseFragment implements
          }
  
          final float paddingBottom;
@@ -63,7 +63,7 @@ index 0000000..0000000 100644
              paddingBottom = AndroidUtilities.navigationBarHeight;
          } else {
              paddingBottom = blurredViewBottomOffset + dp(NonIslandHelper.chatElements() ? 3 : 9 + 7)
-@@ -46270,7 +46270,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -46271,7 +46271,7 @@ public class ChatActivity extends BaseFragment implements
                  removeTag.setColors(Theme.getColor(Theme.key_color_red), Theme.getColor(Theme.key_color_red));
                  popupLayout.addView(removeTag);
                  scrimPopupContainerLayout.addView(popupLayout);
@@ -72,7 +72,7 @@ index 0000000..0000000 100644
                  final boolean canDeleteReactions = ChatObject.canUserDoAdminAction(currentChat, ChatObject.ACTION_DELETE_MESSAGES)
                      && (reaction.count > 1 || !reaction.chosen);
  
-@@ -47414,7 +47414,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -47415,7 +47415,7 @@ public class ChatActivity extends BaseFragment implements
              return;
          }
  
@@ -81,7 +81,7 @@ index 0000000..0000000 100644
          fadeHeight += dp(7 - 6);
          fadeHeight += getTopPanelHeightWithPadding(dp(7));
          if (topicsTabs != null) {
-@@ -47433,7 +47433,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -47434,7 +47434,7 @@ public class ChatActivity extends BaseFragment implements
              parentChatActivity.checkUi_messagesSearchListPadding();
          }
  

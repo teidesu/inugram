@@ -212,6 +212,28 @@ open class QuickJs {
 
     open fun abandonTranslation(dispatchId: Long, timedOut: Boolean) = ifLive { nativeAbandonTranslation(it, dispatchId, timedOut) }
 
+    /**
+     * Any thread, without the engine lease. `[matched, ...callback ids]`, `matched` being 0, 1 for a
+     * spoiler or 2 for a hide; null once the engine has closed
+     */
+    open fun matchMessageFilters(
+        text: String,
+        entitiesJson: String,
+        buttons: String,
+        sender: Long,
+        peer: Long,
+        peerType: Int,
+        media: String,
+        forward: Boolean,
+    ): IntArray? = ifLiveOr(null) { nativeMatchMessageFilters(it, text, entitiesJson, buttons, sender, peer, peerType, media, forward) }
+
+    /**
+     * Runs [callbackIds] over the message, on the engine thread. `H` hides; otherwise `S` (spoiler) or
+     * `V` and the first rewrite's json. Empty when the engine has closed
+     */
+    open fun filterMessage(callbackIds: IntArray, accountId: Int, messageJson: String): String =
+        ifLiveOr("") { nativeFilterMessage(it, callbackIds, accountId, messageJson) }
+
     /** the host owns the diff ([desu.inugram.core.plugins.ScreenStack]) */
     fun dispatchScreenChange(changeJson: String, stackJson: String) = requireLive { nativeDispatchScreenChange(it, changeJson, stackJson) }
 
@@ -343,6 +365,18 @@ open class QuickJs {
     private external fun nativeDispatchTranslation(ptr: Long, token: Int, dispatchId: Long, requestJson: String)
     private external fun nativeAbandonTranslation(ptr: Long, dispatchId: Long, timedOut: Boolean)
     private external fun nativeDispatchScreenChange(ptr: Long, changeJson: String, stackJson: String)
+    private external fun nativeMatchMessageFilters(
+        ptr: Long,
+        text: String,
+        entitiesJson: String,
+        buttons: String,
+        sender: Long,
+        peer: Long,
+        peerType: Int,
+        media: String,
+        forward: Boolean,
+    ): IntArray?
+    private external fun nativeFilterMessage(ptr: Long, callbackIds: IntArray, accountId: Int, messageJson: String): String
     private external fun nativeDispatchNotification(ptr: Long, callbackId: Int, name: String, accountId: Int, args: Array<String>)
     private external fun nativeWriteProgress(ptr: Long, requestId: Long, loaded: Long, total: Long)
     private external fun nativeDispatchRpc(ptr: Long, callbackId: Int, dispatchId: Long, method: String, accountId: Int, requestWire: String)

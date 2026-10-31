@@ -20,6 +20,7 @@ internal val KNOWN_GRANTS: Map<String, GrantPresentation> = mapOf(
     "onUpdate" to GrantPresentation(R.string.InuPluginGrantOnUpdate, R.drawable.msg_message),
     "interceptUpdate" to GrantPresentation(R.string.InuPluginGrantInterceptUpdate, R.drawable.msg_download),
     "interceptSendMessage" to GrantPresentation(R.string.InuPluginGrantInterceptSend, R.drawable.msg_edit),
+    "filterMessages" to GrantPresentation(R.string.InuPluginGrantFilterMessages, R.drawable.menu_hide_gift),
     "invokeRpc" to GrantPresentation(R.string.InuPluginGrantInvokeRpc, R.drawable.msg_bot),
     "interceptRpc" to GrantPresentation(R.string.InuPluginGrantInterceptRpc, R.drawable.msg_log),
     "takeout" to GrantPresentation(R.string.InuPluginGrantTakeout, R.drawable.msg_download),

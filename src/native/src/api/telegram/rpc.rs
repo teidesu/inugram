@@ -1184,7 +1184,7 @@ impl Dispose for RpcState {
 }
 
 #[path = "sends.rs"]
-mod sends;
+pub(crate) mod sends;
 
 #[cfg(test)]
 #[path = "rpc_tests.rs"]

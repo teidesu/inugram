@@ -9,6 +9,7 @@ Currently there are three interceptor methods:
 - `inu.interceptUpdate`: intercept updates sent by the server before they're applied by the app
 
 Avoid using interceptors to listen for events, as they slightly slow down the app.
+To change only how messages look in chats, use [message filters](telegram.md#message-filters) instead of intercepting and dropping an update.
 
 ## Quirks to keep in mind
 

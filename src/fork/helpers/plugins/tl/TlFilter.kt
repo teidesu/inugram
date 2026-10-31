@@ -87,6 +87,13 @@ object TlFilter {
         return !out && peerUserId != null && isServiceSender(peerUserId)
     }
 
+    fun isServiceMessage(message: TLRPC.Message): Boolean = isServiceMessage(
+        fromUserId = findPeerUserId(message.from_id),
+        peerUserId = findPeerUserId(message.peer_id),
+        forwardedFromUserId = findPeerUserId(message.fwd_from?.from_id),
+        out = message.out,
+    )
+
     fun canRedactField(cls: Class<*>, key: String): Boolean =
         key == REDACTED_MESSAGE_FIELD &&
             (TLRPC.Message::class.java.isAssignableFrom(cls) || TLRPC.Updates::class.java.isAssignableFrom(cls))
@@ -94,12 +101,7 @@ object TlFilter {
     fun filterFieldValue(target: TLObject, key: String, value: Any?): Any? {
         if (key != REDACTED_MESSAGE_FIELD || value !is String) return value
         val service = when (target) {
-            is TLRPC.Message -> isServiceMessage(
-                fromUserId = findPeerUserId(target.from_id),
-                peerUserId = findPeerUserId(target.peer_id),
-                forwardedFromUserId = findPeerUserId(target.fwd_from?.from_id),
-                out = target.out,
-            )
+            is TLRPC.Message -> isServiceMessage(target)
             // `updateShortMessage` is how a 1:1 message actually arrives, with its own `message` field rather than
             // a `Message`. The fan-out normalizes it first, but TL views can still show the real object.
             is TLRPC.Updates -> isServiceMessage(

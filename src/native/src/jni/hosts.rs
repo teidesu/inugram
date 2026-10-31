@@ -9,6 +9,7 @@ use crate::api::platform::notifications::NotificationHost;
 use crate::api::platform::open_url::OpenUrlHost;
 use crate::api::platform::xposed::XposedHost;
 use crate::api::telegram::account::AccountHost;
+use crate::api::telegram::filters::FilterHost;
 use crate::api::telegram::reads::ReadsHost;
 use crate::api::telegram::rpc::RpcHost;
 use crate::api::telegram::writes::WritesHost;
@@ -136,6 +137,12 @@ impl TranslationHost for JniBridge {
 
   fn translation_result(&self, dispatch_id: i64, wire: &str) {
     self.call_void("translate", self.on_translation_result, &[Arg::Long(dispatch_id), Arg::Str(wire)]);
+  }
+}
+
+impl FilterHost for JniBridge {
+  fn message_filters_changed(&self, needs: i32) {
+    self.call_void("filterMessages", self.on_message_filters_changed, &[Arg::Int(needs)]);
   }
 }
 

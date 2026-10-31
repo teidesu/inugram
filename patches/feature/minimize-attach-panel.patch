@@ -13,7 +13,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -13786,8 +13786,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -13787,8 +13787,11 @@ public class ChatActivity extends BaseFragment implements
              chatAttachAlert.setMaxSelectedPhotos(-1, true);
          }
          chatAttachAlert.enableDefaultMode();
@@ -27,7 +27,7 @@ index 0000000..0000000 100644
          chatAttachAlert.parentThemeDelegate = themeDelegate;
          showDialog(chatAttachAlert);
      }
-@@ -30366,6 +30369,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -30365,6 +30368,7 @@ public class ChatActivity extends BaseFragment implements
      public void onResume() {
          super.onResume();
          checkShowBlur(false);

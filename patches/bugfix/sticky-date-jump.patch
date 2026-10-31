@@ -36,7 +36,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -7189,7 +7189,6 @@ public class ChatActivity extends BaseFragment implements
+@@ -7190,7 +7190,6 @@ public class ChatActivity extends BaseFragment implements
              protected void onDraw(Canvas canvas) {
                  if (scrimBlurBitmap != null) return;
                  float clipTop = chatListView.getY() + chatListViewPaddingTop - getY();
@@ -44,7 +44,7 @@ index 0000000..0000000 100644
                  if (clipTop > 0) {
                      if (clipTop < getMeasuredHeight()) {
                          canvas.save();
-@@ -12139,7 +12138,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -12140,7 +12139,7 @@ public class ChatActivity extends BaseFragment implements
          }
  
          if (floatingDateView != null) {
@@ -53,7 +53,7 @@ index 0000000..0000000 100644
          }
          updateFloatingTopicView();
  
-@@ -16910,7 +16909,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -16911,7 +16910,7 @@ public class ChatActivity extends BaseFragment implements
          }
          if (floatingDateView != null) {
              floatingDateView.setTranslationX(getSideMenuWidth() / 2f);

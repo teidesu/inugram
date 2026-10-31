@@ -20,7 +20,7 @@ index 0000000..0000000 100644
  import org.telegram.ui.community.CommunityUtils;
  import org.telegram.ui.web.BotWebViewContainer;
  import org.telegram.utils.code.highlight.CodeHighlighting;
-@@ -6478,6 +6479,15 @@ public class MessageObject {
+@@ -6486,6 +6487,15 @@ public class MessageObject {
                      return out;
                  }
              }

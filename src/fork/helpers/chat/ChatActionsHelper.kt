@@ -83,6 +83,7 @@ object ChatActionsHelper {
     const val ACTION_PERMISSIONS = 519
     const val ACTION_INVITE_LINKS = 520
     const val ACTION_PLUGIN_ACTIONS = 521
+    const val ACTION_SHOW_HIDDEN_MESSAGES = 522
 
     // selection action mode
     const val ACTION_SELECT_RANGE = 1500
@@ -131,6 +132,11 @@ object ChatActionsHelper {
                 LocaleController.getString(R.string.InuShowPinnedPanel),
             )
             headerItem.setSubItemShown(ACTION_SHOW_PINNED_PANEL, false)
+            revealItems[activity] = headerItem.lazilyAddSubItem(
+                ACTION_SHOW_HIDDEN_MESSAGES, R.drawable.msg_message,
+                LocaleController.getString(R.string.InuShowFilteredMessages),
+            )
+            updateRevealItem(activity)
         }
         if (canViewAdminLog(activity.currentChat)) {
             headerItem.lazilyAddSubItem(
@@ -210,8 +216,19 @@ object ChatActionsHelper {
     // #endif
 
     private val selectionMenus = WeakHashMap<ChatActivity, SelectionMenu>()
+    private val revealItems = WeakHashMap<ChatActivity, ActionBarMenuItem.Item>()
+
+    @JvmStatic
+    fun updateRevealItem(activity: ChatActivity) {
+        val item = revealItems[activity] ?: return
+        val revealed = BlockedMessagesHelper.isRevealed(activity.currentAccount, activity.dialogId)
+        item.setText(LocaleController.getString(if (revealed) R.string.InuHideFilteredMessages else R.string.InuShowFilteredMessages))
+        item.setIcon(if (revealed) R.drawable.menu_hide_gift else R.drawable.msg_message)
+        activity.headerItem?.setSubItemShown(ACTION_SHOW_HIDDEN_MESSAGES, revealed || BlockedMessagesHelper.hasFiltered(activity.messages))
+    }
 
     fun onFragmentDestroy(activity: ChatActivity) {
+        if (revealItems.remove(activity) != null) BlockedMessagesHelper.setRevealed(activity.currentAccount, activity.dialogId, false)
         // #if PLUGINS
         pluginMenus.remove(activity)
         val state = selectionMenus.remove(activity)?.plugins ?: return
@@ -471,6 +488,10 @@ object ChatActionsHelper {
                 }
             }
 
+            ACTION_SHOW_HIDDEN_MESSAGES -> BlockedMessagesHelper.setRevealed(
+                activity.currentAccount, activity.dialogId,
+                !BlockedMessagesHelper.isRevealed(activity.currentAccount, activity.dialogId),
+            )
             ACTION_PINNED_UNPIN_ALL -> activity.bottomOverlayChatText?.callOnClick()
             ACTION_OPEN_IN_DISCUSSION -> openInDiscussionGroup(activity)
 

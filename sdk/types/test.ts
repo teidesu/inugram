@@ -219,6 +219,12 @@ inu.interceptSendMessage({ stage: 'uploaded' }, ({ message }) => {
   return ids.length > 10 ? 'drop' : 'send'
 })
 
+inu.filterMessages([{ html: /erid=/i, peer: 'broadcast' }, { buttons: /erid=/i }], 'hide')
+inu.filterMessages({ sender: [1, 2], media: ['photo', 'video'], forward: false }, (message, account) => {
+  if (message.senderId === account.userId) return undefined
+  return message.text.length > 4000 ? { rewrite: { text: message.text.slice(0, 200), entities: [] } } : 'spoiler'
+})
+
 inu.interceptUpdate(['updateNewMessage', 'updateNewChannelMessage'], ({ update }) => {
   const message = new inu.Message(update.message)
   if (message.text.includes('spoilers ahead')) return 'drop'

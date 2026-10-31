@@ -4,27 +4,23 @@ Date: Mon, 31 Aug 2026 04:04:45 +0400
 Subject: temporary patch with extra debug logs for various notifications-related issues
 
 ---
- .../messenger/NotificationsController.java        | 15 ++++++++++++---
- .../messenger/PushListenerController.java         |  2 ++
- 2 files changed, 14 insertions(+), 3 deletions(-)
+ .../telegram/messenger/NotificationsController.java   | 11 +++++++++--
+ .../telegram/messenger/PushListenerController.java    |  2 ++
+ 2 files changed, 11 insertions(+), 2 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java b/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
-@@ -1202,7 +1202,10 @@ public class NotificationsController extends BaseController implements Notificat
- 
+@@ -1207,6 +1207,7 @@ public class NotificationsController extends BaseController implements Notificat
              for (int a = 0; a < messageObjects.size(); a++) {
                  MessageObject messageObject = messageObjects.get(a);
--                if (desu.inugram.helpers.NotificationsHelper.shouldSuppressMessageNotification(messageObject)) continue;
-+                if (desu.inugram.helpers.NotificationsHelper.shouldSuppressMessageNotification(messageObject)) {
+                 if (desu.inugram.helpers.NotificationsHelper.shouldSuppressMessageNotification(messageObject)) {
 +                    desu.inugram.helpers.NotificationDebugHelper.onPushMessageSkipped(messageObject.getDialogId(), messageObject.getId(), "fork suppression");
-+                    continue;
-+                }
-                 if (messageObject.messageOwner != null && (messageObject.isImportedForward() ||
-                         messageObject.messageOwner.action instanceof TLRPC.TL_messageActionSetMessagesTTL ||
-                         messageObject.messageOwner.silent && (messageObject.messageOwner.action instanceof TLRPC.TL_messageActionContactSignUp || messageObject.messageOwner.action instanceof TLRPC.TL_messageActionUserJoined)) ||
-@@ -5366,6 +5369,7 @@ public class NotificationsController extends BaseController implements Notificat
+                     desu.inugram.helpers.NotificationsHelper.removeFromNotifications(messageObject);
+                     continue;
+                 }
+@@ -5376,6 +5377,7 @@ public class NotificationsController extends BaseController implements Notificat
                  }
              }
  
@@ -32,7 +28,7 @@ index 0000000..0000000 100644
              if (chat != null) {
                  Person.Builder personBuilder = new Person.Builder().setName(name);
                  if (avatarFile != null && avatarFile.exists() && Build.VERSION.SDK_INT >= 28) {
-@@ -5574,6 +5578,9 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -5584,6 +5586,9 @@ public class NotificationsController extends BaseController implements Notificat
  
                      if (person == null || !TextUtils.equals(person.getName(), personName)) {
                          Person.Builder personBuilder = new Person.Builder().setName(personName);
@@ -42,7 +38,7 @@ index 0000000..0000000 100644
                          if (preview[0] && !DialogObject.isEncryptedDialog(dialogId) && Build.VERSION.SDK_INT >= 28) {
                              File avatar = null;
                              if (DialogObject.isUserDialog(dialogId) || isChannel) {
-@@ -5590,6 +5597,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -5600,6 +5605,7 @@ public class NotificationsController extends BaseController implements Notificat
                                  if (sender != null && sender.photo != null && sender.photo.photo_small != null && sender.photo.photo_small.volume_id != 0 && sender.photo.photo_small.local_id != 0) {
                                      avatar = getFileLoader().getPathToAttach(sender.photo.photo_small, true);
                                  }
@@ -50,7 +46,7 @@ index 0000000..0000000 100644
                              }
                              if (avatar == null && dialogId == UserObject.VERIFY && messageObject.getForwardedFromId() != null) {
                                  if (uid >= 0) {
-@@ -6003,6 +6011,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -6013,6 +6019,7 @@ public class NotificationsController extends BaseController implements Notificat
              }
              FileLog.d("showExtraNotifications: holders["+a+"].call()");
              holder.call();
@@ -58,7 +54,7 @@ index 0000000..0000000 100644
              if (!unsupportedNotificationShortcut() && !ids.isEmpty()) {
                  ShortcutManagerCompat.removeDynamicShortcuts(ApplicationLoader.applicationContext, ids);
              }
-@@ -6100,8 +6109,8 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -6110,8 +6117,8 @@ public class NotificationsController extends BaseController implements Notificat
                  });
                  IconCompat icon = IconCompat.createWithBitmap(bitmap);
                  personBuilder.setIcon(icon);

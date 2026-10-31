@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -4869,6 +4869,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -4870,6 +4870,9 @@ public class ChatActivity extends BaseFragment implements
                  if (quickShareSelectorOverlay != null && quickShareSelectorOverlay.isActive()) {
                      return false;
                  }
@@ -21,7 +21,7 @@ index 0000000..0000000 100644
                  boolean result = super.onInterceptTouchEvent(e);
                  if (actionBar.isActionModeShowed() || isReport()) {
                      return result;
-@@ -5199,6 +5202,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -5200,6 +5203,9 @@ public class ChatActivity extends BaseFragment implements
  
              @Override
              public boolean onTouchEvent(MotionEvent e) {
@@ -31,7 +31,7 @@ index 0000000..0000000 100644
                  textSelectionHelper.checkSelectionCancel(e);
                  if (e.getAction() == MotionEvent.ACTION_DOWN) {
                      scrollByTouch = true;
-@@ -37354,7 +37360,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -37353,7 +37359,7 @@ public class ChatActivity extends BaseFragment implements
          if (animatorSearchResultAsListVisibility.getValue()) {
              return false;
          }
@@ -40,7 +40,7 @@ index 0000000..0000000 100644
              && (quickShareSelectorOverlay == null || !quickShareSelectorOverlay.isActive());
      }
  
-@@ -37366,7 +37372,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -37365,7 +37371,7 @@ public class ChatActivity extends BaseFragment implements
          if (animatorSearchResultAsListVisibility.getValue()) {
              return false;
          }

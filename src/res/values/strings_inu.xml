@@ -580,6 +580,8 @@
     <string name="InuEventLogBanConfirm">Ban **%1$s**?</string>
     <string name="InuEventLogShowDiff">Show as diff</string>
     <string name="InuShowPinnedPanel">Show pinned messages</string>
+    <string name="InuShowFilteredMessages">Show hidden messages</string>
+    <string name="InuHideFilteredMessages">Hide hidden messages</string>
     <string name="InuAppIconStock">Stock</string>
     <string name="InuAppIconLicenseInugram">Placeholder icon, feel free to contribute a better one</string>
     <string name="InuAppIconLicenseTelegram">Icon by **Telegram**. All rights reserved.</string>
@@ -885,6 +887,9 @@
     <string name="InuPluginGrantOnUpdate">Watch updates</string>
     <string name="InuPluginGrantInterceptUpdate">Intercept updates</string>
     <string name="InuPluginGrantInterceptSend">Intercept outgoing messages</string>
+    <string name="InuPluginRewrittenBy">Rewritten by %1$s.</string>
+    <string name="InuPluginRewriteRevert">Revert ></string>
+    <string name="InuPluginGrantFilterMessages">Hide or change messages in chats</string>
     <string name="InuPluginGrantInterceptRpc">Intercept API requests</string>
     <string name="InuPluginGrantInvokeRpc">Raw API access</string>
     <string name="InuPluginGrantTakeout">Data export sessions</string>

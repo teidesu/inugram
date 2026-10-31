@@ -1118,7 +1118,7 @@ object PluginCompose {
         return entities
     }
 
-    private fun encodeEntities(entities: List<TLRPC.MessageEntity>?): JSONArray =
+    internal fun encodeEntities(entities: List<TLRPC.MessageEntity>?): JSONArray =
         JSONArray(entities.orEmpty().map { TlJson.toJson(it, POLICY) })
 
     /** what `send_message.js` hands the stages, less its media. A reply to a topic's root names only the topic */

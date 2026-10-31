@@ -148,6 +148,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - long-tap a mention in a message to insert a name-mention into the input with custom text
 - 🐶 restrict/ban menu items the avatar long-tap menu
 - hide messages from blocked users: with a spoiler or completely - *partially ported from [Nekogram](https://github.com/Nekogram/Nekogram)*
+  - "show hidden messages" in the chat menu, to see a chat as sent until it is closed
   - also hide messages from a custom list of users/channels without blocking them (via settings picker or profile menu)
   - optionally also hide replies to those users
 

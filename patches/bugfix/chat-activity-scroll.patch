@@ -21,7 +21,7 @@ index 0000000..0000000 100644
      private int fixedKeyboardHeight = -1;
      private Runnable cancelFixedPositionRunnable;
      private boolean invalidateMessagesVisiblePart;
-@@ -18755,8 +18756,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -18756,8 +18757,7 @@ public class ChatActivity extends BaseFragment implements
              if (actionBar.getVisibility() == VISIBLE) {
                  heightSize -= actionBarHeight;
              }
@@ -31,7 +31,7 @@ index 0000000..0000000 100644
              if (lastHeight != allHeight) {
                  measureKeyboardHeight();
              }
-@@ -18772,7 +18772,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -18773,7 +18773,11 @@ public class ChatActivity extends BaseFragment implements
              }
              setEmojiKeyboardHeight(chatEmojiViewPadding);
  
@@ -44,7 +44,7 @@ index 0000000..0000000 100644
              boolean waitingChatListItemAnimator = false;
              if (MediaController.getInstance().getPlayingMessageObject() != null && MediaController.getInstance().getPlayingMessageObject().isRoundVideo() && keyboardVisibleOld != keyboardVisible) {
                  for (int i = 0; i < chatListView.getChildCount(); i++) {
-@@ -18783,7 +18787,16 @@ public class ChatActivity extends BaseFragment implements
+@@ -18784,7 +18788,16 @@ public class ChatActivity extends BaseFragment implements
                          if (messageObject.isRoundVideo() && MediaController.getInstance().isPlayingMessage(messageObject)) {
                              int p = chatListView.getChildAdapterPosition(child);
                              if (p >= 0) {
@@ -62,7 +62,7 @@ index 0000000..0000000 100644
                                  chatAdapter.notifyItemChanged(p);
                                  adjustPanLayoutHelper.delayAnimation();
                                  waitingChatListItemAnimator = true;
-@@ -21869,6 +21882,26 @@ public class ChatActivity extends BaseFragment implements
+@@ -21870,6 +21883,26 @@ public class ChatActivity extends BaseFragment implements
                      createUnreadMessageAfterId = 0;
                      if (!universalNotify && !chatAdapter.isFiltered) {
                          chatAdapter.notifyItemRemoved(chatAdapter.loadingDownRow);
@@ -89,7 +89,7 @@ index 0000000..0000000 100644
                      }
                  }
                  startLoadFromMessageId = 0;
-@@ -23376,7 +23409,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -23375,7 +23408,7 @@ public class ChatActivity extends BaseFragment implements
                                  if (MediaController.getInstance().isPlayingMessage(messageObject1)) {
                                      boolean keyboardIsVisible = contentView.getKeyboardHeight() >= AndroidUtilities.dp(20);
                                      float topPadding = chatListViewPaddingTop - (contentPanTranslation);

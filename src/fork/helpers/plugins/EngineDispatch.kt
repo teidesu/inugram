@@ -43,6 +43,8 @@ internal object EngineDispatch {
         override fun cancel(task: Runnable) = handler.removeCallbacks(task)
     }
 
+    fun isEngineThread(): Boolean = Looper.myLooper() === handler.looper
+
     fun onEngine(session: PluginSession, onDropped: () -> Unit = {}, block: () -> Unit) {
         scheduler.postRunnable {
             if (session.isCurrent()) block() else onDropped()

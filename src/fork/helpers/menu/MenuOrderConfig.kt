@@ -170,6 +170,12 @@ class ChatMenuConfig(key: String) : MenuOrderConfig<ChatMenuConfig.Item>(key, It
         OPEN_FORUM("open_forum", listOf(ChatActivity.open_forum), R.string.OpenAllTopics, R.drawable.msg_discussion),
         CLOSE_TOPIC("close_topic", listOf(ChatActivity.topic_close), R.string.CloseTopic, R.drawable.msg_topic_close),
         SHOW_PINNED_PANEL("show_pinned_panel", listOf(ChatActionsHelper.ACTION_SHOW_PINNED_PANEL), R.string.InuShowPinnedPanel, R.drawable.msg_pin),
+        SHOW_HIDDEN_MESSAGES(
+            "show_hidden_messages",
+            listOf(ChatActionsHelper.ACTION_SHOW_HIDDEN_MESSAGES),
+            R.string.InuShowFilteredMessages,
+            R.drawable.msg_message
+        ),
         RECENT_ACTIONS("recent_actions", listOf(ChatActionsHelper.ACTION_RECENT_ACTIONS), R.string.EventLog, R.drawable.msg_log),
         GO_TO_BEGINNING("go_to_beginning", listOf(ChatActionsHelper.ACTION_GO_TO_BEGINNING), R.string.InuJumpToBeginning, R.drawable.msg_go_up),
         GO_TO_MESSAGE("go_to_message", listOf(ChatActionsHelper.ACTION_GO_TO_MESSAGE), R.string.InuGoToMessage, R.drawable.msg_message),

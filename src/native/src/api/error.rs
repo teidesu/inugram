@@ -36,7 +36,9 @@ pub(crate) fn format_exception(ctx: &Ctx<'_>) -> String {
 }
 
 pub(crate) fn report_callback_error(log: &crate::Log, ctx: &Ctx<'_>, what: &str, error: rquickjs::Error) {
-  if error.is_exception() {
+  if error.is_exception() && crate::sandbox::limits::is_tripped() {
+    log(&format!("{what} was stopped: {}", format_exception(ctx)));
+  } else if error.is_exception() {
     log(&crate::fault(format_args!("{what} threw: {}", format_exception(ctx))));
   } else {
     log(&format!("{what} failed: {error:?}"));

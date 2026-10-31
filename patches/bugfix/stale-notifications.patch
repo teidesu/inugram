@@ -197,7 +197,7 @@ index 0000000..0000000 100644
                  AndroidUtilities.runOnUIThread(() -> {
                      for (int a = 0, size = popupArrayRemove.size(); a < size; a++) {
                          popupMessages.remove(popupArrayRemove.get(a));
-@@ -1502,7 +1579,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -1509,7 +1586,7 @@ public class NotificationsController extends BaseController implements Notificat
                      pushDialogsOverrideMention.remove(dialogId);
                      for (int a = 0; a < pushMessages.size(); a++) {
                          MessageObject messageObject = pushMessages.get(a);
@@ -206,7 +206,7 @@ index 0000000..0000000 100644
                              if (isPersonalMessage(messageObject)) {
                                  personalCount--;
                              }
-@@ -1544,7 +1621,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -1551,7 +1628,7 @@ public class NotificationsController extends BaseController implements Notificat
                      NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.pushMessagesUpdated);
                  });
              }
@@ -215,7 +215,7 @@ index 0000000..0000000 100644
                  if (!notifyCheck) {
                      delayedPushMessages.clear();
                      showOrUpdateNotification(notifyCheck);
-@@ -3338,6 +3415,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -3348,6 +3425,7 @@ public class NotificationsController extends BaseController implements Notificat
              }
              wearNotificationsIds.clear();
              NotificationsHelper.clearPostedSignatures(currentAccount);
@@ -223,7 +223,7 @@ index 0000000..0000000 100644
          });
      }
  
-@@ -3357,6 +3435,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -3367,6 +3445,7 @@ public class NotificationsController extends BaseController implements Notificat
              }
              wearNotificationsIds.clear();
              NotificationsHelper.clearPostedSignatures(currentAccount);
@@ -231,7 +231,7 @@ index 0000000..0000000 100644
              AndroidUtilities.runOnUIThread(() -> NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.pushMessagesUpdated));
          } catch (Exception e) {
              FileLog.e(e);
-@@ -5928,6 +6007,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -5938,6 +6017,7 @@ public class NotificationsController extends BaseController implements Notificat
                  ShortcutManagerCompat.removeDynamicShortcuts(ApplicationLoader.applicationContext, ids);
              }
          }

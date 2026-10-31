@@ -22,7 +22,7 @@ index 0000000..0000000 100644
      private LongSparseArray<Boolean> checkingLastMessagesDialogs = new LongSparseArray<>();
  
      private ArrayList<TLRPC.Updates> updatesQueueSeq = new ArrayList<>();
-@@ -12842,6 +12843,85 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -12843,6 +12844,85 @@ public class MessagesController extends BaseController implements NotificationCe
          });
      }
  
@@ -108,7 +108,7 @@ index 0000000..0000000 100644
      private void fetchFolderInLoadedPinnedDialogs(TLRPC.TL_messages_peerDialogs res) {
          for (int a = 0, N = res.dialogs.size(); a < N; a++) {
              TLRPC.Dialog dialog = res.dialogs.get(a);
-@@ -17723,6 +17803,9 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -17726,6 +17806,9 @@ public class MessagesController extends BaseController implements NotificationCe
              }
          }
          getMessagesStorage().setDialogPinned(dialogId, dialog.pinnedNum);
@@ -118,7 +118,7 @@ index 0000000..0000000 100644
          return true;
      }
  
-@@ -22970,7 +23053,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -22975,7 +23058,7 @@ public class MessagesController extends BaseController implements NotificationCe
                          }
                      }
                      if (maxDate > Integer.MIN_VALUE) {

@@ -170,6 +170,14 @@
       "description": "see outgoing messages before they are sent, and rewrite or drop them"
     },
     {
+      "name": "filterMessages",
+      "scopes": "none",
+      "tier": "caution",
+      "title": "InuPluginGrantFilterMessages",
+      "icon": "menu_hide_gift",
+      "description": "see messages as chats show them, and hide, blur or rewrite them on screen"
+    },
+    {
       "name": "invokeRpc",
       "scopes": "rpcMethod",
       "refusesTakeover": true,

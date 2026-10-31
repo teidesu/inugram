@@ -90,7 +90,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -34451,9 +34451,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -34450,9 +34450,7 @@ public class ChatActivity extends BaseFragment implements
                  if (selectedObject.isEditing() || selectedObject.isSending() && selectedObjectGroup == null) {
                      getSendMessagesHelper().cancelSendingMessage(selectedObject);
                  } else if (selectedObject.isSending() && selectedObjectGroup != null) {

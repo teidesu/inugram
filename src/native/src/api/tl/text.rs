@@ -126,8 +126,42 @@ fn read_entity<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<Entity> {
   let name = name.to_string()?;
   let offset = get_number_field(ctx, object, "offset")?;
   let length = get_number_field(ctx, object, "length")?;
+  Ok(Entity::new(read_entity_kind(&name, object)?, offset, length))
+}
 
-  let kind = match name.as_str() {
+/// The app's own json of a `messageEntity` vector, as `TlJson` writes it. An entity that does not
+/// read is left out: this is what the app already shows, not plugin input.
+pub(crate) fn read_entities_json(json: &str) -> Vec<Entity> {
+  let Ok(serde_json::Value::Array(items)) = serde_json::from_str(json) else {
+    return Vec::new();
+  };
+  items
+    .iter()
+    .filter_map(|item| {
+      let object = item.as_object()?;
+      let name = object.get("_")?.as_str()?;
+      let offset = object.get("offset")?.as_i64()?;
+      let length = object.get("length")?.as_i64()?;
+      let Ok(kind) = read_entity_kind(name, object);
+      Some(Entity::new(kind, offset, length))
+    })
+    .collect()
+}
+
+/// An entity's fields, read off a plugin's js object or off the app's json
+trait EntityFields: Sized {
+  type Error;
+  fn string(&self, name: &str) -> Result<Option<String>, Self::Error>;
+  fn boolean(&self, name: &str) -> Result<bool, Self::Error>;
+  /// an int64 the app writes as a number where it fits and as a decimal string otherwise
+  fn int64(&self, name: &str) -> Result<Option<i64>, Self::Error>;
+  /// same, kept as text: a document id is only ever passed along, and 2^53 is not its ceiling
+  fn id_string(&self, name: &str) -> Result<Option<String>, Self::Error>;
+  fn object(&self, name: &str) -> Option<Self>;
+}
+
+fn read_entity_kind<F: EntityFields>(name: &str, fields: &F) -> Result<EntityKind, F::Error> {
+  Ok(match name {
     "messageEntityBold" => EntityKind::Bold,
     "messageEntityItalic" => EntityKind::Italic,
     "messageEntityUnderline" => EntityKind::Underline,
@@ -135,48 +169,120 @@ fn read_entity<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<Entity> {
     "messageEntitySpoiler" => EntityKind::Spoiler,
     "messageEntityCode" => EntityKind::Code,
     "messageEntityPre" => EntityKind::Pre {
-      language: get_string_field(object, "language")?.unwrap_or_default(),
+      language: fields.string("language")?.unwrap_or_default(),
     },
-    "messageEntityBlockquote" => EntityKind::Blockquote {
-      collapsed: get_bool_field(object, "collapsed")?,
-    },
+    "messageEntityBlockquote" => EntityKind::Blockquote { collapsed: fields.boolean("collapsed")? },
     "messageEntityTextUrl" => EntityKind::TextUrl {
-      url: get_string_field(object, "url")?.unwrap_or_default(),
+      url: fields.string("url")?.unwrap_or_default(),
     },
     "messageEntityMentionName" => EntityKind::MentionName {
-      user_id: get_int64_field(object, "user_id")?.unwrap_or_default(),
+      user_id: fields.int64("user_id")?.unwrap_or_default(),
     },
     "inputMessageEntityMentionName" => {
-      let user: Value = object.get("user_id")?;
-      let user = user.as_object();
-      let user_id = user.as_ref().and_then(|user| get_int64_field(user, "user_id").ok().flatten()).unwrap_or_default();
-      let access_hash = user
-        .as_ref()
-        .and_then(|user| get_int64_field(user, "access_hash").ok().flatten())
-        .unwrap_or_default();
+      let user = fields.object("user_id");
+      let user_id = user.as_ref().and_then(|user| user.int64("user_id").ok().flatten()).unwrap_or_default();
+      let access_hash = user.as_ref().and_then(|user| user.int64("access_hash").ok().flatten()).unwrap_or_default();
       EntityKind::InputMentionName { user_id, access_hash }
     }
     "messageEntityCustomEmoji" => EntityKind::CustomEmoji {
-      document_id: id_string_field(object, "document_id")?.unwrap_or_else(|| "0".into()),
+      document_id: fields.id_string("document_id")?.unwrap_or_else(|| "0".into()),
     },
     "messageEntityFormattedDate" => EntityKind::FormattedDate {
-      date: get_int64_field(object, "date")?.unwrap_or_default(),
+      date: fields.int64("date")?.unwrap_or_default(),
       format: DateFormat {
-        relative: get_bool_field(object, "relative")?,
-        day_of_week: get_bool_field(object, "day_of_week")?,
-        short_date: get_bool_field(object, "short_date")?,
-        long_date: get_bool_field(object, "long_date")?,
-        short_time: get_bool_field(object, "short_time")?,
-        long_time: get_bool_field(object, "long_time")?,
+        relative: fields.boolean("relative")?,
+        day_of_week: fields.boolean("day_of_week")?,
+        short_date: fields.boolean("short_date")?,
+        long_date: fields.boolean("long_date")?,
+        short_time: fields.boolean("short_time")?,
+        long_time: fields.boolean("long_time")?,
       },
     },
     "messageEntityUrl" => EntityKind::Url,
     "messageEntityEmail" => EntityKind::Email,
     "messageEntityMention" => EntityKind::Mention,
-    _ => EntityKind::Other(name),
-  };
+    _ => EntityKind::Other(name.to_string()),
+  })
+}
 
-  Ok(Entity::new(kind, offset, length))
+impl<'js> EntityFields for Object<'js> {
+  type Error = rquickjs::Error;
+
+  fn string(&self, name: &str) -> JsResult<Option<String>> {
+    let value: Value = self.get(name)?;
+    match value.as_string() {
+      Some(value) => Ok(Some(value.to_string()?)),
+      None => Ok(None),
+    }
+  }
+
+  fn boolean(&self, name: &str) -> JsResult<bool> {
+    let value: Value = self.get(name)?;
+    Ok(value.as_bool().unwrap_or(false))
+  }
+
+  fn int64(&self, name: &str) -> JsResult<Option<i64>> {
+    let value: Value = self.get(name)?;
+    if let Some(value) = value.as_number() {
+      if value.is_finite() && value.fract() == 0.0 {
+        return Ok(Some(value as i64));
+      }
+    }
+    if let Some(value) = value.as_string() {
+      return Ok(value.to_string()?.parse::<i64>().ok());
+    }
+    Ok(None)
+  }
+
+  fn id_string(&self, name: &str) -> JsResult<Option<String>> {
+    let value: Value = self.get(name)?;
+    if let Some(value) = value.as_string() {
+      let value = value.to_string()?;
+      return Ok(if value.is_empty() { None } else { Some(value) });
+    }
+    if let Some(value) = value.as_number() {
+      if value.is_finite() && value.fract() == 0.0 {
+        return Ok(Some((value as i64).to_string()));
+      }
+    }
+    Ok(None)
+  }
+
+  fn object(&self, name: &str) -> Option<Self> {
+    self.get::<_, Value>(name).ok()?.into_object()
+  }
+}
+
+impl EntityFields for serde_json::Map<String, serde_json::Value> {
+  type Error = std::convert::Infallible;
+
+  fn string(&self, name: &str) -> Result<Option<String>, Self::Error> {
+    Ok(self.get(name).and_then(|value| value.as_str()).map(str::to_string))
+  }
+
+  fn boolean(&self, name: &str) -> Result<bool, Self::Error> {
+    Ok(self.get(name).and_then(|value| value.as_bool()).unwrap_or(false))
+  }
+
+  fn int64(&self, name: &str) -> Result<Option<i64>, Self::Error> {
+    Ok(match self.get(name) {
+      Some(serde_json::Value::String(value)) => value.parse().ok(),
+      Some(value) => value.as_i64(),
+      None => None,
+    })
+  }
+
+  fn id_string(&self, name: &str) -> Result<Option<String>, Self::Error> {
+    Ok(match self.get(name) {
+      Some(serde_json::Value::String(value)) if !value.is_empty() => Some(value.clone()),
+      Some(value) => value.as_i64().map(|value| value.to_string()),
+      None => None,
+    })
+  }
+
+  fn object(&self, name: &str) -> Option<Self> {
+    self.get(name)?.as_object().cloned()
+  }
 }
 
 pub(crate) fn text_to_js<'js>(ctx: &Ctx<'js>, value: &TextWithEntities) -> JsResult<Object<'js>> {
@@ -239,46 +345,4 @@ fn get_number_field<'js>(ctx: &Ctx<'js>, object: &Object<'js>, name: &str) -> Js
     Some(value) if value.is_finite() && value.fract() == 0.0 => Ok(value as i64),
     _ => Err(Exception::throw_type(ctx, &format!("entities: {name} must be an integer"))),
   }
-}
-
-fn get_string_field<'js>(object: &Object<'js>, name: &str) -> JsResult<Option<String>> {
-  let value: Value = object.get(name)?;
-  match value.as_string() {
-    Some(value) => Ok(Some(value.to_string()?)),
-    None => Ok(None),
-  }
-}
-
-fn get_bool_field<'js>(object: &Object<'js>, name: &str) -> JsResult<bool> {
-  let value: Value = object.get(name)?;
-  Ok(value.as_bool().unwrap_or(false))
-}
-
-/// An int64 field, which the app writes as a number where it fits and as a decimal string otherwise.
-fn get_int64_field<'js>(object: &Object<'js>, name: &str) -> JsResult<Option<i64>> {
-  let value: Value = object.get(name)?;
-  if let Some(value) = value.as_number() {
-    if value.is_finite() && value.fract() == 0.0 {
-      return Ok(Some(value as i64));
-    }
-  }
-  if let Some(value) = value.as_string() {
-    return Ok(value.to_string()?.parse::<i64>().ok());
-  }
-  Ok(None)
-}
-
-/// Same, kept as text: a document id is only ever passed along, and 2^53 is not its ceiling.
-fn id_string_field<'js>(object: &Object<'js>, name: &str) -> JsResult<Option<String>> {
-  let value: Value = object.get(name)?;
-  if let Some(value) = value.as_string() {
-    let value = value.to_string()?;
-    return Ok(if value.is_empty() { None } else { Some(value) });
-  }
-  if let Some(value) = value.as_number() {
-    if value.is_finite() && value.fract() == 0.0 {
-      return Ok(Some((value as i64).to_string()));
-    }
-  }
-  Ok(None)
 }

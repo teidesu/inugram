@@ -150,6 +150,15 @@ object GrantCatalog {
             tierWhenUnscoped = null,
         ),
         Entry(
+            name = "filterMessages",
+            scopes = ScopeKind.NONE,
+            values = emptySet(),
+            extraValues = emptySet(),
+            refusesTakeover = false,
+            tier = GrantTier.CAUTION,
+            tierWhenUnscoped = null,
+        ),
+        Entry(
             name = "invokeRpc",
             scopes = ScopeKind.RPC_METHOD,
             values = emptySet(),

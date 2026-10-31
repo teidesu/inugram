@@ -145,6 +145,12 @@ interface TranslationListener {
     fun translationResult(dispatchId: Long, wire: String)
 }
 
+/** `filterMessages` */
+interface MessageFiltersListener {
+    /** called from inside the engine; [needs] is rust's `NEEDS_*` bits, 0 once the plugin has no filters */
+    fun messageFiltersChanged(needs: Int)
+}
+
 /** a separate table in rust from [RpcListener]'s */
 interface UpdatesListener {
     /** [scope] "" means each constructor is its own scope, else the demuxed event name */

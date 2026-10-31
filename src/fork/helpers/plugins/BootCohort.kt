@@ -12,6 +12,7 @@ object BootCohort {
         "interceptRpc",
         "interceptUpdate",
         "interceptSendMessage",
+        "filterMessages",
         "onUpdate",
         "unsafe.notificationCenter",
     )

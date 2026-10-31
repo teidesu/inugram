@@ -512,6 +512,7 @@ dependencies = [
  "libsqlite3-sys",
  "lzma-rs",
  "object",
+ "regex",
  "rquickjs",
  "rusqlite",
  "serde_json",

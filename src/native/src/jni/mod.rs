@@ -20,7 +20,13 @@ use crate::{
     io::fetch::FetchState,
     lifecycle::LifecycleState,
     platform::{jvm::JvmState, notifications::NotificationState, xposed::XposedState},
-    telegram::{account::AccountState, reads::ReadsState, rpc::RpcState, writes::WritesState},
+    telegram::{
+      account::AccountState,
+      filters::{FilterState, MessageFilters},
+      reads::ReadsState,
+      rpc::RpcState,
+      writes::WritesState,
+    },
     timers::TimerState,
     translation::TranslationState,
     ui::{actions::ActionState, dialogs::DialogState, history::HistoryState, pages::UiState, screens::ScreenState},
@@ -66,6 +72,7 @@ impl Deref for TransferEngine {
 struct EngineSlot {
   engine: Arc<Serialized<TransferEngine>>,
   jvm_refs: Option<Arc<crate::api::platform::jvm::RefTable>>,
+  message_filters: Arc<MessageFilters>,
 }
 
 static ENGINES: OnceLock<Mutex<SlotMap<EngineKey, EngineSlot>>> = OnceLock::new();
@@ -77,6 +84,7 @@ fn lock_engines() -> Option<std::sync::MutexGuard<'static, SlotMap<EngineKey, En
 
 pub(crate) fn insert_engine(engine: Engine) -> jlong {
   let jvm_refs = engine.jvm.as_ref().map(|state| state.refs().clone());
+  let message_filters = engine.filters.rules.clone();
   ENGINES
     .get_or_init(|| Mutex::new(SlotMap::with_key()))
     .lock()
@@ -84,6 +92,7 @@ pub(crate) fn insert_engine(engine: Engine) -> jlong {
     .insert(EngineSlot {
       engine: Serialized::new(TransferEngine(engine)),
       jvm_refs,
+      message_filters,
     })
     .data()
     .as_ffi() as jlong
@@ -91,6 +100,10 @@ pub(crate) fn insert_engine(engine: Engine) -> jlong {
 
 pub(crate) fn engine_jvm_refs(handle: jlong) -> Option<Arc<crate::api::platform::jvm::RefTable>> {
   lock_engines()?.get(get_engine_key(handle))?.jvm_refs.clone()
+}
+
+pub(crate) fn engine_message_filters(handle: jlong) -> Option<Arc<MessageFilters>> {
+  Some(lock_engines()?.get(get_engine_key(handle))?.message_filters.clone())
 }
 
 /// A caller-thread entry waits out the engine thread's longest turn: that thread lends the engine
@@ -207,6 +220,7 @@ pub(crate) struct Engine {
   pub(crate) history: Rc<HistoryState>,
   pub(crate) actions: Rc<ActionState>,
   pub(crate) translation: Rc<TranslationState>,
+  pub(crate) filters: Rc<FilterState>,
   pub(crate) account: Rc<AccountState>,
   pub(crate) reads: Rc<ReadsState>,
   pub(crate) writes: Rc<WritesState>,
@@ -233,6 +247,7 @@ impl Engine {
       &*self.history,
       &*self.actions,
       &*self.translation,
+      &*self.filters,
       &*self.writes,
       &*self.reads,
       &*self.account,

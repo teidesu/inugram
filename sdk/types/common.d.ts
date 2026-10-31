@@ -1818,6 +1818,73 @@ declare namespace inu {
     middleware: (context: UpdateMiddlewareContext<U>) => MaybePromise<'deliver' | 'drop'>,
   ): Disposer
 
+  /**
+   * Which messages a {@link filterMessages} rule applies to.
+   *
+   * Fields within the same object are logical AND.
+   */
+  interface MessageFilter {
+    /** Regex the message's text or caption should match, or whether it has any (`true`) or none (`false`) */
+    text?: RegExp | boolean
+    /**
+     * Regex the message's text should match, as {@link utils.thtml} HTML.
+     *
+     * **Note**: `&` inside a text-link (`<a>`) is `&amp;`
+     */
+    html?: RegExp
+    /** Regex the URL of at least one of the message's inline buttons matches */
+    buttons?: RegExp
+    /** Marked peer id(s) of the sender. A channel post's sender is the channel */
+    sender?: number | number[]
+    /** Chat(s) the message is in: marked peer ids, peer types, or both */
+    peer?: SendMessagePeer | SendMessagePeer[]
+    /** Whether the message has media (`true`) or not (`false`), or the type(s) of its media */
+    media?: boolean | MediaType | MediaType[]
+    /** Whether the message is a forward (`true`) or not (`false`) */
+    forward?: boolean
+  }
+
+  type MessageFilterVerdict = 'show' | 'hide' | 'spoiler' | { rewrite: InputText }
+
+  /**
+   * Register a message filter, applied when *rendering* the messages.
+   *
+   * Currently the supported actions are:
+   * - `hide` - to hide the message completely
+   * - `spoiler` - to hide the message text/media with a spoiler
+   * - `{ rewrite: InputText }` - to modify the visible text of the message
+   *
+   * Prefer a fixed verdict (i.e. plain action as the second argument) where possible,
+   * since that allows for better performance.
+   *
+   * A callback only runs for matched messages, and the verdict for a message is cached.
+   * Callbacks are synchronous and share a 50 ms budget per message: once it runs out, the
+   * running callback is stopped, the rest are skipped, the message shows as is, and the
+   * plugin takes a strike. Three strikes stop the plugin.
+   *
+   * When several rules match, the following applies, in order:
+   * - any `hide` verdict wins
+   * - any `spoiler` verdict wins
+   * - the first rewrite in the user's plugin order wins.
+   *
+   * Service messages, secret chats, messages from Telegram (777000), Saved Messages
+   * and outgoing messages are never filtered.
+   *
+   * **Limits: 50 ms per message**
+   *
+   * @needs-grant filterMessages
+   * @example
+   * ```ts
+   * inu.filterMessages({ html: /[?&](amp;)?erid=/i, peer: 'broadcast' }, 'hide')
+   * inu.filterMessages({ text: /crypto/i, peer: 'group' }, message => (message.forwardedFrom ? 'hide' : 'spoiler'))
+   * ```
+   */
+  function filterMessages(filter: MessageFilter | MessageFilter[], verdict: 'hide' | 'spoiler'): Disposer
+  function filterMessages(
+    filter: MessageFilter | MessageFilter[],
+    callback: (message: Message, account: Account) => MessageFilterVerdict | undefined,
+  ): Disposer
+
   interface ActionContext {
     account: Account
   }
