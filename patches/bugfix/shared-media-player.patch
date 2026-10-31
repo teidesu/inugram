@@ -41,7 +41,7 @@ index 0000000..0000000 100644
                  }
              } else if (mediaPages[a].selectedType == TAB_BOT_PREVIEWS) {
                  if (currentAdapter != null) {
-@@ -11937,7 +11946,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -11934,7 +11943,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
      private void updateProgressViewLayout(MediaPage page) {
          final boolean photos = page.selectedType == TAB_PHOTOVIDEO || isAnyStoryPageType(page.selectedType);
          final FrameLayout.LayoutParams lp = LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.FILL, photos ? 0 : 12, 48 + (photos ? 8 : 12), photos ? 0 : 12, photos ? 0 : 12);

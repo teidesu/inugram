@@ -4,14 +4,28 @@ Date: Fri, 10 Apr 2026 05:29:50 +0300
 Subject: hooks into various places inside ChatActivity
 
 ---
+ .../telegram/messenger/AndroidUtilities.java  |   3 +
  .../messenger/MessagesController.java         |   2 +-
  .../telegram/messenger/RichMessageLayout.java |   1 +
  .../ui/ActionBar/ActionBarMenuItem.java       |   4 +
  .../java/org/telegram/ui/AvatarPreviewer.java |   4 +-
  .../java/org/telegram/ui/ChatActivity.java    | 122 ++++++++++++------
- .../ui/Components/SharedMediaLayout.java      |   3 +
  6 files changed, 91 insertions(+), 45 deletions(-)
 
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
+@@ -4195,6 +4195,9 @@ public class AndroidUtilities {
+         if (document == null) {
+             return;
+         }
++        if (parentFragment != null && desu.inugram.helpers.chat.ChatHelper.maybeHandleFileClick(parentFragment, message)) {
++            return;
++        }
+         File f = null;
+         String fileName = message.messageOwner.media != null ? FileLoader.getAttachFileName(document) : "";
+         if (message.messageOwner.attachPath != null && message.messageOwner.attachPath.length() != 0) {
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
@@ -531,17 +545,3 @@ index 0000000..0000000 100644
          }
  
          if (getMessagesController().config.walletAvailable.get() &&
-diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
-index 0000000..0000000 100644
---- a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
-+++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
-@@ -7849,6 +7849,9 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
-                     SharedDocumentCell cell = (SharedDocumentCell) view;
-                     TLRPC.Document document = message.getDocument();
-                     if (cell.isLoaded()) {
-+                        if (desu.inugram.helpers.chat.ChatHelper.maybeHandleFileClick(profileActivity, message)) {
-+                            return;
-+                        }
-                         if (message.canPreviewDocument()) {
-                             PhotoViewer.getInstance().setParentActivity(profileActivity);
-                             index = sharedMediaData[selectedMode].messages.indexOf(message);

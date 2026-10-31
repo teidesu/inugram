@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaL
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
-@@ -11073,6 +11073,15 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -11070,6 +11070,15 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
  
          public ChatUsersAdapter(Context context) {
              mContext = context;
