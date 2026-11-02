@@ -430,6 +430,12 @@
     <string name="InuTextClassifierModeOff">オフ</string>
     <string name="InuTextClassifierModeOffInfo">テキスト分類を無効にするとテキスト選択の応答性が向上します</string>
 
+    <string name="InuSelectionProcessText">追加のテキスト操作</string>
+    <string name="InuWebSearch">ウェブ検索</string>
+    <string name="InuSelectionProcessTextInfo">メッセージのテキスト選択メニューに他のアプリが提供する操作を表示</string>
+    <string name="InuSelectionProcessTextItems">操作</string>
+    <string name="InuSelectionProcessTextReset">デフォルトに戻す</string>
+
     <string name="InuSuggestCustomEmojiAfter">カスタム絵文字を通常絵文字の後に提案</string>
     <string name="InuSuggestCustomEmojiAfterInfo">「:shortcode」候補ポップアップで、アニメ/カスタム絵文字を通常絵文字の前ではなく後に表示します</string>
 
@@ -462,6 +468,8 @@
     <string name="InuEventLogBanConfirm">**%1$s** を BAN しますか？</string>
     <string name="InuEventLogShowDiff">diff として表示</string>
     <string name="InuShowPinnedPanel">ピン留めメッセージを表示</string>
+    <string name="InuShowFilteredMessages">非表示のメッセージを表示</string>
+    <string name="InuHideFilteredMessages">非表示のメッセージを隠す</string>
     <string name="InuAppIconStock">標準</string>
     <string name="InuAppIconLicenseInugram">仮アイコンです。より良いものを提供していただけたら嬉しいです</string>
     <string name="InuAppIconLicenseTelegram">**Telegram** によるアイコン。All rights reserved.</string>
@@ -738,8 +746,11 @@
     <string name="InuLogsCopySystemInfo">システム情報をコピー</string>
     <string name="InuLogsSystemInfoCopied">システム情報をクリップボードにコピーしました</string>
     <string name="InuLogsHeapUsage">ヒープ: %1$s / %2$s</string>
+    <string name="InuLogsRunGc">ガベージコレクションを実行</string>
     <string name="InuLogsMakeHeapDump">ヒープダンプを作成</string>
     <string name="InuLogsMakingHeapDump">ヒープダンプを作成中…</string>
+    <string name="InuLogsHeapDumpSaved">ヒープダンプを保存しました</string>
+    <string name="InuLogsHeapDumpSaveError">ヒープダンプの保存に失敗しました</string>
     <string name="InuLogsHeapDumpWarning">.hprof ファイルは**絶対に**誰とも共有しないでください — アプリのメモリのスナップショットであり、**メッセージやトークンなどの機密情報を含みます**。\n\n**自分だけで**確認してください。\n\nアプリはしばらくフリーズします。</string>
 
     <string name="InuLookAndFeel">外観とスタイル</string>
@@ -841,6 +852,7 @@
     <string name="InuPluginReposUpToDate">アップデートはありません</string>
     <string name="InuPluginReposErrorLink">チャンネルのユーザー名またはリンクを入力してください</string>
     <string name="InuPluginReposErrorNotChannel">公開チャンネルではありません</string>
+    <string name="InuPluginReposAddConfirm">**%1$s** をプラグインリポジトリとして追加しますか？</string>
     <string name="InuPluginReposErrorExists">このリポジトリは既に追加されています</string>
     <string name="InuPluginRepoEmpty">このリポジトリにはプラグインがありません</string>
     <string name="InuPluginRepoErrorLoad">リポジトリを読み込めませんでした</string>
@@ -876,6 +888,9 @@
     <string name="InuPluginGrantOnUpdate">更新を監視</string>
     <string name="InuPluginGrantInterceptUpdate">更新をインターセプト</string>
     <string name="InuPluginGrantInterceptSend">送信メッセージをインターセプト</string>
+    <string name="InuPluginRewrittenBy">%1$s によって書き換えられました。</string>
+    <string name="InuPluginRewriteRevert">元に戻す ></string>
+    <string name="InuPluginGrantFilterMessages">チャット内のメッセージを非表示・変更</string>
     <string name="InuPluginGrantInterceptRpc">API リクエストをインターセプト</string>
     <string name="InuPluginGrantInvokeRpc">Raw API アクセス</string>
     <string name="InuPluginGrantTakeout">データエクスポートセッション</string>

@@ -518,6 +518,12 @@
     <string name="InuTextClassifierModeImprovedInfo">Обробляє тільки частину сутностей для уникнення хибних спрацювань</string>
     <string name="InuTextClassifierModeOff">Вимкнено</string>
     <string name="InuTextClassifierModeOffInfo">Вимкнення класифікатора тексту покращує швидкість виділення тексту</string>
+
+    <string name="InuSelectionProcessText">Додаткові дії з текстом</string>
+    <string name="InuWebSearch">Пошук в інтернеті</string>
+    <string name="InuSelectionProcessTextInfo">Показувати дії інших додатків у меню виділення тексту повідомлення</string>
+    <string name="InuSelectionProcessTextItems">Дії</string>
+    <string name="InuSelectionProcessTextReset">Скинути за замовчуванням</string>
     <string name="InuSuggestCustomEmojiAfter">Підказувати кастомні емодзі після звичайних</string>
     <string name="InuSuggestCustomEmojiAfterInfo">У підказках «:код» показувати анімовані та авторські емодзі після звичайних, а не перед ними</string>
     <string name="InuEmojiPanelKeywordSearch">Пошук емодзі за ключовим словом</string>
@@ -552,6 +558,8 @@
     <string name="InuEventLogBanConfirm">Заблокувати **%1$s**?</string>
     <string name="InuEventLogShowDiff">Показати різницю (diff)</string>
     <string name="InuShowPinnedPanel">Показувати закріплені повідомлення</string>
+    <string name="InuShowFilteredMessages">Показати приховані повідомлення</string>
+    <string name="InuHideFilteredMessages">Сховати приховані повідомлення</string>
     <string name="InuAppIconStock">Стандартний</string>
     <string name="InuAppIconLicenseInugram">Тимчасовий значок, можете запропонувати кращий</string>
     <string name="InuAppIconLicenseTelegram">Іконка від **Telegram**. Усі права захищено.</string>
@@ -760,8 +768,11 @@
     <string name="InuLogsCopySystemInfo">Копіювати системну інформацію</string>
     <string name="InuLogsSystemInfoCopied">Системну інформацію скопійовано в буфер обміну</string>
     <string name="InuLogsHeapUsage">Купа: %1$s / %2$s</string>
+    <string name="InuLogsRunGc">Запустити збирання сміття</string>
     <string name="InuLogsMakeHeapDump">Зробити дамп купи</string>
     <string name="InuLogsMakingHeapDump">Створення дампу купи…</string>
+    <string name="InuLogsHeapDumpSaved">Дамп купи збережено</string>
+    <string name="InuLogsHeapDumpSaveError">Не вдалося зберегти дамп купи</string>
     <string name="InuLogsHeapDumpWarning">**НІКОЛИ** не ділися отриманим файлом .hprof ні з ким — це знімок пам’яті додатка, який **містить чутливу інформацію** (повідомлення, токени тощо).\n\nДосліджуй його **ТІЛЬКИ** самостійно.\n\nДодаток ненадовго зависне.</string>
     <string name="InuDeleteOwnMessages">Видалити мої повідомлення</string>
     <string name="InuDeleteOwnMessagesSearching">Пошук ваших повідомлень…</string>
@@ -822,6 +833,7 @@
     <string name="InuPluginReposUpToDate">Оновлень немає</string>
     <string name="InuPluginReposErrorLink">Введіть юзернейм або посилання на канал</string>
     <string name="InuPluginReposErrorNotChannel">Це не публічний канал</string>
+    <string name="InuPluginReposAddConfirm">Додати **%1$s** як репозиторій плагінів?</string>
     <string name="InuPluginReposErrorExists">Цей репозиторій уже додано</string>
     <string name="InuPluginRepoEmpty">У цьому репозиторії немає плагінів</string>
     <string name="InuPluginRepoErrorLoad">Не вдалося завантажити репозиторій</string>
@@ -863,6 +875,9 @@
     <string name="InuPluginGrantOnUpdate">Відстеження оновлень</string>
     <string name="InuPluginGrantInterceptUpdate">Перехоплення оновлень</string>
     <string name="InuPluginGrantInterceptSend">Перехоплення вихідних повідомлень</string>
+    <string name="InuPluginRewrittenBy">Змінено плагіном %1$s.</string>
+    <string name="InuPluginRewriteRevert">Повернути ></string>
+    <string name="InuPluginGrantFilterMessages">Приховування та зміна повідомлень у чатах</string>
     <string name="InuPluginGrantInterceptRpc">Перехоплення API-запитів</string>
     <string name="InuPluginGrantInvokeRpc">Прямий доступ до API</string>
     <string name="InuPluginGrantTakeout">Сесії експорту даних</string>

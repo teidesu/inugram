@@ -432,6 +432,12 @@
     <string name="InuTextClassifierModeOff">Выкл.</string>
     <string name="InuTextClassifierModeOffInfo">Отключение классификатора улучшает отзывчивость выделения текста</string>
 
+    <string name="InuSelectionProcessText">Дополнительные действия с текстом</string>
+    <string name="InuWebSearch">Поиск в интернете</string>
+    <string name="InuSelectionProcessTextInfo">Показывать действия других приложений в меню выделения текста сообщения</string>
+    <string name="InuSelectionProcessTextItems">Действия</string>
+    <string name="InuSelectionProcessTextReset">Сбросить по умолчанию</string>
+
     <string name="InuSuggestCustomEmojiAfter">Кастомные эмодзи после обычных</string>
     <string name="InuSuggestCustomEmojiAfterInfo">В подсказке «:shortcode» показывать анимированные/кастомные эмодзи после обычных, а не до</string>
 
@@ -464,6 +470,8 @@
     <string name="InuEventLogBanConfirm">Заблокировать **%1$s**?</string>
     <string name="InuEventLogShowDiff">Показать как diff</string>
     <string name="InuShowPinnedPanel">Показать закреплённые сообщения</string>
+    <string name="InuShowFilteredMessages">Показать скрытые сообщения</string>
+    <string name="InuHideFilteredMessages">Спрятать скрытые сообщения</string>
     <string name="InuAppIconStock">Стандартная</string>
     <string name="InuAppIconLicenseInugram">Временная иконка, не стесняйтесь предложить лучше</string>
     <string name="InuAppIconLicenseTelegram">Иконка от **Telegram**. Все права защищены.</string>
@@ -753,8 +761,11 @@
     <string name="InuLogsCopySystemInfo">Копировать системную информацию</string>
     <string name="InuLogsSystemInfoCopied">Системная информация скопирована в буфер обмена</string>
     <string name="InuLogsHeapUsage">Куча: %1$s / %2$s</string>
+    <string name="InuLogsRunGc">Запустить сборку мусора</string>
     <string name="InuLogsMakeHeapDump">Сделать хипдамп</string>
     <string name="InuLogsMakingHeapDump">Создание хипдампа…</string>
+    <string name="InuLogsHeapDumpSaved">Хипдамп сохранён</string>
+    <string name="InuLogsHeapDumpSaveError">Не удалось сохранить хипдамп</string>
     <string name="InuLogsHeapDumpWarning">**НИКОГДА** не делись полученным файлом .hprof ни с кем — это снимок памяти приложения, и он **содержит чувствительную информацию** (сообщения, токены и т. д.).\n\nИзучай его **ТОЛЬКО** сам.\n\nПриложение ненадолго зависнет.</string>
 
     <string name="InuLookAndFeel">Внешний вид и стиль</string>
@@ -858,6 +869,7 @@
     <string name="InuPluginReposUpToDate">Обновлений нет</string>
     <string name="InuPluginReposErrorLink">Введите юзернейм или ссылку на канал</string>
     <string name="InuPluginReposErrorNotChannel">Это не публичный канал</string>
+    <string name="InuPluginReposAddConfirm">Добавить **%1$s** как репозиторий плагинов?</string>
     <string name="InuPluginReposErrorExists">Этот репозиторий уже добавлен</string>
     <string name="InuPluginRepoEmpty">В этом репозитории нет плагинов</string>
     <string name="InuPluginRepoErrorLoad">Не удалось загрузить репозиторий</string>
@@ -899,6 +911,9 @@
     <string name="InuPluginGrantOnUpdate">Наблюдение за обновлениями</string>
     <string name="InuPluginGrantInterceptUpdate">Перехват обновлений</string>
     <string name="InuPluginGrantInterceptSend">Перехват исходящих сообщений</string>
+    <string name="InuPluginRewrittenBy">Изменено плагином %1$s.</string>
+    <string name="InuPluginRewriteRevert">Вернуть ></string>
+    <string name="InuPluginGrantFilterMessages">Скрытие и изменение сообщений в чатах</string>
     <string name="InuPluginGrantInterceptRpc">Перехват API-запросов</string>
     <string name="InuPluginGrantInvokeRpc">Прямой доступ к API</string>
     <string name="InuPluginGrantTakeout">Сеансы экспорта данных</string>

@@ -429,6 +429,12 @@
     <string name="InuTextClassifierModeOff">关闭</string>
     <string name="InuTextClassifierModeOffInfo">禁用文本分类器可提升文本选择响应速度</string>
 
+    <string name="InuSelectionProcessText">更多文本操作</string>
+    <string name="InuWebSearch">网页搜索</string>
+    <string name="InuSelectionProcessTextInfo">在消息文本选择菜单中显示其他应用提供的操作</string>
+    <string name="InuSelectionProcessTextItems">操作</string>
+    <string name="InuSelectionProcessTextReset">恢复默认</string>
+
     <string name="InuSuggestCustomEmojiAfter">自定义表情排在普通之后</string>
     <string name="InuSuggestCustomEmojiAfterInfo">在「:shortcode」建议弹窗中，将动画/自定义表情显示在普通表情之后而非之前</string>
 
@@ -461,6 +467,8 @@
     <string name="InuEventLogBanConfirm">封禁 **%1$s**？</string>
     <string name="InuEventLogShowDiff">以 diff 显示</string>
     <string name="InuShowPinnedPanel">显示置顶消息</string>
+    <string name="InuShowFilteredMessages">显示隐藏的消息</string>
+    <string name="InuHideFilteredMessages">隐藏已隐藏的消息</string>
     <string name="InuAppIconStock">原版</string>
     <string name="InuAppIconLicenseInugram">占位图标，欢迎提供更好的</string>
     <string name="InuAppIconLicenseTelegram">图标版权归 **Telegram** 所有。保留所有权利。</string>
@@ -737,8 +745,11 @@
     <string name="InuLogsCopySystemInfo">复制系统信息</string>
     <string name="InuLogsSystemInfoCopied">系统信息已复制到剪贴板</string>
     <string name="InuLogsHeapUsage">堆内存: %1$s / %2$s</string>
+    <string name="InuLogsRunGc">运行垃圾回收</string>
     <string name="InuLogsMakeHeapDump">生成堆转储</string>
     <string name="InuLogsMakingHeapDump">正在生成堆转储…</string>
+    <string name="InuLogsHeapDumpSaved">堆转储已保存</string>
+    <string name="InuLogsHeapDumpSaveError">保存堆转储失败</string>
     <string name="InuLogsHeapDumpWarning">**切勿**与任何人分享生成的 .hprof 文件 —— 它是应用内存的快照，**包含敏感信息**（消息、令牌等）。\n\n**仅**自行查看。\n\n应用将会冻结一段时间。</string>
 
     <string name="InuLookAndFeel">外观与样式</string>
@@ -841,6 +852,7 @@
     <string name="InuPluginReposUpToDate">没有可用更新</string>
     <string name="InuPluginReposErrorLink">请输入频道用户名或链接</string>
     <string name="InuPluginReposErrorNotChannel">这不是公开频道</string>
+    <string name="InuPluginReposAddConfirm">将 **%1$s** 添加为插件仓库？</string>
     <string name="InuPluginReposErrorExists">该仓库已添加</string>
     <string name="InuPluginRepoEmpty">此仓库中没有插件</string>
     <string name="InuPluginRepoErrorLoad">无法加载仓库</string>
@@ -876,6 +888,9 @@
     <string name="InuPluginGrantOnUpdate">监视更新</string>
     <string name="InuPluginGrantInterceptUpdate">拦截更新</string>
     <string name="InuPluginGrantInterceptSend">拦截发出的消息</string>
+    <string name="InuPluginRewrittenBy">已被 %1$s 改写。</string>
+    <string name="InuPluginRewriteRevert">还原 ></string>
+    <string name="InuPluginGrantFilterMessages">隐藏或修改聊天中的消息</string>
     <string name="InuPluginGrantInterceptRpc">拦截 API 请求</string>
     <string name="InuPluginGrantInvokeRpc">原始 API 访问</string>
     <string name="InuPluginGrantTakeout">数据导出会话</string>
