@@ -54,12 +54,14 @@ object UrlCleanerHelper {
         "||google.*/maps/\$removeparam=skid",
         "||x.com/*/status/\$removeparam=a",
         "||twitter.com/*/status/\$removeparam=a",
+        "||ozon.ru^\$removeparam=/^(from|perehod|sh|short)=/",
     )
     private val REDIRECT_HOSTS = setOf("vm.tiktok.com", "vt.tiktok.com", "on.soundcloud.com", "share.google", "pin.it", "spotify.link", "maps.app.goo.gl")
     private val REDDIT_SHARE_PATH = Regex("^/r/[^/]+/s/[^/]+/?$")
     private val PINTEREST_HOST = Regex("^(www\\.)?pinterest\\.[a-z.]+$")
     private val YANDEX_HOST = Regex("^(www\\.)?yandex\\.[a-z.]+$")
     private val YANDEX_MAPS_SHARE_PATH = Regex("^/maps/-/[^/]+/?$")
+    private val OZON_SHARE_PATH = Regex("^/t/[^/]+/?$")
     private val resolvedRedirects = LruCache<String, String>(128)
 
     @Volatile
@@ -302,6 +304,7 @@ object UrlCleanerHelper {
         return host in REDIRECT_HOSTS && path.length > 1
             || (host == "www.reddit.com" || host == "reddit.com") && REDDIT_SHARE_PATH.matches(path)
             || YANDEX_HOST.matches(host.orEmpty()) && YANDEX_MAPS_SHARE_PATH.matches(path)
+            || host == "ozon.ru" && OZON_SHARE_PATH.matches(path)
     }
 
     private fun findRedirectTargets(text: CharSequence): List<String> {
@@ -345,6 +348,9 @@ object UrlCleanerHelper {
 
         "maps.app.goo.gl" -> fetchRedirectLocation(url)
             ?.takeIf { it.host == "www.google.com" && it.path.orEmpty().startsWith("/maps/") }
+
+        "ozon.ru" -> fetchRedirectLocation(url)
+            ?.takeIf { it.host == "www.ozon.ru" && it.path.orEmpty().length > 1 }
 
         else -> if (YANDEX_HOST.matches(host)) {
             fetchRedirectLocation(url)?.takeIf { it.host == host && it.path.orEmpty().startsWith("/maps/") }
