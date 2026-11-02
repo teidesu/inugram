@@ -30,6 +30,7 @@ import desu.inugram.ui.drawer.DrawerUserCell
 import desu.inugram.ui.drawer.SideMenultItemAnimator
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.AndroidUtilities.dp
+import org.telegram.messenger.BuildVars
 import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.DialogObject
 import org.telegram.messenger.FileLoader
@@ -48,7 +49,9 @@ import org.telegram.ui.ActionBar.DrawerLayoutContainer
 import org.telegram.ui.ActionBar.INavigationLayout
 import org.telegram.ui.ActionBar.MenuDrawable
 import org.telegram.ui.ActionBar.Theme
+import org.telegram.ui.ActionIntroActivity
 import org.telegram.ui.CallLogActivity
+import org.telegram.ui.ChannelCreateActivity
 import org.telegram.ui.ChatActivity
 import org.telegram.ui.Components.AnimatedEmojiDrawable
 import org.telegram.ui.Components.ItemOptions
@@ -608,8 +611,19 @@ object DrawerHelper {
                 }
             }
 
+            ITEM_NEW_CHANNEL -> {
+                // mirrors the "New Channel" row in ContactsActivity
+                if (MessagesController.getInstance(account).isFrozen) {
+                    AccountFrozenAlert.show(account)
+                } else {
+                    val preferences = MessagesController.getGlobalMainSettings()
+                    nav.presentFragment(ChannelCreateActivity(Bundle().apply { putInt("step", 0) }))
+                    close()
+                }
+            }
+
             ITEM_NEW_MESSAGE -> {
-                // swapped in for New Group when a compose draft is pending
+                // swapped in for New Group when the FAB has no New Message action
                 val top = nav.lastFragment
                 val dialogs = if (top is MainTabsActivity) top.currentVisibleFragment else top
                 (dialogs as? DialogsActivity)?.openWriteContacts()
@@ -683,6 +697,7 @@ object DrawerHelper {
     private const val ITEM_PROXY = DrawerLayoutAdapter.ITEM_PROXY
     private const val ITEM_ARCHIVE = DrawerLayoutAdapter.ITEM_ARCHIVE
     private const val ITEM_PLUGINS = DrawerLayoutAdapter.ITEM_PLUGINS
+    private const val ITEM_NEW_CHANNEL = DrawerLayoutAdapter.ITEM_NEW_CHANNEL
 
     @JvmStatic
     fun notifyDataChanged() {

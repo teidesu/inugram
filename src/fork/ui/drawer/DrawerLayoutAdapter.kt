@@ -226,12 +226,12 @@ class DrawerLayoutAdapter(
 
                 DrawerMenuConfig.Item.DIVIDER -> addDivider()
 
-                // Mirrors the overflow menu: a pending compose-draft swaps "New Group" for "New Message".
-                DrawerMenuConfig.Item.NEW_GROUP -> if (DialogsFabHelper.hasNewMessage()) {
-                    items.add(Item(17, LocaleController.getString(R.string.NewMessageTitle), R.drawable.menu_topic_add))
-                } else {
-                    items.add(Item(2, LocaleController.getString(R.string.NewGroup), R.drawable.msg_groups))
-                }
+                // Mirrors the overflow menu: "New Message" replaces "New Group" when the FAB lacks it.
+                DrawerMenuConfig.Item.NEW_GROUP ->
+                    items.add(Item(if (!DialogsFabHelper.hasNewMessage()) 17 else 2, LocaleController.getString(entry.item.labelRes), entry.item.iconRes))
+
+                DrawerMenuConfig.Item.NEW_CHANNEL ->
+                    items.add(Item(ITEM_NEW_CHANNEL, LocaleController.getString(R.string.NewChannel), R.drawable.msg_channel))
 
                 DrawerMenuConfig.Item.CONTACTS ->
                     items.add(Item(6, LocaleController.getString(R.string.Contacts), R.drawable.msg_contacts))
@@ -279,6 +279,7 @@ class DrawerLayoutAdapter(
         const val ITEM_PROXY = 9
         const val ITEM_ARCHIVE = 18
         const val ITEM_PLUGINS = 19
+        const val ITEM_NEW_CHANNEL = 20
     }
 
     class Item private constructor(
