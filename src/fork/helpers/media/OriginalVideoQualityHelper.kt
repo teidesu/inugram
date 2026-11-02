@@ -161,17 +161,6 @@ object OriginalVideoQualityHelper {
     fun isHevc(codecMime: String?): Boolean = codecMime == HEVC_MIME
 
     /**
-     * Whether the file can be uploaded byte-for-byte instead of being remuxed:
-     * a codec every client can decode, inside a container Telegram labels as mp4.
-     */
-    @JvmStatic
-    fun canSendAsIs(videoPath: String?, codecMime: String?): Boolean {
-        if (codecMime != MediaController.VIDEO_MIME_TYPE && codecMime != HEVC_MIME) return false
-        val name = videoPath?.substringAfterLast('/')?.lowercase() ?: return false
-        return name.endsWith(".mp4") || name.endsWith(".m4v") || name.endsWith(".mov")
-    }
-
-    /**
      * Stock only trusts an Exynos allowlist here (stories have no avc fallback, so a
      * broken encoder there means a broken story). Re-encoding at original quality does
      * fall back to avc, so any hardware encoder that reports the target size/rate will do.
