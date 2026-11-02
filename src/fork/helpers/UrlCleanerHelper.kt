@@ -4,6 +4,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Canvas
 import android.net.Uri
+import android.os.Looper
 import android.text.Selection
 import android.text.Spannable
 import android.text.Spanned
@@ -23,11 +24,20 @@ import desu.inugram.core.urlcleaner.UrlCleaner
 import desu.inugram.helpers.chat.WebPreviewHelper
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.ApplicationLoader
+import org.telegram.messenger.DialogObject
 import org.telegram.messenger.FileLog
+import org.telegram.messenger.MessageObject
+import org.telegram.messenger.MessagesController
+import org.telegram.messenger.MessagesStorage
+import org.telegram.messenger.NotificationCenter
+import org.telegram.messenger.SendMessagesHelper
 import org.telegram.messenger.Utilities
 import org.telegram.messenger.browser.Browser
+import org.telegram.tgnet.TLObject
+import org.telegram.tgnet.TLRPC
 import org.telegram.ui.ActionBar.AlertDialog
 import org.telegram.ui.ActionBar.Theme
+import org.telegram.ui.ChatActivity
 import org.telegram.ui.Components.EditTextCaption
 import org.telegram.ui.Components.LinkPath
 import org.telegram.ui.Components.LoadingDrawable
@@ -36,6 +46,9 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.OffsetDateTime
+import java.util.Collections
+import java.util.IdentityHashMap
+import java.util.concurrent.ConcurrentHashMap
 
 object UrlCleanerHelper {
     private const val FILE = "adguard_url_tracking.txt"
@@ -62,7 +75,17 @@ object UrlCleanerHelper {
     private val YANDEX_HOST = Regex("^(www\\.)?yandex\\.[a-z.]+$")
     private val YANDEX_MAPS_SHARE_PATH = Regex("^/maps/-/[^/]+/?$")
     private val OZON_SHARE_PATH = Regex("^/t/[^/]+/?$")
+    /** stock persists `Message.params` while a message is unsent, so a send retried after a restart still resolves */
+    private const val REDIRECTS_PARAM = "inu_redirects"
     private val resolvedRedirects = LruCache<String, String>(128)
+
+    /** callbacks of the redirects being resolved, mutated on the ui thread */
+    private val resolving = ConcurrentHashMap<String, MutableList<(String?) -> Unit>>()
+
+    /** sends held until their redirects resolve, and the later sends of their chat; ui thread */
+    private val held = ArrayList<HeldSend>()
+    @Volatile private var hasHeld = false
+    private var releasing = false
 
     @Volatile
     private var cleaner: UrlCleaner? = null
@@ -465,6 +488,174 @@ object UrlCleanerHelper {
         return true
     }
 
+    /** marks the redirects [params] carries that are being resolved, or were, for [holdSend] to replace */
+    @JvmStatic
+    fun markPendingRedirects(params: SendMessagesHelper.SendMessageParams) {
+        if (params.retryMessageObject != null || DialogObject.isEncryptedDialog(params.peer)) return
+        val text = params.message?.takeIf { it.isNotEmpty() } ?: params.caption ?: return
+        val urls = HashSet<String>()
+        AndroidUtilities.WEB_URL?.matcher(text)?.let { matcher ->
+            while (matcher.find()) urls.add(matcher.group())
+        }
+        params.entities?.forEach { if (it is TLRPC.TL_messageEntityTextUrl) urls.add(it.url) }
+        if (urls.isEmpty()) return
+        val candidates = resolving.keys + resolvedRedirects.snapshot().keys
+        val pending = candidates.mapNotNull { url -> transformPastedUrl(url).takeIf { it in urls }?.let { it to url } }
+        if (pending.isEmpty()) return
+        val encoded = pending.joinToString(" ") { (shown, url) -> Uri.encode(shown) + " " + Uri.encode(url) }
+        params.params = HashMap(params.params.orEmpty()).apply { put(REDIRECTS_PARAM, encoded) }
+    }
+
+    private fun readMarkedRedirects(message: TLRPC.Message): Map<String, String>? =
+        message.params?.get(REDIRECTS_PARAM)?.split(' ')?.chunked(2)?.filter { it.size == 2 }?.associate { (shown, url) -> Uri.decode(shown) to Uri.decode(url) }
+
+    private class HeldSend(val account: Int, val dialogId: Long, val scheduled: Boolean, val messages: List<MessageObject>, val send: Runnable) {
+        val id = messages.maxOf { it.id }
+        var ready = false
+
+        fun isSameChat(other: HeldSend) = account == other.account && dialogId == other.dialogId && scheduled == other.scheduled
+    }
+
+    /**
+     * Holds the final request of [messages] until the redirects marked in them resolve and replace their urls, and
+     * holds the later sends of their chat behind them. Returns true if [send] was deferred
+     */
+    @JvmStatic
+    fun holdSend(account: Int, req: TLObject, messages: List<MessageObject>, scheduled: Boolean, send: Runnable): Boolean {
+        if (messages.isEmpty() || messages.any { it.id > 0 }) return false
+        if (!hasHeld && messages.none { readMarkedRedirects(it.messageOwner) != null }) return false
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            AndroidUtilities.runOnUIThread { if (!holdSend(account, req, messages, scheduled, send)) releaseHeld(send) }
+            return true
+        }
+        if (releasing) return false
+        val entry = HeldSend(account, messages[0].dialogId, scheduled, messages, send)
+        val marked = messages.mapNotNull { message -> readMarkedRedirects(message.messageOwner)?.let { message to it } }.toMap()
+        if (marked.isEmpty() && held.none { it.isSameChat(entry) && it.id > entry.id }) return false
+        held.add(entry)
+        hasHeld = true
+        if (marked.isEmpty()) {
+            entry.ready = true
+            return true
+        }
+        resolveInBackground(marked.values.flatMapTo(HashSet()) { it.values }) { resolved ->
+            replaceRedirects(account, req, marked, resolved)
+            entry.ready = true
+            releaseReadySends()
+        }
+        return true
+    }
+
+    private fun releaseHeld(send: Runnable) {
+        releasing = true
+        try {
+            send.run()
+        } finally {
+            releasing = false
+        }
+    }
+
+    /** older messages have greater local ids */
+    private fun releaseReadySends() {
+        held.sortByDescending { it.id }
+        val ready = ArrayList<HeldSend>()
+        for (entry in held) {
+            if (!entry.ready) continue
+            if (held.any { !it.ready && it.isSameChat(entry) && it.id > entry.id }) continue
+            ready.add(entry)
+        }
+        held.removeAll(ready.toSet())
+        hasHeld = held.isNotEmpty()
+        for (entry in ready) {
+            val helper = SendMessagesHelper.getInstance(entry.account)
+            if (entry.messages.any { helper.isSendingMessage(it.id) }) releaseHeld(entry.send)
+        }
+    }
+
+    private fun replaceRedirects(account: Int, req: TLObject, marked: Map<MessageObject, Map<String, String>>, resolved: Map<String, String>) {
+        val controller = MessagesController.getInstance(account)
+        val changed = ArrayList<MessageObject>()
+        for ((message, pending) in marked) {
+            val owner = message.messageOwner
+            owner.params?.remove(REDIRECTS_PARAM)
+            val targets = pending.mapNotNull { (shown, url) -> resolved[url]?.let { shown to transformPastedUrl(it) } }.toMap()
+            if (targets.isEmpty()) continue
+            val replace = { text: String?, entities: List<TLRPC.MessageEntity>?, limit: Int ->
+                text?.let { replaceRedirectsInText(it, entities.orEmpty() + owner.entities.orEmpty(), targets, limit) }
+                    ?.also { owner.message = it }
+            }
+            val replaced = when (req) {
+                is TLRPC.TL_messages_sendMessage -> replace(req.message, req.entities, controller.getMaxMessageLength())?.also { req.message = it }
+                is TLRPC.TL_messages_sendMedia -> replace(req.message, req.entities, controller.captionMaxLengthLimit)?.also { req.message = it }
+                is TLRPC.TL_messages_sendMultiMedia -> req.multi_media.find { it.random_id == owner.random_id }?.let { single ->
+                    replace(single.message, single.entities, controller.captionMaxLengthLimit)?.also { single.message = it }
+                }
+                else -> null
+            }
+            if (replaced != null) changed.add(message)
+        }
+        if (changed.isEmpty()) return
+        for (message in changed) {
+            val owner = message.messageOwner
+            val mode = when {
+                message.scheduled -> ChatActivity.MODE_SCHEDULED
+                MessageObject.isWelcomeMessage(owner) -> ChatActivity.MODE_WELCOME_MESSAGES
+                owner.quick_reply_shortcut_id != 0 || owner.quick_reply_shortcut != null -> ChatActivity.MODE_QUICK_REPLIES
+                else -> 0
+            }
+            MessagesStorage.getInstance(account).putMessages(arrayListOf(owner), false, true, false, 0, mode, owner.quick_reply_shortcut_id.toLong())
+        }
+        val notifications = NotificationCenter.getInstance(account)
+        for ((dialogId, messages) in changed.groupBy { it.dialogId }) {
+            for (message in messages) {
+                val shown = controller.dialogMessage.get(dialogId).orEmpty().filter { it.id == message.id && it !== message }
+                for (copy in shown) {
+                    copy.messageOwner.message = message.messageOwner.message
+                    copy.messageOwner.entities = message.messageOwner.entities
+                }
+                for (instance in shown + message) {
+                    if (instance.type == MessageObject.TYPE_TEXT) {
+                        instance.applyNewText()
+                    } else {
+                        instance.caption = null
+                        instance.generateCaption()
+                    }
+                    instance.forceUpdate = true
+                }
+            }
+            notifications.postNotificationName(NotificationCenter.replaceMessagesObjects, dialogId, ArrayList(messages))
+        }
+        notifications.postNotificationName(NotificationCenter.dialogsNeedReload)
+    }
+
+    /**
+     * Replaces the urls of [targets] in [text] and in the text urls of [entities], shifting the entities in place.
+     * Null if nothing changed or the text would outgrow [limit]
+     */
+    private fun replaceRedirectsInText(text: String, entities: List<TLRPC.MessageEntity>, targets: Map<String, String>, limit: Int): String? {
+        val ranges = ArrayList<Triple<Int, Int, String>>()
+        AndroidUtilities.WEB_URL?.matcher(text)?.let { matcher ->
+            while (matcher.find()) targets[matcher.group()]?.let { ranges.add(Triple(matcher.start(), matcher.end(), it)) }
+        }
+        val distinct = entities.toCollection(Collections.newSetFromMap(IdentityHashMap()))
+        val linked = distinct.filter { it is TLRPC.TL_messageEntityTextUrl && it.url in targets }
+        if (ranges.isEmpty() && linked.isEmpty()) return null
+        if (text.length + ranges.sumOf { (start, end, target) -> target.length - (end - start) } > limit) return null
+        val result = StringBuilder(text)
+        for ((start, end, target) in ranges.asReversed()) {
+            result.replace(start, end, target)
+            val delta = target.length - (end - start)
+            for (entity in distinct) {
+                val entityStart = entity.offset
+                val entityEnd = entity.offset + entity.length
+                entity.offset = if (entityStart >= end) entityStart + delta else minOf(entityStart, start)
+                entity.length = (if (entityEnd >= end) entityEnd + delta else if (entityEnd > start) start + target.length else entityEnd) - entity.offset
+            }
+        }
+        for (entity in linked) entity.url = targets.getValue(entity.url)
+        return result.toString()
+    }
+
     @JvmStatic
     fun drawPendingRedirects(editText: EditText, canvas: Canvas) {
         val text = editText.text ?: return
@@ -537,21 +728,32 @@ object UrlCleanerHelper {
         return finish
     }
 
-    private fun resolveInBackground(urls: List<String>, onResolved: (Map<String, String>) -> Unit) {
-        Utilities.externalNetworkQueue.postRunnable {
-            val resolved = urls.mapNotNull { url ->
+    /** ui thread */
+    private fun resolveInBackground(urls: Collection<String>, onResolved: (Map<String, String>) -> Unit) {
+        val resolved = HashMap<String, String>()
+        var left = urls.size
+        if (left == 0) return onResolved(resolved)
+        for (url in urls) {
+            val done = { target: String? ->
+                target?.let { resolved[url] = it }
+                if (--left == 0) onResolved(resolved)
+            }
+            val waiting = resolving[url]
+            if (waiting != null) {
+                waiting.add(done)
+                continue
+            }
+            resolving[url] = mutableListOf(done)
+            Utilities.externalNetworkQueue.postRunnable {
                 val target = try {
                     resolveTrackableRedirect(url)
                 } catch (e: Exception) {
                     Log.e("UrlCleanerHelper", "failed to resolve $url", e)
                     null
                 }
-                target?.let {
-                    resolvedRedirects.put(url, it)
-                    url to it
-                }
-            }.toMap()
-            AndroidUtilities.runOnUIThread { onResolved(resolved) }
+                target?.let { resolvedRedirects.put(url, it) }
+                AndroidUtilities.runOnUIThread { resolving.remove(url)?.forEach { it(target) } }
+            }
         }
     }
 }

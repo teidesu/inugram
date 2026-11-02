@@ -66,7 +66,7 @@ index 0000000..0000000 100644
              if (type == 4) {
                  for (int a = 0; a < messageObjects.size(); a++) {
                      MessageObject obj = messageObjects.get(a);
-@@ -8835,6 +8836,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -8842,6 +8843,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                      if (!found) {
                          String fileName = size2.location.volume_id + "_" + size2.location.local_id;
                          File cacheFile = new File(FileLoader.getDirectory(FileLoader.MEDIA_DIR_CACHE), fileName + ".jpg");
@@ -74,7 +74,7 @@ index 0000000..0000000 100644
                          cacheFile.delete();
                          if ("s".equals(size2.type) && strippedNew != null) {
                              newMedia.photo.sizes.set(b, strippedNew);
-@@ -8990,6 +8992,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -8997,6 +8999,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                          if (!found) {
                              String fileName = coverSize2.location.volume_id + "_" + coverSize2.location.local_id;
                              File cacheFile = new File(FileLoader.getDirectory(FileLoader.MEDIA_DIR_CACHE), fileName + ".jpg");
@@ -82,7 +82,7 @@ index 0000000..0000000 100644
                              cacheFile.delete();
                              if ("s".equals(coverSize2.type) && coverStrippedNew != null) {
                                  newPhoto.sizes.set(b, coverStrippedNew);
-@@ -9160,6 +9163,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -9167,6 +9170,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
      }
  
      protected void processUnsentMessages(final ArrayList<TLRPC.Message> messages, final ArrayList<TLRPC.Message> scheduledMessages, final ArrayList<TLRPC.User> users, final ArrayList<TLRPC.Chat> chats, final ArrayList<TLRPC.EncryptedChat> encryptedChats) {

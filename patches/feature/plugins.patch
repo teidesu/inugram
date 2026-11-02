@@ -444,10 +444,10 @@ index 0000000..0000000 100644
  
      public void sendMessage(SendMessageParams sendMessageParams) {
 +        if (desu.inugram.helpers.plugins.telegram.PluginCompose.interceptParams(this, currentAccount, sendMessageParams)) return;
+         desu.inugram.helpers.UrlCleanerHelper.markPendingRedirects(sendMessageParams);
          final SendMessageChatArguments sendMessageChatArguments = sendMessageParams.sendMessageChatArguments != null ?
                  sendMessageParams.sendMessageChatArguments : SendMessageChatArguments.EMPTY;
-         String message = sendMessageParams.message;
-@@ -4992,7 +4996,8 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -4993,7 +4997,8 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                  if (newMsg.attachPath == null) {
                      newMsg.attachPath = "";
                  }
@@ -457,7 +457,7 @@ index 0000000..0000000 100644
                  newMsg.out = true;
                  TLRPC.Chat chat = sendToPeer != null ? getMessagesController().getChat(sendToPeer.channel_id) : null;
                  if (isChannel && sendToPeer != null && (chat == null || !chat.signatures)) {
-@@ -7609,7 +7614,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -7610,7 +7615,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
          }
      }
  
@@ -466,7 +466,7 @@ index 0000000..0000000 100644
          TLRPC.Message message;
          if (mid > 0) {
              message = editingMessages.get(mid);
-@@ -7740,6 +7745,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -7744,6 +7749,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
              return;
          }
  
@@ -474,7 +474,7 @@ index 0000000..0000000 100644
          int reqId = getConnectionsManager().sendRequest(request, (response, error) -> {
              if (error != null && FileRefController.isFileRefError(error.text)) {
                  final int fileRefIndex = FileRefController.getFileRefErrorIndex(error.text);
-@@ -8010,6 +8016,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -8014,6 +8020,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                      }
                      Utilities.stageQueue.postRunnable(() -> getMessagesController().processUpdates(updates, false));
                  } else {
@@ -484,17 +484,17 @@ index 0000000..0000000 100644
                      AlertsCreator.processError(currentAccount, error, null, request);
                      isSentError = true;
                  }
-@@ -8124,6 +8133,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -8128,6 +8137,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
          }
          final TLRPC.Message newMsgObj = msgObj.messageOwner;
          putToSendingMessages(newMsgObj, scheduled);
 +        if (desu.inugram.helpers.plugins.telegram.PluginCompose.parkRequest(msgObj, () -> performSendMessageRequest(req, msgObj, originalPath, parentMessage, check, delayedMessage, parentObject, params, scheduled))) {
 +            return;
 +        }
-         if (!StarsController.getInstance(currentAccount).beforeSendingFinalRequest(req, msgObj, () -> performSendMessageRequest(req, msgObj, originalPath, parentMessage, check, delayedMessage, parentObject, params, scheduled))) {
+         if (desu.inugram.helpers.UrlCleanerHelper.holdSend(currentAccount, req, Collections.singletonList(msgObj), scheduled, () -> performSendMessageRequest(req, msgObj, originalPath, parentMessage, check, delayedMessage, parentObject, params, scheduled))) {
              return;
          }
-@@ -8134,6 +8146,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -8141,6 +8153,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
              return;
          }
  
@@ -502,7 +502,7 @@ index 0000000..0000000 100644
          newMsgObj.reqId = getConnectionsManager().sendRequest(req, (response, error) -> {
              if (error != null && (req instanceof TLRPC.TL_messages_sendMedia || req instanceof TL_ephemeral.TL_sendMessage || req instanceof TLRPC.TL_messages_editMessage || req instanceof TLRPC.TL_messages_addPollAnswer) && FileRefController.isFileRefError(error.text)) {
                  if (FileRefController.isFileRefErrorCover(error.text)) {
-@@ -8555,6 +8568,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -8562,6 +8575,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                              }
                          }
                      } else {
@@ -512,7 +512,7 @@ index 0000000..0000000 100644
                          AlertsCreator.processError(currentAccount, error, null, req);
                          isSentError = true;
                      }
-@@ -8663,7 +8679,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -8670,7 +8686,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
          return false;
      }
  
@@ -521,7 +521,7 @@ index 0000000..0000000 100644
          updateMediaPaths(newMsgObj, sentMessage, newMsgId, Collections.singletonList(originalPath), post, -1, params);
      }
  
-@@ -10140,6 +10156,11 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -10147,6 +10163,11 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
          if (paths == null && originalPaths == null && uris == null || paths != null && originalPaths != null && paths.size() != originalPaths.size()) {
              return;
          }
@@ -533,7 +533,7 @@ index 0000000..0000000 100644
          Utilities.globalQueue.postRunnable(() -> {
              int error = 0;
              long[] groupId = new long[1];
-@@ -10880,6 +10901,12 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -10887,6 +10908,12 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
          if (media.isEmpty()) {
              return;
          }
@@ -546,7 +546,7 @@ index 0000000..0000000 100644
          for (int a = 0, N = media.size(); a < N; a++) {
              if (media.get(a).ttl > 0) {
                  groupMedia = false;
-@@ -12313,6 +12340,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -12320,6 +12347,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
      }
  
      public static class SendMessageParams {

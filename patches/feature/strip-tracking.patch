@@ -4,13 +4,46 @@ Date: Mon, 18 May 2026 21:24:46 +0400
 Subject: strip tracking parameters from urls
 
 ---
+ .../messenger/SendMessagesHelper.java         |  7 +++++
  .../telegram/messenger/browser/Browser.java   |  8 +++++
  .../java/org/telegram/ui/ChatActivity.java    |  3 ++
  .../ui/Components/ChatActivityEnterView.java  |  7 +++++
  .../ui/Components/EditTextCaption.java        | 29 ++++++++++++++++---
  .../java/org/telegram/ui/LaunchActivity.java  |  2 +-
- 5 files changed, 44 insertions(+), 5 deletions(-)
+ 6 files changed, 51 insertions(+), 5 deletions(-)
 
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
+@@ -4429,6 +4429,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+     }
+ 
+     public void sendMessage(SendMessageParams sendMessageParams) {
++        desu.inugram.helpers.UrlCleanerHelper.markPendingRedirects(sendMessageParams);
+         final SendMessageChatArguments sendMessageChatArguments = sendMessageParams.sendMessageChatArguments != null ?
+                 sendMessageParams.sendMessageChatArguments : SendMessageChatArguments.EMPTY;
+         String message = sendMessageParams.message;
+@@ -7705,6 +7706,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+         for (int a = 0, size = msgObjs.size(); a < size; a++) {
+             putToSendingMessages(msgObjs.get(a).messageOwner, scheduled);
+         }
++        if (desu.inugram.helpers.UrlCleanerHelper.holdSend(currentAccount, request, msgObjs, scheduled, () -> performSendMessageRequestMulti(request, msgObjs, originalPaths, parentObjects, delayedMessage, scheduled))) {
++            return;
++        }
+         if (!StarsController.getInstance(currentAccount).beforeSendingFinalRequest(request, msgObjs, () -> performSendMessageRequestMulti(request, msgObjs, originalPaths, parentObjects, delayedMessage, scheduled))) {
+             return;
+         }
+@@ -8096,6 +8100,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+         }
+         final TLRPC.Message newMsgObj = msgObj.messageOwner;
+         putToSendingMessages(newMsgObj, scheduled);
++        if (desu.inugram.helpers.UrlCleanerHelper.holdSend(currentAccount, req, Collections.singletonList(msgObj), scheduled, () -> performSendMessageRequest(req, msgObj, originalPath, parentMessage, check, delayedMessage, parentObject, params, scheduled))) {
++            return;
++        }
+         if (!StarsController.getInstance(currentAccount).beforeSendingFinalRequest(req, msgObj, () -> performSendMessageRequest(req, msgObj, originalPath, parentMessage, check, delayedMessage, parentObject, params, scheduled))) {
+             return;
+         }
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/browser/Browser.java b/TMessagesProj/src/main/java/org/telegram/messenger/browser/Browser.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/browser/Browser.java
@@ -63,7 +96,7 @@ index 0000000..0000000 100644
                  sendRichDraft(notify, scheduleDate, scheduleRepeatPeriod, payStars);
                  return;
              }
-+            if (desu.inugram.helpers.UrlCleanerHelper.sendAfterRedirectsResolved(messageEditText, () -> sendMessageInternal(notify, scheduleDate, scheduleRepeatPeriod, payStars, false))) {
++            if (DialogObject.isEncryptedDialog(dialog_id) && desu.inugram.helpers.UrlCleanerHelper.sendAfterRedirectsResolved(messageEditText, () -> sendMessageInternal(notify, scheduleDate, scheduleRepeatPeriod, payStars, false))) {
 +                return;
 +            }
              CharSequence message = messageEditText == null ? "" : messageEditText.getTextToUse();
