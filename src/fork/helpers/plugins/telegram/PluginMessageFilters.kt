@@ -12,10 +12,12 @@ import desu.inugram.helpers.plugins.EngineDispatch
 import desu.inugram.helpers.plugins.MessageFiltersListener
 import desu.inugram.helpers.plugins.PluginManager
 import desu.inugram.helpers.plugins.PluginSession
+import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.SessionResource
 import desu.inugram.helpers.plugins.tl.TlFilter
 import desu.inugram.helpers.plugins.tl.TlJson
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 import org.json.JSONObject
@@ -40,6 +42,8 @@ import org.telegram.ui.Components.LayoutHelper
 object PluginMessageFilters : SessionResource {
     class Verdict(
         val generation: Int,
+        /** the [landed] count it was read at while a callback it shows has not answered, else -1 */
+        val landedAt: Int,
         val owner: TLRPC.Message,
         val editDate: Int,
         val hide: Boolean,
@@ -61,6 +65,18 @@ object PluginMessageFilters : SessionResource {
     }
 
     private class Job(val key: Key, val owner: TLRPC.Message, val callbackIds: IntArray, val generation: Int)
+
+    /** what a rule sees of a message, rust's `filters::Probe` */
+    class Probe(
+        val text: String,
+        val entitiesJson: String,
+        val buttons: String,
+        val sender: Long,
+        val peer: Long,
+        val peerType: Int,
+        val media: String,
+        val forward: Boolean,
+    )
 
     private class Rules(val session: PluginSession, val needs: Int, val generation: Int) {
         val outcomes = LruCache<Key, Outcome>(OUTCOME_CACHE_SIZE)
@@ -87,6 +103,9 @@ object PluginMessageFilters : SessionResource {
     /** written before [generation], so a reader that sees a generation sees its rules */
     @Volatile private var entries: List<Rules> = emptyList()
     @Volatile private var generation = 0
+
+    /** bumped as a callback's outcome changes what a message shows, which only outdates verdicts waiting for one */
+    private val landed = AtomicInteger()
 
     private val reverted = LruCache<Key, Boolean>(REVERTED_CACHE_SIZE)
     private val pendingNotify = HashSet<Int>()
@@ -122,8 +141,12 @@ object PluginMessageFilters : SessionResource {
             generation++
         }
         lock.withLock { settled.signalAll() }
-        notifyChanged((0 until UserConfig.MAX_ACCOUNT_COUNT).filter { UserConfig.getInstance(it).isClientActivated })
+        notifyAllChanged()
     }
+
+    /** rebuilds the messages on screen in every account, for any plugin change in how they render */
+    fun notifyAllChanged() =
+        notifyChanged((0 until UserConfig.MAX_ACCOUNT_COUNT).filter { UserConfig.getInstance(it).isClientActivated })
 
     private fun notifyChanged(accounts: Collection<Int>) {
         val post = synchronized(pendingNotify) {
@@ -143,15 +166,21 @@ object PluginMessageFilters : SessionResource {
 
     @JvmStatic
     fun getVerdict(message: MessageObject): Verdict? {
-        val generation = generation
         val entries = entries
-        val owner = message.messageOwner
-        if (entries.isEmpty() || owner == null || !isFilterable(message, owner)) return null
+        if (entries.isEmpty()) return null
+        val generation = generation
+        val landed = landed.get()
+        val owner = message.messageOwner ?: return null
         if (BlockedMessagesHelper.isRevealed(message.currentAccount, message.dialogId)) return null
         message.inu_filterVerdict?.let { cached ->
-            if (cached.generation == generation && cached.owner === owner && cached.editDate == owner.edit_date) return cached
+            if (cached.generation == generation && (cached.landedAt < 0 || cached.landedAt == landed) &&
+                cached.owner === owner && cached.editDate == owner.edit_date
+            ) {
+                return cached
+            }
         }
-        return computeVerdict(message, owner, entries, generation).also { message.inu_filterVerdict = it }
+        if (!isFilterable(message, owner)) return null
+        return computeVerdict(message, owner, entries, generation, landed).also { message.inu_filterVerdict = it }
     }
 
     /**
@@ -229,44 +258,58 @@ object PluginMessageFilters : SessionResource {
             !(owner.out && !owner.post) && message.dialogId != UserConfig.getInstance(message.currentAccount).clientUserId &&
             !DialogObject.isEncryptedDialog(message.dialogId) && !TlFilter.isServiceMessage(owner)
 
-    private fun computeVerdict(message: MessageObject, owner: TLRPC.Message, entries: List<Rules>, generation: Int): Verdict {
-        val needs = entries.fold(0) { needs, rules -> needs or rules.needs }
-        val text = owner.message.orEmpty()
+    /** [needs] is rust's `filters::NEEDS_*` bits of every rule the probe is for */
+    fun readProbe(owner: TLRPC.Message, needs: Int): Probe {
         val entitiesJson = if (needs and NEEDS_ENTITIES != 0 && !owner.entities.isNullOrEmpty()) {
             PluginCompose.encodeEntities(owner.entities).toString()
         } else {
             ""
         }
-        val buttons = if (needs and NEEDS_BUTTONS != 0) readButtonUrls(owner) else ""
         val peer = owner.peer_id
-        val sender = (owner.from_id ?: peer)?.let(PeerSpecs::toMarkedPeerId) ?: 0L
-        val peerType = when {
-            peer == null || peer.user_id != 0L -> 1
-            peer.channel_id != 0L && owner.post -> 4
-            else -> 2
-        }
-        val media = readMediaType(owner.media).orEmpty()
+        return Probe(
+            text = owner.message.orEmpty(),
+            entitiesJson = entitiesJson,
+            buttons = if (needs and NEEDS_BUTTONS != 0) readButtonUrls(owner) else "",
+            sender = (owner.from_id ?: peer)?.let(PeerSpecs::toMarkedPeerId) ?: 0L,
+            peer = peer?.let(PeerSpecs::toMarkedPeerId) ?: 0L,
+            peerType = when {
+                peer == null || peer.user_id != 0L -> 1
+                peer.channel_id != 0L && owner.post -> 4
+                else -> 2
+            },
+            media = readMediaType(owner.media).orEmpty(),
+            forward = owner.fwd_from != null,
+        )
+    }
+
+    private fun computeVerdict(message: MessageObject, owner: TLRPC.Message, entries: List<Rules>, generation: Int, landed: Int): Verdict {
+        val live = entries.filter { it.session.canDispatch() }
+        val probe = readProbe(owner, live.fold(0) { needs, rules -> needs or rules.needs })
+        val matched = QuickJs.matchMessageFilters(live.map { it.session.engine }, probe) ?: IntArray(0)
         val key = Key(message.currentAccount, message.dialogId, owner.id)
 
         var hide = false
         var spoiler = false
+        var waiting = false
         var rewrite: TLRPC.TL_textWithEntities? = null
         var rewriteBy: String? = null
         val keepRewrites = reverted.get(key) == null
-        for (rules in entries) {
-            if (!rules.session.canDispatch()) continue
-            val matched = rules.session.engine.matchMessageFilters(
-                text, entitiesJson, buttons, sender, peer?.let(PeerSpecs::toMarkedPeerId) ?: 0L, peerType, media, owner.fwd_from != null,
-            ) ?: continue
-            if (matched[0] == MATCHED_HIDE) {
+        var at = 0
+        for (rules in live) {
+            if (at >= matched.size) break
+            val start = at + 1
+            at = start + matched[at]
+            if (at == start) continue
+            if (matched[start] == MATCHED_HIDE) {
                 hide = true
                 break
             }
-            if (matched[0] == MATCHED_SPOILER) spoiler = true
-            if (matched.size == 1) continue
+            if (matched[start] == MATCHED_SPOILER) spoiler = true
+            if (at == start + 1) continue
             val outcome = rules.outcomes.get(key)
             if (outcome == null || outcome.generation != rules.generation || outcome.editDate != owner.edit_date) {
-                enqueue(rules, Job(key, owner, matched.copyOfRange(1, matched.size), rules.generation))
+                enqueue(rules, Job(key, owner, matched.copyOfRange(start + 1, at), rules.generation))
+                waiting = true
             }
             if (outcome == null) continue
             if (outcome.hide) {
@@ -279,7 +322,7 @@ object PluginMessageFilters : SessionResource {
                 rewriteBy = rules.session.manifest.name
             }
         }
-        return Verdict(generation, owner, owner.edit_date, hide, spoiler, rewrite, rewriteBy)
+        return Verdict(generation, if (waiting) landed else -1, owner, owner.edit_date, hide, spoiler, rewrite, rewriteBy)
     }
 
     private fun enqueue(rules: Rules, job: Job) {
@@ -316,7 +359,7 @@ object PluginMessageFilters : SessionResource {
             val previous = rules.outcomes.put(job.key, outcome)
             if (outcome.isVisible || previous?.isVisible == true) {
                 changed += job.key.account
-                synchronized(this) { generation++ }
+                landed.incrementAndGet()
             }
             lock.withLock {
                 if (job.key !in rules.queue) rules.pending -= job.key

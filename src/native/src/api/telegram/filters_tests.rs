@@ -59,7 +59,7 @@ fn an_ad_marked_only_in_a_link_is_hidden_without_asking_the_plugin() {
     entities_json: entities,
     ..probe("shop now")
   };
-  assert_eq!(state.rules.matches(&ad), vec![MATCHED_HIDE]);
+  assert_eq!(state.rules.matches(&ad, &mut None), vec![MATCHED_HIDE]);
   let in_a_group = Probe {
     peer_type: 2,
     ..Probe {
@@ -67,14 +67,14 @@ fn an_ad_marked_only_in_a_link_is_hidden_without_asking_the_plugin() {
       ..probe("shop now")
     }
   };
-  assert_eq!(state.rules.matches(&in_a_group), vec![MATCHED_NONE]);
+  assert_eq!(state.rules.matches(&in_a_group, &mut None), vec![MATCHED_NONE]);
   let ad_button = Probe {
     buttons: "https://t.me/x\nhttps://shop.example/?erid=1",
     ..probe("plain post")
   };
-  assert_eq!(state.rules.matches(&ad_button), vec![MATCHED_HIDE]);
-  assert_eq!(state.rules.matches(&probe("plain text with erid= in it is html too")), vec![MATCHED_HIDE]);
-  assert_eq!(state.rules.matches(&probe("nothing to see")), vec![MATCHED_NONE]);
+  assert_eq!(state.rules.matches(&ad_button, &mut None), vec![MATCHED_HIDE]);
+  assert_eq!(state.rules.matches(&probe("plain text with erid= in it is html too"), &mut None), vec![MATCHED_HIDE]);
+  assert_eq!(state.rules.matches(&probe("nothing to see"), &mut None), vec![MATCHED_NONE]);
 }
 
 #[test]
@@ -108,9 +108,9 @@ fn a_callback_rewrites_or_hides_the_messages_its_rule_lets_through() {
       globalThis.__dispose = inu.filterMessages({ text: /secret/ }, async () => 'hide')
     "#,
   );
-  let callbacks = state.rules.matches(&probe("a secret"));
+  let callbacks = state.rules.matches(&probe("a secret"), &mut None);
   assert_eq!(callbacks.len(), 4, "every callback whose rule matched is named: {callbacks:?}");
-  assert_eq!(state.rules.matches(&probe("public")), vec![MATCHED_NONE]);
+  assert_eq!(state.rules.matches(&probe("public"), &mut None), vec![MATCHED_NONE]);
 
   let message = |text: &str| format!(r#"{{"_":"message","id":1,"message":"{text}","date":0}}"#);
   let context = ctx.clone();
@@ -124,5 +124,5 @@ fn a_callback_rewrites_or_hides_the_messages_its_rule_lets_through() {
 
   eval(&ctx, "__dispose(); __dispose()");
   assert_eq!(host.changes.borrow().len(), 4, "a second dispose changes nothing");
-  assert_eq!(state.rules.matches(&probe("a secret")).len(), 3);
+  assert_eq!(state.rules.matches(&probe("a secret"), &mut None).len(), 3);
 }

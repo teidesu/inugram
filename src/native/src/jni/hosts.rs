@@ -12,6 +12,7 @@ use crate::api::telegram::account::AccountHost;
 use crate::api::telegram::filters::FilterHost;
 use crate::api::telegram::reads::ReadsHost;
 use crate::api::telegram::rpc::RpcHost;
+use crate::api::telegram::text_entities::TextEntityHost;
 use crate::api::telegram::writes::WritesHost;
 use crate::api::timers::TimerHost;
 use crate::api::tl::proxy::{TlHost, ORDINAL_FALLBACK};
@@ -143,6 +144,16 @@ impl TranslationHost for JniBridge {
 impl FilterHost for JniBridge {
   fn message_filters_changed(&self, needs: i32) {
     self.call_void("filterMessages", self.on_message_filters_changed, &[Arg::Int(needs)]);
+  }
+}
+
+impl TextEntityHost for JniBridge {
+  fn text_entities_changed(&self, needs: i32) {
+    self.call_void("registerTextEntity", self.on_text_entities_changed, &[Arg::Int(needs)]);
+  }
+
+  fn text_entity_settled(&self, tap_id: i64) {
+    self.call_void("registerTextEntity", self.on_text_entity_settled, &[Arg::Long(tap_id)]);
   }
 }
 
@@ -367,6 +378,14 @@ impl UiHost for JniBridge {
       "openMenu",
       self.on_ui_open_menu,
       &[Arg::Long(menu_id), Arg::Long(page_id), Arg::Str(anchor_key), Arg::Str(items_json)],
+    )
+  }
+
+  fn ui_open_text_entity_menu(&self, menu_id: i64, tap_id: i64, items_json: &str) -> Option<String> {
+    self.call_refusal(
+      "openMenu",
+      self.on_ui_open_text_entity_menu,
+      &[Arg::Long(menu_id), Arg::Long(tap_id), Arg::Str(items_json)],
     )
   }
 }

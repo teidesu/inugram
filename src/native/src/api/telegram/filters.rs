@@ -52,7 +52,7 @@ enum Presence<T> {
 }
 
 #[derive(Clone)]
-struct Matcher {
+pub(crate) struct Matcher {
   text: Option<Presence<Regex>>,
   html: Option<Regex>,
   buttons: Option<Regex>,
@@ -91,8 +91,15 @@ pub(crate) struct Probe<'a> {
 }
 
 impl Matcher {
+  /// the `NEEDS_*` bits the app has to read off a message for this matcher
+  pub(crate) fn needs(&self) -> i32 {
+    NEEDS_ANY
+      | if self.html.is_some() { NEEDS_ENTITIES } else { 0 }
+      | if self.buttons.is_some() { NEEDS_BUTTONS } else { 0 }
+  }
+
   /// cheap checks first: rendering html is the only allocation, and it happens once per probe
-  fn matches(&self, probe: &Probe<'_>, html: &mut Option<String>) -> bool {
+  pub(crate) fn matches(&self, probe: &Probe<'_>, html: &mut Option<String>) -> bool {
     (self.senders.is_empty() || self.senders.contains(&probe.sender))
       && (self.peers.is_empty() && self.peer_types == 0
         || self.peers.contains(&probe.peer)
@@ -127,10 +134,10 @@ pub(crate) struct MessageFilters {
 
 impl MessageFilters {
   /// `[MATCHED_*, ...callback ids]`: the callbacks whose rules matched, in registration order. A
-  /// static hide leaves none, since nothing they answer can show the message again
-  pub(crate) fn matches(&self, probe: &Probe<'_>) -> Vec<i32> {
+  /// static hide leaves none, since nothing they answer can show the message again. `html` is the
+  /// probe's rendering, shared by every plugin's rules
+  pub(crate) fn matches(&self, probe: &Probe<'_>, html: &mut Option<String>) -> Vec<i32> {
     let rules = self.rules.read().unwrap_or_else(|e| e.into_inner()).clone();
-    let mut html = None;
     let mut matched = vec![MATCHED_NONE];
     // ponytail: one pass over every rule, a RegexSet per field if blocklists get into the thousands
     for rule in rules.iter() {
@@ -139,7 +146,7 @@ impl MessageFilters {
         Action::Callback(id) => matched[1..].contains(&(id as i32)),
         Action::Hide => false,
       };
-      if seen || !rule.matcher.matches(probe, &mut html) {
+      if seen || !rule.matcher.matches(probe, html) {
         continue;
       }
       match rule.action {
@@ -158,12 +165,7 @@ impl MessageFilters {
     let before = rules.len();
     change(&mut rules);
     let changed = rules.len() != before;
-    let needs = rules.iter().fold(0, |needs, rule| {
-      needs
-        | NEEDS_ANY
-        | if rule.matcher.html.is_some() { NEEDS_ENTITIES } else { 0 }
-        | if rule.matcher.buttons.is_some() { NEEDS_BUTTONS } else { 0 }
-    });
+    let needs = rules.iter().fold(0, |needs, rule| needs | rule.matcher.needs());
     *current = Arc::new(rules);
     (needs, changed)
   }
@@ -359,44 +361,44 @@ fn read_verdict<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Verdict> {
 
 fn read_matchers<'js>(ctx: &Ctx<'js>, filter: &Value<'js>) -> JsResult<Vec<Matcher>> {
   let Some(filters) = filter.as_array() else {
-    return Ok(vec![read_matcher(ctx, filter)?]);
+    return Ok(vec![read_matcher(ctx, WHAT, filter)?]);
   };
   if filters.is_empty() {
     return Err(Exception::throw_type(ctx, &format!("{WHAT}: the filter list must not be empty")));
   }
-  filters.iter::<Value>().map(|filter| read_matcher(ctx, &filter?)).collect()
+  filters.iter::<Value>().map(|filter| read_matcher(ctx, WHAT, &filter?)).collect()
 }
 
 /// unknown keys are refused: a misspelled field would otherwise widen the rule to every message
-fn read_matcher<'js>(ctx: &Ctx<'js>, filter: &Value<'js>) -> JsResult<Matcher> {
+pub(crate) fn read_matcher<'js>(ctx: &Ctx<'js>, what: &str, filter: &Value<'js>) -> JsResult<Matcher> {
   let Some(filter) = filter.as_object() else {
-    return Err(Exception::throw_type(ctx, &format!("{WHAT}: a filter must be an object")));
+    return Err(Exception::throw_type(ctx, &format!("{what}: a filter must be an object")));
   };
   for key in filter.keys::<String>() {
     let key = key?;
     if !FILTER_KEYS.contains(&key.as_str()) {
-      return Err(Exception::throw_type(ctx, &format!("{WHAT}: unknown filter field '{key}'")));
+      return Err(Exception::throw_type(ctx, &format!("{what}: unknown filter field '{key}'")));
     }
   }
   let text: Value = filter.get("text")?;
   let text = match text.as_bool() {
     Some(present) => Some(Presence::Present(present)),
-    None => read_regex(ctx, &text, "text", "a RegExp or a boolean")?.map(Presence::Matching),
+    None => read_regex(ctx, what, &text, "filter.text", "a RegExp or a boolean")?.map(Presence::Matching),
   };
-  let html = read_regex(ctx, &filter.get("html")?, "html", "a RegExp")?;
-  let buttons = read_regex(ctx, &filter.get("buttons")?, "buttons", "a RegExp")?;
-  let senders = read_one_or_many(ctx, WHAT, filter, "sender")?
+  let html = read_regex(ctx, what, &filter.get("html")?, "filter.html", "a RegExp")?;
+  let buttons = read_regex(ctx, what, &filter.get("buttons")?, "filter.buttons", "a RegExp")?;
+  let senders = read_one_or_many(ctx, what, filter, "sender")?
     .iter()
     .map(read_peer_id)
     .collect::<Option<Vec<_>>>()
-    .ok_or_else(|| Exception::throw_type(ctx, &format!("{WHAT}: filter.sender must hold peer ids")))?;
+    .ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: filter.sender must hold peer ids")))?;
   let (mut peers, mut peer_types) = (Vec::new(), 0);
-  for peer in read_one_or_many(ctx, WHAT, filter, "peer")? {
+  for peer in read_one_or_many(ctx, what, filter, "peer")? {
     match read_peer_id(&peer) {
       Some(id) => peers.push(id),
       None => {
         let name = read_name(&peer, PEER_TYPES).ok_or_else(|| {
-          Exception::throw_type(ctx, &format!("{WHAT}: filter.peer must hold peer ids, 'user', 'group' or 'broadcast'"))
+          Exception::throw_type(ctx, &format!("{what}: filter.peer must hold peer ids, 'user', 'group' or 'broadcast'"))
         })?;
         peer_types |= 1 << PEER_TYPES.iter().position(|known| *known == name).unwrap_or_default();
       }
@@ -406,12 +408,12 @@ fn read_matcher<'js>(ctx: &Ctx<'js>, filter: &Value<'js>) -> JsResult<Matcher> {
   let media = match media.as_bool() {
     Some(present) => Some(Presence::Present(present)),
     None => {
-      let kinds = read_one_or_many(ctx, WHAT, filter, "media")?
+      let kinds = read_one_or_many(ctx, what, filter, "media")?
         .iter()
         .map(|kind| read_name(kind, MEDIA_KINDS))
         .collect::<Option<Vec<_>>>()
         .ok_or_else(|| {
-          Exception::throw_type(ctx, &format!("{WHAT}: filter.media must be a boolean, or one or more media types"))
+          Exception::throw_type(ctx, &format!("{what}: filter.media must be a boolean, or one or more media types"))
         })?;
       (!kinds.is_empty()).then_some(Presence::Matching(kinds))
     }
@@ -422,7 +424,7 @@ fn read_matcher<'js>(ctx: &Ctx<'js>, filter: &Value<'js>) -> JsResult<Matcher> {
     false => Some(
       forward
         .as_bool()
-        .ok_or_else(|| Exception::throw_type(ctx, &format!("{WHAT}: filter.forward must be a boolean")))?,
+        .ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: filter.forward must be a boolean")))?,
     ),
   };
   if text.is_none()
@@ -434,7 +436,7 @@ fn read_matcher<'js>(ctx: &Ctx<'js>, filter: &Value<'js>) -> JsResult<Matcher> {
     && media.is_none()
     && forward.is_none()
   {
-    return Err(Exception::throw_type(ctx, &format!("{WHAT}: a filter must constrain at least one field")));
+    return Err(Exception::throw_type(ctx, &format!("{what}: a filter must constrain at least one field")));
   }
   Ok(Matcher {
     text,
@@ -454,16 +456,22 @@ fn read_peer_id(value: &Value<'_>) -> Option<i64> {
 
 /// The plugin's RegExp, compiled by the `regex` crate: linear-time, so no rule can stall the app,
 /// at the cost of lookaround and backreferences. `y` anchors at the start; `g` and `d` mean nothing here
-fn read_regex<'js>(ctx: &Ctx<'js>, value: &Value<'js>, key: &str, expected: &str) -> JsResult<Option<Regex>> {
+pub(crate) fn read_regex<'js>(
+  ctx: &Ctx<'js>,
+  what: &str,
+  value: &Value<'js>,
+  key: &str,
+  expected: &str,
+) -> JsResult<Option<Regex>> {
   if value.is_undefined() {
     return Ok(None);
   }
-  let not_regexp = || Exception::throw_type(ctx, &format!("{WHAT}: filter.{key} must be {expected}"));
+  let not_regexp = || Exception::throw_type(ctx, &format!("{what}: {key} must be {expected}"));
   let regexp: &Object = value.as_object().filter(|regexp| qjs_is_regexp(regexp)).ok_or_else(not_regexp)?;
   let source: String = regexp.get("source").map_err(|_| not_regexp())?;
   let flags: String = regexp.get("flags").map_err(|_| not_regexp())?;
   if let Some(flag) = flags.chars().find(|flag| !"dgimsuy".contains(*flag)) {
-    return Err(Exception::throw_type(ctx, &format!("{WHAT}: filter.{key} uses the unsupported flag '{flag}'")));
+    return Err(Exception::throw_type(ctx, &format!("{what}: {key} uses the unsupported flag '{flag}'")));
   }
   let pattern = match flags.contains('y') {
     true => format!(r"\A(?:{source})"),
@@ -475,7 +483,7 @@ fn read_regex<'js>(ctx: &Ctx<'js>, value: &Value<'js>, key: &str, expected: &str
     .dot_matches_new_line(flags.contains('s'))
     .build()
     .map(Some)
-    .map_err(|e| Exception::throw_type(ctx, &format!("{WHAT}: filter.{key} /{source}/ is not supported: {e}")))
+    .map_err(|e| Exception::throw_type(ctx, &format!("{what}: {key} /{source}/ is not supported: {e}")))
 }
 
 #[cfg(test)]

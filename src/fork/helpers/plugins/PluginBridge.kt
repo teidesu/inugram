@@ -30,6 +30,7 @@ class PluginBridge(
     notifications: NotificationListener,
     translation: TranslationListener,
     filters: MessageFiltersListener,
+    textEntities: TextEntitiesListener,
     val jvm: JvmListener? = null,
     val xposed: XposedListener? = null,
 ) : CoreListener by core,
@@ -45,6 +46,7 @@ class PluginBridge(
     NotificationListener by notifications,
     TranslationListener by translation,
     MessageFiltersListener by filters,
+    TextEntitiesListener by textEntities,
     JvmListener by (jvm ?: MissingJvm),
     XposedListener by (xposed ?: MissingXposed) {
 

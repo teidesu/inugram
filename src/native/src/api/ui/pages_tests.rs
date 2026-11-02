@@ -51,6 +51,9 @@ impl UiHost for TestUiHost {
     });
     None
   }
+  fn ui_open_text_entity_menu(&self, _menu_id: i64, _tap_id: i64, _items_json: &str) -> Option<String> {
+    unreachable!()
+  }
 }
 
 type Disposing = crate::testing::harness::DisposeOnDrop<UiState>;

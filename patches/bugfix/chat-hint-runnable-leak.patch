@@ -21,7 +21,7 @@ index 0000000..0000000 100644
          getNotificationCenter().removePostponeNotificationsCallback(postponeNotificationsWhileLoadingCallback);
          getMessagesController().setLastCreatedDialogId(dialog_id, chatMode == MODE_SCHEDULED, false);
  
-@@ -7100,8 +7103,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -7101,8 +7104,8 @@ public class ChatActivity extends BaseFragment implements
                          savedMessagesTagHint.hide();
                      } else if (!savedMessagesTagHintShown) {
                          lastScrollTime = System.currentTimeMillis();
@@ -32,7 +32,7 @@ index 0000000..0000000 100644
                      }
                  }
                  if (videoConversionTimeHint != null && videoConversionTimeHint.shown()) {
-@@ -7110,8 +7113,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -7111,8 +7114,8 @@ public class ChatActivity extends BaseFragment implements
                  if (botMessageHint != null && botMessageHint.shown()) {
                      botMessageHint.hide();
                  } else {
@@ -43,7 +43,7 @@ index 0000000..0000000 100644
                  }
                  if (factCheckHint != null) {
                      factCheckHint.hide();
-@@ -27885,8 +27888,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -27886,8 +27889,8 @@ public class ChatActivity extends BaseFragment implements
              videoConversionTimeHint.setJointPx(0, -dp(16) + loc[0] + foundCell.timeX + foundCell.timeWidth / 2f);
              videoConversionTimeHint.show();
          } else {
@@ -54,7 +54,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -27916,6 +27919,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -27917,6 +27920,9 @@ public class ChatActivity extends BaseFragment implements
  
      private long lastScrollTime;
      private boolean savedMessagesTagHintShown;
@@ -64,7 +64,7 @@ index 0000000..0000000 100644
      private void checkSavedMessagesTagHint() {
          if (savedMessagesTagHint == null || savedMessagesTagHint.shown() || savedMessagesTagHintShown || !checkedSavedMessagesHint) {
              return;
-@@ -27949,8 +27955,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -27950,8 +27956,8 @@ public class ChatActivity extends BaseFragment implements
  
                  MessagesController.getGlobalMainSettings().edit().putInt("savedsearchtaghint", 1).apply();
              } else {

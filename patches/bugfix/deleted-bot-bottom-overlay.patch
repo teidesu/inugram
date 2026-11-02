@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -28581,7 +28581,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -28583,7 +28583,11 @@ public class ChatActivity extends BaseFragment implements
                      sentBotStart = true;
                  }
              } else {

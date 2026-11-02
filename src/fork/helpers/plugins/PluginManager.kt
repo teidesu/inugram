@@ -34,6 +34,7 @@ import desu.inugram.helpers.plugins.telegram.PluginOptimisticSend
 import desu.inugram.helpers.plugins.telegram.PluginRpc
 import desu.inugram.helpers.plugins.telegram.PluginSends
 import desu.inugram.helpers.plugins.telegram.PluginMessageFilters
+import desu.inugram.helpers.plugins.telegram.PluginTextEntities
 import desu.inugram.helpers.plugins.telegram.PluginTranslation
 import desu.inugram.helpers.plugins.telegram.PluginUpdates
 import desu.inugram.helpers.plugins.tl.TlReflect
@@ -421,6 +422,7 @@ object PluginManager {
         PluginSends.refreshOrder()
         PluginUpdates.refreshOrder()
         PluginMessageFilters.refreshOrder()
+        PluginTextEntities.refreshOrder()
     }
 
     /** also the install flow's gate. `@plugin-api` reads like minSdkVersion: a shipped level never breaks */
@@ -532,6 +534,7 @@ object PluginManager {
             notifications = PluginNotifications.listenerFor(session),
             translation = PluginTranslation.listenerFor(session),
             filters = PluginMessageFilters.listenerFor(session),
+            textEntities = PluginTextEntities.listenerFor(session),
             jvm = jvm,
             xposed = PluginXposed.listenerFor(session, jvm),
         )
@@ -643,6 +646,7 @@ object PluginManager {
         PluginActions,
         PluginTranslation,
         PluginMessageFilters,
+        PluginTextEntities,
         PluginNotifications,
         PluginCanvas,
         PluginXposed,

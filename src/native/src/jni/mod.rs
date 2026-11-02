@@ -25,6 +25,7 @@ use crate::{
       filters::{FilterState, MessageFilters},
       reads::ReadsState,
       rpc::RpcState,
+      text_entities::{TextEntities, TextEntityState},
       writes::WritesState,
     },
     timers::TimerState,
@@ -73,6 +74,7 @@ struct EngineSlot {
   engine: Arc<Serialized<TransferEngine>>,
   jvm_refs: Option<Arc<crate::api::platform::jvm::RefTable>>,
   message_filters: Arc<MessageFilters>,
+  text_entities: Arc<TextEntities>,
 }
 
 static ENGINES: OnceLock<Mutex<SlotMap<EngineKey, EngineSlot>>> = OnceLock::new();
@@ -85,6 +87,7 @@ fn lock_engines() -> Option<std::sync::MutexGuard<'static, SlotMap<EngineKey, En
 pub(crate) fn insert_engine(engine: Engine) -> jlong {
   let jvm_refs = engine.jvm.as_ref().map(|state| state.refs().clone());
   let message_filters = engine.filters.rules.clone();
+  let text_entities = engine.text_entities.entities.clone();
   ENGINES
     .get_or_init(|| Mutex::new(SlotMap::with_key()))
     .lock()
@@ -93,6 +96,7 @@ pub(crate) fn insert_engine(engine: Engine) -> jlong {
       engine: Serialized::new(TransferEngine(engine)),
       jvm_refs,
       message_filters,
+      text_entities,
     })
     .data()
     .as_ffi() as jlong
@@ -104,6 +108,10 @@ pub(crate) fn engine_jvm_refs(handle: jlong) -> Option<Arc<crate::api::platform:
 
 pub(crate) fn engine_message_filters(handle: jlong) -> Option<Arc<MessageFilters>> {
   Some(lock_engines()?.get(get_engine_key(handle))?.message_filters.clone())
+}
+
+pub(crate) fn engine_text_entities(handle: jlong) -> Option<Arc<TextEntities>> {
+  Some(lock_engines()?.get(get_engine_key(handle))?.text_entities.clone())
 }
 
 /// A caller-thread entry waits out the engine thread's longest turn: that thread lends the engine
@@ -221,6 +229,7 @@ pub(crate) struct Engine {
   pub(crate) actions: Rc<ActionState>,
   pub(crate) translation: Rc<TranslationState>,
   pub(crate) filters: Rc<FilterState>,
+  pub(crate) text_entities: Rc<TextEntityState>,
   pub(crate) account: Rc<AccountState>,
   pub(crate) reads: Rc<ReadsState>,
   pub(crate) writes: Rc<WritesState>,
@@ -248,6 +257,7 @@ impl Engine {
       &*self.actions,
       &*self.translation,
       &*self.filters,
+      &*self.text_entities,
       &*self.writes,
       &*self.reads,
       &*self.account,

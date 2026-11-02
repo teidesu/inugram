@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -27443,6 +27443,17 @@ public class ChatActivity extends BaseFragment implements
+@@ -27444,6 +27444,17 @@ public class ChatActivity extends BaseFragment implements
                      desu.inugram.helpers.chat.ReactionDebugHelper.onMessageObjectReplaced(old, messageObject);
                      messageObject.copyStableParams(old);
                      messages.set(index, messageObject);

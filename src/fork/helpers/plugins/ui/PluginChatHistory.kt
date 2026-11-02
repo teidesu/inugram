@@ -347,6 +347,7 @@ object PluginChatHistory : SessionResource {
                 val array = JSONArray(wire.substring(1))
                 (0 until array.length()).map { i ->
                     val o = array.getJSONObject(i)
+                    if (o.optBoolean("separator")) return@map null
                     MenuItem(
                         PluginText.formatted(o.getString("text"), o.optJSONArray("textEntities")),
                         o.optString("icon").takeIf { o.has("icon") },
@@ -372,6 +373,10 @@ object PluginChatHistory : SessionResource {
             screen.menuCells.clear()
             headerItem.removeAllSubItems()
             items.forEachIndexed { index, item ->
+                if (item == null) {
+                    headerItem.addColoredGap()
+                    return@forEachIndexed
+                }
                 val cell = headerItem.addSubItem(MENU_ITEM_BASE + index, 0, null, item.text, true, item.checked != null)
                 item.checked?.let(cell::setChecked)
                 if (item.icon != null) PluginIcons.setIcon(cell, item.text, item.icon, screen.session.engine, 0)

@@ -264,31 +264,51 @@ object PluginUi : SessionResource {
     }
 
     /** the row's view may be recycled after a re-render, so a row off screen settles as dismissed */
-    fun openMenu(session: PluginSession, menuId: Long, pageId: Long, anchorKey: String, itemsJson: String): String? {
+    fun openMenu(session: PluginSession, menuId: Long, pageId: Long, anchorKey: String, itemsJson: String): String? =
+        openMenu(session, menuId, itemsJson) { menu ->
+            val activity = openPages[PageKey(session, pageId)]?.lastOrNull()
+            val anchorView = activity?.anchorViewFor(anchorKey)
+            if (activity == null || anchorView == null || activity.parentActivity == null || !anchorView.isAttachedToWindow) {
+                return@openMenu menu.settle(-1)
+            }
+            menu.fill(ItemOptions.makeOptions(activity, anchorView).setLongPressSelectionEnabled(false)) { activity.requestRender() }
+                .setOnDismiss { menu.settle(-1) }
+                .show()
+        }
+
+    /** [show] runs on the ui thread, and every way it closes the menu has to settle it */
+    fun openMenu(session: PluginSession, menuId: Long, itemsJson: String, show: (Menu) -> Unit): String? {
         val items = try {
             parseMenuItems(itemsJson)
         } catch (e: Exception) {
             return PluginWire.encodePluginError("invalid-argument", "openMenu: ${e.message}")
         }
-        AndroidUtilities.runOnUIThread {
-            fun settle(slot: Int) {
-                EngineDispatch.onEngine(session) { session.engine.uiMenuClick(menuId, slot) }
-            }
-            val activity = openPages[PageKey(session, pageId)]?.lastOrNull()
-            val anchorView = activity?.anchorViewFor(anchorKey)
-            if (activity == null || anchorView == null || activity.parentActivity == null || !anchorView.isAttachedToWindow) {
-                settle(-1)
-                return@runOnUIThread
-            }
-            var clicked = false
-            val opts = ItemOptions.makeOptions(activity, anchorView).setLongPressSelectionEnabled(false)
+        AndroidUtilities.runOnUIThread { show(Menu(session, menuId, items)) }
+        return null
+    }
+
+    /** ui thread only */
+    class Menu internal constructor(private val session: PluginSession, private val menuId: Long, private val items: List<MenuItem?>) {
+        private var settled = false
+
+        /** -1 for dismissed; only the first call counts */
+        fun settle(slot: Int) {
+            if (settled) return
+            settled = true
+            EngineDispatch.onEngine(session) { session.engine.uiMenuClick(menuId, slot) }
+        }
+
+        fun fill(opts: ItemOptions, onPick: () -> Unit): ItemOptions {
             // any `checked` (even false) makes the menu radio-style, aligning every row on the checkmark column
-            val radioStyle = items.any { it.checked != null }
+            val radioStyle = items.any { it?.checked != null }
             items.forEachIndexed { index, item ->
+                if (item == null) {
+                    opts.addGap()
+                    return@forEachIndexed
+                }
                 val onClick = Runnable {
-                    clicked = true
                     settle(index)
-                    activity.requestRender()
+                    onPick()
                 }
                 if (radioStyle) {
                     opts.addChecked(item.checked == true, item.text, onClick)
@@ -297,20 +317,18 @@ object PluginUi : SessionResource {
                     opts.add(0, item.text, item.danger, onClick)
                 }
             }
-            opts.setOnDismiss {
-                if (!clicked) settle(-1)
-            }
-            opts.show()
+            return opts
         }
-        return null
     }
 
-    private class MenuItem(val text: String, val checked: Boolean?, val danger: Boolean)
+    internal class MenuItem(val text: String, val checked: Boolean?, val danger: Boolean)
 
-    private fun parseMenuItems(json: String): List<MenuItem> {
+    /** a separator is null */
+    private fun parseMenuItems(json: String): List<MenuItem?> {
         val arr = JSONArray(json)
         return (0 until arr.length()).map { i ->
             val o = arr.getJSONObject(i)
+            if (o.optBoolean("separator")) return@map null
             MenuItem(
                 o.getString("text"),
                 if (o.has("checked")) o.getBoolean("checked") else null,

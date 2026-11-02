@@ -346,6 +346,35 @@ A filter returns a verdict, which can be one of:
 - **Notifications follow the verdicts.** A hidden message doesn't notify, and spoilers and rewrites apply to the notification text. A push received while the app is in background only carries the message text, so filters on media, buttons or entities won't match it until the full message arrives.
 - **Some messages can't be touched**, notably: service messages, messages in secret chats, messages from Telegram (777000), Saved Messages and outgoing messages.
 
+## Text entities
+
+`inu.registerTextEntity` makes matches of a pattern in message text tappable, like links,
+with a customizable handler.
+
+Example use-cases: currency converters, github issues, timezones, etc.
+
+```ts
+// a link, opened like a text link (no JS runs on tap)
+inu.registerTextEntity({ pattern: /#(\d+)/, filter: { peer: -1001234567890 }, url: 'https://github.com/x/y/issues/$1' })
+
+// a custom callback, with the match and its groups passed to it
+inu.registerTextEntity({
+  pattern: /(?<amount>\d+(?:[.,]\d+)?)\s?(?<currency>USD|EUR|CNY)/i,
+  callback: async ({ groups, signal }) => {
+    const rates = await getRates(signal)
+    inu.ui.dialog({ title: `${groups.amount} ${groups.currency}`, message: convert(rates, groups), positive: 'OK' })
+  },
+})
+```
+
+- The `url` template works like the `String.prototype.replace` (`$1`, `$<name>`, `$&`, `$$`), with each group encoded using `encodeURIComponent`.
+- Async callbacks are supported – the link will shimmer while the callback resolves, and you can
+use `signal` to abort any operation in case the user taps on another link or leaves the chat.
+- `anchor` opens a menu at the tapped link, like the one stock shows on a long tap.
+- Matches inside some entities (notably - links, mentions, code) are not matched
+- When the same entity is matched by multiple plugins, the first one in the user's plugin order wins.
+- Messages in secret chats, from Telegram (777000) and in the "Recent actions" are never matched.
+
 ## Events
 
 There are a few methods that are events you can subscribe to, to do something when something happens.

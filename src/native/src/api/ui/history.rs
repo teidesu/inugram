@@ -54,13 +54,14 @@ struct HistoryDef {
 /// the items of the last menu the host was handed; clicks name it by request id
 struct ShownMenu {
   request_id: i64,
-  callbacks: Vec<Persistent<Function<'static>>>,
+  /// a separator's slot holds no callback
+  callbacks: Vec<Option<Persistent<Function<'static>>>>,
   retained_icons: Vec<Persistent<Value<'static>>>,
 }
 
 impl ShownMenu {
   fn release(self, ctx: &Ctx<'_>) {
-    for f in self.callbacks {
+    for f in self.callbacks.into_iter().flatten() {
       let _ = f.restore(ctx);
     }
     for icon in self.retained_icons {
@@ -591,6 +592,11 @@ impl HistoryState {
     let mut callbacks = Vec::with_capacity(items.len());
     let mut retained_icons = Vec::new();
     for (i, item) in items.into_iter().enumerate() {
+      if let Some(separator) = crate::api::ui::pages::write_menu_separator(ctx, &item, WHAT)? {
+        callbacks.push(None);
+        out.set(i, separator)?;
+        continue;
+      }
       let item = item.as_object().ok_or_else(|| Exception::throw_type(ctx, "menu: items must be objects"))?;
       let entry = Object::new(ctx.clone())?;
       write_input_text(&entry, "text", req_text(ctx, item, "menu item", "text")?)?;
@@ -602,7 +608,7 @@ impl HistoryState {
       if let Some(checked) = opt_bool(ctx, item, "menu item", "checked")? {
         entry.set("checked", checked)?;
       }
-      callbacks.push(Persistent::save(ctx, req_fn(ctx, item, "menu item", "onClick")?));
+      callbacks.push(Some(Persistent::save(ctx, req_fn(ctx, item, "menu item", "onClick")?)));
       out.set(i, entry)?;
     }
     let json = stringify_json(ctx, out.into_value(), WHAT)?;
@@ -643,7 +649,7 @@ impl HistoryState {
     enter_js(context, |ctx| {
       let callback = self.defs.borrow().get(&history_id).and_then(|def| {
         let shown = def.shown_menu.as_ref().filter(|shown| shown.request_id == request_id)?;
-        shown.callbacks.get(usize::try_from(index).ok()?).cloned()
+        shown.callbacks.get(usize::try_from(index).ok()?).cloned().flatten()
       });
       let Some(callback) = callback else { return };
       match callback.restore(&ctx) {

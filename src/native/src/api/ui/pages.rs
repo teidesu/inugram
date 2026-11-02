@@ -45,6 +45,28 @@ pub trait UiHost {
   fn ui_unregister_settings(&self, page_id: i64);
   fn ui_invalidate(&self, page_id: i64);
   fn ui_open_menu(&self, menu_id: i64, page_id: i64, anchor_key: &str, items_json: &str) -> Option<String>;
+  fn ui_open_text_entity_menu(&self, menu_id: i64, tap_id: i64, items_json: &str) -> Option<String>;
+}
+
+/// a menu entry that is the `'separator'` string, written as `{ separator: true }`
+pub(crate) fn write_menu_separator<'js>(ctx: &Ctx<'js>, item: &Value<'js>, what: &str) -> JsResult<Option<Object<'js>>> {
+  let Some(name) = item.as_string() else {
+    return Ok(None);
+  };
+  if name.to_string()? != "separator" {
+    return Err(Exception::throw_type(ctx, &format!("{what}: items must be objects or 'separator'")));
+  }
+  let entry = Object::new(ctx.clone())?;
+  entry.set("separator", true)?;
+  Ok(Some(entry))
+}
+
+/// what a `UIAnchor` opens its menu at
+#[derive(Clone)]
+pub(crate) enum MenuAnchor {
+  Row { page_id: i64, row: Rc<str> },
+  /// the link of a `registerTextEntity` tap
+  TextEntityTap(i64),
 }
 
 struct CallbackEntry {
@@ -81,7 +103,8 @@ pub struct UiState {
   jvm: Option<Rc<crate::api::platform::jvm::JvmState>>,
   next_id: RequestIds,
   pages: RefCell<HashMap<i64, UiPageDef>>,
-  menus: RefCell<HashMap<i64, Vec<Persistent<Function<'static>>>>>,
+  /// a separator's slot holds no callback
+  menus: RefCell<HashMap<i64, Vec<Option<Persistent<Function<'static>>>>>>,
   settings: Registry<i64>,
 }
 
@@ -687,21 +710,21 @@ impl UiState {
     stringify_json(ctx, root.into_value(), "render: serialization produced no output")
   }
 
-  fn make_anchor<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, page_id: i64, row: Rc<str>) -> JsResult<Object<'js>> {
-    let anchor = Object::new(ctx.clone())?;
+  pub(crate) fn make_anchor<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, anchor: MenuAnchor) -> JsResult<Object<'js>> {
+    let out = Object::new(ctx.clone())?;
     let state = self.clone();
-    anchor.set(
+    out.set(
       "openMenu",
-      Function::new(ctx.clone(), move |ctx: Ctx<'js>, items: Value<'js>| {
-        state.js_open_menu(&ctx, page_id, &row, items)
-      })?,
+      Function::new(ctx.clone(), move |ctx: Ctx<'js>, items: Value<'js>| state.js_open_menu(&ctx, &anchor, items))?,
     )?;
-    Ok(anchor)
+    Ok(out)
   }
 
-  fn js_open_menu<'js>(&self, ctx: &Ctx<'js>, page_id: i64, row: &str, items: Value<'js>) -> JsResult<()> {
-    if !self.pages.borrow().contains_key(&page_id) {
-      return PluginErrorCode::HandleExpired.throw(ctx, "openMenu: the page this anchor came from has been disposed");
+  fn js_open_menu<'js>(&self, ctx: &Ctx<'js>, anchor: &MenuAnchor, items: Value<'js>) -> JsResult<()> {
+    if let MenuAnchor::Row { page_id, .. } = anchor {
+      if !self.pages.borrow().contains_key(page_id) {
+        return PluginErrorCode::HandleExpired.throw(ctx, "openMenu: the page this anchor came from has been disposed");
+      }
     }
     let arr = items.as_array().ok_or_else(|| Exception::throw_type(ctx, "openMenu: expected an array of items"))?;
     let arr = crate::utils::arguments::array_values(ctx, arr, "openMenu")?;
@@ -710,8 +733,13 @@ impl UiState {
     }
 
     let out = Array::new(ctx.clone())?;
-    let mut callbacks: Vec<Function<'js>> = Vec::with_capacity(arr.len());
+    let mut callbacks: Vec<Option<Function<'js>>> = Vec::with_capacity(arr.len());
     for (i, item) in arr.into_iter().enumerate() {
+      if let Some(separator) = write_menu_separator(ctx, &item, "openMenu")? {
+        callbacks.push(None);
+        out.set(i, separator)?;
+        continue;
+      }
       let obj = item.as_object().ok_or_else(|| Exception::throw_type(ctx, "openMenu: items must be objects"))?;
       let entry = Object::new(ctx.clone())?;
       entry.set("text", req_str(ctx, obj, "openMenu item", "text")?)?;
@@ -723,19 +751,23 @@ impl UiState {
         entry.set("checked", checked)?;
       }
       entry.set("danger", opt_bool(ctx, obj, "openMenu item", "danger")?.unwrap_or_default())?;
-      callbacks.push(req_fn(ctx, obj, "openMenu item", "onClick")?);
+      callbacks.push(Some(req_fn(ctx, obj, "openMenu item", "onClick")?));
       out.set(i, entry)?;
     }
     let json = stringify_json(ctx, out.into_value(), "openMenu: serialization failed")?;
 
     let menu_id = self.next_id.alloc();
-    if let Some(err) = self.host.ui_open_menu(menu_id, page_id, row, &json) {
+    let refused = match anchor {
+      MenuAnchor::Row { page_id, row } => self.host.ui_open_menu(menu_id, *page_id, row, &json),
+      MenuAnchor::TextEntityTap(tap_id) => self.host.ui_open_text_entity_menu(menu_id, *tap_id, &json),
+    };
+    if let Some(err) = refused {
       return Err(ctx.throw(host_error_to_js(ctx, &err)?));
     }
     self
       .menus
       .borrow_mut()
-      .insert(menu_id, callbacks.into_iter().map(|f| Persistent::save(ctx, f)).collect());
+      .insert(menu_id, callbacks.into_iter().map(|f| f.map(|f| Persistent::save(ctx, f))).collect());
     Ok(())
   }
 }
@@ -780,7 +812,7 @@ impl UiState {
           return;
         }
       };
-      let anchor = match self.make_anchor(&ctx, page_id, row) {
+      let anchor = match self.make_anchor(&ctx, MenuAnchor::Row { page_id, row }) {
         Ok(a) => a,
         Err(e) => {
           (self.log)(&format!("ui: failed to build the anchor: {e:?}"));
@@ -812,6 +844,7 @@ impl UiState {
         return;
       };
       for (i, persistent) in callbacks.into_iter().enumerate() {
+        let Some(persistent) = persistent else { continue };
         let f = match persistent.restore(&ctx) {
           Ok(f) => f,
           Err(_) => continue,

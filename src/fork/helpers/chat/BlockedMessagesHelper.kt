@@ -4,6 +4,7 @@ import androidx.core.content.edit
 import desu.inugram.InuConfig
 // #if PLUGINS
 import desu.inugram.helpers.plugins.telegram.PluginMessageFilters
+import desu.inugram.helpers.plugins.telegram.PluginTextEntities
 // #endif
 import org.telegram.messenger.MessageObject
 import java.util.concurrent.ConcurrentHashMap
@@ -91,16 +92,17 @@ object BlockedMessagesHelper {
         val spoiled = shouldSpoil(msg)
         // #if PLUGINS
         val rewrite = PluginMessageFilters.getRewrite(msg)
-        val rewriteChanged = rewrite !== msg.inu_rewrite
+        val textStale = rewrite !== msg.inu_rewrite || PluginTextEntities.isStale(msg)
         // #else
-        val rewriteChanged = false
+        val textStale = false
         // #endif
-        if (spoiled == msg.inu_spoiled && !rewriteChanged) return false
+        if (spoiled == msg.inu_spoiled && !textStale) return false
         msg.forceUpdate = true
-        if (msg.translated) return true
         // #if PLUGINS
         msg.inu_rewrite = rewrite
+        PluginTextEntities.markCurrent(msg)
         // #endif
+        if (msg.translated) return true
         if (msg.caption != null) {
             msg.caption = null
             msg.generateCaption()

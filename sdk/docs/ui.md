@@ -109,10 +109,14 @@ inu.ui.button({
     anchor.openMenu([
       { text: 'Small', onClick: () => console.log('small') },
       { text: 'Large', onClick: () => console.log('large') },
+      'separator',
+      { text: 'Reset', danger: true, onClick: () => console.log('reset') },
     ])
   },
 })
 ```
+
+`'separator'` draws a gap between the items.
 
 ### Opening pages
 

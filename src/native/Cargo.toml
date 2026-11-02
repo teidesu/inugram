@@ -28,6 +28,7 @@ object = { version = "0.40.0", default-features = false, features = [
   "elf",
   "unaligned"
 ] }
+percent-encoding = "2.3"
 regex = "1.13"
 rusqlite = { version = "0.40", features = [ "hooks", "limits" ] }
 rquickjs = { version = "0.14", default-features = true, features = [
