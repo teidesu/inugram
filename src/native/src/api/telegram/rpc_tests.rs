@@ -1122,7 +1122,7 @@ fn interceptsendmessage_serializes_its_filter_whatever_the_callback_syntax() {
     "#,
   );
   let filters: Vec<String> = host.send_registered.borrow().iter().map(|entry| entry.1.clone()).collect();
-  assert_eq!(filters[1], r#"{"text":{"source":"^\\.stats$","flags":"i"}}"#);
+  assert_eq!(filters[1], r#"{"pattern":true}"#);
   assert_eq!((&filters[0], &filters[1]), (&filters[2], &filters[3]));
 }
 

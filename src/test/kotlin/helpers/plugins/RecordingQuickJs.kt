@@ -218,6 +218,10 @@ class RecordingQuickJs : QuickJs() {
         onDispatchSend?.invoke(dispatch)
     }
 
+    var sendTextMatches: (String) -> Boolean = { true }
+
+    override fun matchSendText(callbackId: Int, text: String) = sendTextMatches(text)
+
     override fun abandonSendDispatch(dispatchId: Long, reasonWire: String) {
         sendAbandons.add(dispatchId)
     }

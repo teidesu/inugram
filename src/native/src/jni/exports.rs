@@ -18,7 +18,7 @@ use super::env::{
 use super::eval::{evaluate_inspected, EvalReply};
 use super::log::{install_console, make_log, Inspect};
 use super::{
-  engine_jvm_refs, engine_message_filters, engine_text_entities, enter_engine, insert_engine, remove_engine,
+  engine_jvm_refs, engine_message_filters, engine_send_patterns, engine_text_entities, enter_engine, insert_engine, remove_engine,
   stop_engine_callbacks, try_enter_engine, CallerEntry, Engine, EntryError, CALLER_LEASE_WAIT,
 };
 use crate::api::canvas::{install_canvas, CanvasHost};
@@ -1369,6 +1369,24 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchS
   with_engine_env(&mut env, ptr, (), |env, engine| {
     let message_json = jstring_to_string(env, &message_json);
     engine.rpc.dispatch_send(&engine.ctx, callback_id as u32, dispatch_id, account_id, &message_json);
+  })
+}
+
+/// Without the engine lease: whether the text pattern of interceptor `callback_id` matches `text`. A
+/// closed engine or a disposed interceptor matches nothing
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeMatchSendText(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  callback_id: jint,
+  text: JString,
+) -> jboolean {
+  in_env(&mut env, false, |env| {
+    let Some(patterns) = engine_send_patterns(ptr) else {
+      return false;
+    };
+    patterns.matches(callback_id as u32, &jstring_to_string(env, &text))
   })
 }
 

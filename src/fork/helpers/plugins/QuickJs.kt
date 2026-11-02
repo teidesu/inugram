@@ -239,6 +239,9 @@ open class QuickJs {
     open fun dispatchSend(callbackId: Int, dispatchId: Long, accountId: Int, messageJson: String) =
         requireLive { nativeDispatchSend(it, callbackId, dispatchId, accountId, messageJson) }
 
+    /** any thread, without the engine lease: whether the text pattern of interceptor [callbackId] matches [text] */
+    open fun matchSendText(callbackId: Int, text: String): Boolean = ifLiveOr(false) { nativeMatchSendText(it, callbackId, text) }
+
     open fun abandonSendDispatch(dispatchId: Long, reasonWire: String) = requireLive { nativeAbandonSendDispatch(it, dispatchId, reasonWire) }
 
     open fun completeNext(dispatchId: Long, resultWire: String) = requireLive { nativeCompleteNext(it, dispatchId, resultWire) }
@@ -364,6 +367,7 @@ open class QuickJs {
     private external fun nativeWriteProgress(ptr: Long, requestId: Long, loaded: Long, total: Long)
     private external fun nativeDispatchRpc(ptr: Long, callbackId: Int, dispatchId: Long, method: String, accountId: Int, requestWire: String)
     private external fun nativeDispatchSend(ptr: Long, callbackId: Int, dispatchId: Long, accountId: Int, messageJson: String)
+    private external fun nativeMatchSendText(ptr: Long, callbackId: Int, text: String): Boolean
     private external fun nativeAbandonSendDispatch(ptr: Long, dispatchId: Long, reasonWire: String)
     private external fun nativeCompleteNext(ptr: Long, dispatchId: Long, resultWire: String)
     private external fun nativeAbandonDispatch(ptr: Long, dispatchId: Long, reasonWire: String)

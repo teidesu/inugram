@@ -9,8 +9,6 @@ import desu.inugram.helpers.plugins.PluginSession
 import desu.inugram.helpers.plugins.SendsListener
 import desu.inugram.helpers.plugins.SessionResource
 import desu.inugram.helpers.plugins.ui.PluginUi
-import java.util.regex.Pattern
-import java.util.regex.PatternSyntaxException
 import org.json.JSONArray
 import org.json.JSONObject
 import org.telegram.tgnet.TLRPC
@@ -27,8 +25,7 @@ object PluginSends : SessionResource {
         val session: PluginSession,
         val callbackId: Int,
         val uploaded: Boolean,
-        val text: Pattern?,
-        val textIsSticky: Boolean,
+        val pattern: Boolean,
         val hasText: Boolean?,
         val peers: Set<Long>,
         val peerTypes: Int,
@@ -53,20 +50,9 @@ object PluginSends : SessionResource {
         }
 
         private fun matchesText(value: String?): Boolean {
-            if (text == null) return true
+            if (!pattern) return true
             value ?: return false
-            // android runs java.util.regex on icu natively: no deadline can reach it, and its backtracking
-            // stack overflows as a RuntimeException
-            return try {
-                val matcher = text.matcher(value)
-                if (textIsSticky) matcher.lookingAt() else matcher.find()
-            } catch (e: RuntimeException) {
-                session.log.w("sends", "send filter /${text.pattern()}/ failed, letting the message through to the interceptor", e)
-                true
-            } catch (e: StackOverflowError) {
-                session.log.w("sends", "send filter /${text.pattern()}/ overflowed the stack, letting the message through to the interceptor")
-                true
-            }
+            return session.engine.matchSendText(callbackId, value)
         }
     }
 
@@ -98,7 +84,6 @@ object PluginSends : SessionResource {
     }
 
     private const val BUDGET_MS = 60_000L
-    private val NESTED_QUANTIFIER = Regex("""(?<!\\)[+*}]\)+[+*{]""")
 
     @Volatile private var interceptors: List<Interceptor> = emptyList()
 
@@ -217,28 +202,6 @@ object PluginSends : SessionResource {
     private fun register(session: PluginSession, callbackId: Int, filterJson: String): String? {
         if (!session.permissions.has("interceptSendMessage")) return PluginWire.encodeNotGranted("interceptSendMessage")
         val filter = if (filterJson.isEmpty()) JSONObject() else JSONObject(filterJson)
-        val regex = filter.optJSONObject("text")
-        val flags = regex?.optString("flags").orEmpty()
-        if (flags.any { it !in "dgimsuy" }) {
-            return PluginWire.encodePluginError("invalid-argument", "unsupported regular expression flags '$flags'")
-        }
-        var patternFlags = 0
-        if ('i' in flags) patternFlags = patternFlags or Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE
-        if ('m' in flags) patternFlags = patternFlags or Pattern.MULTILINE
-        if ('s' in flags) patternFlags = patternFlags or Pattern.DOTALL
-        if ('u' in flags) patternFlags = patternFlags or Pattern.UNICODE_CHARACTER_CLASS
-        val source = regex?.getString("source")
-        if (source != null && NESTED_QUANTIFIER.containsMatchIn(source)) {
-            session.log.w(
-                "sends",
-                "send filter /$source/ nests quantifiers and can backtrack catastrophically, freezing every send; rewrite it without a repeated group that ends in + or *",
-            )
-        }
-        val pattern = try {
-            source?.let { Pattern.compile(it, patternFlags) }
-        } catch (e: PatternSyntaxException) {
-            return PluginWire.encodePluginError("invalid-argument", "invalid text regular expression: ${e.description}")
-        }
         val peers = filter.optJSONArray("peer")?.let { ids -> (0 until ids.length()).mapTo(HashSet()) { ids.getLong(it) } }.orEmpty()
         val peerTypes = filter.optJSONArray("peerType")?.let { types ->
             // the bits PluginUi.canSelectPeer reads
@@ -252,7 +215,7 @@ object PluginSends : SessionResource {
         } ?: 0
         val media = filter.opt("media")
         val interceptor = Interceptor(
-            session, callbackId, filter.optString("stage") == "uploaded", pattern, 'y' in flags,
+            session, callbackId, filter.optString("stage") == "uploaded", filter.optBoolean("pattern"),
             filter.opt("text") as? Boolean, peers, peerTypes,
             media as? Boolean, (media as? JSONArray)?.let { kinds -> (0 until kinds.length()).mapTo(HashSet()) { kinds.getString(it) } },
             if (filter.has("forward")) filter.getBoolean("forward") else null,

@@ -24,7 +24,7 @@ use crate::{
       account::AccountState,
       filters::{FilterState, MessageFilters},
       reads::ReadsState,
-      rpc::RpcState,
+      rpc::{sends::SendPatterns, RpcState},
       text_entities::{TextEntities, TextEntityState},
       writes::WritesState,
     },
@@ -75,6 +75,7 @@ struct EngineSlot {
   jvm_refs: Option<Arc<crate::api::platform::jvm::RefTable>>,
   message_filters: Arc<MessageFilters>,
   text_entities: Arc<TextEntities>,
+  send_patterns: Arc<SendPatterns>,
 }
 
 static ENGINES: OnceLock<Mutex<SlotMap<EngineKey, EngineSlot>>> = OnceLock::new();
@@ -88,6 +89,7 @@ pub(crate) fn insert_engine(engine: Engine) -> jlong {
   let jvm_refs = engine.jvm.as_ref().map(|state| state.refs().clone());
   let message_filters = engine.filters.rules.clone();
   let text_entities = engine.text_entities.entities.clone();
+  let send_patterns = engine.rpc.send_patterns.clone();
   ENGINES
     .get_or_init(|| Mutex::new(SlotMap::with_key()))
     .lock()
@@ -97,6 +99,7 @@ pub(crate) fn insert_engine(engine: Engine) -> jlong {
       jvm_refs,
       message_filters,
       text_entities,
+      send_patterns,
     })
     .data()
     .as_ffi() as jlong
@@ -112,6 +115,10 @@ pub(crate) fn engine_message_filters(handle: jlong) -> Option<Arc<MessageFilters
 
 pub(crate) fn engine_text_entities(handle: jlong) -> Option<Arc<TextEntities>> {
   Some(lock_engines()?.get(get_engine_key(handle))?.text_entities.clone())
+}
+
+pub(crate) fn engine_send_patterns(handle: jlong) -> Option<Arc<SendPatterns>> {
+  Some(lock_engines()?.get(get_engine_key(handle))?.send_patterns.clone())
 }
 
 /// A caller-thread entry waits out the engine thread's longest turn: that thread lends the engine

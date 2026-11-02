@@ -1,4 +1,7 @@
+use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::RwLock;
+use std::time::Instant;
 
 use rquickjs::function::Opt;
 use rquickjs::{Ctx, Exception, Function, Object, Persistent, Result as JsResult, Value};
@@ -6,12 +9,14 @@ use rquickjs::{Ctx, Exception, Function, Object, Persistent, Result as JsResult,
 use super::{Abandon, RpcState, UpdateDispatchState};
 use crate::api::error::{self, describe_js_error, error_value_to_string, format_thrown};
 use crate::api::telegram::account::dispatch_account;
+use crate::api::telegram::filters::read_regex;
 use crate::api::tl::proxy;
 use crate::runtime::{enter_js, pump_jobs};
 use crate::sandbox::grants::MATCH_EXACT;
 use crate::sandbox::registry::{make_disposer, noop_disposer};
 use crate::utils::arguments::stringify_json;
-use crate::utils::qjs::{qjs_is_regexp, qjs_load_prelude, resolve_and_then};
+use crate::utils::qjs::{qjs_load_prelude, resolve_and_then};
+use crate::utils::regexp::{self, Regexp};
 
 const SEND_PRELUDE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/send_message.qbc"));
 const SEND_GRANT: &str = "interceptSendMessage";
@@ -36,6 +41,38 @@ pub(crate) const MEDIA_KINDS: &[&str] = &[
   "other",
 ];
 
+/// The interceptors' text patterns, matched by the app without the engine lease
+pub(crate) struct SendPatterns {
+  patterns: RwLock<HashMap<u32, Regexp>>,
+  log: crate::Log,
+}
+
+impl SendPatterns {
+  pub(super) fn new(log: crate::Log) -> Self {
+    SendPatterns {
+      patterns: RwLock::default(),
+      log,
+    }
+  }
+
+  /// A pattern that fails lets the send through: the interceptor would rather see one send too
+  /// many than miss one it asked for
+  pub(crate) fn matches(&self, callback_id: u32, text: &str) -> bool {
+    let pattern = self.patterns.read().unwrap_or_else(|e| e.into_inner()).get(&callback_id).cloned();
+    let Some(pattern) = pattern else {
+      return false;
+    };
+    pattern.is_match(text, Instant::now() + regexp::BUDGET).unwrap_or_else(|e| {
+      (self.log)(&format!("{SEND_GRANT}: {pattern} {e}, so the send went to the interceptor"));
+      true
+    })
+  }
+
+  pub(super) fn update(&self, change: impl FnOnce(&mut HashMap<u32, Regexp>)) {
+    change(&mut self.patterns.write().unwrap_or_else(|e| e.into_inner()));
+  }
+}
+
 impl RpcState {
   pub(super) fn install_send_message<'js>(
     self: &Rc<Self>,
@@ -56,9 +93,9 @@ impl RpcState {
           return noop_disposer(ctx);
         }
         state.grants.check_grant(ctx, SEND_GRANT, None, MATCH_EXACT)?;
-        let (filter_json, callback) = match second.0 {
+        let ((filter_json, pattern), callback) = match second.0 {
           Some(callback) => (read_filter(ctx, &first)?, callback),
-          None => (String::new(), first),
+          None => ((String::new(), None), first),
         };
         let Some(callback) = callback.into_function() else {
           return Err(Exception::throw_type(ctx, "interceptSendMessage: middleware must be a function"));
@@ -69,13 +106,18 @@ impl RpcState {
         };
         let middleware: Function = wrap.call((callback,))?;
         let callback_id = state.send_fns.alloc();
+        if let Some(pattern) = pattern {
+          state.send_patterns.update(|patterns| drop(patterns.insert(callback_id, pattern)));
+        }
         if let Some(err) = state.host.on_send_register(callback_id, &filter_json) {
+          state.send_patterns.update(|patterns| drop(patterns.remove(&callback_id)));
           return Err(ctx.throw(error::host_error_to_js(ctx, &err)?));
         }
         state.send_fns.register(ctx, callback_id, middleware);
         let state = state.clone();
         make_disposer(ctx, move |ctx| {
           if state.send_fns.dispose(ctx, callback_id) {
+            state.send_patterns.update(|patterns| drop(patterns.remove(&callback_id)));
             state.host.on_send_unregister(callback_id);
           }
         })
@@ -189,7 +231,8 @@ impl RpcState {
   }
 }
 
-fn read_filter<'js>(ctx: &Ctx<'js>, filter: &Value<'js>) -> JsResult<String> {
+/// the filter as the host reads it, `pattern` standing in for the text pattern, which stays here
+fn read_filter<'js>(ctx: &Ctx<'js>, filter: &Value<'js>) -> JsResult<(String, Option<Regexp>)> {
   let Some(filter) = filter.as_object() else {
     return Err(Exception::throw_type(ctx, "interceptSendMessage: filter must be an object"));
   };
@@ -205,19 +248,15 @@ fn read_filter<'js>(ctx: &Ctx<'js>, filter: &Value<'js>) -> JsResult<String> {
     }
   }
   let text: Value = filter.get("text")?;
-  if let Some(text) = text.as_bool() {
-    encoded.set("text", text)?;
-  } else if !text.is_undefined() {
-    let not_regexp = || Exception::throw_type(ctx, "interceptSendMessage: filter.text must be a RegExp or a boolean");
-    let Some(text) = text.as_object().filter(|text| qjs_is_regexp(text)) else {
-      return Err(not_regexp());
-    };
-    let source: String = text.get("source").map_err(|_| not_regexp())?;
-    let flags: String = text.get("flags").map_err(|_| not_regexp())?;
-    let regex = Object::new(ctx.clone())?;
-    regex.set("source", source)?;
-    regex.set("flags", flags)?;
-    encoded.set("text", regex)?;
+  let pattern = match text.as_bool() {
+    Some(text) => {
+      encoded.set("text", text)?;
+      None
+    }
+    None => read_regex(ctx, SEND_GRANT, &text, "filter.text", "a RegExp or a boolean")?,
+  };
+  if pattern.is_some() {
+    encoded.set("pattern", true)?;
   }
   let peers = read_one_or_many(ctx, SEND_GRANT, filter, "peer")?;
   if !peers.is_empty() {
@@ -262,7 +301,8 @@ fn read_filter<'js>(ctx: &Ctx<'js>, filter: &Value<'js>) -> JsResult<String> {
     };
     encoded.set("forward", forward)?;
   }
-  stringify_json(ctx, encoded.into_value(), "interceptSendMessage: the filter did not serialize")
+  let encoded = stringify_json(ctx, encoded.into_value(), "interceptSendMessage: the filter did not serialize")?;
+  Ok((encoded, pattern))
 }
 
 /// an empty array is refused, so an empty result means the field is absent

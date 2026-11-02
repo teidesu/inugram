@@ -3,9 +3,9 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::{Arc, RwLock};
+use std::time::Instant;
 
 use percent_encoding::{utf8_percent_encode, AsciiSet, NON_ALPHANUMERIC};
-use regex::{Captures, Regex};
 use rquickjs::function::{Constructor, This};
 use rquickjs::{Array, Ctx, Exception, Function, Object, Persistent, Result as JsResult, Value};
 use serde_json::{json, Map, Value as Json};
@@ -18,6 +18,7 @@ use crate::api::ui::pages::{MenuAnchor, UiState};
 use crate::runtime::{enter_js, pump_jobs};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle};
 use crate::utils::arguments::{opt_fn, opt_str};
+use crate::utils::regexp::{self, Captures, Regexp};
 
 const WHAT: &str = "registerTextEntity";
 const OPTION_KEYS: &[&str] = &["pattern", "filter", "url", "callback", "secondaryCallback"];
@@ -48,52 +49,57 @@ struct Rule {
   token: u32,
   /// the long-tap callback's token
   secondary: Option<u32>,
-  pattern: Regex,
+  pattern: Regexp,
   filter: Option<Matcher>,
   /// a `$1`-style template, `None` for a callback entity
   url: Option<String>,
 }
 
 /// A plugin's entities, read by the app from any thread without the engine lease
-#[derive(Default)]
 pub(crate) struct TextEntities {
   rules: RwLock<Arc<Vec<Rule>>>,
+  log: crate::Log,
 }
 
 impl TextEntities {
   /// `{ token, start, end }` in registration order, offsets in utf-16 units, with the expanded
   /// `url` or the `match` and `groups` a callback gets. `probe` is for the filters, `text` is what
-  /// the app shows. A filter is checked once its pattern matches, as most texts match no pattern
+  /// the app shows. A filter is checked once its pattern matches, as most texts match no pattern. A
+  /// pattern that fails keeps the matches it found
   pub(crate) fn matches(&self, text: &str, probe: &Probe<'_>, html: &mut Option<String>) -> Vec<Json> {
     let rules = self.rules.read().unwrap_or_else(|e| e.into_inner()).clone();
+    let text: Vec<u16> = text.encode_utf16().collect();
     let mut out = Vec::new();
     'rules: for rule in rules.iter() {
       let mut filter = rule.filter.as_ref();
-      let mut cursor = (0, 0);
-      for caps in rule.pattern.captures_iter(text) {
+      for caps in rule.pattern.captures_iter(&text, Instant::now() + regexp::BUDGET) {
         if out.len() == MAX_MATCHES {
           break 'rules;
         }
-        let Some(whole) = caps.get(0).filter(|whole| !whole.is_empty()) else {
+        let caps = match caps {
+          Ok(caps) => caps,
+          Err(e) => {
+            (self.log)(&format!("{WHAT}: {} {e}, so it stopped there", rule.pattern));
+            continue 'rules;
+          }
+        };
+        let Some(whole) = caps.range(0).filter(|whole| !whole.is_empty()) else {
           continue;
         };
-        if filter.take().is_some_and(|filter| !filter.matches(probe, html)) {
+        if filter.take().is_some_and(|filter| !filter.matches(probe, html, &self.log)) {
           continue 'rules;
         }
-        let start = count_utf16(text, &mut cursor, whole.start());
-        let end = count_utf16(text, &mut cursor, whole.end());
-        let mut entry = json!({ "token": rule.token, "start": start, "end": end });
+        let mut entry = json!({ "token": rule.token, "start": whole.start, "end": whole.end });
         match &rule.url {
           Some(template) => {
-            entry["url"] = expand_url(template, &caps, rule.pattern.capture_names().flatten().next().is_some()).into()
+            entry["url"] = expand_url(template, &caps, rule.pattern.group_names().next().is_some()).into()
           }
           None => {
-            entry["match"] = json!(caps.iter().map(|group| group.map(|group| group.as_str())).collect::<Vec<_>>());
+            entry["match"] = json!((0..caps.len()).map(|index| caps.get(index)).collect::<Vec<_>>());
             entry["groups"] = rule
               .pattern
-              .capture_names()
-              .flatten()
-              .filter_map(|name| Some((name.to_string(), caps.name(name)?.as_str().into())))
+              .group_names()
+              .filter_map(|name| Some((name.to_string(), caps.name(name)?.into())))
               .collect::<Map<_, _>>()
               .into();
           }
@@ -117,13 +123,6 @@ impl TextEntities {
     *current = Arc::new(rules);
     (needs, changed)
   }
-}
-
-/// `byte` in utf-16 units, counting on from `cursor`, which only moves forward
-fn count_utf16(text: &str, cursor: &mut (usize, usize), byte: usize) -> usize {
-  cursor.1 += text[cursor.0..byte].encode_utf16().count();
-  cursor.0 = byte;
-  cursor.1
 }
 
 /// `String.prototype.replace` substitutions (`$$`, `$&`, `$1`..`$99`, `$<name>`), each group
@@ -153,7 +152,7 @@ fn expand_url(template: &str, caps: &Captures<'_>, has_names: bool) -> String {
       continue;
     };
     if let Some(group) = group {
-      out.extend(utf8_percent_encode(group.as_str(), URI_COMPONENT));
+      out.extend(utf8_percent_encode(&group, URI_COMPONENT));
     }
     rest = &rest[len..];
   }
@@ -190,8 +189,11 @@ pub fn install_text_entities<'js>(
     lifecycle,
     accounts,
     ui,
+    entities: Arc::new(TextEntities {
+      rules: RwLock::default(),
+      log: log.clone(),
+    }),
     log,
-    entities: Arc::default(),
     callbacks: CallbackRegistry::default(),
     abort_controller: RefCell::new(Some(abort_controller)),
     taps: RefCell::default(),

@@ -93,7 +93,7 @@ class PluginSendInterceptTest {
             it is TLRPC.TL_messages_sendMultiMedia || it is TLRPC.TL_messages_forwardMessages
     }
 
-    private fun filtered(source: String): String = """{"text":{"source":"$source","flags":""}}"""
+    private val patterned = """{"pattern":true}"""
 
     private fun text(value: String) = JSONObject().put("text", value).put("entities", JSONArray())
 
@@ -272,7 +272,8 @@ class PluginSendInterceptTest {
     @Test
     fun a_send_no_stage_would_see_is_drawn_before_the_composer_returns() {
         val plugin = startPlugin("p", "interceptSendMessage")
-        assertNull(plugin.interceptSendMessage(filterJson = filtered("^\\\\.drop")))
+        assertNull(plugin.interceptSendMessage(filterJson = patterned))
+        plugin.js.sendTextMatches = { it.startsWith(".drop") }
         plugin.js.onDispatchSend = { plugin.dropVerdict(it.dispatchId) }
 
         onUi {
@@ -285,7 +286,8 @@ class PluginSendInterceptTest {
     @Test
     fun a_send_no_stage_would_see_still_waits_behind_a_held_one() {
         val plugin = startPlugin("p", "interceptSendMessage")
-        assertNull(plugin.interceptSendMessage(filterJson = filtered("^\\\\.hold")))
+        assertNull(plugin.interceptSendMessage(filterJson = patterned))
+        plugin.js.sendTextMatches = { it.startsWith(".hold") }
         var held: RecordingQuickJs.SendDispatch? = null
         plugin.js.onDispatchSend = { held = it }
 
@@ -337,7 +339,7 @@ class PluginSendInterceptTest {
         val plugin = startPlugin("p", "interceptSendMessage")
         val filtered = startPlugin("q", "interceptSendMessage")
         assertNull(plugin.interceptSendMessage())
-        assertNull(filtered.interceptSendMessage(filterJson = filtered("")))
+        assertNull(filtered.interceptSendMessage(filterJson = patterned))
         plugin.js.onDispatchSend = { plugin.passSend(it) }
 
         sendWithComment(null, 5)

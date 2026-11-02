@@ -513,7 +513,6 @@ dependencies = [
  "lzma-rs",
  "object",
  "percent-encoding",
- "regex",
  "rquickjs",
  "rusqlite",
  "serde_json",

@@ -2,6 +2,7 @@ use crate::runtime::Dispose;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use rquickjs::function::{Constructor, Opt, This};
 use rquickjs::object::{Accessor, Property};
@@ -181,6 +182,7 @@ pub struct RpcState {
   pub(crate) log: Log,
   intercept_fns: CallbackRegistry,
   send_fns: CallbackRegistry,
+  pub(crate) send_patterns: Arc<sends::SendPatterns>,
   update_fns: Registry<UpdateReg>,
   intercept_update_fns: Registry<UpdateReg>,
   demux: RefCell<Option<Persistent<Function<'static>>>>,
@@ -314,6 +316,7 @@ pub fn install_rpc<'js>(
     grants,
     lifecycle,
     accounts,
+    send_patterns: Arc::new(sends::SendPatterns::new(log.clone())),
     log,
     intercept_fns: CallbackRegistry::default(),
     send_fns: CallbackRegistry::default(),
@@ -1166,6 +1169,7 @@ impl Dispose for RpcState {
     enter_js(context, |ctx| {
       self.intercept_fns.release_all(&ctx);
       self.send_fns.release_all(&ctx);
+      self.send_patterns.update(HashMap::clear);
       drop(self.update_fns.remove_matching(|_| true));
       drop(self.intercept_update_fns.remove_matching(|_| true));
       let built = (self.demux.take(), self.send_wrap.take(), self.abort_controller.take());

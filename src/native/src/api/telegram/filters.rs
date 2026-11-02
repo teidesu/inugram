@@ -1,8 +1,8 @@
 use crate::runtime::Dispose;
 use std::rc::Rc;
 use std::sync::{Arc, RwLock};
+use std::time::Instant;
 
-use regex::{Regex, RegexBuilder};
 use rquickjs::{Ctx, Exception, Function, Object, Result as JsResult, Value};
 use tgtext::TextWithEntities;
 
@@ -16,6 +16,7 @@ use crate::sandbox::grants::{GrantHost, MATCH_EXACT};
 use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle};
 use crate::utils::arguments::stringify_json;
 use crate::utils::qjs::qjs_is_regexp;
+use crate::utils::regexp::{self, Regexp};
 
 const WHAT: &str = "filterMessages";
 /// the app holds incoming messages back while it waits for verdicts, so each one must come quickly
@@ -53,9 +54,9 @@ enum Presence<T> {
 
 #[derive(Clone)]
 pub(crate) struct Matcher {
-  text: Option<Presence<Regex>>,
-  html: Option<Regex>,
-  buttons: Option<Regex>,
+  text: Option<Presence<Regexp>>,
+  html: Option<Regexp>,
+  buttons: Option<Regexp>,
   senders: Vec<i64>,
   peers: Vec<i64>,
   /// the `PEER_*` bits of [Probe::peer_type]
@@ -98,8 +99,16 @@ impl Matcher {
       | if self.buttons.is_some() { NEEDS_BUTTONS } else { 0 }
   }
 
-  /// cheap checks first: rendering html is the only allocation, and it happens once per probe
-  pub(crate) fn matches(&self, probe: &Probe<'_>, html: &mut Option<String>) -> bool {
+  /// cheap checks first: rendering html is the only allocation, and it happens once per probe. A
+  /// pattern that fails does not match
+  pub(crate) fn matches(&self, probe: &Probe<'_>, html: &mut Option<String>, log: &crate::Log) -> bool {
+    let deadline = Instant::now() + regexp::BUDGET;
+    let test = |pattern: &Regexp, text: &str| {
+      pattern.is_match(text, deadline).unwrap_or_else(|e| {
+        log(&format!("message filter {pattern} {e}, so it did not match"));
+        false
+      })
+    };
     (self.senders.is_empty() || self.senders.contains(&probe.sender))
       && (self.peers.is_empty() && self.peer_types == 0
         || self.peers.contains(&probe.peer)
@@ -113,23 +122,23 @@ impl Matcher {
       && match &self.text {
         None => true,
         Some(Presence::Present(present)) => *present == !probe.text.is_empty(),
-        Some(Presence::Matching(pattern)) => !probe.text.is_empty() && pattern.is_match(probe.text),
+        Some(Presence::Matching(pattern)) => !probe.text.is_empty() && test(pattern, probe.text),
       }
-      && self.buttons.as_ref().is_none_or(|pattern| probe.buttons.lines().any(|url| pattern.is_match(url)))
+      && self.buttons.as_ref().is_none_or(|pattern| probe.buttons.lines().any(|url| test(pattern, url)))
       && self.html.as_ref().is_none_or(|pattern| {
         !probe.text.is_empty()
-          && pattern.is_match(
-            html
-              .get_or_insert_with(|| tgtext::html::unparse(true, probe.text, &read_entities_json(probe.entities_json))),
+          && test(
+            pattern,
+            html.get_or_insert_with(|| tgtext::html::unparse(true, probe.text, &read_entities_json(probe.entities_json))),
           )
       })
   }
 }
 
 /// A plugin's rules, read by the app from any thread without the engine lease
-#[derive(Default)]
 pub(crate) struct MessageFilters {
   rules: RwLock<Arc<Vec<Rule>>>,
+  log: crate::Log,
 }
 
 impl MessageFilters {
@@ -146,7 +155,7 @@ impl MessageFilters {
         Action::Callback(id) => matched[1..].contains(&(id as i32)),
         Action::Hide => false,
       };
-      if seen || !rule.matcher.matches(probe, html) {
+      if seen || !rule.matcher.matches(probe, html, &self.log) {
         continue;
       }
       match rule.action {
@@ -203,8 +212,11 @@ pub fn install_filters<'js>(
     grants,
     lifecycle,
     accounts,
+    rules: Arc::new(MessageFilters {
+      rules: RwLock::default(),
+      log: log.clone(),
+    }),
     log,
-    rules: Arc::default(),
     callbacks: CallbackRegistry::default(),
   });
   let registering = state.clone();
@@ -454,15 +466,15 @@ fn read_peer_id(value: &Value<'_>) -> Option<i64> {
   value.as_number().filter(|id| id.fract() == 0.0 && id.abs() <= MAX_SAFE_INTEGER).map(|id| id as i64)
 }
 
-/// The plugin's RegExp, compiled by the `regex` crate: linear-time, so no rule can stall the app,
-/// at the cost of lookaround and backreferences. `y` anchors at the start; `g` and `d` mean nothing here
+/// The plugin's RegExp, compiled by the engine's own regexp library to match outside the engine.
+/// It backtracks, so each match runs on [regexp::BUDGET]
 pub(crate) fn read_regex<'js>(
   ctx: &Ctx<'js>,
   what: &str,
   value: &Value<'js>,
   key: &str,
   expected: &str,
-) -> JsResult<Option<Regex>> {
+) -> JsResult<Option<Regexp>> {
   if value.is_undefined() {
     return Ok(None);
   }
@@ -470,20 +482,9 @@ pub(crate) fn read_regex<'js>(
   let regexp: &Object = value.as_object().filter(|regexp| qjs_is_regexp(regexp)).ok_or_else(not_regexp)?;
   let source: String = regexp.get("source").map_err(|_| not_regexp())?;
   let flags: String = regexp.get("flags").map_err(|_| not_regexp())?;
-  if let Some(flag) = flags.chars().find(|flag| !"dgimsuy".contains(*flag)) {
-    return Err(Exception::throw_type(ctx, &format!("{what}: {key} uses the unsupported flag '{flag}'")));
-  }
-  let pattern = match flags.contains('y') {
-    true => format!(r"\A(?:{source})"),
-    false => source.clone(),
-  };
-  RegexBuilder::new(&pattern)
-    .case_insensitive(flags.contains('i'))
-    .multi_line(flags.contains('m'))
-    .dot_matches_new_line(flags.contains('s'))
-    .build()
+  Regexp::new(&source, &flags)
     .map(Some)
-    .map_err(|e| Exception::throw_type(ctx, &format!("{what}: {key} /{source}/ is not supported: {e}")))
+    .map_err(|e| Exception::throw_type(ctx, &format!("{what}: {key} /{source}/{flags} is not supported: {e}")))
 }
 
 #[cfg(test)]

@@ -151,8 +151,16 @@ fn query_stack_low() -> Option<usize> {
 /// 1 MB stack has left, so deep recursion would fault instead of throwing `RangeError`. The limit
 /// this sets is `low + margin` whatever the depth, so refitting on the same thread is idempotent.
 pub fn fit_stack_limit(context: &Context) {
-  // SAFETY: the context's runtime lives as long as the context; both calls only store numbers
-  let rt = unsafe { qjs::JS_GetRuntime(context.as_raw().as_ptr()) };
+  // SAFETY: the context's runtime lives as long as the context
+  unsafe { fit_runtime_stack_limit(qjs::JS_GetRuntime(context.as_raw().as_ptr())) }
+}
+
+/// [fit_stack_limit] for a runtime without a [Context]
+///
+/// # Safety
+/// `rt` is a live runtime used only by this thread
+pub(crate) unsafe fn fit_runtime_stack_limit(rt: *mut qjs::JSRuntime) {
+  // SAFETY: both calls only store numbers
   unsafe { qjs::JS_UpdateStackTop(rt) };
   let Some(low) = stack_low() else {
     return;

@@ -82,8 +82,6 @@ fn a_rule_that_would_match_more_than_written_is_refused() {
   let (_rt, ctx, host, _state, _logs) = setup();
   for registration in [
     "inu.filterMessages({ txt: /ad/ }, 'hide')",
-    "inu.filterMessages({ text: /(?<=#)ad/ }, 'hide')",
-    "inu.filterMessages({ text: /ad/v }, 'hide')",
     "inu.filterMessages([], 'hide')",
     "inu.filterMessages({}, 'hide')",
     "inu.filterMessages({ sender: [], media: [] }, 'hide')",
@@ -125,4 +123,15 @@ fn a_callback_rewrites_or_hides_the_messages_its_rule_lets_through() {
   eval(&ctx, "__dispose(); __dispose()");
   assert_eq!(host.changes.borrow().len(), 4, "a second dispose changes nothing");
   assert_eq!(state.rules.matches(&probe("a secret"), &mut None).len(), 3);
+}
+
+#[test]
+fn a_pattern_that_backtracks_without_end_gives_up_instead_of_holding_messages_back() {
+  let (_rt, ctx, _host, state, logs) = setup();
+  eval(&ctx, r"inu.filterMessages({ text: /^(a+)+$/ }, 'hide'); inu.filterMessages({ text: /(?<=#)ad\b/ }, 'spoiler')");
+  let text = format!("{}b #ad", "a".repeat(40));
+  let started = std::time::Instant::now();
+  assert_eq!(state.rules.matches(&probe(&text), &mut None), vec![MATCHED_SPOILER]);
+  assert!(started.elapsed() < std::time::Duration::from_secs(1), "took {:?}", started.elapsed());
+  assert!(logs.borrow().iter().any(|line| line.contains("budget")), "{:?}", logs.borrow());
 }
