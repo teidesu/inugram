@@ -192,7 +192,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -9894,6 +9894,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9896,6 +9896,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          if (filter != null) {
              if (pin) {
                  filter.pinnedDialogs.put(selectedDialog, minPinnedNum);
@@ -202,7 +202,7 @@ index 0000000..0000000 100644
              } else {
                  filter.pinnedDialogs.delete(selectedDialog);
              }
-@@ -10228,6 +10231,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -10230,6 +10233,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
  
      private void showOrUpdateActionMode(long dialogId, View cell) {
          addOrRemoveSelectedDialog(dialogId, cell);
