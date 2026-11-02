@@ -306,6 +306,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - big emoji jumping around in emoji-only messages when a visible reply preview shared its spans (stock bug: per-span draw-position cache fought over by both layouts), plus oversized animated emoji in reply previews (stock bug: `cloneSpan` overwrote the resized value with the old size)
 - pinned dialog reorder scrolling/glitching mid-drag in the archive (stock bug: async list diffing dispatched the move after the drag swap)
 - forwards from users with hidden forward privacy: the optimistic message shows the anonymized name right away (when their profile is cached), and the server-confirmed hidden header is applied in place instead of showing the linked author until chat reopen
+- own channel posts with author profiles enabled no longer show the text signature (the optimistic message lacked the `from_id` flag the cell checks, and the server's `post_author` was copied onto it)
 - shared media player visual glitches
 - profile pinned-music sheet bugfixes
 - shared media pager: fling mid-animation to chain tabs or reverse (was ignored until settled); at the edge tab the fling falls through to swipe-to-close
