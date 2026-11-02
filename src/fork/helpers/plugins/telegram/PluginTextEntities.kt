@@ -18,7 +18,7 @@ import desu.inugram.helpers.plugins.ui.PluginUi
 import org.json.JSONArray
 import org.json.JSONObject
 import org.telegram.messenger.AndroidUtilities
-import org.telegram.messenger.CodeHighlighting
+import org.telegram.utils.code.highlight.CodeHighlighting
 import org.telegram.messenger.DialogObject
 import org.telegram.messenger.MessageObject
 import org.telegram.messenger.MessagesController
