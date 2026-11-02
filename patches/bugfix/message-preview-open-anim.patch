@@ -1,0 +1,21 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Mon, 2 Nov 2026 19:26:32 +0400
+Subject: fix height animation when opening reply/forward options
+
+---
+ .../main/java/org/telegram/ui/Components/MessagePreviewView.java | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/MessagePreviewView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/MessagePreviewView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/MessagePreviewView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/MessagePreviewView.java
+@@ -437,7 +437,6 @@ public class MessagePreviewView extends FrameLayout {
+                         if (currentTab != TAB_REPLY) {
+                             scrollToPosition(0);
+                         }
+-                        firstLayout = false;
+                     }
+                     super.onLayout(changed, l, t, r, b);
+                     updatePositions();

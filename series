@@ -417,3 +417,4 @@ bugfix/emoji-pager-fake-drag-crash.patch
 bugfix/secret-media-viewer-hd-photo.patch
 bugfix/sticker-bottom-padding.patch
 bugfix/signature-profiles-own-post.patch
+bugfix/message-preview-open-anim.patch
