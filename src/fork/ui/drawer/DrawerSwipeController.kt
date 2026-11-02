@@ -74,6 +74,8 @@ class DrawerSwipeController(private val host: DrawerLayoutContainer) {
 
     val isDrawerOpened: Boolean get() = drawerOpened
 
+    val isDrawerVisible: Boolean get() = drawerPosition > 0f
+
     val drawerWidth: Int get() = drawerLayout?.measuredWidth ?: 0
 
     val canOpenFromBackGesture: Boolean

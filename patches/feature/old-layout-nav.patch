@@ -10,7 +10,7 @@ Show app update bar only in the drawer when it is enabled
  .../ui/ActionBar/DrawerLayoutContainer.java   | 38 +++++++++++++++++--
  .../ui/Components/ProfileActionsView.java     | 10 ++++-
  .../java/org/telegram/ui/DialogsActivity.java | 32 ++++++++++++----
- .../java/org/telegram/ui/LaunchActivity.java  | 14 ++++---
+ .../java/org/telegram/ui/LaunchActivity.java  | 17 ++++++---
  .../java/org/telegram/ui/LoginActivity.java   |  1 +
  .../org/telegram/ui/MainTabsActivity.java     |  2 +-
  .../java/org/telegram/ui/ProfileActivity.java | 12 +++++-
@@ -18,7 +18,7 @@ Show app update bar only in the drawer when it is enabled
  .../ui/TwoStepVerificationActivity.java       |  1 +
  .../ui/TwoStepVerificationSetupActivity.java  |  2 +
  .../org/telegram/ui/ViewPagerActivity.java    |  2 +-
- 11 files changed, 94 insertions(+), 22 deletions(-)
+ 11 files changed, 97 insertions(+), 22 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/DrawerLayoutContainer.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/DrawerLayoutContainer.java
 index 0000000..0000000 100644
@@ -332,6 +332,16 @@ index 0000000..0000000 100644
                      }
                  }
              }
+@@ -8515,6 +8517,9 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+         } else if (ArticleViewer.hasInstance() && ArticleViewer.getInstance().isVisible()) {
+             if (invoked) ArticleViewer.getInstance().close(true, false);
+             return false;
++        } else if (drawerLayoutContainer != null && drawerLayoutContainer.inu_drawer != null && drawerLayoutContainer.inu_drawer.isDrawerVisible()) {
++            if (invoked) drawerLayoutContainer.inu_drawer.closeDrawer(false);
++            return false;
+         }
+         return true;
+     }
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
