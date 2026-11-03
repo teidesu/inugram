@@ -1004,4 +1004,20 @@
     <string name="InuPluginsFailedAtRuntime">Çalışma zamanı hatası</string>
     <string name="InuPluginsFailedAtUnload">Kaldırma hatası</string>
     <string name="InuPluginsFailedFormat">%1$s: %2$s</string>
+    <string name="InuWalletPrivateKey">Özel anahtar</string>
+    <string name="InuWalletPrivateKeyInfo">Özel anahtarı ya da cüzdan adresini ve 12 kelimesini girin.</string>
+    <string name="InuWalletPrivateKeyInvalid">Geçerli bir özel anahtar değil</string>
+    <string name="InuWalletPrivateKeyHint">Özel anahtar ya da adres ve 12 kelime</string>
+    <string name="InuWalletRecoverSearching">Cüzdan geçmişi aranıyor…</string>
+    <string name="InuWalletRecoverInvalid">Bunlar geçerli 12 kelime değil</string>
+    <string name="InuWalletRecoverNotFound">Bu 12 kelimeye anahtar değişikliği bulunamadı. Adresi ve kelimeleri kontrol edin ya da tekrar deneyin.</string>
+    <string name="InuWalletRecoverReplaced">Bunlar bu cüzdanın en yeni 12 kelimesi değil</string>
+    <string name="InuWalletRecoverFailed">Cüzdan geçmişi yüklenemedi. Tekrar deneyin.</string>
+    <string name="InuWalletReplaceKey">Anahtarı 12 Kelimeyle Değiştir</string>
+    <string name="InuWalletReplaceKeyTitle">Anahtar 12 kelimeyle değiştirilsin mi?</string>
+    <string name="InuWalletReplaceKeyInfo">Oluşturuculardan alınan anahtarları başkaları görmüş olabilir. Bundan sonra özel anahtar çalışmaz; cüzdan, adresiniz ve 12 yeni kelimeyle geri yüklenir.</string>
+    <string name="InuWalletReplaceKeyButton">Değiştir</string>
+    <string name="InuWalletKeyReplaced">Anahtar değiştirildi</string>
+    <string name="InuWalletKeyReplacedInfo">Bu cüzdan artık adresiniz ve 12 yeni kelimeyle geri yüklenir.</string>
+    <string name="InuWalletPrivateKeyBackupUnavailable">Özel anahtardan içe aktarılan cüzdanlar Telegram\'a yedeklenemez, çünkü diğer uygulamalar bunları geri yükleyemez. Anahtarı kendiniz güvende tutun.</string>
 </resources>

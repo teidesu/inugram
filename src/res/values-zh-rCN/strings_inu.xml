@@ -998,4 +998,20 @@
     <string name="InuPluginsFailedAtRuntime">运行时错误</string>
     <string name="InuPluginsFailedAtUnload">卸载错误</string>
     <string name="InuPluginsFailedFormat">%1$s: %2$s</string>
+    <string name="InuWalletPrivateKey">私钥</string>
+    <string name="InuWalletPrivateKeyInfo">输入私钥，或钱包地址及其 12 个助记词。</string>
+    <string name="InuWalletPrivateKeyInvalid">私钥无效</string>
+    <string name="InuWalletPrivateKeyHint">私钥，或地址和 12 个助记词</string>
+    <string name="InuWalletRecoverSearching">正在搜索钱包历史…</string>
+    <string name="InuWalletRecoverInvalid">这不是有效的 12 个助记词</string>
+    <string name="InuWalletRecoverNotFound">未找到更换为这 12 个助记词的密钥变更。请检查地址和助记词，或重试。</string>
+    <string name="InuWalletRecoverReplaced">这不是该钱包最新的 12 个助记词</string>
+    <string name="InuWalletRecoverFailed">无法加载钱包历史。请重试。</string>
+    <string name="InuWalletReplaceKey">将密钥替换为 12 个助记词</string>
+    <string name="InuWalletReplaceKeyTitle">将密钥替换为 12 个助记词？</string>
+    <string name="InuWalletReplaceKeyInfo">生成器产生的密钥可能已被他人看到。替换后私钥将失效，可通过地址和新的 12 个助记词恢复钱包。</string>
+    <string name="InuWalletReplaceKeyButton">替换</string>
+    <string name="InuWalletKeyReplaced">密钥已替换</string>
+    <string name="InuWalletKeyReplacedInfo">现在可通过地址和新的 12 个助记词恢复此钱包。</string>
+    <string name="InuWalletPrivateKeyBackupUnavailable">从私钥导入的钱包无法备份到 Telegram，因为其他应用无法恢复它们。请自行妥善保管密钥。</string>
 </resources>

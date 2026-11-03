@@ -1030,4 +1030,20 @@
     <string name="InuPluginsFailedAtRuntime">Ошибка выполнения</string>
     <string name="InuPluginsFailedAtUnload">Ошибка выгрузки</string>
     <string name="InuPluginsFailedFormat">%1$s: %2$s</string>
+    <string name="InuWalletPrivateKey">Приватный ключ</string>
+    <string name="InuWalletPrivateKeyInfo">Введите приватный ключ или адрес кошелька и его 12 слов.</string>
+    <string name="InuWalletPrivateKeyInvalid">Неверный приватный ключ</string>
+    <string name="InuWalletPrivateKeyHint">Приватный ключ или адрес и 12 слов</string>
+    <string name="InuWalletRecoverSearching">Поиск в истории кошелька…</string>
+    <string name="InuWalletRecoverInvalid">Это не похоже на 12 слов</string>
+    <string name="InuWalletRecoverNotFound">Смена ключа на эти 12 слов не найдена. Проверьте адрес и слова или попробуйте снова.</string>
+    <string name="InuWalletRecoverReplaced">Это не самые новые 12 слов этого кошелька</string>
+    <string name="InuWalletRecoverFailed">Не удалось загрузить историю кошелька. Попробуйте снова.</string>
+    <string name="InuWalletReplaceKey">Заменить ключ на 12 слов</string>
+    <string name="InuWalletReplaceKeyTitle">Заменить ключ на 12 слов?</string>
+    <string name="InuWalletReplaceKeyInfo">Ключи из генераторов могли видеть другие. После замены приватный ключ перестанет работать, а кошелёк можно будет восстановить по адресу и 12 новым словам.</string>
+    <string name="InuWalletReplaceKeyButton">Заменить</string>
+    <string name="InuWalletKeyReplaced">Ключ заменён</string>
+    <string name="InuWalletKeyReplacedInfo">Теперь кошелёк восстанавливается по адресу и 12 новым словам.</string>
+    <string name="InuWalletPrivateKeyBackupUnavailable">Кошельки, импортированные из приватного ключа, нельзя сохранить в Telegram, так как другие приложения не смогут их восстановить. Храните ключ в надёжном месте сами.</string>
 </resources>

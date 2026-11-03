@@ -998,4 +998,20 @@
     <string name="InuPluginsFailedAtRuntime">実行時エラー</string>
     <string name="InuPluginsFailedAtUnload">アンロードエラー</string>
     <string name="InuPluginsFailedFormat">%1$s: %2$s</string>
+    <string name="InuWalletPrivateKey">秘密鍵</string>
+    <string name="InuWalletPrivateKeyInfo">秘密鍵、またはウォレットのアドレスと12単語を入力してください。</string>
+    <string name="InuWalletPrivateKeyInvalid">有効な秘密鍵ではありません</string>
+    <string name="InuWalletPrivateKeyHint">秘密鍵、またはアドレスと12単語</string>
+    <string name="InuWalletRecoverSearching">ウォレットの履歴を検索中…</string>
+    <string name="InuWalletRecoverInvalid">有効な12単語ではありません</string>
+    <string name="InuWalletRecoverNotFound">この12単語への鍵の変更が見つかりませんでした。アドレスと単語を確認するか、もう一度お試しください。</string>
+    <string name="InuWalletRecoverReplaced">このウォレットの最新の12単語ではありません</string>
+    <string name="InuWalletRecoverFailed">ウォレットの履歴を読み込めませんでした。もう一度お試しください。</string>
+    <string name="InuWalletReplaceKey">鍵を12単語に置き換える</string>
+    <string name="InuWalletReplaceKeyTitle">鍵を12単語に置き換えますか？</string>
+    <string name="InuWalletReplaceKeyInfo">ジェネレーターで作られた鍵は他人に見られている可能性があります。置き換え後は秘密鍵が使えなくなり、アドレスと新しい12単語でウォレットを復元できます。</string>
+    <string name="InuWalletReplaceKeyButton">置き換え</string>
+    <string name="InuWalletKeyReplaced">鍵を置き換えました</string>
+    <string name="InuWalletKeyReplacedInfo">今後はアドレスと新しい12単語でこのウォレットを復元できます。</string>
+    <string name="InuWalletPrivateKeyBackupUnavailable">秘密鍵からインポートしたウォレットは、他のアプリで復元できないため Telegram にバックアップできません。鍵はご自身で安全に保管してください。</string>
 </resources>

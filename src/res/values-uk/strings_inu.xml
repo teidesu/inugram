@@ -994,4 +994,20 @@
     <string name="InuPluginsFailedAtRuntime">Помилка під час роботи</string>
     <string name="InuPluginsFailedAtUnload">Помилка вивантаження</string>
     <string name="InuPluginsFailedFormat">%1$s: %2$s</string>
+    <string name="InuWalletPrivateKey">Приватний ключ</string>
+    <string name="InuWalletPrivateKeyInfo">Введіть приватний ключ або адресу гаманця та його 12 слів.</string>
+    <string name="InuWalletPrivateKeyInvalid">Неправильний приватний ключ</string>
+    <string name="InuWalletPrivateKeyHint">Приватний ключ або адреса та 12 слів</string>
+    <string name="InuWalletRecoverSearching">Пошук в історії гаманця…</string>
+    <string name="InuWalletRecoverInvalid">Це не схоже на 12 слів</string>
+    <string name="InuWalletRecoverNotFound">Зміну ключа на ці 12 слів не знайдено. Перевірте адресу та слова або спробуйте ще раз.</string>
+    <string name="InuWalletRecoverReplaced">Це не найновіші 12 слів цього гаманця</string>
+    <string name="InuWalletRecoverFailed">Не вдалося завантажити історію гаманця. Спробуйте ще раз.</string>
+    <string name="InuWalletReplaceKey">Замінити ключ на 12 слів</string>
+    <string name="InuWalletReplaceKeyTitle">Замінити ключ на 12 слів?</string>
+    <string name="InuWalletReplaceKeyInfo">Ключі з генераторів могли бачити інші. Після заміни приватний ключ перестане працювати, а гаманець можна буде відновити за адресою та 12 новими словами.</string>
+    <string name="InuWalletReplaceKeyButton">Замінити</string>
+    <string name="InuWalletKeyReplaced">Ключ замінено</string>
+    <string name="InuWalletKeyReplacedInfo">Тепер гаманець відновлюється за адресою та 12 новими словами.</string>
+    <string name="InuWalletPrivateKeyBackupUnavailable">Гаманці, імпортовані з приватного ключа, не можна зберегти в Telegram, бо інші застосунки не зможуть їх відновити. Зберігайте ключ у надійному місці самостійно.</string>
 </resources>
