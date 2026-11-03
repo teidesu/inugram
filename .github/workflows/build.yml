@@ -145,6 +145,11 @@ jobs:
       - name: set up worktree
         run: pnpm run setup -- --ci ${{ matrix.variant == 'pluginless' && '--pluginless' || '' }}
 
+      # wallet-engine carries patches-native, so gradle rebuilds it with the toolchain its source pins
+      - name: install wallet engine rust target
+        working-directory: ${{ matrix.worktree }}/TMessagesProj/jni/gram-wallet
+        run: rustup target add aarch64-linux-android
+
       # the node --check loop plus both tsc projects: the plugin contract, and the bundled plugins
       # against it - a bundled oracle that lost a member reads as a refusal and passes without this
       - name: typecheck (plugin contract + bundled plugins)

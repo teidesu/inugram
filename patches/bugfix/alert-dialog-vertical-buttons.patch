@@ -1,0 +1,22 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Tue, 3 Nov 2026 18:33:11 +0400
+Subject: fix alert dialog buttons overflowing instead of stacking vertically
+
+---
+ .../src/main/java/org/telegram/ui/ActionBar/AlertDialog.java    | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/AlertDialog.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/AlertDialog.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/AlertDialog.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/AlertDialog.java
+@@ -976,7 +976,7 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
+                     if (buttonsWidth > 0) buttonsWidth += dp(8);
+                     buttonsWidth += paint.measureText(neutralButtonText, 0, neutralButtonText.length()) + dp(12 + 12);
+                 }
+-                if (buttonsWidth > AndroidUtilities.displaySize.x - dp(64)) {
++                if (buttonsWidth > getDialogWidth() - backgroundPaddings.left - backgroundPaddings.right - dp(32)) {
+                     if (twoRowsButtonsWhenNeeded
+                             && positiveButtonText != null && negativeButtonText != null
+                             && negative2ButtonText != null && neutralButtonText != null) {

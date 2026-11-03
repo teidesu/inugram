@@ -1,0 +1,586 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Tue, 3 Nov 2026 18:33:11 +0400
+Subject: import wallets from a private key and replace it with 12 words
+
+---
+ .../jni/gram-wallet/src/ton_connect.rs        |  1 +
+ .../jni/wallet/WalletEngineBridge.cpp         | 95 +++++++++++++++++--
+ .../org/telegram/ui/Wallet/GramWallet.java    | 15 +++
+ .../org/telegram/ui/Wallet/WalletEngine2.java | 61 ++++++++++++
+ .../ui/Wallet/WalletImportFragment.java       | 45 ++++++++-
+ .../ui/Wallet/WalletKeysBackupFragment.java   | 17 +++-
+ .../ui/Wallet/WalletSecretPhraseFragment.java | 13 ++-
+ 7 files changed, 235 insertions(+), 12 deletions(-)
+
+diff --git a/TMessagesProj/jni/gram-wallet/src/ton_connect.rs b/TMessagesProj/jni/gram-wallet/src/ton_connect.rs
+index 0000000..0000000 100644
+--- a/TMessagesProj/jni/gram-wallet/src/ton_connect.rs
++++ b/TMessagesProj/jni/gram-wallet/src/ton_connect.rs
+@@ -125,6 +125,7 @@ impl Session {
+         // The descriptor uses the immutable anchor; the derived session below
+         // exposes the current signing key separately for the MTProto key check.
+         let anchor = rotation_mnemonic_public_key(normalized.to_string())
++            .or_else(|_| private_key_public_key(normalized.to_string()))
+             .map_err(|_| invalid("Invalid wallet recovery phrase"))?;
+         let lifecycle = WalletLifecycle::new(Arc::new(PhraseHost(normalized)));
+         // Gram Wallet currently uses mainnet, as does the Android WalletClient.
+diff --git a/TMessagesProj/jni/wallet/WalletEngineBridge.cpp b/TMessagesProj/jni/wallet/WalletEngineBridge.cpp
+index 0000000..0000000 100644
+--- a/TMessagesProj/jni/wallet/WalletEngineBridge.cpp
++++ b/TMessagesProj/jni/wallet/WalletEngineBridge.cpp
+@@ -109,6 +109,11 @@ struct ImportProofRequest {
+     }
+ };
+ 
++bool inu_is_private_key(const std::string &phrase) {
++    ImportProofRequest request(phrase);
++    return we::detect_private_key(request.value.recovery_words);
++}
++
+ class OfflineWalletTransport final : public we::WalletStatuslessHost {
+ public:
+     std::vector<uint8_t> execute_statusless(const we::HttpRequest &) override {
+@@ -516,13 +521,15 @@ Java_org_telegram_ui_Wallet_WalletEngine2_nativeSecretPhraseToPublicKey(
+         SensitiveString phrase(static_cast<size_t>(length));
+         env->GetByteArrayRegion(secret_phrase, 0, length, reinterpret_cast<jbyte *>(phrase.value.data()));
+         if (env->ExceptionCheck()) return nullptr;
+-        auto key = we::rotation_mnemonic_public_key(phrase.value);
++        const bool inu_private_key = inu_is_private_key(phrase.value);
++        const size_t inu_anchor_words = inu_private_key ? 1 : 12;
++        auto key = inu_private_key ? we::private_key_public_key(phrase.value) : we::rotation_mnemonic_public_key(phrase.value);
+         ImportProofRequest parsed(phrase.value);
+-        if (parsed.value.recovery_words.size() == 24) {
++        if (parsed.value.recovery_words.size() == inu_anchor_words + 12) {
+             SensitiveString signing_phrase(0);
+             signing_phrase.value.reserve(phrase.value.size());
+-            for (size_t i = 12; i < 24; ++i) {
+-                if (i != 12) signing_phrase.value.push_back(' ');
++            for (size_t i = inu_anchor_words; i < inu_anchor_words + 12; ++i) {
++                if (i != inu_anchor_words) signing_phrase.value.push_back(' ');
+                 signing_phrase.value.append(parsed.value.recovery_words[i]);
+             }
+             key = we::rotation_mnemonic_public_key(signing_phrase.value);
+@@ -571,6 +578,79 @@ Java_org_telegram_ui_Wallet_WalletEngine2_nativeSecretPhraseToAddress(
+     return nullptr;
+ }
+ 
++extern "C" JNIEXPORT jboolean JNICALL
++Java_desu_inugram_helpers_wallet_WalletKeyHelper_nativeIsPrivateKey(JNIEnv *env, jclass, jbyteArray secret_phrase) {
++    if (!secret_phrase) return JNI_FALSE;
++    try {
++        SensitiveString phrase(static_cast<size_t>(env->GetArrayLength(secret_phrase)));
++        env->GetByteArrayRegion(secret_phrase, 0, static_cast<jsize>(phrase.value.size()), reinterpret_cast<jbyte *>(phrase.value.data()));
++        if (env->ExceptionCheck()) return JNI_FALSE;
++        return inu_is_private_key(phrase.value) ? JNI_TRUE : JNI_FALSE;
++    } catch (...) {
++        return JNI_FALSE;
++    }
++}
++
++extern "C" JNIEXPORT jbyteArray JNICALL
++Java_desu_inugram_helpers_wallet_WalletKeyHelper_nativeNormalizePrivateKey(JNIEnv *env, jclass, jbyteArray secret_phrase) {
++    if (!secret_phrase) return nullptr;
++    try {
++        SensitiveString phrase(static_cast<size_t>(env->GetArrayLength(secret_phrase)));
++        env->GetByteArrayRegion(secret_phrase, 0, static_cast<jsize>(phrase.value.size()), reinterpret_cast<jbyte *>(phrase.value.data()));
++        if (env->ExceptionCheck() || !inu_is_private_key(phrase.value)) return nullptr;
++        constexpr auto reason = we::SecretAccessReason::kSignTonConnectProof;
++        auto host = std::make_shared<EphemeralWalletHost>(reason);
++        ImportProofRequest request(phrase.value);
++        auto descriptor = we::WalletLifecycle::init(host)->import_wallet(request.value);
++        auto bytes = host->read_protected_secret({descriptor.secret_ref, reason, ""});
++        auto result = env->NewByteArray(static_cast<jsize>(bytes.size()));
++        if (result) env->SetByteArrayRegion(result, 0, static_cast<jsize>(bytes.size()),
++                                           reinterpret_cast<const jbyte *>(bytes.data()));
++        volatile uint8_t *wipe = bytes.data();
++        for (size_t i = 0; i < bytes.size(); ++i) wipe[i] = 0;
++        return result;
++    } catch (const we::wallet_lifecycle_error::InvalidRecoveryPhrase &) {
++        return nullptr;
++    } catch (const std::bad_alloc &) {
++        throw_java(env, "java/lang/OutOfMemoryError", "Could not read private key");
++    } catch (...) {
++        throw_java(env, "java/lang/IllegalStateException", "Could not read private key");
++    }
++    return nullptr;
++}
++
++extern "C" JNIEXPORT jbyteArray JNICALL
++Java_org_telegram_ui_Wallet_WalletEngine2_nativeInuRecoverWalletSecret(JNIEnv *env, jclass, jlong handle, jbyteArray phrase_bytes) {
++    if (!phrase_bytes) return nullptr;
++    try {
++        auto client = get_client(handle);
++        SensitiveString phrase(static_cast<size_t>(env->GetArrayLength(phrase_bytes)));
++        env->GetByteArrayRegion(phrase_bytes, 0, static_cast<jsize>(phrase.value.size()), reinterpret_cast<jbyte *>(phrase.value.data()));
++        if (env->ExceptionCheck()) return nullptr;
++        ImportProofRequest request(phrase.value);
++        SensitiveString secret(0);
++        auto recovered = client.wallet->recover_wallet_secret(request.value.recovery_words);
++        secret.value.swap(recovered.phrase);
++        auto result = env->NewByteArray(static_cast<jsize>(secret.value.size()));
++        if (result) env->SetByteArrayRegion(result, 0, static_cast<jsize>(secret.value.size()),
++                                           reinterpret_cast<const jbyte *>(secret.value.data()));
++        return result;
++    } catch (const we::wallet_client_error::InvalidProtectedSecret &) {
++        throw_java(env, "java/lang/IllegalArgumentException", "INU_RECOVER_INVALID");
++    } catch (const we::wallet_client_error::EncryptedCommentLookupFailed &) {
++        throw_java(env, "java/lang/IllegalStateException", "INU_RECOVER_NOT_FOUND");
++    } catch (const we::wallet_client_error::WalletIdentityMismatch &) {
++        throw_java(env, "java/lang/IllegalStateException", "INU_RECOVER_REPLACED");
++    } catch (const std::bad_alloc &) {
++        throw_java(env, "java/lang/OutOfMemoryError", "Could not recover wallet secret");
++    } catch (const std::exception &error) {
++        throw_java(env, "java/lang/IllegalStateException", error.what());
++    } catch (...) {
++        throw_java(env, "java/lang/IllegalStateException", "Could not recover wallet secret");
++    }
++    return nullptr;
++}
++
+ extern "C" JNIEXPORT jboolean JNICALL
+ Java_org_telegram_ui_Wallet_WalletEngine2_isValidCellBoc(JNIEnv *env, jclass, jstring boc) {
+     try {
+@@ -644,17 +724,18 @@ Java_org_telegram_ui_Wallet_WalletEngine2_nativeCreateImportProof(
+         auto host = std::make_shared<EphemeralWalletHost>(we::SecretAccessReason::kSignTonConnectProof);
+         auto lifecycle = we::WalletLifecycle::init(host);
+         auto descriptor = lifecycle->import_wallet(request.value);
+-        if (for_import && request.value.recovery_words.size() == 24) {
++        const size_t anchor_words = we::detect_private_key(request.value.recovery_words) ? 1 : 12;
++        if (for_import && request.value.recovery_words.size() == anchor_words + 12) {
+             // The complete phrase was validated above. MTProto import verifies
+             // with the submitted address-derivation key, not the rotated key.
+             // Importing its first half retains the same address and authorizes
+             // that key for this one proof. Wipe discarded signing words first.
+-            for (size_t i = 12; i < request.value.recovery_words.size(); ++i) {
++            for (size_t i = anchor_words; i < request.value.recovery_words.size(); ++i) {
+                 auto &word = request.value.recovery_words[i];
+                 volatile char *data = word.data();
+                 for (size_t j = 0; j < word.size(); ++j) data[j] = 0;
+             }
+-            request.value.recovery_words.resize(12);
++            request.value.recovery_words.resize(anchor_words);
+             host = std::make_shared<EphemeralWalletHost>(we::SecretAccessReason::kSignTonConnectProof);
+             lifecycle = we::WalletLifecycle::init(host);
+             descriptor = lifecycle->import_wallet(request.value);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Wallet/GramWallet.java b/TMessagesProj/src/main/java/org/telegram/ui/Wallet/GramWallet.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Wallet/GramWallet.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Wallet/GramWallet.java
+@@ -1,5 +1,6 @@
+ package org.telegram.ui.Wallet;
+ 
++import desu.inugram.helpers.wallet.WalletKeyHelper;
+ import static org.telegram.messenger.LocaleController.getString;
+ import static org.telegram.messenger.PasskeysController.ktxCallback;
+ import static org.telegram.ui.web.BotWebViewContainer.obj;
+@@ -94,6 +95,7 @@ public class GramWallet implements GramWalletStreaming.IGramWalletStreamingSubsc
+         public String msg_hash;
+         public SecretPhrase secretPhrase;
+         public byte[] publicKey;
++        public boolean inu_rotateOnly;
+ 
+         public void disableBackup() {
+             final SecretPhrase owned = secretPhrase;
+@@ -116,6 +118,10 @@ public class GramWallet implements GramWalletStreaming.IGramWalletStreamingSubsc
+                         }
+                         updateState(state);
+                         onWalletChanged();
++                        if (inu_rotateOnly) {
++                            WalletKeyHelper.onKeyReplaced();
++                            return;
++                        }
+                         AndroidUtilities.runOnUIThread(() -> {
+                             final BaseFragment lastFragment = LaunchActivity.getSafeLastFragment();
+                             if (lastFragment == null) return;
+@@ -993,6 +999,7 @@ public class GramWallet implements GramWalletStreaming.IGramWalletStreamingSubsc
+         public TL_wallet.sendTransfer transfer;
+         public SecretPhrase newSecretPhrase;
+         public byte[] newPublicKey;
++        public boolean inu_rotateOnly;
+ 
+         @Override public void close() {
+             if (newSecretPhrase != null) newSecretPhrase.close();
+@@ -1121,6 +1128,7 @@ public class GramWallet implements GramWalletStreaming.IGramWalletStreamingSubsc
+                 pending.msg_hash = sentTransfer.msg_hash;
+                 pending.publicKey = prepared.newPublicKey;
+                 pending.secretPhrase = replacement;
++                pending.inu_rotateOnly = prepared.inu_rotateOnly;
+ //                pending.publicKey = publicKey;
+ //                pending.secretPhrase = currentPhrase;
+                 if (sentTransfer.transaction != null) {
+@@ -1221,6 +1229,11 @@ public class GramWallet implements GramWalletStreaming.IGramWalletStreamingSubsc
+                     whenDone.run(error);
+                 };
+                 log("enable backup: got secret phrase");
++                if (WalletKeyHelper.isPrivateKey(phrase)) {
++                    WalletKeyHelper.rememberKeyWallet(getAddress(), phrase);
++                    finish.run(WalletKeyHelper.BACKUP_UNAVAILABLE);
++                    return;
++                }
+                 final byte[] public_key;
+                 try {
+                     public_key = WalletEngine2.secretPhraseToPublicKey(phrase);
+@@ -2056,6 +2069,7 @@ public class GramWallet implements GramWalletStreaming.IGramWalletStreamingSubsc
+             return;
+         }
+         final SecretPhrase owned = phrase.copy();
++        final boolean inu_keyWallet = WalletKeyHelper.isPrivateKey(owned);
+         log("import wallet: requesting proof challenge");
+         PasswordRequest.<TL_wallet.WalletState>open(currentAccount, (password, send) -> {
+             proveChallenge(owned, true, (proof, err2) -> {
+@@ -2083,6 +2097,7 @@ public class GramWallet implements GramWalletStreaming.IGramWalletStreamingSubsc
+                 return;
+             }
+             updateState(state);
++            if (inu_keyWallet) WalletKeyHelper.rememberKeyWallet(getAddress(), anchor_public_key);
+             // Import completes only after local persistence; propagate storage/authentication failures.
+             new GramWalletStorage(getContext(), currentAccount, getAddress())
+                 .init(UserConfig.getInstance(currentAccount).getClientUserId(), public_key, owned, whenDone);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Wallet/WalletEngine2.java b/TMessagesProj/src/main/java/org/telegram/ui/Wallet/WalletEngine2.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Wallet/WalletEngine2.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Wallet/WalletEngine2.java
+@@ -1,5 +1,6 @@
+ package org.telegram.ui.Wallet;
+ 
++import desu.inugram.helpers.wallet.WalletKeyHelper;
+ import androidx.annotation.Keep;
+ import androidx.annotation.Nullable;
+ import android.util.Base64;
+@@ -26,6 +27,7 @@ import org.telegram.ui.Wallet.GramWallet.SecretPhrase;
+ import org.telegram.messenger.AndroidUtilities;
+ import org.telegram.messenger.ApplicationLoader;
+ import org.telegram.messenger.BuildVars;
++import org.telegram.messenger.DispatchQueue;
+ import org.telegram.messenger.FileLog;
+ import org.telegram.messenger.MessagesController;
+ import org.telegram.messenger.Utilities;
+@@ -100,6 +102,11 @@ public class WalletEngine2 implements AutoCloseable {
+         if (secretPhrase == null || secretPhrase.isEmpty()) {
+             throw new IllegalArgumentException("Recovery phrase is required");
+         }
++        if (WalletKeyHelper.isPrivateKey(secretPhrase)) {
++            try (SecretPhrase anchor = secretPhrase.firstWords(1)) {
++                return secretPhraseToPublicKey(anchor);
++            }
++        }
+         int count = secretPhrase.wordCount();
+         if (count != 12 && count != 24) {
+             throw new IllegalArgumentException("Recovery phrase must contain 12 or 24 words");
+@@ -109,6 +116,59 @@ public class WalletEngine2 implements AutoCloseable {
+         }
+     }
+ 
++    private static class InuRecovery {
++        static final DispatchQueue queue = new DispatchQueue("InuWalletRecovery");
++    }
++
++    public static Runnable inu_recoverWalletSecret(int currentAccount, String address, SecretPhrase words, Utilities.Callback2<SecretPhrase, String> onResult) {
++        final byte[] publicKey;
++        try {
++            publicKey = secretPhraseToPublicKey(words);
++        } catch (RuntimeException e) {
++            AndroidUtilities.runOnUIThread(() -> onResult.run(null, "INU_RECOVER_INVALID"));
++            return null;
++        }
++        final byte[] phrase = words.copyBytes();
++        final AtomicBoolean cancelled = new AtomicBoolean();
++        InuRecovery.queue.postRunnable(() -> {
++            if (cancelled.get()) {
++                Arrays.fill(phrase, (byte) 0);
++                return;
++            }
++            final HttpTransport transport = new HttpTransport(currentAccount);
++            long handle = 0;
++            SecretPhrase secret = null;
++            String error = null;
++            try {
++                handle = nativeCreate(currentAccount, address, publicKey, transport,
++                    ApplicationLoader.applicationContext.getCacheDir().getAbsolutePath() + "/inu-wallet-recovery");
++                final byte[] bytes = nativeInuRecoverWalletSecret(handle, phrase);
++                if (bytes == null) throw new IllegalStateException("INU_RECOVER_NOT_FOUND");
++                try {
++                    secret = new SecretPhrase(bytes);
++                } finally {
++                    Arrays.fill(bytes, (byte) 0);
++                }
++            } catch (RuntimeException e) {
++                error = errorMessage(e);
++            } finally {
++                Arrays.fill(phrase, (byte) 0);
++                if (handle != 0) nativeClose(handle);
++                transport.close();
++            }
++            final SecretPhrase result = secret;
++            final String failure = error;
++            AndroidUtilities.runOnUIThread(() -> {
++                try {
++                    onResult.run(result, failure);
++                } finally {
++                    if (result != null) result.close();
++                }
++            });
++        });
++        return () -> cancelled.set(true);
++    }
++
+     /**
+      * Derives the friendly non-bounceable Wallet rev00 mainnet address in workchain 0.
+      * Accepts a valid 12- or 24-word TG Wallet Rotation mnemonic; both halves of a
+@@ -1332,6 +1392,7 @@ public class WalletEngine2 implements AutoCloseable {
+         });
+     }
+ 
++    private static native byte[] nativeInuRecoverWalletSecret(long handle, byte[] phrase);
+     private static native long nativeCreate(int currentAccount, String address, byte[] publicKey, HttpTransport transport, String journalDirectory);
+     private static native TL_wallet.walletTransaction nativeEmulateSend(long handle, String address, long amount, byte[] comment, boolean comment_encrypted);
+     private static native byte[] nativeDecryptComment(long handle, byte[] phrase, String sender, String body);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Wallet/WalletImportFragment.java b/TMessagesProj/src/main/java/org/telegram/ui/Wallet/WalletImportFragment.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Wallet/WalletImportFragment.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Wallet/WalletImportFragment.java
+@@ -1,5 +1,8 @@
+ package org.telegram.ui.Wallet;
+ 
++import desu.inugram.helpers.wallet.WalletKeyHelper;
++import desu.inugram.helpers.wallet.WalletKeyInput;
++import desu.inugram.ui.ExpandableFrameLayout;
+ import org.telegram.ui.Wallet.GramWallet.SecretPhrase;
+ import org.telegram.messenger.LocaleController;
+ 
+@@ -61,6 +64,8 @@ public class WalletImportFragment extends BaseFragment {
+     private int keyboardInset;
+     private boolean wipe;
+     private byte[] matchPublicKey;
++    private WalletKeyInput inu_keyInput;
++    private ExpandableFrameLayout inu_importFrame;
+ 
+     public WalletImportFragment setWipe(boolean wipe) {
+         this.wipe = wipe;
+@@ -148,7 +153,8 @@ public class WalletImportFragment extends BaseFragment {
+         }
+         root.addView(subtitleView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 32, 0, 32, 8));
+ 
+-        tabs = new WalletActivity.TabsView(context, new CharSequence[] { LocaleController.formatPluralString("WalletPhraseWords", 12), LocaleController.formatPluralString("WalletPhraseWords", 24) }, tab -> {
++        tabs = new WalletActivity.TabsView(context, new CharSequence[] { LocaleController.formatPluralString("WalletPhraseWords", 12), LocaleController.formatPluralString("WalletPhraseWords", 24), LocaleController.getString(R.string.InuWalletPrivateKey) }, tab -> {
++            if (inu_setKeyMode(tab == 2)) return;
+             setCount(tab == 0 ? 12 : 24);
+         }, resourceProvider);
+         tabs.shadowed = true;
+@@ -163,12 +169,18 @@ public class WalletImportFragment extends BaseFragment {
+         cellsContainer.setClipChildren(false);
+         root.addView(cellsContainer, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 0, 16, 0, 0));
+ 
++        inu_keyInput = new WalletKeyInput(context, currentAccount, resourceProvider, this::updateImportButton);
++        inu_keyInput.getView().setVisibility(View.GONE);
++        root.addView(inu_keyInput.getView(), LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 0, 16, 0, 0));
++
+         importButton = new ButtonWithCounterView(context, resourceProvider);
+         importButton.setRound();
+         importButton.setText(LocaleController.getString(R.string.WalletImportButton));
+         importButton.setEnabled(false);
+         importButton.setOnClickListener(v -> onImportPressed());
+-        root.addView(importButton, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48, Gravity.CENTER_HORIZONTAL, 0, 24, 0, 0));
++        inu_importFrame = new ExpandableFrameLayout(context);
++        inu_importFrame.addView(importButton, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48, Gravity.TOP, 0, 24, 0, 0));
++        root.addView(inu_importFrame, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+ 
+         buildCells(context);
+         updateImportButton();
+@@ -176,6 +188,19 @@ public class WalletImportFragment extends BaseFragment {
+         return fragmentView;
+     }
+ 
++    private boolean inu_setKeyMode(boolean keyMode) {
++        cellsContainer.setVisibility(keyMode ? View.GONE : View.VISIBLE);
++        inu_keyInput.getView().setVisibility(keyMode ? View.VISIBLE : View.GONE);
++        inu_importFrame.setExpanded(!keyMode || inu_keyInput.getHasAddress(), false);
++        updateImportButton();
++        if (keyMode) {
++            subtitleView.setText(LocaleController.getString(R.string.InuWalletPrivateKeyInfo));
++        } else {
++            subtitleView.setText(matchPublicKey != null ? LocaleController.formatSpannable(R.string.WalletImportCurrentPhraseInfo, currentCount) : LocaleController.formatSpannable(R.string.WalletImportPhraseInfo, currentCount));
++        }
++        return keyMode;
++    }
++
+     private void setCount(int count) {
+         if (currentCount == count) {
+             return;
+@@ -240,6 +265,11 @@ public class WalletImportFragment extends BaseFragment {
+     }
+ 
+     private void updateImportButton() {
++        if (inu_keyInput != null && inu_keyInput.getView().getVisibility() == View.VISIBLE) {
++            inu_importFrame.setExpanded(inu_keyInput.getHasAddress(), true);
++            importButton.setEnabled(inu_keyInput.isResolved());
++            return;
++        }
+         boolean allFilled = true;
+         for (WalletWordCell cell : cells) {
+             if (cell.isEmpty()) {
+@@ -257,7 +287,8 @@ public class WalletImportFragment extends BaseFragment {
+         for (WalletWordCell cell : cells) {
+             words.add(cell.getWord().toLowerCase().trim());
+         }
+-        try (SecretPhrase phrase = SecretPhrase.fromWords(words)) {
++        try (SecretPhrase phrase = inu_keyInput.getView().getVisibility() == View.VISIBLE ? inu_keyInput.copySecret() : SecretPhrase.fromWords(words)) {
++            if (phrase == null) return;
+ 
+             importButton.setLoading(true);
+ 
+@@ -326,6 +357,7 @@ public class WalletImportFragment extends BaseFragment {
+             final BaseFragment previousFragment = getParentLayout() != null && getParentLayout().getFragmentStack().size() > 1
+                     ? getParentLayout().getFragmentStack().get(getParentLayout().getFragmentStack().size() - 2)
+                     : null;
++            final boolean inu_offerReplace = WalletKeyHelper.isUnrotatedKey(phrase);
+             wallet.importWallet(phrase, error -> {
+                 importButton.setLoading(false);
+                 if ("WRONG_CONTRACT".equalsIgnoreCase(error) || "INVALID_PHRASE".equalsIgnoreCase(error)) {
+@@ -349,11 +381,18 @@ public class WalletImportFragment extends BaseFragment {
+                                 .show();
+                     }
+                     finishFragment();
++                    if (inu_offerReplace) WalletKeyHelper.offerKeyReplacement();
+                 }, 300);
+             });
+         }
+     }
+ 
++    @Override
++    public void onFragmentDestroy() {
++        if (inu_keyInput != null) inu_keyInput.destroy();
++        super.onFragmentDestroy();
++    }
++
+     public static CharSequence formatAddressTwoLines(String address) {
+         if (address == null)
+             return null;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Wallet/WalletKeysBackupFragment.java b/TMessagesProj/src/main/java/org/telegram/ui/Wallet/WalletKeysBackupFragment.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Wallet/WalletKeysBackupFragment.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Wallet/WalletKeysBackupFragment.java
+@@ -1,5 +1,6 @@
+ package org.telegram.ui.Wallet;
+ 
++import desu.inugram.helpers.wallet.WalletKeyHelper;
+ import static org.telegram.messenger.AndroidUtilities.dp;
+ import static org.telegram.messenger.AndroidUtilities.getAccountInProduction;
+ import static org.telegram.messenger.LocaleController.getString;
+@@ -116,6 +117,7 @@ public class WalletKeysBackupFragment extends UniversalFragment implements Notif
+     private final int BTN_ENABLE_BACKUP = 2;
+     private final int BTN_DISABLE_BACKUP = 3;
+     private final int BTN_DELETE = 4;
++    private final int BTN_INU_REPLACE_KEY = 5;
+ 
+     @Override
+     protected void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
+@@ -124,10 +126,11 @@ public class WalletKeysBackupFragment extends UniversalFragment implements Notif
+         if (wallet.canExportPhrase() || wallet.cantAccessWallet()) {
+             items.add(UItem.asHeader(LocaleController.getString(R.string.WalletRecoveryPhraseLearnTitle)));
+             items.add(UItem.asButton(BTN_RECOVERY_PHRASE, LocaleController.getString(R.string.WalletRecoveryPhraseLearnButton)).accent());
++            if (WalletKeyHelper.isUnrotatedKeyWallet(wallet)) items.add(UItem.asButton(BTN_INU_REPLACE_KEY, LocaleController.getString(R.string.InuWalletReplaceKey)).accent());
+             items.add(UItem.asShadow(LocaleController.getString(R.string.WalletRecoveryPhraseTransferInfo)));
+         }
+ 
+-        if (wallet.isBackupEnabled() || wallet.canEnableBackup()) {
++        if (wallet.isBackupEnabled() || wallet.canEnableBackup() && !WalletKeyHelper.isKeyWallet(wallet)) {
+             items.add(UItem.asHeader(LocaleController.getString(R.string.WalletEncryptedBackup)));
+             if (wallet.isBackupEnabled()) {
+                 items.add(UItem.asButton(BTN_DISABLE_BACKUP, LocaleController.getString(R.string.WalletDisableBackup)).red());
+@@ -220,6 +223,8 @@ public class WalletKeysBackupFragment extends UniversalFragment implements Notif
+ 
+     public static void showRecoveryPhraseAlert(Context context, ArrayList<String> words, Theme.ResourcesProvider resourcesProvider, Utilities.Callback<Utilities.Callback<String>> onImport, Runnable onDelete) {
+         if (words == null) return;
++        final String inu_key = WalletKeyHelper.extractKey(words);
++        if (inu_key != null) words = new ArrayList<>(words.subList(1, words.size()));
+ 
+         BottomSheet.Builder b = new BottomSheet.Builder(context, false, resourcesProvider);
+ 
+@@ -271,6 +276,7 @@ public class WalletKeysBackupFragment extends UniversalFragment implements Notif
+         columns.addView(gap, LayoutHelper.createLinear(10, 0));
+         columns.addView(rightColumn, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1.0f, Gravity.TOP));
+ 
++        if (inu_key != null) listWrap.addView(WalletKeyHelper.createKeyView(context, resourcesProvider, inu_key), LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 0, words.isEmpty() ? 0 : 20));
+         listWrap.addView(columns, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL));
+         contentLayout.addView(listWrap, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 40, 32, 40, 28));
+ 
+@@ -385,6 +391,10 @@ public class WalletKeysBackupFragment extends UniversalFragment implements Notif
+ 
+     @Override
+     protected void onClick(UItem item, View view, int position, float x, float y) {
++        if (item.id == BTN_INU_REPLACE_KEY) {
++            WalletKeyHelper.startKeyReplacement(this);
++            return;
++        }
+         if (item.id == BTN_RECOVERY_PHRASE) {
+             final GramWallet wallet = GramWallet.getInstance(currentAccount);
+             if (wallet.cantAccessWallet()) {
+@@ -566,6 +576,11 @@ public class WalletKeysBackupFragment extends UniversalFragment implements Notif
+         } else if (item.id == BTN_ENABLE_BACKUP) {
+             final GramWallet wallet = GramWallet.getInstance(currentAccount);
+             wallet.enableBackup(error -> {
++                if (WalletKeyHelper.BACKUP_UNAVAILABLE.equals(error)) {
++                    BulletinFactory.of(this).createErrorBulletin(LocaleController.getString(R.string.InuWalletPrivateKeyBackupUnavailable)).show();
++                    listView.adapter.update(true);
++                    return;
++                }
+                 if (error != null) {
+                     BulletinFactory.of(this).showForError(error);
+                     return;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Wallet/WalletSecretPhraseFragment.java b/TMessagesProj/src/main/java/org/telegram/ui/Wallet/WalletSecretPhraseFragment.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Wallet/WalletSecretPhraseFragment.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Wallet/WalletSecretPhraseFragment.java
+@@ -1,5 +1,6 @@
+ package org.telegram.ui.Wallet;
+ 
++import desu.inugram.helpers.wallet.WalletKeyHelper;
+ import org.telegram.ui.Wallet.GramWallet.SecretPhrase;
+ import org.telegram.messenger.LocaleController;
+ 
+@@ -40,6 +41,7 @@ public class WalletSecretPhraseFragment extends BaseFragment {
+     private ButtonWithCounterView continueButton;
+     private Runnable onTested;
+     private boolean current;
++    private String inu_key;
+ 
+     public WalletSecretPhraseFragment onTested(Runnable onTested) {
+         this.onTested = onTested;
+@@ -50,6 +52,8 @@ public class WalletSecretPhraseFragment extends BaseFragment {
+         words.clear();
+         if (secretPhrase != null && !secretPhrase.isEmpty()) {
+             words.addAll(secretPhrase.toWordsForDisplay());
++            inu_key = WalletKeyHelper.extractKey(words);
++            if (inu_key != null) words.remove(0);
+         }
+         updateWords();
+         return this;
+@@ -112,6 +116,8 @@ public class WalletSecretPhraseFragment extends BaseFragment {
+         subtitleView.setText(current ? LocaleController.getString(R.string.WalletCurrentSecretPhraseInfo) : LocaleController.getString(R.string.WalletNewSecretPhraseInfo));
+         root.addView(subtitleView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 32, 0, 32, 8));
+ 
++        if (inu_key != null) root.addView(WalletKeyHelper.createKeyView(context, resourceProvider, inu_key), LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 4, 24, 4, 0));
++
+         columns = new LinearLayout(context);
+         columns.setOrientation(LinearLayout.HORIZONTAL);
+         columns.setGravity(Gravity.CENTER_HORIZONTAL);
+@@ -140,11 +146,16 @@ public class WalletSecretPhraseFragment extends BaseFragment {
+         columns.addView(new View(context), LayoutHelper.createLinear(10, 0));
+         columns.addView(WalletKeysBackupFragment.makeWordColumn(context, resourceProvider, words, leftCount, words.size()), LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1.0f, Gravity.TOP));
+         if (continueButton != null) {
+-            continueButton.setEnabled(words.size() == 12 || words.size() == 24);
++            continueButton.setEnabled(words.size() == 12 || words.size() == 24 || inu_key != null && words.isEmpty());
+         }
+     }
+ 
+     protected void onContinuePressed() {
++        if (inu_key != null && words.isEmpty()) {
++            finishFragment();
++            if (onTested != null) onTested.run();
++            return;
++        }
+         if (words.size() != 12 && words.size() != 24) {
+             return;
+         }

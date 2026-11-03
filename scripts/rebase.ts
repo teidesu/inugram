@@ -1,6 +1,7 @@
 import { $ } from 'zx'
 import { worktreeDir } from './config.js'
 import {
+  applySubmodulePatches,
   cd,
   getAllPatchNames,
   step,
@@ -49,4 +50,5 @@ if (result.exitCode !== 0) {
 }
 
 await syncSubmodules(worktreeDir)
+await applySubmodulePatches(worktreeDir)
 success(`Rebased onto ${resolvedCommit}`)

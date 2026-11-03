@@ -130,6 +130,15 @@ export async function syncSubmodules(repoDir: string, excludedSubmodules: string
     return false
   }
 
+  // a patched working tree blocks checking out the new pin; applySubmodulePatches reapplies them
+  const stalePaths = new Set(stale.map(line => line.slice(1).trim().split(/\s+/)[1]))
+  for (const { submodule, patch } of [...submodulePatches].reverse()) {
+    if (!stalePaths.has(submodule)) continue
+    const submoduleGit = cd(join(repoDir, submodule))
+    const applied = await submoduleGit`git apply --reverse --check ${patch}`.nothrow().quiet()
+    if (applied.exitCode === 0) await submoduleGit`git apply --reverse ${patch}`
+  }
+
   step(`Syncing ${stale.length} submodule(s), this will take a while`)
   const skips = skippedSubmodules.flatMap(name => ['-c', `submodule.${name}.update=none`])
   const depth = shallow ? ['--depth', '1'] : ['--filter=blob:none']

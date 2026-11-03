@@ -1003,4 +1003,20 @@
     <string name="InuPluginsFailedAtRuntime">Runtime error</string>
     <string name="InuPluginsFailedAtUnload">Unload error</string>
     <string name="InuPluginsFailedFormat">%1$s: %2$s</string>
+    <string name="InuWalletPrivateKey">Private key</string>
+    <string name="InuWalletPrivateKeyInfo">Enter a private key, or a wallet address and its 12 words.</string>
+    <string name="InuWalletPrivateKeyInvalid">Not a valid private key</string>
+    <string name="InuWalletPrivateKeyHint">Private key, or address and 12 words</string>
+    <string name="InuWalletRecoverSearching">Searching the wallet\'s history…</string>
+    <string name="InuWalletRecoverInvalid">These aren\'t valid 12 words</string>
+    <string name="InuWalletRecoverNotFound">No key change to these 12 words was found. Check the address and words, or try again.</string>
+    <string name="InuWalletRecoverReplaced">These aren\'t the newest 12 words of this wallet</string>
+    <string name="InuWalletRecoverFailed">Couldn\'t load the wallet\'s history. Try again.</string>
+    <string name="InuWalletReplaceKey">Replace Key with 12 Words</string>
+    <string name="InuWalletReplaceKeyTitle">Replace the key with 12 words?</string>
+    <string name="InuWalletReplaceKeyInfo">Keys from generators may have been seen by others. After this, the private key stops working, and your address with 12 new words restores the wallet.</string>
+    <string name="InuWalletReplaceKeyButton">Replace</string>
+    <string name="InuWalletKeyReplaced">Key replaced</string>
+    <string name="InuWalletKeyReplacedInfo">Your address and the 12 new words now restore this wallet.</string>
+    <string name="InuWalletPrivateKeyBackupUnavailable">Wallets imported from a private key can\'t be backed up to Telegram, since other apps can\'t restore them. Keep the key safe yourself.</string>
 </resources>

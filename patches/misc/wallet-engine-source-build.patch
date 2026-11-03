@@ -1,0 +1,69 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Tue, 3 Nov 2026 18:33:11 +0400
+Subject: build patched wallet-engine from source
+
+---
+ TMessagesProj/build.gradle       | 24 ++++++++++++++++++++++++
+ TMessagesProj/jni/CMakeLists.txt |  4 ++--
+ 2 files changed, 26 insertions(+), 2 deletions(-)
+
+diff --git a/TMessagesProj/build.gradle b/TMessagesProj/build.gradle
+index 0000000..0000000 100644
+--- a/TMessagesProj/build.gradle
++++ b/TMessagesProj/build.gradle
+@@ -175,6 +175,29 @@ def preprocessInuSources = tasks.register('preprocessInuSources') {
+     }
+ }
+ 
++// wallet-engine carries patches-native, so its committed prebuilt archive and bindings are stale
++def inuWalletEngineDir = layout.buildDirectory.dir('inuWalletEngine').get().asFile
++def buildInuWalletEngine = tasks.register('buildInuWalletEngine', Exec) {
++    def abis = android.defaultConfig.ndk.abiFilters.join(' ')
++    inputs.files(fileTree('jni/wallet-engine') { exclude '**/target/**', '.git' }, fileTree('jni/gram-wallet') { exclude 'target/**' },
++        'jni/prebuild/build_wallet_engine.sh', 'jni/prebuild/common.sh').withPathSensitivity(PathSensitivity.RELATIVE)
++    inputs.property('abis', abis)
++    inputs.property('ndk', android.ndkVersion)
++    outputs.dirs(new File(inuWalletEngineDir, 'lib'), new File(inuWalletEngineDir, 'include'))
++    outputs.cacheIf { true }
++    def userHome = System.getProperty('user.home')
++    environment 'PATH', [System.getenv('CARGO_HOME') ? "${System.getenv('CARGO_HOME')}/bin" : null, "$userHome/.cargo/bin", System.getenv('PATH')].findAll { it }.join(File.pathSeparator)
++    environment 'ANDROID_NDK_HOME', android.ndkDirectory.absolutePath
++    environment 'ABIS', abis
++    environment 'LIB_DIR', new File(inuWalletEngineDir, 'lib').absolutePath
++    environment 'INCLUDE_DIR', new File(inuWalletEngineDir, 'include').absolutePath
++    environment 'WALLET_ENGINE_BUILD_DIR', new File(inuWalletEngineDir, 'cargo').absolutePath
++    commandLine 'bash', file('jni/prebuild/build_wallet_engine.sh').absolutePath
++}
++tasks.matching { it.name.startsWith('configureCMake') || it.name.startsWith('buildCMake') }.configureEach {
++    dependsOn buildInuWalletEngine
++}
++
+ android {
+     compileSdkVersion 36
+     buildToolsVersion '36.0.0'
+@@ -226,6 +249,7 @@ android {
+             cmake {
+                 version '3.22.1'
+                 arguments '-DANDROID_STL=c++_static', '-DANDROID_PLATFORM=android-26' //, '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
++                arguments += ["-DINU_WALLET_ENGINE_DIR=${inuWalletEngineDir.absolutePath}"]
+                 targets 'tmessages.49'
+                 if (!rootProject.ext.inuPluginless) {
+                     arguments += ['-DINU_EXPORT_SQLITE=ON']
+diff --git a/TMessagesProj/jni/CMakeLists.txt b/TMessagesProj/jni/CMakeLists.txt
+index 0000000..0000000 100644
+--- a/TMessagesProj/jni/CMakeLists.txt
++++ b/TMessagesProj/jni/CMakeLists.txt
+@@ -142,10 +142,10 @@ set_target_properties(tlottie PROPERTIES
+         IMPORTED_LOCATION ${CMAKE_HOME_DIRECTORY}/prebuild/lib/${ANDROID_ABI}/libtlottie.a)
+ 
+ # Wallet Engine: matching Rust archive and generated UniFFI C++20 wrapper.
+-set(WALLET_ENGINE_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/prebuild/include/wallet-engine)
++set(WALLET_ENGINE_INCLUDE_DIR ${INU_WALLET_ENGINE_DIR}/include/wallet-engine)
+ add_library(wallet_engine STATIC IMPORTED)
+ set_target_properties(wallet_engine PROPERTIES
+-        IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/prebuild/lib/${ANDROID_ABI}/libwallet_engine.a)
++        IMPORTED_LOCATION ${INU_WALLET_ENGINE_DIR}/lib/${ANDROID_ABI}/libwallet_engine.a)
+ 
+ add_library(wallet_engine_cpp STATIC
+         ${WALLET_ENGINE_INCLUDE_DIR}/wallet_engine.cpp
