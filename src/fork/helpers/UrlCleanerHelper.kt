@@ -75,6 +75,16 @@ object UrlCleanerHelper {
     private val YANDEX_HOST = Regex("^(www\\.)?yandex\\.[a-z.]+$")
     private val YANDEX_MAPS_SHARE_PATH = Regex("^/maps/-/[^/]+/?$")
     private val OZON_SHARE_PATH = Regex("^/t/[^/]+/?$")
+    private class RedirectWrapper(val host: Regex, val path: String, val params: List<String>)
+    private val REDIRECT_WRAPPERS = listOf(
+        RedirectWrapper(Regex("^(www\\.)?google\\.[a-z.]+$"), "/url", listOf("url", "q")),
+        RedirectWrapper(Regex("^(www\\.|m\\.)?youtube\\.com$"), "/redirect", listOf("q")),
+        RedirectWrapper(Regex("^lm?\\.facebook\\.com$"), "/l.php", listOf("u")),
+        RedirectWrapper(Regex("^l\\.instagram\\.com$"), "", listOf("u")),
+        RedirectWrapper(Regex("^(m\\.)?vk\\.(com|ru)$"), "/away.php", listOf("to")),
+        RedirectWrapper(Regex("^steamcommunity\\.com$"), "/linkfilter", listOf("url", "u")),
+    )
+    private const val MAX_UNWRAP_DEPTH = 3
     /** stock persists `Message.params` while a message is unsent, so a send retried after a restart still resolves */
     private const val REDIRECTS_PARAM = "inu_redirects"
     private val resolvedRedirects = LruCache<String, String>(128)
@@ -194,7 +204,20 @@ object UrlCleanerHelper {
     private fun cleanUrl(url: String): String {
         val scheme = url.substringBefore(':', "").lowercase()
         if (scheme != "http" && scheme != "https") return url
-        return getCleaner()?.clean(url) ?: url
+        val target = unwrapRedirect(url, 0)
+        return getCleaner()?.clean(target) ?: target
+    }
+
+    private tailrec fun unwrapRedirect(url: String, depth: Int): String {
+        if (depth == MAX_UNWRAP_DEPTH) return url
+        val uri = url.toUri()
+        val host = uri.host?.lowercase() ?: return url
+        val path = uri.path.orEmpty().trimEnd('/')
+        val wrapper = REDIRECT_WRAPPERS.firstOrNull { it.host.matches(host) && it.path == path } ?: return url
+        val target = wrapper.params.firstNotNullOfOrNull { uri.getQueryParameter(it)?.trim() } ?: return url
+        val scheme = target.substringBefore(':', "").lowercase()
+        if (scheme != "http" && scheme != "https") return url
+        return unwrapRedirect(target, depth + 1)
     }
 
     private fun isPasteTransformEnabled(): Boolean =
