@@ -119,7 +119,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -41504,6 +41504,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -41507,6 +41507,7 @@ public class ChatActivity extends BaseFragment implements
                      }
                      final Integer finalTaskId = task_id;
                      final byte[] finalPollOptionId = option_id;
@@ -127,7 +127,7 @@ index 0000000..0000000 100644
                      Runnable scroll = () -> {
                          scrollToMessageId(id, messageObject.getId(), true, messageObject.getDialogId() == mergeDialogId ? 1 : 0, true, 0, finalTaskId, finalPollOptionId, () -> {
                              progressDialogAtMessageId = messageObject.getId();
-@@ -41517,6 +41518,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -41520,6 +41521,9 @@ public class ChatActivity extends BaseFragment implements
                      } else {
                          scroll.run();
                      }

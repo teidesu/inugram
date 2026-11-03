@@ -383,7 +383,7 @@ index 0000000..0000000 100644
                      messageObject.copyStableParams(old);
                      messages.set(index, messageObject);
                      if (chatAdapter != null && !chatAdapter.isFiltered) {
-@@ -33395,6 +33414,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -33398,6 +33417,9 @@ public class ChatActivity extends BaseFragment implements
          chatMessagesMetadataController.cancelReactionsRequests();
          final int currentChosenReactions = primaryMessage.getChoosenReactions().size();
          final boolean added = primaryMessage.selectReaction(visibleReaction, bigEmoji, fromDoubleTap);
@@ -393,7 +393,7 @@ index 0000000..0000000 100644
          int messageIdForCell = primaryMessage.getId();
          if (groupedMessagesMap.get(primaryMessage.getGroupId()) != null) {
              int flags = primaryMessage.shouldDrawReactionsInLayout() ? MessageObject.POSITION_FLAG_BOTTOM | MessageObject.POSITION_FLAG_LEFT : MessageObject.POSITION_FLAG_BOTTOM | MessageObject.POSITION_FLAG_RIGHT;
-@@ -47407,8 +47429,14 @@ public class ChatActivity extends BaseFragment implements
+@@ -47410,8 +47432,14 @@ public class ChatActivity extends BaseFragment implements
          } else if (buttonId == ChatActivitySideControlsButtonsLayout.BUTTON_MENTION) {
              loadLastUnreadMention();
          } else if (buttonId == ChatActivitySideControlsButtonsLayout.BUTTON_REACTIONS) {

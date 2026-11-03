@@ -76,7 +76,7 @@ index 0000000..0000000 100644
                  object.viewY = coords[1] - 0 + view.getPaddingTop();
                  object.parentView = chatListView;
                  object.animatingImageView = null;
-@@ -38052,6 +38057,12 @@ public class ChatActivity extends BaseFragment implements
+@@ -38055,6 +38060,12 @@ public class ChatActivity extends BaseFragment implements
                          return ChatActivity.this.getSideMenuWidth();
                      }
                  };

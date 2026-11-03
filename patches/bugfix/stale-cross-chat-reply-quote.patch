@@ -37,7 +37,7 @@ index 0000000..0000000 100644
              replyMessage = replyingMessageObject;
              draftMessage = AndroidUtilities.getTrimmedString(chatActivityEnterView.getDraftMessage());
              searchWebpage = chatActivityEnterView.isMessageWebPageSearchEnabled();
-@@ -34156,6 +34159,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -34159,6 +34162,7 @@ public class ChatActivity extends BaseFragment implements
                      }
                      replyingMessageObject = messageObject;
                      replyingQuote = null;

@@ -238,7 +238,7 @@ index 0000000..0000000 100644
              if (currentUser != null && !UserObject.isReplyUser(currentUser)) {
                  boolean oldValue = userBlocked;
                  userBlocked = getMessagesController().blockePeers.indexOfKey(currentUser.id) >= 0;
-@@ -37286,6 +37290,13 @@ public class ChatActivity extends BaseFragment implements
+@@ -37289,6 +37293,13 @@ public class ChatActivity extends BaseFragment implements
          private int messagesEndRow;
  
          public ArrayList<MessageObject> getMessages() {
@@ -252,7 +252,7 @@ index 0000000..0000000 100644
              if (isFrozen) {
                  return frozenMessages;
              } else if (isFiltered) {
-@@ -37360,14 +37371,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -37363,14 +37374,7 @@ public class ChatActivity extends BaseFragment implements
  
          private void updateRowsInternal() {
              rowCount = 0;
@@ -268,7 +268,7 @@ index 0000000..0000000 100644
              if (chatMode == MODE_SAVED && isInsideContainer) {
                  hintRow = rowCount++;
              } else {
-@@ -37464,14 +37468,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -37467,14 +37471,7 @@ public class ChatActivity extends BaseFragment implements
                      return 1;
                  }
              }
@@ -284,7 +284,7 @@ index 0000000..0000000 100644
  
              if (position >= messagesStartRow && position < messagesEndRow) {
                  return messages.get(position - messagesStartRow).stableId;
-@@ -37953,21 +37950,14 @@ public class ChatActivity extends BaseFragment implements
+@@ -37956,21 +37953,14 @@ public class ChatActivity extends BaseFragment implements
                  actionCell.setAlpha(1.0f);
                  actionCell.setSpoilersSuppressed(chatListView.getScrollState() != RecyclerView.SCROLL_STATE_IDLE);
              } else if (position >= messagesStartRow && position < messagesEndRow) {
@@ -308,7 +308,7 @@ index 0000000..0000000 100644
                      messageCell.isChat = currentChat != null || UserObject.isUserSelf(currentUser) || UserObject.isReplyUser(currentUser) || (chatMode == MODE_SEARCH);
                      messageCell.setSponsoredMessageVisible(true, false);
                      messageCell.isBotForum = UserObject.isBotForum(currentUser);
-@@ -38509,14 +38499,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -38512,14 +38502,7 @@ public class ChatActivity extends BaseFragment implements
                  return 1;
              }
              if (position >= messagesStartRow && position < messagesEndRow) {
