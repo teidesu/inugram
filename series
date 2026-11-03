@@ -422,3 +422,4 @@ bugfix/video-codec-support.patch
 misc/wallet-engine-source-build.patch
 bugfix/alert-dialog-vertical-buttons.patch
 feature/wallet-private-key.patch
+bugfix/preview-status-bar-color.patch

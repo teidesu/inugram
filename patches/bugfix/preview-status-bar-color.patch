@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Tue, 3 Nov 2026 21:18:04 +0400
+Subject: fix status bar icon color when expanding or closing chat preview
+
+---
+ .../main/java/org/telegram/ui/ActionBar/ActionBarLayout.java  | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
+@@ -2532,7 +2532,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+         fragment.setInMenuMode(false);
+ 
+         try {
+-            AndroidUtilities.setLightStatusBar(parentActivity, Theme.getColor(Theme.key_actionBarDefault) == Color.WHITE || (fragment.hasForceLightStatusBar() && !Theme.getCurrentTheme().isDark()));
++            AndroidUtilities.setLightStatusBar(parentActivity, fragment.isLightStatusBar());
+         } catch (Exception ignore) {}
+     }
+ 
+@@ -2572,7 +2572,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+         }
+ 
+         if (previousFragment != null) {
+-            AndroidUtilities.setLightStatusBar(parentActivity, Theme.getColor(Theme.key_actionBarDefault) == Color.WHITE || (previousFragment.hasForceLightStatusBar() && !Theme.getCurrentTheme().isDark()));
++            AndroidUtilities.setLightStatusBar(parentActivity, previousFragment.isLightStatusBar());
+             LayoutContainer temp = containerView;
+             containerView = containerViewBack;
+             containerViewBack = temp;
