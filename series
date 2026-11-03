@@ -424,3 +424,4 @@ bugfix/alert-dialog-vertical-buttons.patch
 feature/wallet-private-key.patch
 bugfix/preview-status-bar-color.patch
 feature/dialogs-title-folder-name.patch
+bugfix/time-format-system-locale.patch

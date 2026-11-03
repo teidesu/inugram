@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Wed, 4 Nov 2026 00:49:07 +0400
+Subject: fix 12/24h time format following telegram language instead of system locale
+
+---
+ .../main/java/org/telegram/messenger/LocaleController.java   | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/LocaleController.java b/TMessagesProj/src/main/java/org/telegram/messenger/LocaleController.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/LocaleController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/LocaleController.java
+@@ -18,6 +18,7 @@ import android.content.Intent;
+ import android.content.IntentFilter;
+ import android.content.SharedPreferences;
+ import android.content.res.Configuration;
++import android.content.res.Resources;
+ import android.icu.text.RelativeDateTimeFormatter;
+ import android.os.Build;
+ import android.telephony.TelephonyManager;
+@@ -727,7 +728,7 @@ public class LocaleController {
+         }
+ 
+         systemDefaultLocale = Locale.getDefault();
+-        is24HourFormat = DateFormat.is24HourFormat(ApplicationLoader.applicationContext);
++        is24HourFormat = DateFormat.is24HourFormat(ApplicationLoader.applicationContext.createConfigurationContext(Resources.getSystem().getConfiguration()));
+         LocaleInfo currentInfo = null;
+         boolean override = false;
+ 
+@@ -2044,7 +2045,7 @@ public class LocaleController {
+         if (changingConfiguration) {
+             return;
+         }
+-        is24HourFormat = DateFormat.is24HourFormat(ApplicationLoader.applicationContext);
++        is24HourFormat = DateFormat.is24HourFormat(ApplicationLoader.applicationContext.createConfigurationContext(Resources.getSystem().getConfiguration()));
+         systemDefaultLocale = newConfig.locale;
+         if (languageOverride != null) {
+             LocaleInfo toSet = currentLocaleInfo;
