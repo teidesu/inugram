@@ -425,3 +425,4 @@ feature/wallet-private-key.patch
 bugfix/preview-status-bar-color.patch
 feature/dialogs-title-folder-name.patch
 bugfix/time-format-system-locale.patch
+bugfix/forum-topics-transition.patch

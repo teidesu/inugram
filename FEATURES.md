@@ -306,6 +306,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - share sheet search results unclickable near the top (the touch dead zone under the search field double-counted the status bar inset, swallowing taps on the first row of results)
 - chat list crash while flinging when RecyclerView exposes a stale child without a ViewHolder
 - dialogs list pull-to-reveal-archive glitches
+- dialogs list jumping when opening/closing forum topics (the collapsed avatar column was laid out with the filter tabs' padding, then snapped after the next dialog update; closing re-anchored against the wrong padding and left the top chats under the tabs)
 - inline code in dialog previews no longer inherits chat-bubble colors
 - chat previews no longer persist the scroll position, so opening the chat normally afterwards still starts where you left off
 - big emoji jumping around in emoji-only messages when a visible reply preview shared its spans (stock bug: per-span draw-position cache fought over by both layouts), plus oversized animated emoji in reply previews (stock bug: `cloneSpan` overwrote the resized value with the old size)
