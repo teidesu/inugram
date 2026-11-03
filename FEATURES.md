@@ -63,7 +63,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - folder display modes: titles / titles+icons / icons-only
 - folder unread counter modes: hide / regular / exclude muted / 🐶 exclude muted non-dms
 - hide "all chats" folder tab
-- custom title text: Inugram / @username / first name / "Chats"
+- custom title text: Inugram / @username / first name / "Chats" / active folder name
 - 🐶 dialogs fab customization: main + secondary actions, hide-on-scroll, left-side
 - 🐶 "create as supergroup" toggle in group creation
 - 🐶 deeplink / username / cached peer ID quick-open from global search

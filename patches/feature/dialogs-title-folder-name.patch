@@ -1,0 +1,106 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Wed, 4 Nov 2026 00:30:49 +0400
+Subject: show active folder name in dialogs title
+
+---
+ .../java/org/telegram/ui/DialogsActivity.java | 32 ++++++++++++++++++-
+ .../ui/Stories/DialogStoriesCell.java         |  4 +--
+ 2 files changed, 33 insertions(+), 3 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+@@ -1571,6 +1571,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+                                     viewPages[1] = tempPage;
+                                     filterTabsView.selectTabWithId(viewPages[0].selectedType, 1.0f);
+                                     updateCounters(false);
++                                    inu_updateFolderTitle();
+                                     viewPages[0].dialogsAdapter.resume();
+                                     viewPages[1].dialogsAdapter.pause();
+                                 }
+@@ -3583,7 +3584,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+                 ssb.setSpan(new ImageSpan(logoDrawable), 0, ssb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                 actionBar.setTitle(ssb, statusDrawable);
+                 } else {
+-                    actionBar.setTitle(desu.inugram.helpers.chat.ChatHelper.getDialogsTitle(currentAccount), statusDrawable);
++                    actionBar.setTitle(desu.inugram.helpers.chat.ChatHelper.getDialogsTitle(this, currentAccount), statusDrawable);
+                 }
+                 updateStatus(UserConfig.getInstance(currentAccount).getCurrentUser(), false);
+             }
+@@ -3725,6 +3726,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+                         viewPages[1].setVisibility(View.GONE);
+                         showScrollbars(true);
+                         updateCounters(false);
++                        inu_updateFolderTitle();
+                         filterTabsView.stopAnimatingIndicator();
+                         checkListLoad(viewPages[0]);
+                         viewPages[0].dialogsAdapter.resume();
+@@ -6934,6 +6936,30 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+         }
+     }
+ 
++    public MessagesController.DialogFilter inu_getCurrentFilter() {
++        if (viewPages == null) return null;
++        ArrayList<MessagesController.DialogFilter> filters = getMessagesController().getDialogFilters();
++        int index = viewPages[0].selectedType;
++        return index >= 0 && index < filters.size() ? filters.get(index) : null;
++    }
++
++    private void inu_updateFolderTitle() {
++        if (desu.inugram.InuConfig.DIALOGS_TITLE_TEXT.getValue() != desu.inugram.InuConfig.DialogsTitleTextItem.FOLDER_NAME) return;
++        if (!onlySelect && folderId == 0 && communityId == 0 && !desu.inugram.helpers.security.ParanoiaHelper.isDisguised()) {
++            String title = desu.inugram.helpers.chat.ChatHelper.getDialogsTitle(this, currentAccount);
++            SimpleTextView titleView = actionBar.getTitleTextView();
++            if (titleView == null || !TextUtils.equals(titleView.getText(), title)) {
++                if (titleView != null && titleView.getVisibility() == View.VISIBLE && titleView.getAlpha() == 1f) {
++                    actionBar.setTitleAnimated(title, animatingForward, 220, CubicBezierInterpolator.DEFAULT);
++                }
++                actionBar.setTitle(title, statusDrawable);
++            }
++        }
++        if (dialogStoriesCell != null) {
++            dialogStoriesCell.updateItems(true, false);
++        }
++    }
++
+     public void inu_setActiveFilter(int filterIndex) {
+         if (filterTabsView == null || viewPages == null) return;
+         if (filterIndex < 0 || filterIndex >= getMessagesController().getDialogFilters().size()) return;
+@@ -6970,6 +6996,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+         }
+ 
+         viewPages[a].dialogsAdapter.setDialogsType(viewPages[a].dialogsType);
++        if (a == 0) {
++            inu_updateFolderTitle();
++        }
+         viewPages[a].layoutManager.scrollToPositionWithOffset(viewPages[a].dialogsType == DIALOGS_TYPE_DEFAULT && hasHiddenArchive() && viewPages[a].archivePullViewState == ARCHIVE_ITEM_STATE_HIDDEN ? 1 : 0, (int) scrollYOffset);
+         checkListLoad(viewPages[a]);
+     }
+@@ -7105,6 +7134,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+             }
+         }
+         updateCounters(false);
++        inu_updateFolderTitle();
+ 
+         final int currentDialogsType = viewPages[0].dialogsType;
+         if (currentDialogsType == 7 || currentDialogsType == 8) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stories/DialogStoriesCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Stories/DialogStoriesCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Stories/DialogStoriesCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Stories/DialogStoriesCell.java
+@@ -628,11 +628,11 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
+                     currentTitle = str;
+                 }
+             } else {
+-                currentTitle = menuItemsOffset < dp(50) ? (desu.inugram.helpers.security.ParanoiaHelper.isDisguised() ? null : desu.inugram.helpers.chat.ChatHelper.getDialogsTitle(currentAccount)) :
++                currentTitle = menuItemsOffset < dp(50) || desu.inugram.helpers.chat.ChatHelper.overridesStoriesTitle() ? (desu.inugram.helpers.security.ParanoiaHelper.isDisguised() ? null : desu.inugram.helpers.chat.ChatHelper.getDialogsTitle(fragment, currentAccount)) :
+                     LocaleController.getString(R.string.MyStory);
+             }
+         } else {
+-            currentTitle = menuItemsOffset < dp(50) ? (desu.inugram.helpers.security.ParanoiaHelper.isDisguised() ? null : desu.inugram.helpers.chat.ChatHelper.getDialogsTitle(currentAccount)) :
++            currentTitle = menuItemsOffset < dp(50) || desu.inugram.helpers.chat.ChatHelper.overridesStoriesTitle() ? (desu.inugram.helpers.security.ParanoiaHelper.isDisguised() ? null : desu.inugram.helpers.chat.ChatHelper.getDialogsTitle(fragment, currentAccount)) :
+                 LocaleController.formatPluralString("Stories", totalCount);
+         }
+ 

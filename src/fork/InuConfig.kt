@@ -557,6 +557,7 @@ object InuConfig {
             const val USERNAME = 2
             const val FIRST_NAME = 3
             const val CHATS = 4
+            const val FOLDER_NAME = 5
         }
     }
 

@@ -78,6 +78,7 @@ import org.telegram.messenger.Utilities
 import org.telegram.messenger.utils.tlutils.TLKeyboardHelper
 import org.telegram.tgnet.TLRPC
 import org.telegram.tgnet.tl.TL_keyboard
+import desu.inugram.helpers.security.ParanoiaHelper
 import org.telegram.ui.ActionBar.ActionBarMenuSubItem
 import org.telegram.ui.ActionBar.ActionBarPopupWindow
 import org.telegram.ui.ActionBar.AlertDialog
@@ -2066,7 +2067,7 @@ object ChatHelper {
     }
 
     @JvmStatic
-    fun getDialogsTitle(account: Int): String {
+    fun getDialogsTitle(fragment: BaseFragment?, account: Int): String {
         val user = UserConfig.getInstance(account).getCurrentUser()
         return when (InuConfig.DIALOGS_TITLE_TEXT.value) {
             InuConfig.DialogsTitleTextItem.USERNAME -> {
@@ -2076,9 +2077,18 @@ object ChatHelper {
 
             InuConfig.DialogsTitleTextItem.FIRST_NAME -> getFirstNameOrDefault(user)
             InuConfig.DialogsTitleTextItem.CHATS -> LocaleController.getString(R.string.FilterChats)
+            InuConfig.DialogsTitleTextItem.FOLDER_NAME -> {
+                val filter = (fragment as? DialogsActivity)?.inu_getCurrentFilter()
+                if (filter == null || filter.isDefault) LocaleController.getString(R.string.FilterAllChats) else filter.name
+            }
+
             else -> LocaleController.getString(R.string.AppName)
         }
     }
+
+    @JvmStatic
+    fun overridesStoriesTitle(): Boolean =
+        InuConfig.DIALOGS_TITLE_TEXT.value != InuConfig.DialogsTitleTextItem.INUGRAM && !ParanoiaHelper.isDisguised()
 
     private fun getFirstNameOrDefault(user: TLRPC.User?): String {
         if (user == null) return LocaleController.getString(R.string.AppName)
