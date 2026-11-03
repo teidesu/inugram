@@ -4,8 +4,8 @@ Date: Tue, 12 May 2026 21:30:08 +0200
 Subject: prefer media tab in profile shared media
 
 ---
- .../telegram/ui/Components/SharedMediaLayout.java  | 14 +++++++++-----
- 1 file changed, 9 insertions(+), 5 deletions(-)
+ .../telegram/ui/Components/SharedMediaLayout.java | 15 ++++++++++-----
+ 1 file changed, 10 insertions(+), 5 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
 index 0000000..0000000 100644
@@ -61,3 +61,11 @@ index 0000000..0000000 100644
              scrollToPage(TAB_STORIES);
          }
      }
+@@ -11808,6 +11812,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+             boolean a = isAnyStoryPageType(mediaPages[0].selectedType) && mediaPages[0].selectedType != TAB_ARCHIVED_STORIES;
+             boolean b = (mediaPages[1].getVisibility() == VISIBLE) ?
+                 isAnyStoryPageType(mediaPages[1].selectedType) && mediaPages[1].selectedType != TAB_ARCHIVED_STORIES: a;
++            storiesContainer.setVisibility(a || b ? View.VISIBLE : View.INVISIBLE);
+             if (a == b) {
+                 newSubTabsVisibilityFactor = a ? 1f : 0f;
+                 storiesContainer.setTranslationX(a ? 0 : mediaPages[0].getMeasuredWidth());
