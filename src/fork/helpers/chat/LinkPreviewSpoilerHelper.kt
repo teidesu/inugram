@@ -92,6 +92,11 @@ object LinkPreviewSpoilerHelper {
         return isLinkCoveredBySpoiler(msg)
     }
 
+    @JvmStatic
+    fun hasMediaOrLinkPreviewSpoiler(msg: MessageObject): Boolean {
+        return msg.hasMediaSpoilers() || hasLinkPreviewSpoiler(msg)
+    }
+
     /** message-level gate for stock autoplay decisions, which run before the cell state is bound. */
     @JvmStatic
     fun isMediaCovered(msg: MessageObject?): Boolean {

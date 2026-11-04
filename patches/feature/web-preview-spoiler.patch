@@ -4,10 +4,11 @@ Date: Sun, 5 Jul 2026 21:15:49 +0400
 Subject: spoilers for web previews (when the link is covered with a spoiler)
 
 ---
- .../telegram/ui/Cells/ChatMessageCell.java    | 45 ++++++++++++-------
+ .../telegram/ui/Cells/ChatMessageCell.java    | 51 ++++++++++++-------
  .../org/telegram/ui/Cells/DialogCell.java     |  7 +--
+ .../java/org/telegram/ui/ChatActivity.java    |  4 +-
  .../Components/spoilers/SpoilerEffect2.java   |  2 +-
- 3 files changed, 34 insertions(+), 20 deletions(-)
+ 4 files changed, 39 insertions(+), 25 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 index 0000000..0000000 100644
@@ -155,6 +156,15 @@ index 0000000..0000000 100644
                                      autoPlayingMedia = true;
                                      TLRPC.VideoSize videoSize = MessageObject.getDocumentVideoThumb(document);
                                      if (!messageObject.mediaExists && videoSize != null && (currentPhotoObject == null || currentPhotoObjectThumb == null)) {
+@@ -11254,7 +11261,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+             }
+             oldPollButtons.clear();
+ 
+-            if (mediaSpoilerEffect != null && !(needReplyImage && currentMessageObject != null && currentMessageObject.hasValidReplyMessageObject() && currentMessageObject.replyMessageObject.hasMediaSpoilers())) {
++            if (mediaSpoilerEffect != null && !(needReplyImage && currentMessageObject != null && currentMessageObject.hasValidReplyMessageObject() && desu.inugram.helpers.chat.LinkPreviewSpoilerHelper.hasMediaOrLinkPreviewSpoiler(currentMessageObject.replyMessageObject))) {
+                 mediaSpoilerEffect = null;
+             }
+             if (unlockSpoilerEffect != null && unlockLayout == null) {
 @@ -11332,6 +11339,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
  
          highlightCaptionToSetStart = highlightCaptionToSetEnd = -1;
@@ -200,6 +210,15 @@ index 0000000..0000000 100644
                  if (documentAttachType == DOCUMENT_ATTACH_TYPE_ROUND) {
                      photoImage.setImage(ImageLocation.getForDocument(documentAttach), ImageLoader.AUTOPLAY_FILTER, ImageLocation.getForObject(currentPhotoObject, photoParentObject), currentPhotoObject instanceof TLRPC.TL_photoStrippedSize || currentPhotoObject != null && "s".equals(currentPhotoObject.type) ? currentPhotoFilterThumb : currentPhotoFilter, ImageLocation.getForObject(currentPhotoObjectThumb, photoParentObject), currentPhotoFilterThumb, currentPhotoObjectThumbStripped, documentAttach.size, null, currentMessageObject, 0);
                      photoImage.setAllowStartAnimation(true);
+@@ -19341,7 +19354,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+                     ImageLocation photoImageLocation = null;
+                     Drawable photoImageThumb = null;
+                     if (messageObject.replyMessageObject != null) {
+-                        hasReplySpoiler = messageObject.replyMessageObject.hasMediaSpoilers();
++                        hasReplySpoiler = desu.inugram.helpers.chat.LinkPreviewSpoilerHelper.hasMediaOrLinkPreviewSpoiler(messageObject.replyMessageObject);
+                         photoSize = FileLoader.getClosestPhotoSizeWithSize(messageObject.replyMessageObject.photoThumbs2, 320);
+                         thumbPhotoSize = FileLoader.getClosestPhotoSizeWithSize(messageObject.replyMessageObject.photoThumbs2, 40);
+                         photoObject = messageObject.replyMessageObject.photoThumbsObject2;
 @@ -20412,7 +20425,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
              drawNamesLayout(canvas, 1f);
          }
@@ -209,6 +228,15 @@ index 0000000..0000000 100644
              drawOverlays(canvas);
          }
          if ((drawTime || !mediaBackground) && !forceNotDrawTime && !transitionParams.animateBackgroundBoundsInner && !(enterTransitionInProgress && !currentMessageObject.isVoice()) && (!currentMessageObject.isQuickReply() || currentMessageObject.isSendError())) {
+@@ -22943,7 +22956,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+                     replyImageReceiver.setImageCoords(replySelectorRect.left + dp(8), replySelectorRect.top + dp((isReplyQuote && replyTextLayout != null && replyTextLayout.getLineCount() <= 1 ? 2 : 0) + 5), replyImageSz, replyImageSz);
+                     replyImageReceiver.draw(canvas);
+ 
+-                    if (currentMessageObject != null && currentMessageObject.hasValidReplyMessageObject() && currentMessageObject.replyMessageObject.hasMediaSpoilers()) {
++                    if (currentMessageObject != null && currentMessageObject.hasValidReplyMessageObject() && desu.inugram.helpers.chat.LinkPreviewSpoilerHelper.hasMediaOrLinkPreviewSpoiler(currentMessageObject.replyMessageObject)) {
+                         int[] rad = replyImageReceiver.getRoundRadius();
+                         mediaSpoilerRadii[0] = mediaSpoilerRadii[1] = rad[0];
+                         mediaSpoilerRadii[2] = mediaSpoilerRadii[3] = rad[1];
 @@ -24017,7 +24030,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
              }
          }
@@ -228,7 +256,7 @@ index 0000000..0000000 100644
                  thumbsCount++;
 -                drawPlay[index] = (message.isVideo() || message.isRoundVideo()) && !message.hasMediaSpoilers();
 -                drawSpoiler[index] = message.hasMediaSpoilers();
-+                boolean inu_spoiler = message.hasMediaSpoilers() || desu.inugram.helpers.chat.LinkPreviewSpoilerHelper.hasLinkPreviewSpoiler(message);
++                boolean inu_spoiler = desu.inugram.helpers.chat.LinkPreviewSpoilerHelper.hasMediaOrLinkPreviewSpoiler(message);
 +                drawPlay[index] = (message.isVideo() || message.isRoundVideo()) && !inu_spoiler;
 +                drawSpoiler[index] = inu_spoiler;
                  int size = message.type == MessageObject.TYPE_PHOTO && selectedThumb != null ? selectedThumb.size : 0;
@@ -237,6 +265,28 @@ index 0000000..0000000 100644
                  thumbImage[index].setImage(ImageLocation.getForObject(selectedThumb, photoThumbsObject), filter, ImageLocation.getForObject(smallThumb, photoThumbsObject), filter, size, null, message, 0);
                  thumbImage[index].setRoundRadius(message.isRoundVideo() ? dp(18) : dp(2));
                  needEmoji = false;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -15821,7 +15821,7 @@ public class ChatActivity extends BaseFragment implements
+                 replyImageLocation = photoSize;
+                 replyImageThumbLocation = thumbPhotoSize;
+                 replyImageLocationObject = photoSizeObject;
+-                final boolean hasSpoiler = thumbMediaMessageObject.hasMediaSpoilers();
++                final boolean hasSpoiler = desu.inugram.helpers.chat.LinkPreviewSpoilerHelper.hasMediaOrLinkPreviewSpoiler(thumbMediaMessageObject);
+                 replyLayout.current().hasSpoiler = hasSpoiler;
+                 replyImageView.setImage(ImageLocation.getForObject(replyImageLocation, photoSizeObject), hasSpoiler ? "5_5_b" : "50_50", ImageLocation.getForObject(thumbPhotoSize, photoSizeObject), hasSpoiler ? "5_5_b" : "50_50_b", null, size, cacheType, thumbMediaMessageObject);
+                 replyImageView.setVisibility(View.VISIBLE);
+@@ -29035,7 +29035,7 @@ public class ChatActivity extends BaseFragment implements
+                     } else {
+                         pinnedMessageImageView[1].setRoundRadius(AndroidUtilities.dp(2));
+                     }
+-                    pinnedImageHasBlur = pinnedMessageObject.hasMediaSpoilers();
++                    pinnedImageHasBlur = desu.inugram.helpers.chat.LinkPreviewSpoilerHelper.hasMediaOrLinkPreviewSpoiler(pinnedMessageObject);
+                     pinnedImageSize = size;
+                     pinnedImageCacheType = cacheType;
+                     pinnedImageLocation = photoSize;
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/spoilers/SpoilerEffect2.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/spoilers/SpoilerEffect2.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/spoilers/SpoilerEffect2.java
