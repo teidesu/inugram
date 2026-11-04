@@ -1,0 +1,32 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Wed, 4 Nov 2026 21:32:47 +0400
+Subject: fix downloads stalling forever after a repeated file reference expiry
+
+---
+ .../java/org/telegram/messenger/FileRefController.java     | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/FileRefController.java b/TMessagesProj/src/main/java/org/telegram/messenger/FileRefController.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/FileRefController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/FileRefController.java
+@@ -1485,12 +1485,17 @@ public class FileRefController extends BaseController {
+             if (result != null) {
+                 if (onUpdateObjectReference(requester, result, locationReplacement != null ? locationReplacement[0] : null, fromCache)) {
+                     found = true;
++                } else {
++                    requester.completed = false;
+                 }
+             } else {
+                 sendErrorToObject(requester.args, 1);
+             }
+         }
+-        locationRequester.remove(locationKey);
++        arrayList.removeIf(requester -> requester.completed);
++        if (arrayList.isEmpty()) {
++            locationRequester.remove(locationKey);
++        }
+         if (found) {
+             putReponseToCache(cacheKey, response);
+         }
