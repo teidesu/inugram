@@ -291,6 +291,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - reordering an attach-panel album preserves per-photo captions and no longer duplicates its album caption
 - photo crop silently not applied to the sent image
 - high-quality photo cropping in PhotoViewer (crop *before* downscaling)
+- drawings on HD photos no longer shrink the photo into a corner on low-end devices (the low-memory downscale path leaves a bogus bitmap density that the canvas then scaled by)
 - sticker creator output sent as photo when high-quality default is on
 - sticker-pack Edit button no longer ignores slower taps or inherits the recent-stickers Create button's long-press action
 - sticker editor send/favorites menu uses the editor's dark background instead of the app's light theme; other scrim menus also respect their local theme

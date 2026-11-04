@@ -1,0 +1,21 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Wed, 4 Nov 2026 19:27:37 +0400
+Subject: fix drawings on HD photos shrinking into a corner on low-end devices
+
+---
+ .../src/main/java/org/telegram/messenger/MediaController.java    | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
+@@ -853,6 +853,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+                     final Paint bitmapPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+                     final Bitmap resultBitmap = Bitmap.createBitmap(b.getWidth(), b.getHeight(), Bitmap.Config.ARGB_8888);
+                     final Canvas canvas = new Canvas(resultBitmap);
++                    canvas.setDensity(Bitmap.DENSITY_NONE);
+ 
+                     canvas.drawBitmap(b, 0, 0, bitmapPaint);
+                     canvas.scale(b.getWidth() / (float) paintBitmap.getWidth(), b.getHeight() / (float) paintBitmap.getHeight());
