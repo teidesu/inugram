@@ -676,6 +676,11 @@
     <string name="InuDownloadDirectory">Download folder</string>
     <string name="InuDownloadDirectoryApplied">Applies to newly downloaded files only</string>
     <string name="InuMentionInsertTitle">Insert mention</string>
+    <string name="InuSendWithoutVia">Send without via</string>
+    <string name="InuSendWithoutViaConfirm">Send this result as a regular message (without \"via\")?</string>
+    <string name="InuSendWithoutViaRestrictedConfirm">Inline bots are restricted in this chat. Send this result as a regular message instead?</string>
+    <string name="InuSendWithoutViaButtonsWarning">This result has inline buttons that won\'t be sent. Some bots rely on them for interactivity.</string>
+    <string name="InuSendWithoutViaButtonsLost">Inline buttons won\'t be sent</string>
     <string name="InuPasscode">Passcode</string>
     <string name="InuPasscodeNeeded">Set up a Telegram passcode first.</string>
     <string name="InuPasscodeShowInSettings">Show in inugram settings</string>

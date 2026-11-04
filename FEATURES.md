@@ -147,6 +147,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - show forward count next to the view count on channel posts
 - long-tap forward bar (above input) to cycle between regular / without sender / without caption
 - long-tap a mention in a message to insert a name-mention into the input with custom text
+- send inline bot results as regular messages (without "via @bot"): long-tap a result, or toggle it in the send menu of the media preview; in chats where inline bots are restricted, results are still shown and sent this way
 - 🐶 restrict/ban menu items the avatar long-tap menu
 - hide messages from blocked users: with a spoiler or completely - *partially ported from [Nekogram](https://github.com/Nekogram/Nekogram)*
   - "show hidden messages" in the chat menu, to see a chat as sent until it is closed
