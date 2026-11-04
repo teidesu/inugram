@@ -1,0 +1,75 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Wed, 4 Nov 2026 23:09:45 +0400
+Subject: check the inline bot permission instead of the stickers one
+
+---
+ .../main/java/org/telegram/messenger/ChatObject.java  | 11 +++++++++++
+ .../org/telegram/ui/Adapters/MentionsAdapter.java     |  4 ++--
+ 2 files changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/ChatObject.java b/TMessagesProj/src/main/java/org/telegram/messenger/ChatObject.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/ChatObject.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/ChatObject.java
+@@ -82,6 +82,7 @@ public class ChatObject {
+     public static final int ACTION_SEND_REACTIONS = 26;
+     public static final int ACTION_MANAGE_LINKED_CHATS = 27;
+     public static final int ACTION_MANAGE_WELCOME = 28;
++    public static final int inu_ACTION_SEND_INLINE = 29;
+ 
+     public final static int VIDEO_FRAME_NO_FRAME = 0;
+     public final static int VIDEO_FRAME_REQUESTING = 1;
+@@ -1633,6 +1634,7 @@ public class ChatObject {
+             case ACTION_SEND_REACTIONS:
+             case ACTION_SEND_PLAIN:
+             case ACTION_MANAGE_LINKED_CHATS:
++            case inu_ACTION_SEND_INLINE:
+                 return true;
+         }
+         return false;
+@@ -1698,6 +1700,8 @@ public class ChatObject {
+                 return rights.send_plain;
+             case ACTION_MANAGE_LINKED_CHATS:
+                 return rights.manage_linked_peers;
++            case inu_ACTION_SEND_INLINE:
++                return rights.send_inline;
+         }
+         return false;
+     }
+@@ -2165,6 +2169,13 @@ public class ChatObject {
+         return canUserDoAction(chat, ACTION_SEND_STICKERS);
+     }
+ 
++    public static boolean inu_canSendInline(TLRPC.Chat chat) {
++        if (isIgnoredChatRestrictionsForBoosters(chat)) {
++            return true;
++        }
++        return canUserDoAction(chat, inu_ACTION_SEND_INLINE);
++    }
++
+     public static boolean canSendEmbed(TLRPC.Chat chat) {
+         if (isIgnoredChatRestrictionsForBoosters(chat)) {
+             return true;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/MentionsAdapter.java b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/MentionsAdapter.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/MentionsAdapter.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/MentionsAdapter.java
+@@ -496,7 +496,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
+         if (!inlineMediaEnabled && foundContextBot != null && parentFragment != null) {
+             TLRPC.Chat chat = parentFragment.getCurrentChat();
+             if (chat != null) {
+-                inlineMediaEnabled = ChatObject.canSendStickers(chat);
++                inlineMediaEnabled = ChatObject.inu_canSendInline(chat);
+                 if (inlineMediaEnabled) {
+                     searchResultUsernames = null;
+                     notifyDataSetChanged();
+@@ -570,7 +570,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
+             if (parentFragment != null) {
+                 TLRPC.Chat chat = parentFragment.getCurrentChat();
+                 if (chat != null) {
+-                    inlineMediaEnabled = ChatObject.canSendStickers(chat);
++                    inlineMediaEnabled = ChatObject.inu_canSendInline(chat);
+                     if (!inlineMediaEnabled) {
+                         notifyDataSetChanged();
+                         delegate.needChangePanelVisibility(true);

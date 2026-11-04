@@ -428,3 +428,4 @@ bugfix/time-format-system-locale.patch
 bugfix/forum-topics-transition.patch
 bugfix/paint-density-scale.patch
 bugfix/file-ref-stale-cache-stall.patch
+bugfix/inline-restriction-check.patch

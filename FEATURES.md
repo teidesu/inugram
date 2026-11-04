@@ -436,3 +436,4 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - a sent message moves into its server order once confirmed (e.g. a photo that finished uploading after a later text moves below that text), so the local order matches what the recipient sees
 - hashtag search in another channel (`#tag@channel`): no more huge empty gap above the results, last message in "show as chat" no longer hidden under the bottom bar, long-tapping a reaction on a channel post shows the reaction instead of failing to load reactors
 - search result previews with a media thumbnail no longer drift to the right while scrolling
+- inline bot restriction checked against the stickers permission instead of the inline one: inline results were blocked in chats that only banned stickers, and offered (then failed with `CHAT_SEND_INLINE_FORBIDDEN`) in chats that only banned inline bots
