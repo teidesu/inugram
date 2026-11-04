@@ -4,6 +4,7 @@ Date: Tue, 12 May 2026 14:58:17 +0200
 Subject: force system font for ui
 
 ---
+ TMessagesProj/build.gradle                    |  1 +
  .../telegram/messenger/AndroidUtilities.java  |  6 ++
  .../java/org/telegram/messenger/Emoji.java    |  4 +-
  .../telegram/messenger/RichMessageLayout.java |  6 ++
@@ -24,8 +25,20 @@ Subject: force system font for ui
  .../org/telegram/ui/iv/RichBlockChrome.java   |  1 +
  .../org/telegram/ui/iv/RichDocumentCell.java  |  1 +
  .../java/org/telegram/ui/iv/RichMapCell.java  |  1 +
- 20 files changed, 79 insertions(+), 54 deletions(-)
+ 21 files changed, 80 insertions(+), 54 deletions(-)
 
+diff --git a/TMessagesProj/build.gradle b/TMessagesProj/build.gradle
+index 0000000..0000000 100644
+--- a/TMessagesProj/build.gradle
++++ b/TMessagesProj/build.gradle
+@@ -105,6 +105,7 @@ dependencies {
+     // inu
+     implementation 'org.maplibre.gl:android-sdk:13.1.0'
+     implementation 'com.caverock:androidsvg-aar:1.4'
++    implementation 'org.lsposed.hiddenapibypass:hiddenapibypass:6.1'
+     androidTestImplementation 'androidx.test:runner:1.6.2'
+     androidTestImplementation 'junit:junit:4.13.2'
+     androidTestImplementation "org.jetbrains.kotlin:kotlin-test:2.1.20"
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java

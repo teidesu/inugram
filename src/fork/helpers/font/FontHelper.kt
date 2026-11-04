@@ -13,16 +13,32 @@ import androidx.annotation.RequiresApi
 import desu.inugram.helpers.font.FontConfig.FontMode
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.FileLog
+import org.lsposed.hiddenapibypass.HiddenApiBypass
 import org.telegram.ui.ActionBar.Theme
 import java.lang.reflect.Field
 import java.util.Hashtable
+import java.util.concurrent.atomic.AtomicReference
 
 object FontHelper {
     private const val TAG = "InuFonts"
 
+    // Android 17+: the static Typeface fields are zygote placeholders forwarding to this reference.
+    // setSystemFontMap (re-run on system font changes) re-initializes them and throws on non-placeholders
+    private val pendingTypefaceField: Field? = if (Build.VERSION.SDK_INT >= 37) {
+        try {
+            HiddenApiBypass.addHiddenApiExemptions("Landroid/graphics/Typeface;")
+            Typeface::class.java.getDeclaredField("mPendingTypeface").apply { isAccessible = true }
+        } catch (e: Throwable) {
+            FileLog.e("$TAG: mPendingTypeface unavailable, global font install disabled", e)
+            null
+        }
+    } else {
+        null
+    }
+
     // "real" default/mono fonts captured before they are replaced with reflection
-    val stockDefault: Typeface = Typeface.DEFAULT
-    val stockMonospace: Typeface = Typeface.MONOSPACE
+    val stockDefault: Typeface = getPendingTypeface(Typeface.DEFAULT)?.get() ?: Typeface.DEFAULT
+    val stockMonospace: Typeface = getPendingTypeface(Typeface.MONOSPACE)?.get() ?: Typeface.MONOSPACE
     private var emojiScale = 1f
     private var emojiBottomPaddingRatio = 0f
 
@@ -298,9 +314,9 @@ object FontHelper {
                 emojiScale = (stockHeight / customHeight).coerceIn(0.75f, 1.25f)
                 emojiBottomPaddingRatio = (stockMetrics.bottom - stockMetrics.descent) / customHeight
             }
-            trySetStatic(typefaceDefaultField, regular)
-            trySetStatic(typefaceDefaultBoldField, bold)
-            trySetStatic(typefaceSansSerifField, regular)
+            installStatic(typefaceDefaultField, regular)
+            installStatic(typefaceDefaultBoldField, bold)
+            installStatic(typefaceSansSerifField, regular)
             for (k in arrayOf(
                 "sans-serif", "sans-serif-light", "sans-serif-thin",
                 "sans-serif-condensed", "sans-serif-condensed-light"
@@ -309,8 +325,23 @@ object FontHelper {
         }
         // monospace font (inline code + blocks) — no-op when unset
         FontLibrary.getTypefaceFor(FontConfig.MONO_FONT.value)?.let { mono ->
-            trySetStatic(typefaceMonospaceField, mono)
+            installStatic(typefaceMonospaceField, mono)
             map?.put("monospace", mono)
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun getPendingTypeface(typeface: Typeface): AtomicReference<Typeface>? = try {
+        pendingTypefaceField?.get(typeface) as? AtomicReference<Typeface>
+    } catch (_: Throwable) {
+        null
+    }
+
+    private fun installStatic(field: Field, value: Typeface) {
+        if (Build.VERSION.SDK_INT < 37) return trySetStatic(field, value)
+        try {
+            getPendingTypeface(field.get(null) as Typeface)?.set(value)
+        } catch (_: Throwable) {
         }
     }
 
