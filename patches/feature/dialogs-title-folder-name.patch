@@ -50,7 +50,7 @@ index 0000000..0000000 100644
 +
 +    private void inu_updateFolderTitle() {
 +        if (desu.inugram.InuConfig.DIALOGS_TITLE_TEXT.getValue() != desu.inugram.InuConfig.DialogsTitleTextItem.FOLDER_NAME) return;
-+        if (!onlySelect && folderId == 0 && communityId == 0 && !desu.inugram.helpers.security.ParanoiaHelper.isDisguised()) {
++        if (actionBar != null && !onlySelect && folderId == 0 && communityId == 0 && !desu.inugram.helpers.security.ParanoiaHelper.isDisguised()) {
 +            String title = desu.inugram.helpers.chat.ChatHelper.getDialogsTitle(this, currentAccount);
 +            SimpleTextView titleView = actionBar.getTitleTextView();
 +            if (titleView == null || !TextUtils.equals(titleView.getText(), title)) {
