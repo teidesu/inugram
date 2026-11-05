@@ -29,8 +29,10 @@ import org.telegram.messenger.MessageObject
 import org.telegram.messenger.MessagesController
 import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.R
+import org.telegram.messenger.UserConfig
 import org.telegram.messenger.Utilities
 import org.telegram.tgnet.TLObject
+import org.telegram.ui.Components.AnimatedEmojiDrawable
 import org.telegram.ui.Components.AnimatedFloat
 import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.ChatActivityEnterView
@@ -132,13 +134,17 @@ object InuHooks {
         val uri = intent?.data ?: return false
         if (uri.scheme != "tg") return false
         val host = uri.host ?: uri.schemeSpecificPart?.removePrefix("//")?.substringBefore('/')
-        val (icon, text) = when (host) {
-            "nya" -> R.raw.msg_emoji_cat to "meow~"
-            "woof" -> R.raw.msg_emoji_activities to "woof :3"
+        val (emojiId, text) = when (host) {
+            "nya" -> 6323275213672810256L to "meow~"
+            "woof" -> 5776133475794950313L to "woof :3"
             else -> return false
         }
-        val fragment = activity.actionBarLayout?.lastFragment ?: return false
-        BulletinFactory.of(fragment).createSimpleBulletin(icon, text).show()
+        val account = UserConfig.selectedAccount
+        if (!UserConfig.getInstance(account).isClientActivated) return true
+        AnimatedEmojiDrawable.getDocumentFetcher(account).fetchDocument(emojiId) { document ->
+            val fragment = activity.actionBarLayout?.lastFragment ?: return@fetchDocument
+            BulletinFactory.of(fragment).createEmojiBulletin(document, text).show()
+        }
         return true
     }
 
