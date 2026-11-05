@@ -431,3 +431,4 @@ bugfix/file-ref-stale-cache-stall.patch
 bugfix/inline-restriction-check.patch
 feature/inline-send-without-via.patch
 feature/send-sticker-without-pack.patch
+feature/send-server-error-bulletin.patch

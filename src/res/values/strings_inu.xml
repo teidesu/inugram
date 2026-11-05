@@ -1025,4 +1025,5 @@
     <string name="InuWalletKeyReplaced">Key replaced</string>
     <string name="InuWalletKeyReplacedInfo">Your address and the 12 new words now restore this wallet.</string>
     <string name="InuWalletPrivateKeyBackupUnavailable">Wallets imported from a private key can\'t be backed up to Telegram, since other apps can\'t restore them. Keep the key safe yourself.</string>
+    <string name="InuSendServerError">Telegram is having trouble delivering your message. Still retrying…</string>
 </resources>

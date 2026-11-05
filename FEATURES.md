@@ -215,6 +215,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 
 ## behavior
 
+- 🐶 bulletin with the error code when the server keeps failing to deliver a message, so it doesn't just look stuck
 - call confirmation
 - HD call audio on Bluetooth
 - 🐶 reaction confirmation in non-joined chats
