@@ -322,9 +322,6 @@ object InuConfig {
     val DIALOGS_FAB_HIDE_ON_SCROLL = BoolItem("dialogs_fab_hide_on_scroll", true)
 
     @JvmField
-    val DIALOGS_FAB_OFFSET_FOR_BOTTOM_BAR = BoolItem("dialogs_fab_offset_for_bottom_bar", true)
-
-    @JvmField
     val DIALOGS_FAB_LEFT_SIDE = BoolItem("dialogs_fab_left_side", false)
 
     @JvmField

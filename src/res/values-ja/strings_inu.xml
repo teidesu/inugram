@@ -86,8 +86,6 @@
     <string name="InuDialogsFabMainAction">メイン動作</string>
     <string name="InuDialogsFabSecondaryAction">サブ動作</string>
     <string name="InuDialogsFabHideOnScroll">スクロール時に非表示</string>
-    <string name="InuDialogsFabOffsetForBottomBar">下部バーに合わせてオフセット</string>
-    <string name="InuDialogsFabOffsetForBottomBarInfo">無効化すると画面サイズによってはうまく動作しない場合があります</string>
     <string name="InuDialogsFabLeftSide">左側に移動</string>
     <string name="InuDialogsFabActionNewMessage">新規メッセージ</string>
     <string name="InuDialogsFabActionNewStory">新規ストーリー</string>

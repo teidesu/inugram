@@ -401,7 +401,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -13708,6 +13708,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13709,6 +13709,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
      private void showItemOptions() {
          ItemOptions io = ItemOptions.makeOptions(this, optionsItem);
          io.setColors(getThemedColor(Theme.key_actionBarDefaultTitle), getThemedColor(Theme.key_actionBarDefaultTitle));

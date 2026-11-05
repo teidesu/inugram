@@ -86,8 +86,6 @@
     <string name="InuDialogsFabMainAction">Основное действие</string>
     <string name="InuDialogsFabSecondaryAction">Дополнительное действие</string>
     <string name="InuDialogsFabHideOnScroll">Скрывать при прокрутке</string>
-    <string name="InuDialogsFabOffsetForBottomBar">Отступ для нижней панели</string>
-    <string name="InuDialogsFabOffsetForBottomBarInfo">Отключение может работать некорректно на некоторых размерах экрана</string>
     <string name="InuDialogsFabLeftSide">Переместить влево</string>
     <string name="InuDialogsFabActionNewMessage">Новое сообщение</string>
     <string name="InuDialogsFabActionNewStory">Новая история</string>

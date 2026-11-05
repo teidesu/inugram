@@ -127,8 +127,6 @@
     <string name="InuDialogsFabMainAction">Primary action</string>
     <string name="InuDialogsFabSecondaryAction">Secondary action</string>
     <string name="InuDialogsFabHideOnScroll">Hide when scrolling</string>
-    <string name="InuDialogsFabOffsetForBottomBar">Offset for bottom bar</string>
-    <string name="InuDialogsFabOffsetForBottomBarInfo">Disabling this might not work well for all screen sizes</string>
     <string name="InuDialogsFabLeftSide">Move to the left</string>
     <string name="InuDialogsFabActionNewMessage">New message</string>
     <string name="InuDialogsFabActionNewStory">New story</string>

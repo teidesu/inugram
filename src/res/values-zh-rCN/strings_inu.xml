@@ -86,8 +86,6 @@
     <string name="InuDialogsFabMainAction">主要操作</string>
     <string name="InuDialogsFabSecondaryAction">次要操作</string>
     <string name="InuDialogsFabHideOnScroll">滚动时隐藏</string>
-    <string name="InuDialogsFabOffsetForBottomBar">为底部栏留出偏移</string>
-    <string name="InuDialogsFabOffsetForBottomBarInfo">禁用后在部分屏幕尺寸下可能效果不佳</string>
     <string name="InuDialogsFabLeftSide">移到左侧</string>
     <string name="InuDialogsFabActionNewMessage">新消息</string>
     <string name="InuDialogsFabActionNewStory">新快拍</string>

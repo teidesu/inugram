@@ -144,14 +144,6 @@ class DialogsSettingsActivity : SettingsPageActivity() {
             ).setChecked(InuConfig.DIALOGS_FAB_HIDE_ON_SCROLL.value)
         )
         items.add(
-            mkTwoLineCheckItem(
-                TOGGLE_FAB_OFFSET_FOR_BOTTOM_BAR,
-                R.string.InuDialogsFabOffsetForBottomBar,
-                R.string.InuDialogsFabOffsetForBottomBarInfo,
-                InuConfig.DIALOGS_FAB_OFFSET_FOR_BOTTOM_BAR.value
-            )
-        )
-        items.add(
             UItem.asCheck(
                 TOGGLE_FAB_LEFT_SIDE,
                 LocaleController.getString(R.string.InuDialogsFabLeftSide),
@@ -261,12 +253,6 @@ class DialogsSettingsActivity : SettingsPageActivity() {
                 (view as? TextCheckCell)?.isChecked = new
             }
 
-            TOGGLE_FAB_OFFSET_FOR_BOTTOM_BAR -> {
-                val new = InuConfig.DIALOGS_FAB_OFFSET_FOR_BOTTOM_BAR.toggle()
-                (view as? NotificationsCheckCell)?.isChecked = new
-                softRebuild()
-            }
-
             TOGGLE_FAB_LEFT_SIDE -> {
                 val new = InuConfig.DIALOGS_FAB_LEFT_SIDE.toggle()
                 (view as? TextCheckCell)?.isChecked = new
@@ -362,7 +348,6 @@ class DialogsSettingsActivity : SettingsPageActivity() {
         private val BUTTON_FAB_MAIN_ACTION = InuUtils.generateId()
         private val BUTTON_FAB_SECONDARY_ACTION = InuUtils.generateId()
         private val TOGGLE_FAB_HIDE_ON_SCROLL = InuUtils.generateId()
-        private val TOGGLE_FAB_OFFSET_FOR_BOTTOM_BAR = InuUtils.generateId()
         private val TOGGLE_FAB_LEFT_SIDE = InuUtils.generateId()
         private val TOGGLE_INTERACTIVE_CHAT_PREVIEW = InuUtils.generateId()
         private val TOGGLE_HIDE_ALL_CHATS_TAB = InuUtils.generateId()
@@ -414,7 +399,6 @@ class DialogsSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("dialogs-fab-main-action", R.string.InuDialogsFabMainAction, BUTTON_FAB_MAIN_ACTION),
                 SearchRegistry.Entry("dialogs-fab-secondary-action", R.string.InuDialogsFabSecondaryAction, BUTTON_FAB_SECONDARY_ACTION),
                 SearchRegistry.Entry("dialogs-fab-hide-on-scroll", R.string.InuDialogsFabHideOnScroll, TOGGLE_FAB_HIDE_ON_SCROLL),
-                SearchRegistry.Entry("dialogs-fab-offset-for-bottom-bar", R.string.InuDialogsFabOffsetForBottomBar, TOGGLE_FAB_OFFSET_FOR_BOTTOM_BAR),
                 SearchRegistry.Entry("dialogs-fab-left-side", R.string.InuDialogsFabLeftSide, TOGGLE_FAB_LEFT_SIDE),
             ),
         )

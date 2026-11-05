@@ -127,8 +127,6 @@
     <string name="InuDialogsFabMainAction">Birincil eylem</string>
     <string name="InuDialogsFabSecondaryAction">İkincil eylem</string>
     <string name="InuDialogsFabHideOnScroll">Kaydırırken gizle</string>
-    <string name="InuDialogsFabOffsetForBottomBar">Alt çubuk için mesafe bırak</string>
-    <string name="InuDialogsFabOffsetForBottomBarInfo">Bunu devre dışı bırakmak tüm ekran boyutlarında iyi çalışmayabilir</string>
     <string name="InuDialogsFabLeftSide">Sola taşı</string>
     <string name="InuDialogsFabActionNewMessage">Yeni mesaj</string>
     <string name="InuDialogsFabActionNewStory">Yeni hikaye</string>

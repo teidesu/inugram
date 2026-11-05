@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -8840,13 +8840,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8839,13 +8839,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                  } else {
                      newPinnedCount++;
                  }
@@ -27,7 +27,7 @@ index 0000000..0000000 100644
              } else if (folderId != 0 || filter != null) {
                  if (getUserConfig().isPremium()) {
                      maxPinnedCount = getMessagesController().maxFolderPinnedDialogsCountPremium;
-@@ -8860,7 +8860,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8859,7 +8859,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      maxPinnedCount = getMessagesController().maxPinnedDialogsCountDefault;
                  }
              }
@@ -39,7 +39,7 @@ index 0000000..0000000 100644
          }
  
          if (hasPinAction[0]) {
-@@ -9324,6 +9327,17 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9323,6 +9326,17 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          return dialog.pinned;
      }
  
@@ -57,7 +57,7 @@ index 0000000..0000000 100644
      private void performSelectedDialogsAction(ArrayList<Long> selectedDialogs, int action, boolean alert, boolean longPress) {
          performSelectedDialogsAction(selectedDialogs, action, alert, longPress, null);
      }
-@@ -9403,13 +9417,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9402,13 +9416,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                  } else {
                      newPinnedCount++;
                  }
@@ -74,7 +74,7 @@ index 0000000..0000000 100644
              } else if (folderId != 0 || filter != null) {
                  if (UserConfig.getInstance(currentAccount).isPremium()) {
                      maxPinnedCount = getMessagesController().maxFolderPinnedDialogsCountPremium;
-@@ -9419,7 +9433,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9418,7 +9432,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              } else {
                  maxPinnedCount = getUserConfig().isPremium() ? getMessagesController().dialogFiltersPinnedLimitPremium : getMessagesController().dialogFiltersPinnedLimitDefault;
              }

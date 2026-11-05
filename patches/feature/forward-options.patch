@@ -52,7 +52,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -12137,6 +12137,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -12136,6 +12136,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          final boolean multipleMedia = sharedMediaEntries != null && sharedMediaEntries.size() > 1;
  
          ItemOptions.makeOptions(this, view)

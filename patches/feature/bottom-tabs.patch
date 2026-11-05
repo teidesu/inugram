@@ -8,13 +8,13 @@ Subject: bottom tabs tweaks: compact mode, hiding contacts, hiding it completely
  .../ui/Components/BulletinFactory.java        |  9 ++
  .../ui/Components/glass/GlassTabView.java     | 35 +++++++-
  .../org/telegram/ui/ContactsActivity.java     |  9 +-
- .../java/org/telegram/ui/DialogsActivity.java | 18 ++--
+ .../java/org/telegram/ui/DialogsActivity.java | 19 +++--
  .../org/telegram/ui/MainTabsActivity.java     | 82 ++++++++++++++-----
  .../java/org/telegram/ui/ProfileActivity.java |  9 +-
  .../org/telegram/ui/SettingsActivity.java     |  8 +-
  .../java/org/telegram/ui/TopicsFragment.java  |  9 +-
  .../org/telegram/ui/ViewPagerActivity.java    |  2 +-
- 10 files changed, 146 insertions(+), 50 deletions(-)
+ 10 files changed, 147 insertions(+), 50 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/CallLogActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/CallLogActivity.java
 index 0000000..0000000 100644
@@ -236,7 +236,7 @@ index 0000000..0000000 100644
  
          return true;
      }
-@@ -3205,6 +3207,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -3205,6 +3207,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          wasDrawn = false;
          pacmanAnimation = null;
          filterTabsView = null;
@@ -244,10 +244,11 @@ index 0000000..0000000 100644
 +            hasMainTabs = arguments.getBoolean("hasMainTabs", false) && !MainTabsHelper.isHidden();
 +        }
 +        additionNavigationBarHeight = hasMainTabs ? dp(MainTabsHelper.getMainTabsHeightWithMargins()) : 0;
++        additionFloatingButtonOffset = hasMainTabs ? dp(MainTabsHelper.getMainTabsHeight() + MainTabsHelper.getMainTabsMargin()) : 0;
          selectedDialogs.clear();
  
          maximumVelocity = ViewConfiguration.get(context).getScaledMaximumFlingVelocity();
-@@ -13839,8 +13845,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13839,8 +13846,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              }
          }
  
@@ -258,7 +259,7 @@ index 0000000..0000000 100644
      }
  
      @Override
-@@ -14224,8 +14232,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -14224,8 +14233,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          }
  
          final int additionalList = dp(48);

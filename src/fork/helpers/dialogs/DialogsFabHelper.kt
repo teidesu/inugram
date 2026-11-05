@@ -4,7 +4,6 @@ import android.os.Bundle
 import android.view.Gravity
 import android.widget.FrameLayout
 import desu.inugram.InuConfig
-import org.telegram.messenger.AndroidUtilities.dp
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
 import org.telegram.messenger.UserConfig
@@ -45,17 +44,6 @@ object DialogsFabHelper {
 
     @JvmStatic
     fun hideOnScroll(): Boolean = InuConfig.DIALOGS_FAB_HIDE_ON_SCROLL.value
-
-    @JvmStatic
-    fun offsetForBottomBar(): Boolean = InuConfig.DIALOGS_FAB_OFFSET_FOR_BOTTOM_BAR.value
-
-    // recomputed on each createView so toggling the pref applies without fragment recreation
-    @JvmStatic
-    fun floatingButtonOffset(hasMainTabs: Boolean): Int {
-        if (!hasMainTabs) return 0
-        if (!offsetForBottomBar()) return -dp(10f)
-        return dp((MainTabsHelper.mainTabsHeight + MainTabsHelper.mainTabsMargin).toFloat())
-    }
 
     @JvmStatic
     fun leftSide(): Boolean = InuConfig.DIALOGS_FAB_LEFT_SIDE.value

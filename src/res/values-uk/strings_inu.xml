@@ -127,8 +127,6 @@
     <string name="InuDialogsFabMainAction">Основна дія</string>
     <string name="InuDialogsFabSecondaryAction">Вторинна дія</string>
     <string name="InuDialogsFabHideOnScroll">Ховати під час прокручування</string>
-    <string name="InuDialogsFabOffsetForBottomBar">Відступ для нижньої панелі</string>
-    <string name="InuDialogsFabOffsetForBottomBarInfo">Вимкнення може виглядати некоректно на деяких екранах</string>
     <string name="InuDialogsFabLeftSide">Перемістити ліворуч</string>
     <string name="InuDialogsFabActionNewMessage">Нове повідомлення</string>
     <string name="InuDialogsFabActionNewStory">Нова історія</string>
