@@ -52,7 +52,7 @@ index 0000000..0000000 100644
                      if (fragmentView != null) {
                          fragmentView.invalidate();
 @@ -4651,6 +4658,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
-                                 if (changed && scrollUpdated && (goingDown || scrollingManually) && DialogsFabHelper.hideOnScroll()) {
+                                 if (changed && scrollUpdated && (goingDown || scrollingManually) && DialogsFabHelper.hideOnScroll() && !disableActionBarScrolling) {
                                      hideFloatingButton(goingDown);
                                  }
 +                                if (changed && scrollUpdated && (goingDown || scrollingManually) && recyclerView == viewPages[0].listView && !disableActionBarScrolling) {

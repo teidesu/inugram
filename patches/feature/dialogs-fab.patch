@@ -24,7 +24,7 @@ index 0000000..0000000 100644
                                      goingDown = firstVisiblePosition > prevPosition;
                                  }
 -                                if (changed && scrollUpdated && (goingDown || scrollingManually)) {
-+                                if (changed && scrollUpdated && (goingDown || scrollingManually) && DialogsFabHelper.hideOnScroll()) {
++                                if (changed && scrollUpdated && (goingDown || scrollingManually) && DialogsFabHelper.hideOnScroll() && !disableActionBarScrolling) {
                                      hideFloatingButton(goingDown);
                                  }
                                  prevPosition = firstVisiblePosition;
