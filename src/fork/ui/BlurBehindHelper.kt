@@ -19,11 +19,12 @@ import org.telegram.ui.Components.SizeNotifierFrameLayout
 class BlurBehindHelper(
     private val view: View,
     private val contentView: SizeNotifierFrameLayout,
-    private val colorKey: Int = Theme.key_windowBackgroundWhite,
+    var colorKey: Int = Theme.key_windowBackgroundWhite,
     private val isTop: Boolean = true,
     private val topShadowDp: Float = 0f,
     private val bottomShadowDp: Float = 0f,
-    private val drawBottomDivider: Boolean = false,
+    var drawBottomDivider: Boolean = false,
+    var drawTopDivider: Boolean = false,
 ) {
     private val rect = Rect()
     private val paint = Paint()
@@ -69,6 +70,9 @@ class BlurBehindHelper(
         val y = computeY()
         if (y != null) {
             contentView.drawBlurRect(canvas, y, rect, paint, isTop)
+        }
+        if (drawTopDivider) {
+            canvas.drawRect(0f, 0f, w.toFloat(), 1f, Theme.dividerPaint)
         }
         if (drawBottomDivider) {
             canvas.drawRect(0f, (h - 1).toFloat(), w.toFloat(), h.toFloat(), Theme.dividerPaint)

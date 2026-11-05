@@ -4,6 +4,7 @@ import android.view.View
 import desu.inugram.InuConfig
 import desu.inugram.SearchRegistry
 import desu.inugram.helpers.dialogs.DialogsFabHelper
+import desu.inugram.helpers.dialogs.FolderHelper
 import desu.inugram.helpers.InuUtils
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.MessagesStorage
@@ -51,7 +52,14 @@ class DialogsSettingsActivity : SettingsPageActivity() {
                 LocaleController.getString(R.string.InuHideAllChatsTab),
             ).setChecked(InuConfig.HIDE_ALL_CHATS_TAB.value)
         )
-        items.add(UItem.asShadow(null))
+        val canShowTabsAtBottom = FolderHelper.canShowTabsAtBottom()
+        items.add(
+            UItem.asCheck(
+                TOGGLE_FOLDER_TABS_AT_BOTTOM,
+                LocaleController.getString(R.string.InuFolderTabsAtBottom),
+            ).setChecked(FolderHelper.shouldShowTabsAtBottom()).setEnabled(canShowTabsAtBottom)
+        )
+        items.add(UItem.asShadow(if (canShowTabsAtBottom) null else LocaleController.getString(R.string.InuFolderTabsAtBottomInfo)))
         // end folders section
 
         // chat list section
@@ -185,6 +193,12 @@ class DialogsSettingsActivity : SettingsPageActivity() {
                     val storage = MessagesStorage.getInstance(i)
                     storage.storageQueue.postRunnable { storage.resetAllUnreadCounters(false) }
                 }
+            }
+
+            TOGGLE_FOLDER_TABS_AT_BOTTOM -> {
+                val new = InuConfig.FOLDER_TABS_AT_BOTTOM.toggle()
+                (view as? TextCheckCell)?.isChecked = new
+                softRebuild()
             }
 
             TOGGLE_HIDE_ALL_CHATS_TAB -> {
@@ -352,6 +366,7 @@ class DialogsSettingsActivity : SettingsPageActivity() {
         private val TOGGLE_FAB_LEFT_SIDE = InuUtils.generateId()
         private val TOGGLE_INTERACTIVE_CHAT_PREVIEW = InuUtils.generateId()
         private val TOGGLE_HIDE_ALL_CHATS_TAB = InuUtils.generateId()
+        private val TOGGLE_FOLDER_TABS_AT_BOTTOM = InuUtils.generateId()
         private val BUTTON_COMMUNITY_DISPLAY_MODE = InuUtils.generateId()
         private val BUTTON_TITLE_TEXT = InuUtils.generateId()
 
@@ -387,6 +402,7 @@ class DialogsSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("folders-display-mode", R.string.InuFoldersDisplayMode, BUTTON_FOLDERS_DISPLAY_MODE),
                 SearchRegistry.Entry("folders-unread-counter", R.string.InuFoldersUnreadCounter, BUTTON_FOLDERS_UNREAD_COUNTER_MODE),
                 SearchRegistry.Entry("hide-all-chats-tab", R.string.InuHideAllChatsTab, TOGGLE_HIDE_ALL_CHATS_TAB),
+                SearchRegistry.Entry("folder-tabs-at-bottom", R.string.InuFolderTabsAtBottom, TOGGLE_FOLDER_TABS_AT_BOTTOM),
                 SearchRegistry.Entry("title-text", R.string.InuTitleText, BUTTON_TITLE_TEXT),
                 SearchRegistry.Entry("old-mention-indicator", R.string.InuOldMentionIndicator, TOGGLE_OLD_MENTION_INDICATOR),
                 SearchRegistry.Entry("pull-down-action", R.string.InuPullDownAction, BUTTON_PULL_DOWN_ACTION),

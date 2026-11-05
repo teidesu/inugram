@@ -4,6 +4,7 @@ import android.graphics.Canvas
 import android.graphics.Rect
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
+import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.TextView
@@ -138,15 +139,17 @@ object NonIslandHelper {
     }
 
     @JvmStatic
-    fun setMd3TabIndicatorBounds(indicator: Drawable, indicatorX: Float, indicatorWidth: Float, height: Float, hideProgress: Float) {
+    @JvmOverloads
+    fun setMd3TabIndicatorBounds(indicator: Drawable, indicatorX: Float, indicatorWidth: Float, height: Float, hideProgress: Float, atTop: Boolean = false) {
         val centerX = indicatorX + indicatorWidth / 2f
         val width = max(dp(24f).toFloat(), indicatorWidth - dp(2f) * 2)
         val hideOffset = hideProgress * dp(3f)
+        val top = if (atTop) -hideOffset else height - dp(3f) + hideOffset
         indicator.setBounds(
             (centerX - width / 2f).toInt(),
-            (height - dp(3f) + hideOffset).toInt(),
+            top.toInt(),
             (centerX + width / 2f).toInt(),
-            (height + hideOffset).toInt(),
+            (top + dp(3f)).toInt(),
         )
     }
 
@@ -161,6 +164,18 @@ object NonIslandHelper {
         lp.height = dp(FOLDERS_BAR_HEIGHT_DP.toFloat())
         lp.leftMargin = 0
         lp.rightMargin = 0
+    }
+
+    @JvmStatic
+    fun moveFilterTabBarToBottom(tabsView: FilterTabsView, aboveMaterialTabs: Boolean) {
+        (tabsView.layoutParams as FrameLayout.LayoutParams).gravity = Gravity.BOTTOM
+        val blurHelper = tabsView.inu_blurHelper ?: return
+        blurHelper.drawBottomDivider = false
+        blurHelper.drawTopDivider = true
+        if (aboveMaterialTabs) blurHelper.colorKey = Theme.key_glass_targetMainTabs
+        tabsView.inu_indicatorAtTop = true
+        val rad = AndroidUtilities.dpf2(3f)
+        (tabsView.selectorDrawable as GradientDrawable).cornerRadii = floatArrayOf(0f, 0f, 0f, 0f, rad, rad, rad, rad)
     }
 
     @JvmStatic

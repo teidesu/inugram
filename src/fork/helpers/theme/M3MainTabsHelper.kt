@@ -126,13 +126,23 @@ object M3MainTabsHelper {
         ColorStateList.valueOf(Theme.multAlpha(color, RIPPLE_ALPHA))
 
     private class TopDividerDrawable : Drawable() {
+        private var dividerAlpha = 255
+
         override fun draw(canvas: Canvas) {
-            if (BlurredBackgroundProviderImpl.checkBlurEnabled(null)) return
+            if (dividerAlpha == 0 || BlurredBackgroundProviderImpl.checkBlurEnabled(null)) return
             val top = bounds.top.toFloat()
-            canvas.drawRect(bounds.left.toFloat(), top, bounds.right.toFloat(), top + DIVIDER_HEIGHT_PX, Theme.dividerPaint)
+            val paint = Theme.dividerPaint
+            val paintAlpha = paint.alpha
+            paint.alpha = paintAlpha * dividerAlpha / 255
+            canvas.drawRect(bounds.left.toFloat(), top, bounds.right.toFloat(), top + DIVIDER_HEIGHT_PX, paint)
+            paint.alpha = paintAlpha
         }
 
-        override fun setAlpha(alpha: Int) {}
+        override fun setAlpha(alpha: Int) {
+            if (dividerAlpha == alpha) return
+            dividerAlpha = alpha
+            invalidateSelf()
+        }
 
         override fun setColorFilter(colorFilter: ColorFilter?) {}
 
@@ -143,6 +153,11 @@ object M3MainTabsHelper {
     fun applyTabsWrapper(wrapper: FrameLayout) {
         if (!isEnabled) return
         wrapper.background = TopDividerDrawable()
+    }
+
+    @JvmStatic
+    fun setTabsDividerAlpha(wrapper: FrameLayout, alpha: Float) {
+        (wrapper.background as? TopDividerDrawable)?.alpha = (alpha * 255).toInt()
     }
 
     @JvmStatic

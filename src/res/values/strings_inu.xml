@@ -225,6 +225,8 @@
     <string name="InuFoldersUnreadCounterExcludeMuted">Exclude muted</string>
     <string name="InuFoldersUnreadCounterExcludeMutedNonDms">Exclude muted non-DMs</string>
     <string name="InuHideAllChatsTab">Hide \"All Chats\" tab</string>
+    <string name="InuFolderTabsAtBottom">Show tabs at the bottom</string>
+    <string name="InuFolderTabsAtBottomInfo">The classic folders bar can only be moved to the bottom with Material 3 bottom tabs or with bottom tabs disabled.</string>
     <string name="InuCommunityDisplayMode">Communities</string>
     <string name="InuCommunityDisplayModeRegular">Regular</string>
     <string name="InuCommunityDisplayModeLongTap">Open on long tap</string>

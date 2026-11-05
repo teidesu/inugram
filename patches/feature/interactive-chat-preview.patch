@@ -82,7 +82,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -8706,6 +8706,18 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8710,6 +8710,18 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              });
          }
  
@@ -101,7 +101,7 @@ index 0000000..0000000 100644
          if (!isCommunityCell) {
              ActionBarMenuSubItem markAsUnreadItem = new ActionBarMenuSubItem(getParentActivity(), true, false);
              if (cell.getHasUnread()) {
-@@ -8908,7 +8920,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8912,7 +8924,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              } else {
                  presentFragmentAsPreviewWithMenu(previewActivity[0] = chatActivity1, previewMenu[0]);
                  if (chatActivity1 != null) {
