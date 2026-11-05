@@ -120,6 +120,7 @@
     <string name="InuBottomTabs">Bottom tabs</string>
     <string name="InuNavigation">Navigation</string>
     <string name="InuHideContactsTab">Hide contacts tab</string>
+    <string name="InuBottomTabsHideOnScroll">Hide on scroll</string>
     <string name="InuCompactMode">Compact mode</string>
     <string name="InuCompactModeInfo">Hides titles and make the tabs smaller</string>
     <string name="InuMaterial3BottomTabs">Bottom tabs</string>

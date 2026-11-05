@@ -56,7 +56,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 
 ## dialogs list / main page
 
-- bottom tabs: 🐶 compact mode, hide contacts tab, hide bar entirely
+- bottom tabs: 🐶 compact mode, hide contacts tab, hide bar entirely, hide on scroll
 - bottom tabs: material design 3 style with a pill indicator behind the selected icon
 - double-tap account tab to switch to next account
 - long-tap "chats" tab to pick folder from menu

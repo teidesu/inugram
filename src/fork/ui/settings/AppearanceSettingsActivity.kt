@@ -124,6 +124,12 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
                     InuConfig.BOTTOM_TABS_COMPACT_MODE.value,
                 )
             )
+            items.add(
+                UItem.asCheck(
+                    TOGGLE_BOTTOM_TABS_HIDE_ON_SCROLL,
+                    LocaleController.getString(R.string.InuBottomTabsHideOnScroll),
+                ).setChecked(InuConfig.BOTTOM_TABS_HIDE_ON_SCROLL.value)
+            )
         }
         items.add(UItem.asShadow(null))
 
@@ -257,6 +263,12 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
                 showRestartBulletin()
             }
 
+            TOGGLE_BOTTOM_TABS_HIDE_ON_SCROLL -> {
+                val new = InuConfig.BOTTOM_TABS_HIDE_ON_SCROLL.toggle()
+                (view as? TextCheckCell)?.isChecked = new
+                softRebuild()
+            }
+
             TOGGLE_COMPACT_MODE -> {
                 val new = InuConfig.BOTTOM_TABS_COMPACT_MODE.toggle()
                 (view as? NotificationsCheckCell)?.isChecked = new
@@ -302,6 +314,7 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
         private val TOGGLE_BOTTOM_TABS = InuUtils.generateId()
         private val TOGGLE_HIDE_CONTACTS_TAB = InuUtils.generateId()
         private val TOGGLE_COMPACT_MODE = InuUtils.generateId()
+        private val TOGGLE_BOTTOM_TABS_HIDE_ON_SCROLL = InuUtils.generateId()
         private val TOGGLE_NON_ISLAND_FOLDERS_BAR = InuUtils.generateId()
         private val TOGGLE_NON_ISLAND_SHARED_MEDIA_TABS = InuUtils.generateId()
         private val TOGGLE_NON_ISLAND_GLOBAL_SEARCH = InuUtils.generateId()
@@ -379,6 +392,7 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("bottom-tabs-hide", R.string.InuBottomTabs, TOGGLE_BOTTOM_TABS),
                 SearchRegistry.Entry("hide-contacts-tab", R.string.InuHideContactsTab, TOGGLE_HIDE_CONTACTS_TAB),
                 SearchRegistry.Entry("compact-mode", R.string.InuCompactMode, TOGGLE_COMPACT_MODE),
+                SearchRegistry.Entry("bottom-tabs-hide-on-scroll", R.string.InuBottomTabsHideOnScroll, TOGGLE_BOTTOM_TABS_HIDE_ON_SCROLL),
                 SearchRegistry.Entry("non-island-folders-bar", R.string.InuNonIslandFoldersBar, TOGGLE_NON_ISLAND_FOLDERS_BAR),
                 SearchRegistry.Entry("non-island-shared-media-tabs", R.string.InuNonIslandSharedMediaTabs, TOGGLE_NON_ISLAND_SHARED_MEDIA_TABS),
                 SearchRegistry.Entry("non-island-global-search", R.string.InuNonIslandGlobalSearch, TOGGLE_NON_ISLAND_GLOBAL_SEARCH),
