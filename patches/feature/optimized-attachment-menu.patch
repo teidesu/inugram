@@ -82,7 +82,7 @@ index 0000000..0000000 100644
      }
  
      public void setCheckCameraWhenShown(boolean checkCameraWhenShown) {
-@@ -4134,6 +4138,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -4133,6 +4137,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
      @Override
      public void onOpenAnimationEnd() {
          checkCamera(parentAlert != null && parentAlert.baseFragment instanceof ChatActivity && desu.inugram.helpers.chat.AttachCameraHelper.isInstant());

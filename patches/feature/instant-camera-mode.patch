@@ -4,10 +4,10 @@ Date: Thu, 9 Apr 2026 04:55:09 +0300
 Subject: customizable instant camera in attach alert (stock/static/fab/tab)
 
 ---
- .../ui/Components/ChatAttachAlert.java        | 33 +++++++++--
- .../ChatAttachAlertPhotoLayout.java           | 56 ++++++++++++++-----
+ .../ui/Components/ChatAttachAlert.java        | 33 ++++++++++--
+ .../ChatAttachAlertPhotoLayout.java           | 53 ++++++++++++++-----
  .../ui/Components/glass/GlassTabView.java     |  1 +
- 3 files changed, 70 insertions(+), 20 deletions(-)
+ 3 files changed, 68 insertions(+), 19 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
 index 0000000..0000000 100644
@@ -268,15 +268,6 @@ index 0000000..0000000 100644
          } else {
              if (parentAlert.delegate != null) {
                  parentAlert.delegate.didPressedButton(0, false, true, 0, 0, 0, parentAlert.isCaptionAbove(), false, 0);
-@@ -2163,7 +2178,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
- 
-             @Override
-             public boolean cancelButtonPressed() {
--                if (cameraOpened && cameraView != null) {
-+                if (cameraOpened && cameraView != null && desu.inugram.helpers.chat.AttachCameraHelper.isInstant()) {
-                     AndroidUtilities.runOnUIThread(() -> {
-                         if (cameraView != null && !parentAlert.isDismissed()) {
-                             cameraView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_FULLSCREEN);
 @@ -2453,7 +2468,11 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
          if ((old != deviceHasGoodCamera || old2 != noCameraPermissions) && adapter != null) {
              adapter.notifyDataSetChanged();
@@ -336,15 +327,7 @@ index 0000000..0000000 100644
      }
  
      @Override
-@@ -3943,6 +3966,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
-     }
- 
-     private void resumeCameraPreview() {
-+        if (!desu.inugram.helpers.chat.AttachCameraHelper.isInstant()) return;
-         try {
-             checkCamera(false);
-             if (cameraView != null) {
-@@ -3984,7 +4008,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -3984,7 +4007,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
  //                    afterCameraInitRunnable = null;
  //                    isCameraFrontfaceBeforeEnteringEditMode = null;
  //                };
@@ -353,7 +336,7 @@ index 0000000..0000000 100644
              }
          }
      }
-@@ -4109,7 +4133,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -4109,7 +4132,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
  
      @Override
      public void onOpenAnimationEnd() {
@@ -362,7 +345,7 @@ index 0000000..0000000 100644
      }
  
      @Override
-@@ -4868,11 +4892,13 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -4868,11 +4891,13 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
  
          public void updateBitmap() {
              Bitmap bitmap = null;
