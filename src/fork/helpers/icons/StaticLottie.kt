@@ -91,8 +91,8 @@ class StaticLottie private constructor(
             "gif_to_keyboard" to swap("msg_gif", "input_keyboard"),
             "keyboard_to_gif" to swap("input_keyboard", "msg_gif"),
             "voice_and_video" to Compat(listOf(0f to "input_video_pressed", 0.2f to "input_mic_pressed", 0.51f to "input_mic_pressed", 0.71f to "input_video_pressed")),
-            "inu_voice_to_video" to swap("input_mic_pressed", "input_video_pressed"),
-            "inu_video_to_voice" to swap("input_video_pressed", "input_mic_pressed"),
+            "inu_voice_to_video" to swap("input_mic", "input_video"),
+            "inu_video_to_voice" to swap("input_video", "input_mic"),
         ) + listOf("smiles", "cat", "food", "activities", "travel", "objects", "other", "flags")
             .associate { "msg_emoji_$it" to Compat(listOf(0f to "msg_emoji_$it")) }
 
