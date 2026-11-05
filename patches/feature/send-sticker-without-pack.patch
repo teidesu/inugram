@@ -1,0 +1,88 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Thu, 5 Nov 2026 15:41:29 +0400
+Subject: send stickers without their sticker pack
+
+---
+ .../java/org/telegram/messenger/MediaDataController.java  | 2 +-
+ .../java/org/telegram/messenger/SendMessagesHelper.java   | 3 ++-
+ .../main/java/org/telegram/ui/Cells/ChatMessageCell.java  | 8 +++++++-
+ .../main/java/org/telegram/ui/ContentPreviewViewer.java   | 5 +++++
+ 4 files changed, 15 insertions(+), 3 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
+@@ -960,7 +960,7 @@ public class MediaDataController extends BaseController {
+     }
+ 
+     public void addRecentSticker(int type, Object parentObject, TLRPC.Document document, int date, boolean remove) {
+-        if (type == TYPE_GREETINGS || !MessageObject.isStickerDocument(document) && !MessageObject.isAnimatedStickerDocument(document, true)) {
++        if (type == TYPE_GREETINGS || !MessageObject.isStickerDocument(document) && !MessageObject.isAnimatedStickerDocument(document, true) || document.id == 0 || desu.inugram.helpers.StickerSendHelper.isPacklessSticker(currentAccount, document.id)) {
+             return;
+         }
+         boolean found = false;
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
+@@ -2211,7 +2211,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+             } else {
+                 params = null;
+             }
+-            SendMessageParams sendMessageParams = SendMessageParams.of((TLRPC.TL_document) finalDocument, null, null, peer, replyToMsg, replyToTopMsg, null, null, null, params, notify, scheduleDate, scheduleRepeatPeriod, 0, parentObject, sendAnimationData, updateStickersOrder);
++            SendMessageParams sendMessageParams = SendMessageParams.of((TLRPC.TL_document) finalDocument, null, finalDocument.localPath, peer, replyToMsg, replyToTopMsg, null, null, null, params, notify, scheduleDate, scheduleRepeatPeriod, 0, parentObject, sendAnimationData, updateStickersOrder);
+             sendMessageParams.replyToStoryItem = storyItem;
+             sendMessageParams.replyQuote = quote;
+             sendMessageParams.sendMessageChatArguments = sendMessageChatArguments;
+@@ -9071,6 +9071,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+             newMedia.document.size = sentMedia.document.size;
+             newMedia.document.mime_type = sentMedia.document.mime_type;
+ 
++            desu.inugram.helpers.StickerSendHelper.onStickerSent(currentAccount, newMedia.document, sentMedia.document, newMsgObj.getDialogId(), sentMessage.id);
+             if ((sentMessage.flags & TLRPC.MESSAGE_FLAG_FWD) == 0 && (MessageObject.isOut(sentMessage) || sentMessage.dialog_id == getUserConfig().getClientUserId()) && !MessageObject.isQuickReply(sentMessage)) {
+                 if (MessageObject.isNewGifDocument(sentMedia.document)) {
+                     boolean save;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+@@ -9804,7 +9804,13 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+                         flipImage = true;
+                     }
+                     if (messageObject.getDocument() != null) {
+-                        if (messageObject.isVideoSticker()) {
++                        if (!TextUtils.isEmpty(messageObject.messageOwner.attachPath) && new File(messageObject.messageOwner.attachPath).exists()) {
++                            photoImage.setImage(ImageLocation.getForPath(messageObject.messageOwner.attachPath), messageObject.isVideoSticker() ? ImageLoader.AUTOPLAY_FILTER : filter, null, null, null,
++                                    messageObject.getDocument().size, isWebpSticker ? "webp" : messageObject.isAnimatedSticker() ? "tgs" : null, parentObject, 1);
++                            if (messageObject.isVideoSticker() && !loopStickers()) {
++                                photoImage.animatedFileDrawableRepeatMaxCount = 1;
++                            }
++                        } else if (messageObject.isVideoSticker()) {
+                             photoImage.setImage(ImageLocation.getForDocument(messageObject.getDocument()), ImageLoader.AUTOPLAY_FILTER,
+                                     ImageLocation.getForObject(currentPhotoObjectThumb, photoParentObject), "b1",
+                                     messageObject.pathThumb,
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ContentPreviewViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/ContentPreviewViewer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ContentPreviewViewer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ContentPreviewViewer.java
+@@ -784,6 +784,7 @@ public class ContentPreviewViewer {
+                 }
+ 
+                 desu.inugram.helpers.StickerDownloadHelper.addPreviewMenuItems(currentDocument, items, icons, actions);
++                desu.inugram.helpers.StickerSendHelper.addPreviewMenuItems(delegate, currentDocument, items, icons, actions);
+ 
+                 if (items.isEmpty()) {
+                     return;
+@@ -802,6 +803,10 @@ public class ContentPreviewViewer {
+                             dismissPopupWindow();
+                             return;
+                         }
++                        if (desu.inugram.helpers.StickerSendHelper.processPreviewMenuOption(delegate, currentAccount, currentDocument, currentQuery, parentObject, actions.get(which))) {
++                            dismissPopupWindow();
++                            return;
++                        }
+                         if (actions.get(which) == 0 || actions.get(which) == 6) {
+                             if (delegate != null) {
+                                 delegate.sendSticker(currentDocument, currentQuery, parentObject, actions.get(which) == 0, 0, 0);
