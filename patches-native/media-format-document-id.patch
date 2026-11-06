@@ -1,0 +1,12 @@
+diff --git a/libraries/common/src/main/java/androidx/media3/common/Format.java b/libraries/common/src/main/java/androidx/media3/common/Format.java
+index 7134cae..1209b4d 100644
+--- a/libraries/common/src/main/java/androidx/media3/common/Format.java
++++ b/libraries/common/src/main/java/androidx/media3/common/Format.java
+@@ -1393,6 +1393,7 @@ public final class Format {
+         .setFrameRate(frameRate)
+         .setTileCountHorizontal(tileCountHorizontal)
+         .setTileCountVertical(tileCountVertical)
++        .setDocumentId(manifestFormat.documentId != 0 ? manifestFormat.documentId : documentId)
+         .build();
+   }
+ 

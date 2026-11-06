@@ -1,0 +1,22 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Fri, 6 Nov 2026 21:39:55 +0400
+Subject: fix black checkmark in the video quality menu on light themes
+
+---
+ TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+@@ -8693,7 +8693,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                     }
+                     title.setSpan(new ForegroundColorSpan(Theme.multAlpha(0xFFFFFFFF, .5f)), start, title.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                 }
+-                ActionBarMenuSubItem item = ActionBarMenuItem.addItem(videoQualityLayout, 0, title, true, null);
++                ActionBarMenuSubItem item = ActionBarMenuItem.addItem(videoQualityLayout, 0, title, true, new DarkThemeResourceProvider());
+                 if (SharedConfig.debugVideoQualities && q != null) {
+                     StringBuilder subtext = new StringBuilder();
+                     for (VideoPlayer.VideoUri uri : q.uris) {

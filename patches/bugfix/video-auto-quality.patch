@@ -1,0 +1,63 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Fri, 6 Nov 2026 21:39:55 +0400
+Subject: fix auto video quality sticking to the lowest track
+
+---
+ .../java/org/telegram/messenger/FileStreamLoadOperation.java | 5 ++---
+ .../src/main/java/org/telegram/tgnet/ConnectionsManager.java | 5 +----
+ 2 files changed, 3 insertions(+), 7 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/FileStreamLoadOperation.java b/TMessagesProj/src/main/java/org/telegram/messenger/FileStreamLoadOperation.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/FileStreamLoadOperation.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/FileStreamLoadOperation.java
+@@ -114,7 +114,6 @@ public class FileStreamLoadOperation implements DataSource, FileLoadOperationStr
+             bytesRemaining = Math.min(bytesRemaining, requestedLength - bytesTransferred);
+         }
+         opened = true;
+-        transferStarted(dataSpec);
+         if (loadOperation != null) {
+             currentFile = loadOperation.getCurrentFile();
+             if (currentFile != null) {
+@@ -122,7 +121,6 @@ public class FileStreamLoadOperation implements DataSource, FileLoadOperationStr
+                     file = new RandomAccessFile(currentFile, "r");
+                     file.seek(currentOffset);
+                     if (loadOperation.isFinished()) {
+-                        isNetwork = false;
+                         bytesRemaining = currentFile.length() - currentOffset;
+                         if (requestedLength != C.LENGTH_UNSET) {
+                             bytesRemaining = Math.min(bytesRemaining, requestedLength - bytesTransferred);
+@@ -132,6 +130,8 @@ public class FileStreamLoadOperation implements DataSource, FileLoadOperationStr
+                 }
+             }
+         }
++        isNetwork = loadOperation == null || loadOperation.getDownloadedLengthFromOffset(currentOffset, bytesRemaining)[0] < bytesRemaining;
++        transferStarted(dataSpec);
+         FileLog.e("FileStreamLoadOperation " + document.id + " open operation=" + loadOperation + " currentFile=" + currentFile + " file=" + file + " bytesRemaining=" + bytesRemaining + " me=" + this);
+         FileLog.e("FileStreamLoadOperation " + document.id + " " + MessageObject.getVideoWidth(document) + "x" + MessageObject.getVideoWidth(document) + " mime_type="+document.mime_type+" codec="+MessageObject.getVideoCodec(document)+" size="+ document.size);
+         return bytesRemaining;
+@@ -196,7 +196,6 @@ public class FileStreamLoadOperation implements DataSource, FileLoadOperationStr
+                                 file = new RandomAccessFile(currentFile, "r");
+                                 file.seek(currentOffset);
+                                 if (loadOperation.isFinished()) {
+-                                    isNetwork = false;
+                                     bytesRemaining = currentFile.length() - currentOffset;
+                                     if (requestedLength != C.LENGTH_UNSET) {
+                                         bytesRemaining = Math.min(bytesRemaining, requestedLength - bytesTransferred);
+diff --git a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java b/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
++++ b/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
+@@ -438,10 +438,7 @@ public class ConnectionsManager extends BaseController {
+                         }
+                     }
+                     if ((connectionType & ConnectionTypeDownload) != 0 && VideoPlayer.activePlayers.isEmpty()) {
+-                        long ping_time = native_getCurrentPingTime(currentAccount);
+-                        final long size = responseSize;
+-                        final long delta = Math.max(0, (System.currentTimeMillis() - finalStartRequestTime) - ping_time);
+-                        DefaultBandwidthMeter.getSingletonInstance(ApplicationLoader.applicationContext).onTransfer(size, delta);
++                        DefaultBandwidthMeter.getSingletonInstance(ApplicationLoader.applicationContext).onTransfer(responseSize);
+                     }
+                     if (BuildVars.DEBUG_PRIVATE_VERSION && !getUserConfig().isClientActivated() && error != null && error.code == 400 && Objects.equals(error.text, "CONNECTION_NOT_INITED")) {
+                         if (BuildVars.LOGS_ENABLED) {

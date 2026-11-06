@@ -1,0 +1,64 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Fri, 6 Nov 2026 21:39:55 +0400
+Subject: show the playing quality next to auto in the video quality menu
+
+---
+ .../telegram/ui/Components/VideoPlayer.java   | 24 +++++++++++--------
+ 1 file changed, 14 insertions(+), 10 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/VideoPlayer.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/VideoPlayer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/VideoPlayer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/VideoPlayer.java
+@@ -42,6 +42,7 @@ import androidx.media3.common.util.UnstableApi;
+ import androidx.media3.datasource.DataSource;
+ import androidx.media3.datasource.DataSpec;
+ import androidx.media3.datasource.TransferListener;
++import androidx.media3.exoplayer.DecoderReuseEvaluation;
+ import androidx.media3.exoplayer.DefaultLoadControl;
+ import androidx.media3.exoplayer.DefaultRenderersFactory;
+ import androidx.media3.exoplayer.ExoPlayer;
+@@ -610,22 +611,18 @@ public class VideoPlayer implements Player.Listener, VideoListener, AnalyticsLis
+     public int getCurrentQualityIndex() {
+         if (selectedQualityIndex == QUALITY_AUTO) {
+             try {
+-                if (autoIsOriginal) {
+-                    for (int j = 0; j < getQualitiesCount(); ++j) {
+-                        final Quality q = getQuality(j);
+-                        if (q.original) {
+-                            return j;
+-                        }
+-                    }
++                if (!currentStreamIsHls && videoQualityToSelect != null && videoQualities != null) {
++                    return videoQualities.indexOf(videoQualityToSelect);
+                 }
+ 
+                 if (player == null) return -1;
+                 final Format format = player.getVideoFormat();
+                 if (format == null) return -1;
+                 for (int j = 0; j < getQualitiesCount(); ++j) {
+-                    final Quality q = getQuality(j);
+-                    if (!q.original && format.width == q.width && format.height == q.height && format.bitrate == (int) Math.floor(q.uris.get(0).bitrate * 8)) {
+-                        return j;
++                    for (VideoUri uri : getQuality(j).uris) {
++                        if (uri.docId == format.documentId) {
++                            return j;
++                        }
+                     }
+                 }
+ 
+@@ -2033,6 +2030,13 @@ public class VideoPlayer implements Player.Listener, VideoListener, AnalyticsLis
+         isStory = true;
+     }
+ 
++    @Override
++    public void onVideoInputFormatChanged(EventTime eventTime, Format format, @Nullable DecoderReuseEvaluation decoderReuseEvaluation) {
++        if (onQualityChangeListener != null) {
++            AndroidUtilities.runOnUIThread(onQualityChangeListener);
++        }
++    }
++
+     @Override
+     public void onTracksChanged(Tracks tracks) {
+         Player.Listener.super.onTracksChanged(tracks);

@@ -287,6 +287,9 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - connection status title no longer gets stuck on "Updating..." when its transition animation is cancelled
 - accelerated video playback no longer applies an unnecessary pitch shift; live speed-slider changes use Android's low-latency audio mixer path
 - "Save to Downloads" copies uncached documents after downloading instead of requiring a second attempt
+- auto video quality no longer sticks to the lowest track: bandwidth is measured from total download throughput instead of per-request timing (which read far too low with parallel requests and collapsed after a suspended connection), stream transfers are counted correctly, and an already cached low quality no longer overrides a better fit
+- "Auto" in the video quality menu now always shows the quality being played (stock only compared against the first of the variants at each resolution, and never refreshed when the player switched quality)
+- video quality menu checkmark is no longer black and barely visible on light themes
 - cancelling a video download kept restarting it after streaming the video in PhotoViewer (the player's loader thread swallowed its shutdown interrupt, survived the viewer close, and re-requested the file on every cancel; also a file-reference refresh landing mid-cancel resurrected the operation into an uncancellable zombie)
 - downloads no longer stall forever after a second `FILE_REFERENCE_EXPIRED` in a row (the cached refresh response held the same stale ref, which consumed the waiting download before the fresh server request went out, so its answer had nobody to resume)
 - "Save to Downloads" preserves the original filename on Android 10+

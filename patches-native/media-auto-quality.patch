@@ -1,0 +1,134 @@
+diff --git a/libraries/exoplayer/src/main/java/androidx/media3/exoplayer/trackselection/AdaptiveTrackSelection.java b/libraries/exoplayer/src/main/java/androidx/media3/exoplayer/trackselection/AdaptiveTrackSelection.java
+index 69803d8..1cce2e5 100644
+--- a/libraries/exoplayer/src/main/java/androidx/media3/exoplayer/trackselection/AdaptiveTrackSelection.java
++++ b/libraries/exoplayer/src/main/java/androidx/media3/exoplayer/trackselection/AdaptiveTrackSelection.java
+@@ -447,7 +447,7 @@ public class AdaptiveTrackSelection extends BaseTrackSelection {
+     // Make initial selection
+     if (reason == C.SELECTION_REASON_UNKNOWN) {
+       reason = C.SELECTION_REASON_INITIAL;
+-      selectedIndex = determineIdealSelectedIndex(0, nowMs, chunkDurationUs);
++      selectedIndex = determineIdealSelectedIndex(nowMs, chunkDurationUs);
+       return;
+     }
+ 
+@@ -459,7 +459,7 @@ public class AdaptiveTrackSelection extends BaseTrackSelection {
+       previousSelectedIndex = formatIndexOfPreviousChunk;
+       previousReason = Iterables.getLast(queue).trackSelectionReason;
+     }
+-    int newSelectedIndex = determineIdealSelectedIndex(1, nowMs, chunkDurationUs);
++    int newSelectedIndex = determineIdealSelectedIndex(nowMs, chunkDurationUs);
+     if (newSelectedIndex != previousSelectedIndex
+         && !isTrackExcluded(previousSelectedIndex, nowMs)) {
+       // Revert back to the previous selection if conditions are not suitable for switching.
+@@ -522,7 +522,7 @@ public class AdaptiveTrackSelection extends BaseTrackSelection {
+     if (playoutBufferedDurationBeforeLastChunkUs < minDurationToRetainAfterDiscardUs) {
+       return queueSize;
+     }
+-    int idealSelectedIndex = determineIdealSelectedIndex(-1, nowMs, getLastChunkDurationUs(queue));
++    int idealSelectedIndex = determineIdealSelectedIndex(nowMs, getLastChunkDurationUs(queue));
+     Format idealFormat = getFormat(idealSelectedIndex);
+     // If chunks contain video, discard from the first chunk after minDurationToRetainAfterDiscardUs
+     // whose resolution and bitrate are both lower than the ideal track, and whose width and height
+@@ -597,7 +597,7 @@ public class AdaptiveTrackSelection extends BaseTrackSelection {
+    * @param chunkDurationUs The duration of a media chunk in microseconds, or {@link C#TIME_UNSET}
+    *     if unknown.
+    */
+-  private int determineIdealSelectedIndex(int type, long nowMs, long chunkDurationUs) {
++  private int determineIdealSelectedIndex(long nowMs, long chunkDurationUs) {
+     final long effectiveBitrate = getAllocatedBandwidth(chunkDurationUs);
+ //    FileLog.d("debug_loading_player: determineIdealSelectedIndex: type="+type+" effectiveBitrate=" + effectiveBitrate);
+     final HashMap<Integer, Integer> formatsByResolution = new HashMap<>();
+@@ -623,15 +623,6 @@ public class AdaptiveTrackSelection extends BaseTrackSelection {
+         }
+       }
+     }
+-    if (type == 0) {
+-      for (int i : formatIndices) {
+-        Format format = getFormat(i);
+-        if (format.cached) {
+-//          FileLog.d("debug_loading_player: determineIdealSelectedIndex: initial setup, choose cached format#" + i);
+-          return i;
+-        }
+-      }
+-    }
+     int lowestBitrateAllowedIndex = 0;
+     for (int i : formatIndices) {
+       Format format = getFormat(i);
+diff --git a/libraries/exoplayer/src/main/java/androidx/media3/exoplayer/upstream/DefaultBandwidthMeter.java b/libraries/exoplayer/src/main/java/androidx/media3/exoplayer/upstream/DefaultBandwidthMeter.java
+index b6aab5c..9a8b5c6 100644
+--- a/libraries/exoplayer/src/main/java/androidx/media3/exoplayer/upstream/DefaultBandwidthMeter.java
++++ b/libraries/exoplayer/src/main/java/androidx/media3/exoplayer/upstream/DefaultBandwidthMeter.java
+@@ -274,6 +274,8 @@ public final class DefaultBandwidthMeter implements BandwidthMeter, TransferList
+ 
+   private static final int ELAPSED_MILLIS_FOR_ESTIMATE = 2000;
+   private static final int BYTES_TRANSFERRED_FOR_ESTIMATE = 512 * 1024;
++  private static final int RESPONSE_WINDOW_MIN_MS = 500;
++  private static final int RESPONSE_WINDOW_MAX_GAP_MS = 1000;
+ 
+   @Nullable private final Context context;
+   private final ImmutableMap<Integer, Long> initialBitrateEstimates;
+@@ -287,6 +289,15 @@ public final class DefaultBandwidthMeter implements BandwidthMeter, TransferList
+   @GuardedBy("this") // Used in TransferListener methods that are called on a background thread.
+   private int streamCount;
+ 
++  @GuardedBy("this")
++  private long responseWindowStartMs = C.TIME_UNSET;
++
++  @GuardedBy("this")
++  private long responseWindowLastMs;
++
++  @GuardedBy("this")
++  private long responseWindowBytes;
++
+   @GuardedBy("this") // Used in TransferListener methods that are called on a background thread.
+   private long sampleStartTimeMs;
+ 
+@@ -420,24 +431,32 @@ public final class DefaultBandwidthMeter implements BandwidthMeter, TransferList
+     streamCount--;
+   }
+ 
+-  public synchronized void onTransfer(long bytes, long duration) {
++  public synchronized void onTransfer(long bytes) {
+     long nowMs = clock.elapsedRealtime();
+-    int sampleElapsedTimeMs = (int) (nowMs - sampleStartTimeMs);
+-    totalElapsedTimeMs += sampleElapsedTimeMs;
+-    totalBytesTransferred += bytes;
+-    if (duration > 0 && bytes > 0) {
+-      // FileLog.d("debug_loading: bandwidth meter on transfer " + AndroidUtilities.formatFileSize(bytes) + " per " +duration + "ms");
+-      float bitsPerSecond = (bytes * 8000f) / duration;
+-      slidingPercentile.addSample((int) Math.sqrt(bytes), bitsPerSecond);
+-      if (totalElapsedTimeMs >= ELAPSED_MILLIS_FOR_ESTIMATE
+-              || totalBytesTransferred >= BYTES_TRANSFERRED_FOR_ESTIMATE) {
+-        bitrateEstimate = (long) slidingPercentile.getPercentile(0.5f);
+-        // FileLog.d("debug_loading: bandwidth meter (onTransfer), bitrate estimate = " + bitrateEstimate);
+-      }
+-      maybeNotifyBandwidthSample((int) duration, bytes, bitrateEstimate);
+-      sampleStartTimeMs = nowMs;
+-      sampleBytesTransferred = 0;
++    if (responseWindowStartMs == C.TIME_UNSET
++        || nowMs - responseWindowLastMs > RESPONSE_WINDOW_MAX_GAP_MS) {
++      responseWindowStartMs = nowMs;
++      responseWindowLastMs = nowMs;
++      responseWindowBytes = 0;
++      return;
++    }
++    responseWindowLastMs = nowMs;
++    responseWindowBytes += bytes;
++    int elapsedMs = (int) (nowMs - responseWindowStartMs);
++    if (elapsedMs < RESPONSE_WINDOW_MIN_MS || responseWindowBytes < BYTES_TRANSFERRED_FOR_ESTIMATE) {
++      return;
++    }
++    totalElapsedTimeMs += elapsedMs;
++    totalBytesTransferred += responseWindowBytes;
++    float bitsPerSecond = (responseWindowBytes * 8000f) / elapsedMs;
++    slidingPercentile.addSample((int) Math.sqrt(responseWindowBytes), bitsPerSecond);
++    if (totalElapsedTimeMs >= ELAPSED_MILLIS_FOR_ESTIMATE
++        || totalBytesTransferred >= BYTES_TRANSFERRED_FOR_ESTIMATE) {
++      bitrateEstimate = (long) slidingPercentile.getPercentile(0.5f);
+     }
++    maybeNotifyBandwidthSample(elapsedMs, responseWindowBytes, bitrateEstimate);
++    responseWindowStartMs = nowMs;
++    responseWindowBytes = 0;
+   }
+ 
+   private synchronized void onNetworkTypeChanged(@C.NetworkType int networkType) {

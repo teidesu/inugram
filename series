@@ -434,3 +434,6 @@ feature/send-sticker-without-pack.patch
 feature/send-server-error-bulletin.patch
 feature/folder-tabs-bottom.patch
 feature/bottom-tabs-hide-on-scroll.patch
+bugfix/video-auto-quality.patch
+bugfix/video-auto-quality-label.patch
+bugfix/video-quality-menu-check-color.patch
