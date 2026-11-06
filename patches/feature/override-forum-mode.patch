@@ -27,7 +27,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
-@@ -19093,7 +19093,7 @@ public class MessagesStorage extends BaseController {
+@@ -19068,7 +19068,7 @@ public class MessagesStorage extends BaseController {
                  TLRPC.Chat chat = getChat(-dialogId);
                  if (chat != null && chat.forum) {
                      value |= FORUM_TYPE_CHAT;
@@ -36,7 +36,7 @@ index 0000000..0000000 100644
                          value |= FORUM_TYPE_CHAT_TABS;
                      }
                  }
-@@ -19125,7 +19125,7 @@ public class MessagesStorage extends BaseController {
+@@ -19100,7 +19100,7 @@ public class MessagesStorage extends BaseController {
          return (value & type) != 0;
      }
  

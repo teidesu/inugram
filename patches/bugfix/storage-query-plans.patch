@@ -5,8 +5,8 @@ Subject: fix sqlite picking slow plans on some storage queries
 
 ---
  .../messenger/MediaDataController.java        |  2 +-
- .../telegram/messenger/MessagesStorage.java   | 25 +++++++++----------
- 2 files changed, 13 insertions(+), 14 deletions(-)
+ .../telegram/messenger/MessagesStorage.java   | 23 +++++++++----------
+ 2 files changed, 12 insertions(+), 13 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
 index 0000000..0000000 100644
@@ -34,28 +34,19 @@ index 0000000..0000000 100644
                                  chats.remove(a);
                                  a--;
                                  pushDialogs.remove(did);
-@@ -8902,9 +8902,9 @@ public class MessagesStorage extends BaseController {
+@@ -8917,9 +8917,9 @@ public class MessagesStorage extends BaseController {
              try {
                  int result;
                  if (topicId != 0) {
--                    cursor = database.queryFinalized(String.format(Locale.US, "SELECT MIN(mid) FROM messages_topics WHERE uid = %d AND topic_id = %d AND mention = 1 AND read_state IN(0, 1)", dialog_id, topicId));
-+                    cursor = database.queryFinalized(String.format(Locale.US, "SELECT MIN(mid) FROM messages_topics INDEXED BY uid_mention_idx_messages_topics WHERE uid = %d AND topic_id = %d AND mention = 1 AND read_state IN(0, 1)", dialog_id, topicId));
+-                    cursor = database.queryFinalized(String.format(Locale.US, "SELECT MIN(mid), COUNT(mid) FROM messages_topics WHERE uid = %d AND topic_id = %d AND mention = 1 AND read_state IN(0, 1)", dialog_id, topicId));
++                    cursor = database.queryFinalized(String.format(Locale.US, "SELECT MIN(mid), COUNT(mid) FROM messages_topics INDEXED BY uid_mention_idx_messages_topics WHERE uid = %d AND topic_id = %d AND mention = 1 AND read_state IN(0, 1)", dialog_id, topicId));
                  } else {
--                    cursor = database.queryFinalized(String.format(Locale.US, "SELECT MIN(mid) FROM messages_v2 WHERE uid = %d AND mention = 1 AND read_state IN(0, 1)", dialog_id));
-+                    cursor = database.queryFinalized(String.format(Locale.US, "SELECT MIN(mid) FROM messages_v2 INDEXED BY uid_mention_idx_messages_v2 WHERE uid = %d AND mention = 1 AND read_state IN(0, 1)", dialog_id));
+-                    cursor = database.queryFinalized(String.format(Locale.US, "SELECT MIN(mid), COUNT(mid) FROM messages_v2 WHERE uid = %d AND mention = 1 AND read_state IN(0, 1)", dialog_id));
++                    cursor = database.queryFinalized(String.format(Locale.US, "SELECT MIN(mid), COUNT(mid) FROM messages_v2 INDEXED BY uid_mention_idx_messages_v2 WHERE uid = %d AND mention = 1 AND read_state IN(0, 1)", dialog_id));
                  }
-                 if (cursor.next()) {
+                 if (cursor.next() && cursor.intValue(1) == expectedCount) {
                      result = cursor.intValue(0);
-@@ -14324,7 +14324,7 @@ public class MessagesStorage extends BaseController {
-                     long key = inbox.keyAt(b);
-                     int messageId = inbox.get(key);
-                     database.executeFast(String.format(Locale.US, "UPDATE messages_v2 SET read_state = read_state | 1 WHERE uid = %d AND mid > 0 AND mid <= %d AND read_state IN(0,2) AND out = 0", key, messageId)).stepThis().dispose();
--                    database.executeFast(String.format(Locale.US, "UPDATE messages_v2 SET read_state = read_state | 2 WHERE uid = %d AND mid > 0 AND mid <= %d AND mention = 1 AND read_state IN(0,1) AND out = 0", key, messageId)).stepThis().dispose();
-+                    database.executeFast(String.format(Locale.US, "UPDATE messages_v2 INDEXED BY uid_mention_idx_messages_v2 SET read_state = read_state | 2 WHERE uid = %d AND mid > 0 AND mid <= %d AND mention = 1 AND read_state IN(0,1) AND out = 0", key, messageId)).stepThis().dispose();
-                     int newMentions = 0;
-                     cursor = database.queryFinalized(String.format(Locale.US, "SELECT count(mid) FROM messages_v2 WHERE uid = %d AND mention = 1 AND read_state IN(0,1) AND out = 0", key));
-                     if (cursor.next()) newMentions = cursor.intValue(0);
-@@ -14815,25 +14815,25 @@ public class MessagesStorage extends BaseController {
+@@ -14833,25 +14833,25 @@ public class MessagesStorage extends BaseController {
                  for (int i = 0; i < 5; i++) {
                      if (i == 0) {
                          if (dialogId != 0) {
@@ -88,7 +79,7 @@ index 0000000..0000000 100644
                      }
                      TLRPC.TL_messageEmpty emptyMessage = new TLRPC.TL_messageEmpty();
                      NativeByteBuffer data = new NativeByteBuffer(emptyMessage.getObjectSize());
-@@ -14841,9 +14841,8 @@ public class MessagesStorage extends BaseController {
+@@ -14859,9 +14859,8 @@ public class MessagesStorage extends BaseController {
  
                      state.requery();
                      state.bindByteBuffer(1, data);

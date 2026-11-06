@@ -1,0 +1,319 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Fri, 6 Nov 2026 22:06:50 +0400
+Subject: temporary patch with extra debug logs for mentions
+
+---
+ .../messenger/MessagesController.java         | 21 ++++++++
+ .../telegram/messenger/MessagesStorage.java   | 52 +++++++++++++++++++
+ .../java/org/telegram/ui/ChatActivity.java    | 27 ++++++++++
+ 3 files changed, 100 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
+@@ -13963,6 +13963,9 @@ public class MessagesController extends BaseController implements NotificationCe
+                     long dialogId = dialogsMentionsToUpdate.keyAt(a);
+                     TLRPC.Dialog currentDialog = dialogs_dict.get(dialogId);
+                     if (currentDialog != null) {
++                        if (desu.inugram.helpers.DebugLogUtils.isEnabled()) {
++                            FileLog.d("InuMn dialog read update did=" + dialogId + " " + currentDialog.unread_mentions_count + " -> " + dialogsMentionsToUpdate.valueAt(a));
++                        }
+                         currentDialog.unread_mentions_count = dialogsMentionsToUpdate.valueAt(a);
+                         if (createdDialogMainThreadIds.contains(currentDialog.id)) {
+                             getNotificationCenter().postNotificationName(NotificationCenter.updateMentionsCount, currentDialog.id, 0L, currentDialog.unread_mentions_count);
+@@ -14246,6 +14249,9 @@ public class MessagesController extends BaseController implements NotificationCe
+                         }
+                         currentDialog.unread_count = value.unread_count;
+                         if (currentDialog.unread_mentions_count != value.unread_mentions_count) {
++                            if (desu.inugram.helpers.DebugLogUtils.isEnabled()) {
++                                FileLog.d("InuMn dialogs update did=" + currentDialog.id + " " + currentDialog.unread_mentions_count + " -> " + value.unread_mentions_count + " fromCache=" + fromCache);
++                            }
+                             currentDialog.unread_mentions_count = value.unread_mentions_count;
+                             if (createdDialogMainThreadIds.contains(currentDialog.id)) {
+                                 getNotificationCenter().postNotificationName(NotificationCenter.updateMentionsCount, currentDialog.id, 0L, currentDialog.unread_mentions_count);
+@@ -14452,6 +14458,9 @@ public class MessagesController extends BaseController implements NotificationCe
+             return;
+         }
+         ArrayList<Integer> arrayList = new ArrayList<>();
++        if (desu.inugram.helpers.DebugLogUtils.isEnabled()) {
++            FileLog.d("InuMn mark content read did=" + messageObject.getDialogId() + " mid=" + messageObject.getId() + " mentioned=" + messageObject.messageOwner.mentioned + " from " + desu.inugram.helpers.DebugLogUtils.getCaller());
++        }
+         if (messageObject.messageOwner.mentioned) {
+             getMessagesStorage().markMentionMessageAsRead(-messageObject.messageOwner.peer_id.channel_id, messageObject.getId(), messageObject.getDialogId());
+         }
+@@ -14486,6 +14495,9 @@ public class MessagesController extends BaseController implements NotificationCe
+     }
+ 
+     public void markMentionMessageAsRead(int mid, long channelId, long did) {
++        if (desu.inugram.helpers.DebugLogUtils.isEnabled()) {
++            FileLog.d("InuMn mark read did=" + did + " mid=" + mid + " channel=" + channelId + " from " + desu.inugram.helpers.DebugLogUtils.getCaller());
++        }
+         getMessagesStorage().markMentionMessageAsRead(-channelId, mid, did);
+         if (channelId != 0) {
+             TLRPC.TL_channels_readMessageContents req = new TLRPC.TL_channels_readMessageContents();
+@@ -14716,6 +14728,9 @@ public class MessagesController extends BaseController implements NotificationCe
+         if (DialogObject.isEncryptedDialog(dialogId) || dialogId == getUserConfig().getClientUserId()) {
+             return;
+         }
++        if (desu.inugram.helpers.DebugLogUtils.isEnabled()) {
++            FileLog.d("InuMn mark all read did=" + dialogId + " topic=" + topicId + " from " + desu.inugram.helpers.DebugLogUtils.getCaller());
++        }
+         getMessagesStorage().resetMentionsCount(dialogId, topicId, 0);
+         TLRPC.TL_messages_readMentions req = new TLRPC.TL_messages_readMentions();
+         req.peer = getInputPeer(dialogId);
+@@ -18846,6 +18861,9 @@ public class MessagesController extends BaseController implements NotificationCe
+                 stakeDiceInfo = ((TL_update.TL_updateEmojiGameInfo) baseUpdate).info;
+             } else if (baseUpdate instanceof TL_update.TL_updateReadMessagesContents) {
+                 TL_update.TL_updateReadMessagesContents update = (TL_update.TL_updateReadMessagesContents) baseUpdate;
++                if (desu.inugram.helpers.DebugLogUtils.isEnabled()) {
++                    FileLog.d("InuMn update read contents ids=" + update.messages);
++                }
+                 markContentAsReadMessagesDate = update.date;
+                 if (markContentAsReadMessages == null) {
+                     markContentAsReadMessages = new LongSparseArray<>();
+@@ -18858,6 +18876,9 @@ public class MessagesController extends BaseController implements NotificationCe
+                 ids.addAll(update.messages);
+             } else if (baseUpdate instanceof TL_update.TL_updateChannelReadMessagesContents) {
+                 TL_update.TL_updateChannelReadMessagesContents update = (TL_update.TL_updateChannelReadMessagesContents) baseUpdate;
++                if (desu.inugram.helpers.DebugLogUtils.isEnabled()) {
++                    FileLog.d("InuMn update channel read contents channel=" + update.channel_id + " ids=" + update.messages);
++                }
+                 if (markContentAsReadMessages == null) {
+                     markContentAsReadMessages = new LongSparseArray<>();
+                 }
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
+@@ -5795,6 +5795,9 @@ public class MessagesStorage extends BaseController {
+                 cursor.dispose();
+                 cursor = null;
+                 database.executeFast(String.format(Locale.US, "UPDATE dialogs SET unread_count_i = %d WHERE did = %d", old_mentions_count, did)).stepThis().dispose();
++                if (desu.inugram.helpers.DebugLogUtils.isEnabled()) {
++                    FileLog.d("InuMn db mark read did=" + did + " mid=" + messageId + " count=" + old_mentions_count);
++                }
+                 LongSparseIntArray sparseArray = new LongSparseIntArray(1);
+                 sparseArray.put(did, old_mentions_count);
+                 if (old_mentions_count == 0) {
+@@ -5851,6 +5854,9 @@ public class MessagesStorage extends BaseController {
+     }
+ 
+     public void resetMentionsCount(long did, long topicId, int count) {
++        if (desu.inugram.helpers.DebugLogUtils.isEnabled()) {
++            FileLog.d("InuMn db reset did=" + did + " topic=" + topicId + " count=" + count + " from " + desu.inugram.helpers.DebugLogUtils.getCaller());
++        }
+         storageQueue.postRunnable(() -> {
+             SQLiteCursor cursor = null;
+             try {
+@@ -5862,6 +5868,9 @@ public class MessagesStorage extends BaseController {
+                     }
+                     cursor.dispose();
+                     cursor = null;
++                    if (desu.inugram.helpers.DebugLogUtils.isEnabled()) {
++                        FileLog.d("InuMn db reset applied did=" + did + " prev=" + prevUnreadCount + " count=" + count + " rows=" + inu_debugUnreadMentions(did, Integer.MAX_VALUE));
++                    }
+                     if (prevUnreadCount != 0 || count != 0) {
+                         if (count == 0) {
+                             database.executeFast(String.format(Locale.US, "UPDATE messages_v2 SET read_state = read_state | 2 WHERE uid = %d AND mention = 1 AND read_state IN(0, 1)", did)).stepThis().dispose();
+@@ -6878,6 +6887,9 @@ public class MessagesStorage extends BaseController {
+                         while (cursor.next()) {
+                             long did = cursor.longValue(0);
+                             notFoundMentions.remove((Integer) cursor.intValue(4));
++                            if (desu.inugram.helpers.DebugLogUtils.isEnabled()) {
++                                FileLog.d("InuMn db read contents row did=" + did + " mid=" + cursor.intValue(4) + " readState=" + cursor.intValue(1) + " out=" + cursor.intValue(2) + " mention=" + cursor.intValue(3));
++                            }
+                             if (cursor.intValue(1) < 2 && cursor.intValue(2) == 0 && cursor.intValue(3) == 1) {
+                                 int unread_count = dialogsToUpdateMentions.get(did, -1);
+                                 if (unread_count < 0) {
+@@ -6895,6 +6907,9 @@ public class MessagesStorage extends BaseController {
+                             channelId = cursor.longValue(5);
+                         }
+                         cursor.dispose();
++                        if (desu.inugram.helpers.DebugLogUtils.isEnabled()) {
++                            FileLog.d("InuMn db read contents ids=" + arrayList + " notFound=" + notFoundMentions + " channel=" + channelId);
++                        }
+                         if (!notFoundMentions.isEmpty() && channelId != 0) {
+                             if (!channelMentionsToReload.contains(channelId)) {
+                                 channelMentionsToReload.add(channelId);
+@@ -8911,6 +8926,9 @@ public class MessagesStorage extends BaseController {
+                 } else {
+                     result = 0;
+                 }
++                if (desu.inugram.helpers.DebugLogUtils.isEnabled()) {
++                    FileLog.d("InuMn db next local did=" + dialog_id + " topic=" + topicId + " result=" + result + " expected=" + expectedCount + " rows=" + inu_debugUnreadMentions(dialog_id, Integer.MAX_VALUE));
++                }
+                 cursor.dispose();
+                 AndroidUtilities.runOnUIThread(() -> callback.run(result));
+             } catch (Exception e) {
+@@ -13023,6 +13041,9 @@ public class MessagesStorage extends BaseController {
+                         mentions_count = 0;
+                     } else {
+                         mentionCounts.put(key, mentions_count + old_mentions_count);
++                        if (desu.inugram.helpers.DebugLogUtils.isEnabled()) {
++                            FileLog.d("InuMn db new mentions did=" + key + " " + old_mentions_count + " + " + mentions_count);
++                        }
+                     }
+                     int messageId = message != null ? message.id : last_mid;
+                     if (message != null) {
+@@ -14313,6 +14334,25 @@ public class MessagesStorage extends BaseController {
+         }
+     }
+ 
++    private String inu_debugUnreadMentions(long did, int maxId) {
++        StringBuilder result = new StringBuilder();
++        try {
++            SQLiteCursor cursor = database.queryFinalized(String.format(Locale.US, "SELECT mid FROM messages_v2 INDEXED BY uid_mention_idx_messages_v2 WHERE uid = %d AND mention = 1 AND read_state IN(0,1) AND mid <= %d LIMIT 20", did, maxId));
++            while (cursor.next()) {
++                result.append(cursor.intValue(0)).append(' ');
++            }
++            cursor.dispose();
++            cursor = database.queryFinalized("SELECT unread_count_i FROM dialogs WHERE did = " + did);
++            if (cursor.next()) {
++                result.append("counter=").append(cursor.intValue(0));
++            }
++            cursor.dispose();
++        } catch (Exception e) {
++            result.append(e);
++        }
++        return "[" + result.toString().trim() + "]";
++    }
++
+     private void markMessagesAsReadInternal(LongSparseIntArray inbox, LongSparseIntArray outbox, SparseIntArray encryptedMessages) {
+         SQLitePreparedStatement state = null;
+         try {
+@@ -14322,6 +14362,9 @@ public class MessagesStorage extends BaseController {
+                     long key = inbox.keyAt(b);
+                     int messageId = inbox.get(key);
+                     database.executeFast(String.format(Locale.US, "UPDATE messages_v2 SET read_state = read_state | 1 WHERE uid = %d AND mid > 0 AND mid <= %d AND read_state IN(0,2) AND out = 0", key, messageId)).stepThis().dispose();
++                    if (desu.inugram.helpers.DebugLogUtils.isEnabled()) {
++                        FileLog.d("InuMn db inbox read did=" + key + " max=" + messageId + " unreadMentionsUpToMax=" + inu_debugUnreadMentions(key, messageId));
++                    }
+ 
+                     state.requery();
+                     state.bindLong(1, key);
+@@ -14850,6 +14893,9 @@ public class MessagesStorage extends BaseController {
+                     state.requery();
+                     state.bindInteger(1, Math.max(0, old_unread_count - counts[0]));
+                     state.bindInteger(2, Math.max(0, old_mentions_count - counts[1]));
++                    if (counts[1] != 0 && desu.inugram.helpers.DebugLogUtils.isEnabled()) {
++                        FileLog.d("InuMn db delete did=" + did + " " + old_mentions_count + " - " + counts[1]);
++                    }
+                     state.bindLong(3, did);
+                     state.step();
+                     state.dispose();
+@@ -15464,6 +15510,9 @@ public class MessagesStorage extends BaseController {
+                 state.requery();
+                 state.bindInteger(1, Math.max(0, old_unread_count - counts[0]));
+                 state.bindInteger(2, Math.max(0, old_mentions_count - counts[1]));
++                if (counts[1] != 0 && desu.inugram.helpers.DebugLogUtils.isEnabled()) {
++                    FileLog.d("InuMn db delete did=" + did + " " + old_mentions_count + " - " + counts[1]);
++                }
+                 state.bindLong(3, did);
+                 state.step();
+                 state.dispose();
+@@ -16699,6 +16748,9 @@ public class MessagesStorage extends BaseController {
+                     putChatsInternal(messages.chats);
+ 
+                     if (mentionCountUpdate != Integer.MAX_VALUE) {
++                        if (desu.inugram.helpers.DebugLogUtils.isEnabled()) {
++                            FileLog.d("InuMn db edit count did=" + dialogId + " count=" + mentionCountUpdate);
++                        }
+                         database.executeFast(String.format(Locale.US, "UPDATE dialogs SET unread_count_i = %d WHERE did = %d", mentionCountUpdate, dialogId)).stepThis().dispose();
+                         LongSparseIntArray sparseArray = new LongSparseIntArray(1);
+                         sparseArray.put(dialogId, mentionCountUpdate);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -21199,6 +21199,9 @@ public class ChatActivity extends BaseFragment implements
+         } else if (first) {
+             hasAllMentionsLocal = true;
+         }
++        if (desu.inugram.helpers.DebugLogUtils.isEnabled()) {
++            FileLog.d("InuMn[" + classGuid + "] loaded did=" + dialog_id + " topic=" + getTopicId() + " count=" + loaded_mentions_count + " first=" + first + " hasAllLocal=" + hasAllMentionsLocal);
++        }
+         if (load_type == 4) {
+             startLoadFromMessageId = loaded_max_id;
+ 
+@@ -24128,6 +24131,9 @@ public class ChatActivity extends BaseFragment implements
+                 MessageObject currentMessage = messagesDict[0].get(mid);
+                 if (currentMessage != null) {
+                     currentMessage.setContentIsRead();
++                    if (desu.inugram.helpers.DebugLogUtils.isEnabled()) {
++                        FileLog.d("InuMn[" + classGuid + "] read content mid=" + mid + " mentioned=" + currentMessage.messageOwner.mentioned + " count=" + newMentionsCount);
++                    }
+                     if (currentMessage.messageOwner.mentioned) {
+                         newMentionsCount--;
+                         if (newMentionsCount <= 0) {
+@@ -24609,6 +24615,9 @@ public class ChatActivity extends BaseFragment implements
+             long topicId = (Long) args[1];
+             if (dialog_id == dialogId && this.getTopicId() == topicId) {
+                 int count = (int) args[2];
++                if (desu.inugram.helpers.DebugLogUtils.isEnabled()) {
++                    FileLog.d("InuMn[" + classGuid + "] counter notification did=" + dialogId + " " + newMentionsCount + " -> " + count);
++                }
+                 if (newMentionsCount > count) {
+                     newMentionsCount = count;
+                     if (newMentionsCount <= 0) {
+@@ -26209,6 +26218,9 @@ public class ChatActivity extends BaseFragment implements
+ 
+                 if (threadMessageId == 0 || isTopic) {
+                     if (obj.messageOwner.mentioned && obj.isContentUnread()) {
++                        if (desu.inugram.helpers.DebugLogUtils.isEnabled()) {
++                            FileLog.d("InuMn[" + classGuid + "] new mention mid=" + obj.getId() + " count=" + newMentionsCount);
++                        }
+                         newMentionsCount++;
+                     }
+                 }
+@@ -26584,6 +26596,9 @@ public class ChatActivity extends BaseFragment implements
+                 }
+                 if (threadMessageId == 0 || isTopic) {
+                     if (!obj.isOut() && obj.messageOwner.mentioned && obj.isContentUnread()) {
++                        if (desu.inugram.helpers.DebugLogUtils.isEnabled()) {
++                            FileLog.d("InuMn[" + classGuid + "] new mention mid=" + obj.getId() + " count=" + newMentionsCount);
++                        }
+                         newMentionsCount++;
+                     }
+                 }
+@@ -30320,6 +30335,9 @@ public class ChatActivity extends BaseFragment implements
+                 }
+                 if (message != null && message.messageOwner != null && message.messageOwner.media_unread && message.messageOwner.mentioned) {
+                     if (!message.isVoice() && !message.isRoundVideo()) {
++                        if (desu.inugram.helpers.DebugLogUtils.isEnabled()) {
++                            FileLog.d("InuMn[" + classGuid + "] preview read mid=" + message.getId() + " count=" + newMentionsCount + " view=[" + view.getTop() + "," + view.getBottom() + "] list=" + chatListView.getHeight() + " visible=[" + chatLayoutManager.findFirstVisibleItemPosition() + "," + chatLayoutManager.findLastVisibleItemPosition() + "] manualScroll=" + wasManualScroll + " from " + desu.inugram.helpers.DebugLogUtils.getCaller());
++                        }
+                         newMentionsCount--;
+                         if (newMentionsCount <= 0) {
+                             newMentionsCount = 0;
+@@ -38726,6 +38744,9 @@ public class ChatActivity extends BaseFragment implements
+                 if (message != null && message.messageOwner != null && message.messageOwner.media_unread && message.messageOwner.mentioned) {
+                     if (!inPreviewMode && chatMode == 0) {
+                         if (!message.isVoice() && !message.isRoundVideo()) {
++                            if (desu.inugram.helpers.DebugLogUtils.isEnabled()) {
++                                FileLog.d("InuMn[" + classGuid + "] attach read mid=" + message.getId() + " count=" + newMentionsCount + " view=[" + view.getTop() + "," + view.getBottom() + "] list=" + chatListView.getHeight() + " visible=[" + chatLayoutManager.findFirstVisibleItemPosition() + "," + chatLayoutManager.findLastVisibleItemPosition() + "] manualScroll=" + wasManualScroll + " from " + desu.inugram.helpers.DebugLogUtils.getCaller());
++                            }
+                             newMentionsCount--;
+                             if (newMentionsCount <= 0) {
+                                 newMentionsCount = 0;
+@@ -47489,6 +47510,9 @@ public class ChatActivity extends BaseFragment implements
+ 
+     private void loadLastUnreadMention() {
+         wasManualScroll = true;
++        if (desu.inugram.helpers.DebugLogUtils.isEnabled()) {
++            FileLog.d("InuMn[" + classGuid + "] jump click did=" + dialog_id + " count=" + newMentionsCount + " hasAllLocal=" + hasAllMentionsLocal);
++        }
+         if (hasAllMentionsLocal) {
+             getMessagesStorage().getUnreadMention(dialog_id, getTopicId(), newMentionsCount, param -> {
+                 if (param == 0) {
+@@ -47510,6 +47534,9 @@ public class ChatActivity extends BaseFragment implements
+             req.add_offset = newMentionsCount - 1;
+             getConnectionsManager().sendRequest(req, (response, error) -> AndroidUtilities.runOnUIThread(() -> {
+                 TLRPC.messages_Messages res = (TLRPC.messages_Messages) response;
++                if (desu.inugram.helpers.DebugLogUtils.isEnabled()) {
++                    FileLog.d("InuMn[" + classGuid + "] next server did=" + dialog_id + " error=" + (error == null ? null : error.text) + " serverCount=" + (res == null ? -1 : res.count) + " mid=" + (res == null || res.messages.isEmpty() ? 0 : res.messages.get(0).id));
++                }
+                 if (error != null || res.messages.isEmpty()) {
+                     if (res != null) {
+                         newMentionsCount = res.count;

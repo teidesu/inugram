@@ -295,6 +295,7 @@ feature/hdr-images.patch
 feature/sort-albums-by-size.patch
 misc/debug-stale-reactions.patch
 misc/debug-notifications.patch
+misc/debug-mentions.patch
 bugfix/share-alert-search-dead-zone.patch
 misc/debug-media-upload.patch
 bugfix/sections-scroll-view-alpha.patch

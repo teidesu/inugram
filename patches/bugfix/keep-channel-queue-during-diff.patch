@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -16805,6 +16805,10 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -16820,6 +16820,10 @@ public class MessagesController extends BaseController implements NotificationCe
                      if (anyProceed) {
                          updatesStartWaitTimeChannels.put(channelId, System.currentTimeMillis());
                      }
@@ -22,7 +22,7 @@ index 0000000..0000000 100644
                  } else {
                      if (BuildVars.LOGS_ENABLED) {
                          FileLog.d("HOLE IN CHANNEL " + channelId + " UPDATES QUEUE - getChannelDifference ");
-@@ -17245,7 +17249,6 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -17260,7 +17264,6 @@ public class MessagesController extends BaseController implements NotificationCe
                              if (!res.other_updates.isEmpty()) {
                                  processUpdateArray(res.other_updates, res.users, res.chats, true, 0);
                              }
@@ -30,7 +30,7 @@ index 0000000..0000000 100644
                              getMessagesStorage().saveChannelPts(channelId, res.pts);
                          } else if (res instanceof TLRPC.TL_updates_channelDifferenceTooLong) {
                              long dialogId = -channelId;
-@@ -17273,7 +17276,8 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -17288,7 +17291,8 @@ public class MessagesController extends BaseController implements NotificationCe
                              notifyAbountDifference = false;
                          }
                          gettingDifferenceChannels.delete(channelId);
