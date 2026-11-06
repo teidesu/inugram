@@ -45,7 +45,7 @@ import desu.inugram.helpers.plugins.ui.PluginFilePicker
 import desu.inugram.helpers.plugins.ui.PluginChatHistory
 import desu.inugram.helpers.plugins.ui.PluginUi
 import desu.inugram.helpers.update.UpdateHelper
-import desu.inugram.ui.settings.PluginInfoActivity
+import desu.inugram.ui.settings.PluginTextSheet
 import desu.inugram.ui.settings.findGrantsBeyond
 import desu.inugram.ui.settings.sortedGrants
 import org.telegram.messenger.AndroidUtilities
@@ -56,6 +56,7 @@ import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.LocaleController.formatString
 import org.telegram.messenger.LocaleController.getString
 import org.telegram.messenger.R
+import org.telegram.messenger.SharedConfig
 import org.telegram.tgnet.TLRPC
 import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.LaunchActivity
@@ -88,6 +89,7 @@ object PluginManager {
      * it through [getDispatchTargets]. Ui-thread owned
      */
     @Volatile private var scratch: Plugin? = null
+    private var unannouncedCrash: Plugin? = null
 
     // the engine queue reads the order to sort interceptor chains while the ui thread mutates it
     @Volatile
@@ -396,6 +398,7 @@ object PluginManager {
 
     fun remove(plugin: Plugin) {
         plugin.enabled = false
+        plugin.failure = null
         // same queue as stop()'s completion, so the wipe is ordered after the engine is gone
         stop(plugin) { wipeInstall(plugin.id) }
         plugin.file.delete()
@@ -727,21 +730,26 @@ object PluginManager {
                 plugin.enabled = false
                 PluginStore.persist(plugins)
                 stop(plugin)
-                announceCrash(plugin, failure)
+                unannouncedCrash = plugin
+                announcePendingCrash()
             }
             notifyChanged()
         }
     }
 
-    private fun announceCrash(plugin: Plugin, failure: PluginFailure) {
-        if (!PluginAppVisibility.isForeground) return
+    /** ui thread. Without a resumed, unlocked ui the crash waits for the next resume */
+    fun announcePendingCrash() {
+        if (!LaunchActivity.isResumed || SharedConfig.isWaitingForPasscodeEnter) return
+        val plugin = unannouncedCrash ?: return
+        unannouncedCrash = null
+        val failure = plugin.failure?.takeIf { it.disables } ?: return
         BulletinFactory.global().createSimpleBulletin(
             R.raw.error,
             formatString(R.string.InuPluginCrashed, plugin.manifest.name),
             failure.describe(),
             getString(R.string.ViewAction),
         ) {
-            if (plugin in plugins) LaunchActivity.getSafeLastFragment()?.presentFragment(PluginInfoActivity(plugin))
+            LaunchActivity.instance?.let { PluginTextSheet.createForFailure(it, plugin.manifest.name, failure).show() }
         }.show()
     }
 

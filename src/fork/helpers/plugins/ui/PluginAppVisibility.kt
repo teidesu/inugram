@@ -55,6 +55,7 @@ object PluginAppVisibility {
             override fun onActivityResumed(activity: Activity) {
                 resumedActivities++
                 publish(MODE_RESUMED)
+                AndroidUtilities.runOnUIThread { PluginManager.announcePendingCrash() }
             }
 
             override fun onActivityPaused(activity: Activity) {

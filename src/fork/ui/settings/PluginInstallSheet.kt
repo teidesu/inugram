@@ -314,7 +314,7 @@ class PluginInstallSheet(
         val item = adapter.getItem(position) ?: return
         when (item.id) {
             BUTTON_ASSETS -> PluginAssetsSheet(context, content.source, content.assets).show()
-            BUTTON_SOURCE -> PluginSourceSheet(context, content.manifest.name, content.source).show()
+            BUTTON_SOURCE -> PluginTextSheet.createForSource(context, content.manifest.name, content.source).show()
             // nothing here moves what is already on screen: the rows land below the fold, where
             // the list was not scrollable before, and neither the scroll offset nor the sheet's top
             // edge is a function of how much content is under them
