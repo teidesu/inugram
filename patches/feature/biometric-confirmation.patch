@@ -161,7 +161,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaL
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
-@@ -12903,7 +12903,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -12908,7 +12908,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
              });
              o.add(R.drawable.msg_delete, getString(R.string.DeleteAll), false, true, () -> {
                  TLRPC.User currentUser = profileActivity.getUserConfig().getCurrentUser();
@@ -170,7 +170,7 @@ index 0000000..0000000 100644
                      profileActivity.finishFragment();
                      if (profileActivity instanceof NotificationCenter.NotificationCenterDelegate) {
                          profileActivity.getNotificationCenter().removeObserver((NotificationCenter.NotificationCenterDelegate) profileActivity, NotificationCenter.closeChats);
-@@ -12911,7 +12911,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -12916,7 +12916,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
                      profileActivity.getNotificationCenter().postNotificationName(NotificationCenter.closeChats);
                      profileActivity.getNotificationCenter().postNotificationName(NotificationCenter.needDeleteDialog, dialog_id, currentUser, null, param);
                      profileActivity.getMessagesController().setSavedViewAs(false);

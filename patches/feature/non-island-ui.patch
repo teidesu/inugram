@@ -26,7 +26,7 @@ Subject: non-island ui in various parts of the app
  .../ui/Components/RecyclerListView.java       |   7 +
  .../Components/ScrollSlidingTextTabStrip.java | 117 ++++++++++++-
  .../ui/Components/SearchTagsList.java         |   3 +
- .../ui/Components/SharedMediaLayout.java      |  79 +++++++--
+ .../ui/Components/SharedMediaLayout.java      |  90 ++++++++--
  .../ui/Components/TopicsSidePanel.java        |   7 +-
  .../ui/Components/TopicsTabsView.java         |  78 ++++++---
  .../ui/Components/TranslateButton.java        |   4 +-
@@ -49,7 +49,7 @@ Subject: non-island ui in various parts of the app
  .../bots/ChatAttachAlertBotWebViewLayout.java |   5 +-
  .../java/org/telegram/ui/iv/RichEditor.java   |   4 +-
  .../utils/glass/BaseFragmentSimpleGlass.java  |   6 +-
- 45 files changed, 892 insertions(+), 312 deletions(-)
+ 45 files changed, 900 insertions(+), 315 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -2263,15 +2263,28 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -11929,7 +11978,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -11928,12 +11977,17 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+     /** The player at the top under the header, the tabs and what is under them below it. */
      private void applyTopPanelOffset() {
          final int tabsTop = pagesTabsTop, shift = topLayoutPadding;
++        final int tabsShift = NonIslandHelper.sharedMediaTabs() ? 0 : shift;
          // the player's glass where the glass of the tabs is without it
 -        setTopMargin(topPanelLayout, tabsTop + dp(TABS_GLASS_INSET_DP) - TOP_PANEL_GLASS_TOP);
-+        setTopMargin(topPanelLayout, inu_flatTabBar() ? tabsTop : tabsTop + dp(TABS_GLASS_INSET_DP) - TOP_PANEL_GLASS_TOP);
-         setTopMargin(scrollSlidingTextTabStrip, tabsTop + shift);
-         setTopMargin(actionModeLayout, tabsTop + shift);
+-        setTopMargin(scrollSlidingTextTabStrip, tabsTop + shift);
+-        setTopMargin(actionModeLayout, tabsTop + shift);
++        if (!NonIslandHelper.sharedMediaTabs()) {
++            setTopMargin(topPanelLayout, tabsTop + dp(TABS_GLASS_INSET_DP) - TOP_PANEL_GLASS_TOP);
++        } else {
++            setTopMargin(topPanelLayout, inu_flatTabBar() ? tabsTop + dp(44) : tabsTop + dp(50) - TOP_PANEL_GLASS_TOP);
++        }
++        setTopMargin(scrollSlidingTextTabStrip, tabsTop + tabsShift);
++        setTopMargin(actionModeLayout, tabsTop + tabsShift);
          setTopMargin(floatingDateView, tabsTop + dp(48 + 4) + shift);
+-        setTopMargin(searchTagsList, tabsTop + dp(4) + shift);
++        setTopMargin(searchTagsList, tabsTop + dp(4) + tabsShift);
+         setTopMargin(storiesContainer, tabsTop + dp(48) + shift);
+         if (appliedTopPanelShift != shift) {
+             appliedTopPanelShift = shift;
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/TopicsSidePanel.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/TopicsSidePanel.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/TopicsSidePanel.java
