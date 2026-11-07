@@ -120,6 +120,7 @@
     <string name="InuBottomTabs">Нижні вкладки</string>
     <string name="InuNavigation">Навігація</string>
     <string name="InuHideContactsTab">Приховати вкладку «Контакти»</string>
+    <string name="InuBottomTabsHideOnScroll">Приховувати під час прокручування</string>
     <string name="InuCompactMode">Компактний режим</string>
     <string name="InuCompactModeInfo">Приховує заголовки та зменшує розмір вкладок</string>
     <string name="InuMaterial3BottomTabs">Нижні вкладки</string>
@@ -223,6 +224,8 @@
     <string name="InuFoldersUnreadCounterExcludeMuted">Без беззвучних</string>
     <string name="InuFoldersUnreadCounterExcludeMutedNonDms">Без беззвучних каналів/груп</string>
     <string name="InuHideAllChatsTab">Приховати вкладку «Усі чати»</string>
+    <string name="InuFolderTabsAtBottom">Показувати вкладки внизу</string>
+    <string name="InuFolderTabsAtBottomInfo">Класичну панель папок можна перемістити вниз лише з нижніми вкладками Material 3 або з вимкненими нижніми вкладками.</string>
     <string name="InuCommunityDisplayMode">Спільноти</string>
     <string name="InuCommunityDisplayModeRegular">Звичайний</string>
     <string name="InuCommunityDisplayModeLongTap">Відкривати за тривалим дотиком</string>
@@ -235,6 +238,14 @@
     <string name="InuFrameCopied">Кадр скопійовано в буфер обміну</string>
     <string name="InuDisableDraftUpload">Вимкнути завантаження чернеток</string>
     <string name="InuDisableDraftUploadInfo">Чернетки зберігатимуться лише локально й не синхронізуватимуться</string>
+    <string name="InuCompactModeChannels">Канали</string>
+    <string name="InuCompactModeGroups">Групи</string>
+    <string name="InuCompactModeDms">Особисті чати</string>
+    <string name="InuDontAutoplayWidgets">Не запускати віджети автоматично</string>
+    <string name="InuDontAutoplayWidgetsInfo">Інтерактивні віджети в повідомленнях запускаються лише після натискання</string>
+    <string name="InuWidgetPlaceholderTitle">Інтерактивний віджет</string>
+    <string name="InuWidgetPlaceholderTap">Натисніть, щоб завантажити</string>
+    <string name="InuWidgetPlaceholderLoading">Завантаження…</string>
     <string name="InuHideCallActionButton">Приховати кнопку виклику у шапці</string>
     <string name="InuCallConfirmation">Запитувати перед дзвінком</string>
     <string name="InuCallConfirmationTitle">Підтвердження виклику</string>
@@ -420,7 +431,7 @@
     <string name="InuDisableScrimBlurInfo">Замінює розмиття фону за контекстними меню та попереднім переглядом на пласке затемнення. Може зменшити затримки.</string>
     <string name="InuDisableGlassGlare">Вимкнути відблиски скла</string>
     <string name="InuReduceMenuMotion">Зменшити анімації меню</string>
-    <string name="InuReduceMenuMotionInfo">Пропускати поетапну появу контекстного меню та спростити анімації меню повідомлень</string>
+    <string name="InuReduceMenuMotionInfo">Пропускати поетапну появу контекстного меню, спростити анімації меню повідомлень і використовувати прості спливні меню в заголовках</string>
     <string name="InuProfilePhotoGradientFade">Вимкнути розмиття фото профілю</string>
     <string name="InuNonIslandUI">Класичний інтерфейс</string>
     <string name="InuInterfaceStyle">Стиль інтерфейсу</string>
@@ -443,6 +454,7 @@
     <string name="InuNonIslandSharedMediaTabs">Вкладки спільного медіа</string>
     <string name="InuNonIslandGlobalSearch">Глобальний пошук</string>
     <string name="InuNonIslandChatElements">Елементи чату</string>
+    <string name="InuNonIslandHeaders">Заголовки</string>
     <string name="InuNonIslandHint">Класичний інтерфейс повертає частину нововведень «Рідкого скла» (>12.6) до старого плаского дизайну (якщо це можливо).\nМожуть траплятися візуальні помилки, зважайте на це.</string>
     <string name="InuHideFadeView">Приховати затемнення</string>
     <string name="InuStripTrackingParams">Очищати трекінгові параметри</string>
@@ -657,6 +669,12 @@
     <string name="InuDownloadDirectory">Папка завантажень</string>
     <string name="InuDownloadDirectoryApplied">Застосовується лише до нових завантажень</string>
     <string name="InuMentionInsertTitle">Вставити згадку</string>
+    <string name="InuSendWithoutVia">Надіслати без via</string>
+    <string name="InuSendWithoutViaConfirm">Надіслати цей результат як звичайне повідомлення (без «via»)?</string>
+    <string name="InuSendWithoutViaRestrictedConfirm">Інлайн-боти в цьому чаті обмежені. Надіслати результат як звичайне повідомлення?</string>
+    <string name="InuSendWithoutViaButtonsWarning">Цей результат має інлайн-кнопки, які не буде надіслано. Деякі боти використовують їх для інтерактивності.</string>
+    <string name="InuSendWithoutViaButtonsLost">Інлайн-кнопки не буде надіслано</string>
+    <string name="InuSendWithoutPack">Надіслати без набору</string>
     <string name="InuPasscode">Код-пароль</string>
     <string name="InuPasscodeNeeded">Спочатку налаштуйте код-пароль Telegram.</string>
     <string name="InuPasscodeShowInSettings">Показувати в налаштуваннях Inugram</string>
@@ -1008,4 +1026,5 @@
     <string name="InuWalletKeyReplaced">Ключ замінено</string>
     <string name="InuWalletKeyReplacedInfo">Тепер гаманець відновлюється за адресою та 12 новими словами.</string>
     <string name="InuWalletPrivateKeyBackupUnavailable">Гаманці, імпортовані з приватного ключа, не можна зберегти в Telegram, бо інші застосунки не зможуть їх відновити. Зберігайте ключ у надійному місці самостійно.</string>
+    <string name="InuSendServerError">Telegram має проблеми з доставкою повідомлення. Повторюємо спроби…</string>
 </resources>

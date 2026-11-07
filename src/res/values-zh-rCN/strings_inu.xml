@@ -79,6 +79,7 @@
     <string name="InuBottomTabs">底部标签</string>
     <string name="InuNavigation">导航</string>
     <string name="InuHideContactsTab">隐藏联系人标签</string>
+    <string name="InuBottomTabsHideOnScroll">滚动时隐藏</string>
     <string name="InuCompactMode">紧凑模式</string>
     <string name="InuCompactModeInfo">隐藏标题并缩小标签</string>
     <string name="InuMaterial3BottomTabs">底部标签</string>
@@ -124,6 +125,8 @@
     <string name="InuHideHashtagSuggestions">隐藏话题标签建议</string>
     <string name="InuHideRichEditorButton">隐藏富文本编辑器按钮</string>
     <string name="InuHideAllChatsTab">隐藏「所有聊天」标签</string>
+    <string name="InuFolderTabsAtBottom">在底部显示标签</string>
+    <string name="InuFolderTabsAtBottomInfo">仅在使用 Material 3 底部标签或禁用底部标签时，才能将经典文件夹栏移至底部。</string>
     <string name="InuHideCallActionButton">隐藏标题中的通话按钮</string>
     <string name="InuDisableProfileScrollSnap">禁用资料滚动吸附</string>
     <string name="InuDisableProfileScrollSnapInfo">滚动时不让资料头部吸附到固定位置</string>
@@ -169,6 +172,14 @@
     <string name="InuFrameCopied">帧已复制到剪贴板</string>
     <string name="InuDisableDraftUpload">禁用草稿上传</string>
     <string name="InuDisableDraftUploadInfo">草稿仅保存在本地，不在设备间同步</string>
+    <string name="InuCompactModeChannels">频道</string>
+    <string name="InuCompactModeGroups">群组</string>
+    <string name="InuCompactModeDms">私聊</string>
+    <string name="InuDontAutoplayWidgets">不自动播放小组件</string>
+    <string name="InuDontAutoplayWidgetsInfo">消息中的交互式小组件仅在点击后才会启动</string>
+    <string name="InuWidgetPlaceholderTitle">交互式小组件</string>
+    <string name="InuWidgetPlaceholderTap">点击加载</string>
+    <string name="InuWidgetPlaceholderLoading">加载中…</string>
     <string name="InuCallConfirmation">通话前询问</string>
     <string name="InuCallConfirmationTitle">确认通话</string>
     <string name="InuCallConfirmationText">呼叫 **%1$s**？</string>
@@ -339,7 +350,7 @@
     <string name="InuDisableScrimBlurInfo">将上下文菜单和预览背后的模糊替换为纯色压暗。可能减轻卡顿。</string>
 
     <string name="InuReduceMenuMotion">减少菜单动画</string>
-    <string name="InuReduceMenuMotionInfo">跳过上下文菜单的逐项延迟出现，简化消息菜单动画</string>
+    <string name="InuReduceMenuMotionInfo">跳过上下文菜单的逐项延迟出现，简化消息菜单动画，并在标题栏菜单中使用简单弹窗</string>
 
     <string name="InuProfilePhotoGradientFade">禁用资料头像模糊</string>
 
@@ -352,6 +363,7 @@
     <string name="InuNonIslandSharedMediaTabs">共享媒体标签</string>
     <string name="InuNonIslandGlobalSearch">全局搜索</string>
     <string name="InuNonIslandChatElements">聊天元素</string>
+    <string name="InuNonIslandHeaders">标题栏</string>
     <string name="InuNonIslandHint">经典界面会将新版 (>12.6) 「Liquid Glass」界面的部分改动尽力还原为旧的扁平设计。\n可能仍有一些视觉缺陷，请知悉。</string>
 
     <string name="InuHideFadeView">隐藏渐隐视图</string>
@@ -559,6 +571,12 @@
     <string name="InuDownloadDirectory">下载文件夹</string>
     <string name="InuDownloadDirectoryApplied">仅适用于新下载的文件</string>
     <string name="InuMentionInsertTitle">插入提及</string>
+    <string name="InuSendWithoutVia">不带 via 发送</string>
+    <string name="InuSendWithoutViaConfirm">将此结果作为普通消息发送（不带「via」）？</string>
+    <string name="InuSendWithoutViaRestrictedConfirm">此聊天中内联机器人受到限制。改为作为普通消息发送此结果？</string>
+    <string name="InuSendWithoutViaButtonsWarning">此结果包含不会被发送的内联按钮。部分机器人依赖它们实现交互。</string>
+    <string name="InuSendWithoutViaButtonsLost">内联按钮不会被发送</string>
+    <string name="InuSendWithoutPack">不带贴纸包发送</string>
     <string name="InuPasscode">密码锁</string>
     <string name="InuPasscodeNeeded">请先设置 Telegram 密码锁。</string>
     <string name="InuPasscodeShowInSettings">在 inugram 设置中显示</string>
@@ -1012,4 +1030,5 @@
     <string name="InuWalletKeyReplaced">密钥已替换</string>
     <string name="InuWalletKeyReplacedInfo">现在可通过地址和新的 12 个助记词恢复此钱包。</string>
     <string name="InuWalletPrivateKeyBackupUnavailable">从私钥导入的钱包无法备份到 Telegram，因为其他应用无法恢复它们。请自行妥善保管密钥。</string>
+    <string name="InuSendServerError">Telegram 投递消息时遇到问题，正在重试…</string>
 </resources>

@@ -79,6 +79,7 @@
     <string name="InuBottomTabs">下部タブ</string>
     <string name="InuNavigation">ナビゲーション</string>
     <string name="InuHideContactsTab">連絡先タブを非表示</string>
+    <string name="InuBottomTabsHideOnScroll">スクロール時に非表示</string>
     <string name="InuCompactMode">コンパクトモード</string>
     <string name="InuCompactModeInfo">タイトルを非表示にし、タブを小さくします</string>
     <string name="InuMaterial3BottomTabs">下部タブ</string>
@@ -124,6 +125,8 @@
     <string name="InuHideHashtagSuggestions">ハッシュタグ候補を非表示</string>
     <string name="InuHideRichEditorButton">リッチテキストエディターボタンを非表示</string>
     <string name="InuHideAllChatsTab">「すべてのチャット」タブを非表示</string>
+    <string name="InuFolderTabsAtBottom">タブを下部に表示</string>
+    <string name="InuFolderTabsAtBottomInfo">クラシックのフォルダーバーを下部に移動できるのは、Material 3 の下部タブ使用時か下部タブが無効の場合のみです。</string>
     <string name="InuHideCallActionButton">タイトルの通話ボタンを非表示</string>
     <string name="InuDisableProfileScrollSnap">プロフィールのスクロールスナップを無効化</string>
     <string name="InuDisableProfileScrollSnapInfo">スクロール時にプロフィールヘッダーを固定位置にスナップしない</string>
@@ -169,6 +172,14 @@
     <string name="InuFrameCopied">フレームをクリップボードにコピーしました</string>
     <string name="InuDisableDraftUpload">下書きのアップロードを無効化</string>
     <string name="InuDisableDraftUploadInfo">下書きはローカルのみに保存され、デバイス間で同期されません</string>
+    <string name="InuCompactModeChannels">チャンネル</string>
+    <string name="InuCompactModeGroups">グループ</string>
+    <string name="InuCompactModeDms">個人チャット</string>
+    <string name="InuDontAutoplayWidgets">ウィジェットを自動再生しない</string>
+    <string name="InuDontAutoplayWidgetsInfo">メッセージ内のインタラクティブウィジェットはタップするまで開始されません</string>
+    <string name="InuWidgetPlaceholderTitle">インタラクティブウィジェット</string>
+    <string name="InuWidgetPlaceholderTap">タップして読み込む</string>
+    <string name="InuWidgetPlaceholderLoading">読み込み中…</string>
     <string name="InuCallConfirmation">通話前に確認</string>
     <string name="InuCallConfirmationTitle">通話の確認</string>
     <string name="InuCallConfirmationText">**%1$s** に発信しますか？</string>
@@ -340,7 +351,7 @@
     <string name="InuDisableScrimBlurInfo">コンテキストメニューやプレビューの背景のぼかしを単純な暗転に置き換えます。ラグが減ることがあります。</string>
 
     <string name="InuReduceMenuMotion">メニューのモーションを軽減</string>
-    <string name="InuReduceMenuMotionInfo">コンテキストメニューのスタッガー表示をスキップし、メッセージメニューのアニメーションを簡素化します</string>
+    <string name="InuReduceMenuMotionInfo">コンテキストメニューのスタッガー表示をスキップし、メッセージメニューのアニメーションを簡素化し、ヘッダーメニューにシンプルなポップアップを使用します</string>
 
     <string name="InuProfilePhotoGradientFade">プロフィール写真のぼかしを無効化</string>
 
@@ -353,6 +364,7 @@
     <string name="InuNonIslandSharedMediaTabs">共有メディアのタブ</string>
     <string name="InuNonIslandGlobalSearch">グローバル検索</string>
     <string name="InuNonIslandChatElements">チャット要素</string>
+    <string name="InuNonIslandHeaders">ヘッダー</string>
     <string name="InuNonIslandHint">クラシック UI は、新しい (>12.6) 「Liquid Glass」UI の変更の一部を、可能な範囲で以前のフラットなデザインに戻します。\n視覚的なバグがいくつか残っている可能性があるのでご注意ください。</string>
 
     <string name="InuHideFadeView">フェードビューを非表示</string>
@@ -560,6 +572,12 @@
     <string name="InuDownloadDirectory">ダウンロードフォルダー</string>
     <string name="InuDownloadDirectoryApplied">新しくダウンロードするファイルにのみ適用されます</string>
     <string name="InuMentionInsertTitle">メンションを挿入</string>
+    <string name="InuSendWithoutVia">via なしで送信</string>
+    <string name="InuSendWithoutViaConfirm">この結果を通常のメッセージとして（「via」なしで）送信しますか？</string>
+    <string name="InuSendWithoutViaRestrictedConfirm">このチャットではインラインボットが制限されています。代わりに通常のメッセージとして送信しますか？</string>
+    <string name="InuSendWithoutViaButtonsWarning">この結果には送信されないインラインボタンがあります。一部のボットはインタラクションにこれを利用しています。</string>
+    <string name="InuSendWithoutViaButtonsLost">インラインボタンは送信されません</string>
+    <string name="InuSendWithoutPack">パックなしで送信</string>
     <string name="InuPasscode">パスコード</string>
     <string name="InuPasscodeNeeded">先に Telegram のパスコードを設定してください。</string>
     <string name="InuPasscodeShowInSettings">inugram の設定に表示</string>
@@ -1012,4 +1030,5 @@
     <string name="InuWalletKeyReplaced">鍵を置き換えました</string>
     <string name="InuWalletKeyReplacedInfo">今後はアドレスと新しい12単語でこのウォレットを復元できます。</string>
     <string name="InuWalletPrivateKeyBackupUnavailable">秘密鍵からインポートしたウォレットは、他のアプリで復元できないため Telegram にバックアップできません。鍵はご自身で安全に保管してください。</string>
+    <string name="InuSendServerError">Telegram でメッセージの配信に問題が発生しています。再試行中…</string>
 </resources>

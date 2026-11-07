@@ -79,6 +79,7 @@
     <string name="InuBottomTabs">Нижние вкладки</string>
     <string name="InuNavigation">Навигация</string>
     <string name="InuHideContactsTab">Скрыть вкладку «Контакты»</string>
+    <string name="InuBottomTabsHideOnScroll">Скрывать при прокрутке</string>
     <string name="InuCompactMode">Компактный режим</string>
     <string name="InuCompactModeInfo">Скрывает названия и уменьшает вкладки</string>
     <string name="InuMaterial3BottomTabs">Нижние вкладки</string>
@@ -124,6 +125,8 @@
     <string name="InuHideHashtagSuggestions">Скрыть подсказки хэштегов</string>
     <string name="InuHideRichEditorButton">Скрыть кнопку редактора форматирования</string>
     <string name="InuHideAllChatsTab">Скрыть вкладку «Все чаты»</string>
+    <string name="InuFolderTabsAtBottom">Показывать вкладки снизу</string>
+    <string name="InuFolderTabsAtBottomInfo">Классическую панель папок можно перенести вниз только с нижними вкладками Material 3 или с отключёнными нижними вкладками.</string>
     <string name="InuHideCallActionButton">Скрыть кнопку звонка в заголовке</string>
     <string name="InuDisableProfileScrollSnap">Отключить прилипание прокрутки профиля</string>
     <string name="InuDisableProfileScrollSnapInfo">Не привязывать шапку профиля к фиксированным позициям при прокрутке</string>
@@ -169,6 +172,14 @@
     <string name="InuFrameCopied">Кадр скопирован в буфер обмена</string>
     <string name="InuDisableDraftUpload">Не загружать черновики</string>
     <string name="InuDisableDraftUploadInfo">Черновики будут сохраняться только локально и не синхронизироваться между устройствами</string>
+    <string name="InuCompactModeChannels">Каналы</string>
+    <string name="InuCompactModeGroups">Группы</string>
+    <string name="InuCompactModeDms">Личные чаты</string>
+    <string name="InuDontAutoplayWidgets">Не запускать виджеты автоматически</string>
+    <string name="InuDontAutoplayWidgetsInfo">Интерактивные виджеты в сообщениях запускаются только после нажатия</string>
+    <string name="InuWidgetPlaceholderTitle">Интерактивный виджет</string>
+    <string name="InuWidgetPlaceholderTap">Нажмите, чтобы загрузить</string>
+    <string name="InuWidgetPlaceholderLoading">Загрузка…</string>
     <string name="InuCallConfirmation">Спрашивать перед звонком</string>
     <string name="InuCallConfirmationTitle">Подтверждение звонка</string>
     <string name="InuCallConfirmationText">Позвонить **%1$s**?</string>
@@ -342,7 +353,7 @@
     <string name="InuDisableScrimBlurInfo">Заменяет размытие за контекстными меню и превью на плоское затемнение. Может уменьшить лаги.</string>
 
     <string name="InuReduceMenuMotion">Уменьшить анимации меню</string>
-    <string name="InuReduceMenuMotionInfo">Пропускать поэтапное появление контекстного меню и упрощать анимации меню сообщения</string>
+    <string name="InuReduceMenuMotionInfo">Пропускать поэтапное появление контекстного меню, упрощать анимации меню сообщения и использовать простые всплывающие меню в заголовках</string>
 
     <string name="InuProfilePhotoGradientFade">Отключить размытие фото профиля</string>
 
@@ -355,6 +366,7 @@
     <string name="InuNonIslandSharedMediaTabs">Вкладки медиа</string>
     <string name="InuNonIslandGlobalSearch">Глобальный поиск</string>
     <string name="InuNonIslandChatElements">Элементы чата</string>
+    <string name="InuNonIslandHeaders">Заголовки</string>
     <string name="InuNonIslandHint">Классический интерфейс откатывает часть новых (>12.6) изменений «Liquid Glass» назад к старому плоскому дизайну (по мере возможности).\nВероятно, остались визуальные баги — имейте в виду.</string>
 
     <string name="InuHideFadeView">Скрыть градиенты затухания</string>
@@ -571,6 +583,12 @@
     <string name="InuDownloadDirectoryApplied">Применяется только к новым загрузкам</string>
 
     <string name="InuMentionInsertTitle">Вставить упоминание</string>
+    <string name="InuSendWithoutVia">Отправить без via</string>
+    <string name="InuSendWithoutViaConfirm">Отправить этот результат как обычное сообщение (без «via»)?</string>
+    <string name="InuSendWithoutViaRestrictedConfirm">Инлайн-боты в этом чате ограничены. Отправить результат как обычное сообщение?</string>
+    <string name="InuSendWithoutViaButtonsWarning">У этого результата есть инлайн-кнопки, которые не будут отправлены. Некоторые боты используют их для интерактивности.</string>
+    <string name="InuSendWithoutViaButtonsLost">Инлайн-кнопки не будут отправлены</string>
+    <string name="InuSendWithoutPack">Отправить без набора</string>
 
     <string name="InuPasscode">Код-пароль</string>
     <string name="InuPasscodeNeeded">Сначала настройте код-пароль Telegram.</string>
@@ -1044,4 +1062,5 @@
     <string name="InuWalletKeyReplaced">Ключ заменён</string>
     <string name="InuWalletKeyReplacedInfo">Теперь кошелёк восстанавливается по адресу и 12 новым словам.</string>
     <string name="InuWalletPrivateKeyBackupUnavailable">Кошельки, импортированные из приватного ключа, нельзя сохранить в Telegram, так как другие приложения не смогут их восстановить. Храните ключ в надёжном месте сами.</string>
+    <string name="InuSendServerError">У Telegram проблемы с доставкой сообщения. Повторяем попытки…</string>
 </resources>

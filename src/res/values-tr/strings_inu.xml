@@ -120,6 +120,7 @@
     <string name="InuBottomTabs">Alt sekmeler</string>
     <string name="InuNavigation">Gezinme</string>
     <string name="InuHideContactsTab">Kişiler sekmesini gizle</string>
+    <string name="InuBottomTabsHideOnScroll">Kaydırırken gizle</string>
     <string name="InuCompactMode">Kompakt mod</string>
     <string name="InuCompactModeInfo">Başlıkları gizler ve sekmeleri küçültür</string>
     <string name="InuMaterial3BottomTabs">Alt sekmeler</string>
@@ -223,6 +224,8 @@
     <string name="InuFoldersUnreadCounterExcludeMuted">Sessize alınanları hariç tut</string>
     <string name="InuFoldersUnreadCounterExcludeMutedNonDms">Özel sohbet dışındaki sessize alınanları hariç tut</string>
     <string name="InuHideAllChatsTab">\"Tüm Sohbetler\" sekmesini gizle</string>
+    <string name="InuFolderTabsAtBottom">Sekmeleri altta göster</string>
+    <string name="InuFolderTabsAtBottomInfo">Klasik klasörler çubuğu yalnızca Material 3 alt sekmeleriyle veya alt sekmeler kapalıyken alta taşınabilir.</string>
     <string name="InuCommunityDisplayMode">Topluluklar</string>
     <string name="InuCommunityDisplayModeRegular">Normal</string>
     <string name="InuCommunityDisplayModeLongTap">Uzun basınca aç</string>
@@ -235,6 +238,14 @@
     <string name="InuFrameCopied">Kare panoya kopyalandı</string>
     <string name="InuDisableDraftUpload">Taslak yüklemeyi devre dışı bırak</string>
     <string name="InuDisableDraftUploadInfo">Taslaklar yalnızca yerel olarak kaydedilir ve cihazlar arasında senkronize edilmez</string>
+    <string name="InuCompactModeChannels">Kanallar</string>
+    <string name="InuCompactModeGroups">Gruplar</string>
+    <string name="InuCompactModeDms">Özel sohbetler</string>
+    <string name="InuDontAutoplayWidgets">Widget\'ları otomatik oynatma</string>
+    <string name="InuDontAutoplayWidgetsInfo">Mesajlardaki etkileşimli widget\'lar yalnızca dokunduktan sonra başlar</string>
+    <string name="InuWidgetPlaceholderTitle">Etkileşimli widget</string>
+    <string name="InuWidgetPlaceholderTap">Yüklemek için dokunun</string>
+    <string name="InuWidgetPlaceholderLoading">Yükleniyor…</string>
     <string name="InuHideCallActionButton">Başlıktaki arama düğmesini gizle</string>
     <string name="InuCallConfirmation">Aramadan önce sor</string>
     <string name="InuCallConfirmationTitle">Aramayı onayla</string>
@@ -427,7 +438,7 @@
     <string name="InuDisableGlassGlare">Cam parlamasını devre dışı bırak</string>
 
     <string name="InuReduceMenuMotion">Menü hareketlerini azalt</string>
-    <string name="InuReduceMenuMotionInfo">Bağlam menüsü kademeli açılışını atlar ve mesaj menüsü animasyonlarını sadeleştirir</string>
+    <string name="InuReduceMenuMotionInfo">Bağlam menüsü kademeli açılışını atlar, mesaj menüsü animasyonlarını sadeleştirir ve başlık menülerinde basit açılır pencereler kullanır</string>
 
     <string name="InuProfilePhotoGradientFade">Profil fotoğrafı bulanıklığını devre dışı bırak</string>
 
@@ -452,6 +463,7 @@
     <string name="InuNonIslandSharedMediaTabs">Paylaşılan medya sekmeleri</string>
     <string name="InuNonIslandGlobalSearch">Genel arama</string>
     <string name="InuNonIslandChatElements">Sohbet ögeleri</string>
+    <string name="InuNonIslandHeaders">Başlıklar</string>
     <string name="InuNonIslandHint">Klasik Arayüz, yeni (>12.6) \"Likit Cam\" arayüz değişikliklerinin bazılarını eski düz tasarıma geri döndürür (mümkün olduğu kadar).\nMuhtemelen bir sürü görsel hata olabilir, bilginize.</string>
 
     <string name="InuHideFadeView">Solma görünümlerini gizle</string>
@@ -675,6 +687,12 @@
     <string name="InuDownloadDirectory">İndirme klasörü</string>
     <string name="InuDownloadDirectoryApplied">Yalnızca yeni indirilen dosyalara uygulanır</string>
     <string name="InuMentionInsertTitle">Bahsetme ekle</string>
+    <string name="InuSendWithoutVia">via olmadan gönder</string>
+    <string name="InuSendWithoutViaConfirm">Bu sonuç normal bir mesaj olarak (\"via\" olmadan) gönderilsin mi?</string>
+    <string name="InuSendWithoutViaRestrictedConfirm">Bu sohbette satır içi botlar kısıtlanmış. Bu sonuç normal bir mesaj olarak gönderilsin mi?</string>
+    <string name="InuSendWithoutViaButtonsWarning">Bu sonuçta gönderilmeyecek satır içi düğmeler var. Bazı botlar etkileşim için bunlara ihtiyaç duyar.</string>
+    <string name="InuSendWithoutViaButtonsLost">Satır içi düğmeler gönderilmeyecek</string>
+    <string name="InuSendWithoutPack">Paket olmadan gönder</string>
     <string name="InuPasscode">Parola</string>
     <string name="InuPasscodeNeeded">Önce bir Telegram parolası ayarlayın.</string>
     <string name="InuPasscodeShowInSettings">Inugram ayarlarında göster</string>
@@ -1018,4 +1036,5 @@
     <string name="InuWalletKeyReplaced">Anahtar değiştirildi</string>
     <string name="InuWalletKeyReplacedInfo">Bu cüzdan artık adresiniz ve 12 yeni kelimeyle geri yüklenir.</string>
     <string name="InuWalletPrivateKeyBackupUnavailable">Özel anahtardan içe aktarılan cüzdanlar Telegram\'a yedeklenemez, çünkü diğer uygulamalar bunları geri yükleyemez. Anahtarı kendiniz güvende tutun.</string>
+    <string name="InuSendServerError">Telegram mesajınızı iletmekte zorlanıyor. Yeniden deneniyor…</string>
 </resources>
