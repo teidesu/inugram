@@ -412,6 +412,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - fix deeplinking to a non-primary album member sometimes mis-anchoring
 - a bunch of stock memory/resource leaks (incl. `NativeByteBuffer` wrapper pool growing unbounded on write-heavy threads, reply-line sticker emoji never detaching and pinning closed chats via the global emoji cache, story viewer input/mention observers, `BotLocation` caching an activity context, saved messages tag hint timers re-posting forever after the chat is closed, detached/measuring message cells registering animated emoji in the global cache, instant view sheets never unregistering their observers)
 - correctly handle "Open in..." in ChatAttachAlert: open editor before sending + support multi-attach
+- connecting to proxies with an IPv6 address or a hostname resolving to IPv6
 - avatar of a bubble right below a topic separator (forum "All" tab) only clickable in its lower part
 - opt out of android media resumption, so a phantom telegram player chip no longer reappears in quick settings after a reboot or once the app process is gone
 - fix profile crash when a contact's note is removed server-side while the open animation is running (note row built from stale user info, bound against fresh)
