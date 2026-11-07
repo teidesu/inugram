@@ -8,9 +8,10 @@ Subject: reduce motion in profile
  .../ui/Components/SharedMediaLayout.java      |  3 ++
  .../java/org/telegram/ui/Gifts/GiftSheet.java |  4 +++
  .../java/org/telegram/ui/ProfileActivity.java | 28 +++++++++++++------
+ .../org/telegram/ui/SettingsActivity.java     |  9 +++---
  .../telegram/ui/Stars/ProfileGiftsView.java   |  8 ++++--
  .../ui/Stories/ProfileStoriesView.java        |  5 ++--
- 6 files changed, 38 insertions(+), 14 deletions(-)
+ 7 files changed, 43 insertions(+), 18 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ProfileActionsView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ProfileActionsView.java
 index 0000000..0000000 100644
@@ -168,6 +169,42 @@ index 0000000..0000000 100644
              collectibleHintVisible = null;
              collectibleHint = new HintView2(getContext(), HintView2.DIRECTION_BOTTOM);
              collectibleHintBackgroundColor = Theme.blendOver(status.center_color | 0xFF000000, Theme.multAlpha(status.pattern_color | 0xFF000000, .5f));
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
+@@ -658,13 +658,14 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+         final float hiddenY = avatarGooey.getHiddenAvatarCenterY(-dp(16));
+         // the avatar goes with the list, it must not run into the name below it
+         final float shown = MathUtils.clamp((y - hiddenY) / Math.max(1, shownY - hiddenY), 0f, 1f);
+-        final float centerY = Math.max(y, hiddenY);
++        final boolean inu_reduceMotion = desu.inugram.helpers.profile.ProfileHelper.reduceMotion();
++        final float centerY = inu_reduceMotion ? y : Math.max(y, hiddenY);
+         avatarListY = y;
+         avatarShownY = shownY;
+         avatarHiddenY = hiddenY;
+ 
+         final float size = dp(90);
+-        final float scale = AndroidUtilities.lerp(dp(avatarGooey.getHiddenAvatarSizeDp()), size, shown) / size * avatarTouchView.getScaleX();
++        final float scale = AndroidUtilities.lerp(dp(avatarGooey.getHiddenAvatarSizeDp()), size, inu_reduceMotion ? 1f : shown) / size * avatarTouchView.getScaleX();
+         final float translationX = avatarGooey.getWidth() / 2f - size * scale / 2f;
+         if (centerY == avatarHideCenterY && scale == avatarHideScale && shown == avatarHideShown && alpha == avatarGooey.getAlpha() && translationX == avatarContainer.getTranslationX()) {
+             return; // called on each draw: no invalidation without changes
+@@ -677,12 +678,12 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+         avatarContainer.setScaleY(scale);
+         avatarContainer.setTranslationX(translationX);
+         avatarContainer.setTranslationY(centerY - size * scale / 2f);
+-        cameraButton.setAlpha(alpha * MathUtils.clamp(AndroidUtilities.ilerp(shown, 0.75f, 1f), 0f, 1f));
++        cameraButton.setAlpha(alpha * (inu_reduceMotion ? 1f : MathUtils.clamp(AndroidUtilities.ilerp(shown, 0.75f, 1f), 0f, 1f)));
+         cameraButton.setScaleX(scale);
+         cameraButton.setScaleY(scale);
+         cameraButton.setTranslationX(translationX + dp(60) * scale);
+         cameraButton.setTranslationY(centerY - size * scale / 2f + dp(60) * scale);
+-        avatarGooey.setHideProgress(1f - shown);
++        avatarGooey.setHideProgress(inu_reduceMotion ? 0f : 1f - shown);
+     }
+ 
+     private float avatarHideCenterY, avatarHideScale, avatarHideShown = -1;
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stars/ProfileGiftsView.java b/TMessagesProj/src/main/java/org/telegram/ui/Stars/ProfileGiftsView.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Stars/ProfileGiftsView.java

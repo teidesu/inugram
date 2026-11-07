@@ -1040,7 +1040,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
-@@ -1346,6 +1346,8 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -1347,6 +1347,8 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
              titleView.setTranslationX(icon == 0 ? dp(2) : 0);
              subtitleView.setTranslationX(icon == 0 ? dp(2) : 0);
  
@@ -1049,7 +1049,7 @@ index 0000000..0000000 100644
              iconBackground.setColor(iconColorTop, iconColorBottom);
              iconView.setImageResource(icon);
              titleView.setText(title);
-@@ -1362,6 +1364,13 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -1363,6 +1365,13 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
  
          @Override
          protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
@@ -1063,7 +1063,7 @@ index 0000000..0000000 100644
              super.onMeasure(
                  MeasureSpec.makeMeasureSpec(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.EXACTLY),
                  MeasureSpec.makeMeasureSpec(dp(mini ? 44 : twoLines ? 60 : 50), MeasureSpec.EXACTLY)
-@@ -1390,8 +1399,17 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -1391,8 +1400,17 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                  this.border = drawBorder;
              }
  

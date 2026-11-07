@@ -232,8 +232,8 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - 🐶 keep previous chats in the back stack when opening another chat
 - 🐶 disable cloud drafts upload
 - 🐶 disable wallpaper parallax
-- 🐶 disable scroll-snap in profile
-- 🐶 reduce profile motion (skip various enter animations, disable avatar scale-on-scroll effect)
+- 🐶 disable scroll-snap in profile and settings
+- 🐶 reduce profile motion (skip various enter animations, disable avatar scale-on-scroll effect, also in settings)
 - 🐶 prefer "Media" tab in profile over Gifts/Posts
 - "Send a gift" in profile menu (stock hides it without billing), optional "Gift" header action button
 - 🐶 recyclerlistview instant-tap
