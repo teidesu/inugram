@@ -68,7 +68,7 @@ class PluginInfoActivity(private val plugin: Plugin) : SettingsPageActivity() {
     override fun getTitle(): CharSequence = plugin.manifest.name
 
     private val onPluginChanged: () -> Unit = {
-        actionBar?.setTitle(plugin.manifest.name)
+        simpleActionBar?.setTitle(plugin.manifest.name)
         listView?.adapter?.update(true)
     }
 

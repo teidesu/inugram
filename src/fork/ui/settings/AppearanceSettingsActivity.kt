@@ -197,7 +197,8 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
     private fun applyStyleChanges(changed: List<ExpandableBoolGroup.Option>) {
         val configs = changed.map { it.config }
         if (InuConfig.MATERIAL3_SWITCHES in configs || InuConfig.MATERIAL3_SLIDERS in configs) invalidateVisibleRows()
-        if (configs.any { it in SOFT_REBUILD_CONFIGS }) softRebuild()
+        if (InuConfig.NON_ISLAND_HEADERS in configs) rebuildAll()
+        else if (configs.any { it in SOFT_REBUILD_CONFIGS }) softRebuild()
         // if (InuConfig.M3_SECTIONS_STYLE in configs) inu_rebuildSelf()
         if (InuConfig.NON_ISLAND_CHAT_ELEMENTS in configs) InuHooks.syncChatInputRowHeight()
         listView.adapter.update(true)
@@ -346,7 +347,6 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
             InuConfig.MATERIAL_PROFILE_ACTIONS,
             InuConfig.NON_ISLAND_FOLDERS_BAR,
             InuConfig.NON_ISLAND_GLOBAL_SEARCH,
-            InuConfig.NON_ISLAND_HEADERS,
             InuConfig.HIDE_FADE_VIEW,
         )
 

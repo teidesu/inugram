@@ -30,6 +30,7 @@ import org.telegram.messenger.NotificationCenter
 import org.telegram.messenger.R
 import org.telegram.messenger.UserConfig
 import org.telegram.messenger.Utilities
+import org.telegram.ui.ActionBar.ActionBar
 import org.telegram.ui.ActionBar.SimpleTextView
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Cells.NotificationsCheckCell
@@ -38,10 +39,12 @@ import org.telegram.ui.Components.Bulletin
 import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.ItemOptions
 import org.telegram.ui.Components.LayoutHelper
+import org.telegram.ui.Components.RecyclerListView
 import org.telegram.ui.Components.UItem
 import org.telegram.ui.Components.UniversalFragment
 import org.telegram.ui.Components.UniversalRecyclerView
 import org.telegram.ui.LaunchActivity
+import org.telegram.utils.glass.BaseFragmentSimpleGlass
 
 abstract class SettingsPageActivity : UniversalFragment() {
     override fun isSupportEdgeToEdge(): Boolean = true
@@ -55,10 +58,15 @@ abstract class SettingsPageActivity : UniversalFragment() {
         for (group in expandableGroups) group.expandIfContains(itemId)
     }
 
+    override fun useSimpleActionBar(): Boolean = true
+
+    override fun getListViewForSimpleGlass(): RecyclerListView? = listView
+
     override fun createView(context: Context): View {
+        setHasOwnBackground(true)
         return super.createView(context).also {
             listView.setSections()
-            actionBar.setAdaptiveBackground(listView)
+            listView.setSectionsDrawBackground(true)
             listView.clipToPadding = false
             listView.setOnItemClickListener { view, position, x, y ->
                 val item = listView.adapter.getItem(position) ?: return@setOnItemClickListener
@@ -93,15 +101,21 @@ abstract class SettingsPageActivity : UniversalFragment() {
     }
 
     override fun onInsets(left: Int, top: Int, right: Int, bottom: Int) {
-        lastBottomInset = bottom
-        val lv = listView ?: return
-        val container = stickyButtonContainer
-        if (container != null) {
-            lv.setPadding(0, 0, 0, bottom + dp(STICKY_BUTTON_HEIGHT))
-            container.setPadding(dp(16), dp(8), dp(16), dp(8) + bottom)
-        } else {
-            lv.setPadding(lv.paddingLeft, lv.paddingTop, lv.paddingRight, bottom)
-        }
+        stickyButtonContainer?.setPadding(dp(16), dp(8), dp(16), dp(8) + bottom)
+        updateListPadding()
+    }
+
+    protected open fun getListExtraBottomPadding(): Int =
+        if (stickyButtonContainer != null) dp(STICKY_BUTTON_HEIGHT) else 0
+
+    protected fun updateListPadding() {
+        BaseFragmentSimpleGlass.setListViewParams(
+            listView ?: return,
+            mSystemInsets.top,
+            mSystemInsets.bottom,
+            ActionBar.getCurrentActionBarHeight(),
+            getListExtraBottomPadding(),
+        )
     }
 
     override fun onFragmentDestroy() {
@@ -110,7 +124,6 @@ abstract class SettingsPageActivity : UniversalFragment() {
     }
 
     private var stickyButtonContainer: FrameLayout? = null
-    private var lastBottomInset = 0
 
     // Sticky bottom button bar (à la CloudSyncActivity): wraps `button` in a windowBackgroundWhite
     // bar, reserves matching list padding, and offsets bulletins above it. Callable both from
@@ -119,7 +132,7 @@ abstract class SettingsPageActivity : UniversalFragment() {
     protected fun attachStickyButton(rootView: View, button: View) {
         val container = FrameLayout(rootView.context).apply {
             setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite))
-            setPadding(dp(16), dp(8), dp(16), dp(8) + lastBottomInset)
+            setPadding(dp(16), dp(8), dp(16), dp(8) + mSystemInsets.bottom)
             addView(button, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48f))
         }
         stickyButtonContainer = container
@@ -127,7 +140,7 @@ abstract class SettingsPageActivity : UniversalFragment() {
             container,
             LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM)
         )
-        listView.setPadding(0, 0, 0, lastBottomInset + dp(STICKY_BUTTON_HEIGHT))
+        updateListPadding()
         Bulletin.addDelegate(this, object : Bulletin.Delegate {
             override fun getBottomOffset(tag: Int): Int = stickyButtonContainer?.height ?: 0
         })
@@ -146,6 +159,15 @@ abstract class SettingsPageActivity : UniversalFragment() {
     // rebuilds views of all fragments below this one — settings page itself stays.
     protected fun softRebuild() {
         LaunchActivity.instance?.rebuildAllFragments(false)
+    }
+
+    // rebuilds this page too, keeping its scroll position
+    protected fun rebuildAll() {
+        val lm = listView.layoutManager
+        val position = lm.findFirstVisibleItemPosition()
+        val offset = lm.findViewByPosition(position)?.let { it.top - listView.paddingTop } ?: 0
+        LaunchActivity.instance?.rebuildAllFragments(true)
+        if (position >= 0) listView?.layoutManager?.scrollToPositionWithOffset(position, offset)
     }
 
     // redraws all visible rows; softRebuild skips the current page, so toggles that change how

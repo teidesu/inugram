@@ -50,7 +50,7 @@ class IconPacksActivity : SettingsPageActivity() {
             setText(LocaleController.getString(R.string.InuIconPacksApply), false)
             setOnClickListener { apply() }
         })
-        actionBar.setActionBarMenuOnItemClick(object : ActionBar.ActionBarMenuOnItemClick() {
+        simpleActionBar.setActionBarMenuOnItemClick(object : ActionBar.ActionBarMenuOnItemClick() {
             override fun onItemClick(id: Int) {
                 if (id == -1 && onBackPressed(true)) finishFragment()
             }

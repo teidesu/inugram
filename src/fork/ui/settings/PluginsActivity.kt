@@ -82,7 +82,7 @@ class PluginsActivity : SettingsPageActivity() {
         listView.setReorderLongPressEnabled(false)
         listView.listenReorder { id, items -> if (id == reorderSectionId) applyReorder(items) }
 
-        val otherItem = actionBar.createMenu().addItem(0, R.drawable.ic_ab_other)
+        val otherItem = simpleActionBar.createMenu().addItem(0, R.drawable.ic_ab_other)
         otherItem.contentDescription = LocaleController.getString(R.string.AccDescrMoreOptions)
         compactItem = otherItem.addSubItem(MENU_COMPACT, 0, null)
         updateCompactItem()
@@ -95,7 +95,7 @@ class PluginsActivity : SettingsPageActivity() {
             setColors(red, red)
             visibility = if (PluginManager.plugins().isEmpty()) View.GONE else View.VISIBLE
         }
-        actionBar.setActionBarMenuOnItemClick(object : ActionBar.ActionBarMenuOnItemClick() {
+        simpleActionBar.setActionBarMenuOnItemClick(object : ActionBar.ActionBarMenuOnItemClick() {
             override fun onItemClick(id: Int) {
                 when (id) {
                     -1 -> finishFragment()
