@@ -238,6 +238,11 @@
     <string name="InuFrameCopied">Frame copied to clipboard</string>
     <string name="InuDisableDraftUpload">Disable uploading drafts</string>
     <string name="InuDisableDraftUploadInfo">Drafts will only be saved locally and not synced across devices</string>
+    <string name="InuDontAutoplayWidgets">Don\'t autoplay widgets</string>
+    <string name="InuDontAutoplayWidgetsInfo">Interactive widgets in messages only start after you tap them</string>
+    <string name="InuWidgetPlaceholderTitle">Interactive widget</string>
+    <string name="InuWidgetPlaceholderTap">Tap to load</string>
+    <string name="InuWidgetPlaceholderLoading">Loading…</string>
     <string name="InuHideCallActionButton">Hide call button in title</string>
     <string name="InuCallConfirmation">Ask before calling</string>
     <string name="InuCallConfirmationTitle">Confirm calling</string>

@@ -231,6 +231,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - disable notification chat bubbles
 - 🐶 keep previous chats in the back stack when opening another chat
 - 🐶 disable cloud drafts upload
+- 🐶 don't autoplay widgets: widget messages show a placeholder and only start their engine after a tap
 - 🐶 disable wallpaper parallax
 - 🐶 disable scroll-snap in profile and settings
 - 🐶 reduce profile motion (skip various enter animations, disable avatar scale-on-scroll effect, also in settings)

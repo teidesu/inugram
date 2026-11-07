@@ -640,6 +640,9 @@ object InuConfig {
     val DISABLE_DRAFT_UPLOAD = BoolItem("disable_draft_upload", false)
 
     @JvmField
+    val DONT_AUTOPLAY_WIDGETS = BoolItem("dont_autoplay_widgets", true)
+
+    @JvmField
     val ROUND_DEFAULT_CAMERA = IntItem("round_default_camera", 1) // 1=Front, 2=Rear, 3=Ask
 
     @JvmField

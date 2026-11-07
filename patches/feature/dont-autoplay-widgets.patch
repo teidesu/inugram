@@ -1,0 +1,113 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Sun, 8 Nov 2026 03:09:05 +0400
+Subject: add option to not autoplay widgets
+
+---
+ .../ui/Components/RichWidgetBlock.java        | 28 +++++++++++++++++--
+ .../telegram/utils/twidget/WidgetMedia.java   | 11 ++++++++
+ 2 files changed, 36 insertions(+), 3 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/RichWidgetBlock.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/RichWidgetBlock.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/RichWidgetBlock.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/RichWidgetBlock.java
+@@ -54,6 +54,7 @@ public final class RichWidgetBlock extends RichMessageLayout.RichBlock
+     /** Newer layouts of a message get larger serials: the newest attached block runs the widget. */
+     public final int serial = serials.incrementAndGet();
+     private WidgetSandboxPlayer player;
++    private desu.inugram.ui.WidgetPlaceholder inu_placeholder;
+     // UI: this block runs the widget (WidgetMedia#attach); otherwise it only shows its frames.
+     private boolean running;
+     /**
+@@ -263,6 +264,9 @@ public final class RichWidgetBlock extends RichMessageLayout.RichBlock
+     @Override
+     protected void onAttachedToWindow() {
+         if (message == null) message = WidgetMedia.find(embed.url);
++        if (message == null && inu_placeholder == null && WidgetMedia.inu_isBlocked(embed.url)) {
++            inu_placeholder = new desu.inugram.ui.WidgetPlaceholder(() -> { if (view != null) view.invalidate(); });
++        }
+         if (message == null) return;
+         if (player == null) player = new WidgetSandboxPlayer(this, AndroidUtilities.density);
+         // A cell animating to a new layout of this message attaches the old one too: only the newest
+@@ -271,6 +275,13 @@ public final class RichWidgetBlock extends RichMessageLayout.RichBlock
+         else player.preview(message);
+     }
+ 
++    private void inu_load() {
++        WidgetMedia.inu_allow(embed.url);
++        if (view != null) view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP);
++        onAttachedToWindow();
++        if (view != null) view.invalidate();
++    }
++
+     /** UI: this block now runs the widget. */
+     private void run() {
+         running = true;
+@@ -325,8 +336,8 @@ public final class RichWidgetBlock extends RichMessageLayout.RichBlock
+ 
+     @Override
+     protected void onDraw(Canvas canvas) {
+-        if (player == null) return;
+-        if (themeSignature != WidgetSandboxTheme.signature(resourcesProvider(), root.isOut())) updateTheme();
++        if (player == null && inu_placeholder == null) return;
++        if (player != null && themeSignature != WidgetSandboxTheme.signature(resourcesProvider(), root.isOut())) updateTheme();
+         // The paddings are known when drawn; the widget was laid out for bleed() on both sides.
+         bleedLeft = isInQuote() ? 0 : Math.max(0, Math.min(bleed(), root.padLeft - dp(2)));
+         int width = widthPx();
+@@ -355,7 +366,10 @@ public final class RichWidgetBlock extends RichMessageLayout.RichBlock
+         clip.addRoundRect(AndroidUtilities.rectTmp, radii, Path.Direction.CW);
+         canvas.clipPath(clip);
+         canvas.translate(0, shift);
+-        if (player.draw(canvas, width) && view != null) view.postInvalidateOnAnimation();
++        boolean animating = player != null && player.draw(canvas, width);
++        if (inu_placeholder != null && player != null && message.frame() != null) inu_placeholder = null;
++        if (inu_placeholder != null) animating |= inu_placeholder.draw(canvas, width, laidOutHeight, root.isOut(), resourcesProvider(), player != null);
++        if (animating && view != null) view.postInvalidateOnAnimation();
+         canvas.restore();
+     }
+ 
+@@ -519,6 +533,14 @@ public final class RichWidgetBlock extends RichMessageLayout.RichBlock
+ 
+     @Override
+     protected boolean onTouchEvent(MotionEvent event) {
++        if (player == null && inu_placeholder != null) {
++            event.offsetLocation(bleedLeft, 0);
++            try {
++                return inu_placeholder.onTouchEvent(event, widthPx(), laidOutHeight, this::inu_load);
++            } finally {
++                event.offsetLocation(-bleedLeft, 0);
++            }
++        }
+         if (player == null || !running) return false;
+         if (WidgetMedia.isPreview(embed.url)) return false;
+         event.offsetLocation(bleedLeft, 0);
+diff --git a/TMessagesProj/src/main/java/org/telegram/utils/twidget/WidgetMedia.java b/TMessagesProj/src/main/java/org/telegram/utils/twidget/WidgetMedia.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/utils/twidget/WidgetMedia.java
++++ b/TMessagesProj/src/main/java/org/telegram/utils/twidget/WidgetMedia.java
+@@ -345,6 +345,7 @@ public final class WidgetMedia {
+         if (entry == null) return null;
+         // Kill switch (AppGlobalConfig#widgetsDisabled): no runtime, the block keeps its placeholder.
+         if (WidgetSandboxSession.disabledByConfig()) return null;
++        if (inu_isBlocked(url)) return null;
+         synchronized (entry) {
+             if (entry.message == null) {
+                 if (entry.html == null) entry.html = inflate(entry.payload);
+@@ -362,6 +363,16 @@ public final class WidgetMedia {
+         }
+     }
+ 
++    public static boolean inu_isBlocked(String url) {
++        Entry entry = isWidgetUrl(url) ? entries.get(url) : null;
++        return entry != null && !entry.preview && !WidgetSandboxSession.disabledByConfig() && !desu.inugram.helpers.chat.WidgetAutoplayHelper.mayRun(entry.storageKey());
++    }
++
++    public static void inu_allow(String url) {
++        Entry entry = isWidgetUrl(url) ? entries.get(url) : null;
++        if (entry != null) desu.inugram.helpers.chat.WidgetAutoplayHelper.allow(entry.storageKey());
++    }
++
+     /** The widget's width in px: the bubble's (`width` 0) or the anchor clamped to [200, bubble]. */
+     public static int widgetWidthPx(String url, int bubbleWidthPx) {
+         Entry entry = isWidgetUrl(url) ? entries.get(url) : null;
