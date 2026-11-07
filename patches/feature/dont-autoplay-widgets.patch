@@ -5,8 +5,10 @@ Subject: add option to not autoplay widgets
 
 ---
  .../ui/Components/RichWidgetBlock.java        | 28 +++++++++++++++++--
- .../telegram/utils/twidget/WidgetMedia.java   | 11 ++++++++
- 2 files changed, 36 insertions(+), 3 deletions(-)
+ .../ui/Components/WidgetInlinePreview.java    |  9 ++++--
+ .../telegram/utils/twidget/WidgetMedia.java   | 20 +++++++++++++
+ .../utils/twidget/WidgetSandboxMessage.java   |  1 +
+ 4 files changed, 53 insertions(+), 5 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/RichWidgetBlock.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/RichWidgetBlock.java
 index 0000000..0000000 100644
@@ -62,7 +64,7 @@ index 0000000..0000000 100644
 -        if (player.draw(canvas, width) && view != null) view.postInvalidateOnAnimation();
 +        boolean animating = player != null && player.draw(canvas, width);
 +        if (inu_placeholder != null && player != null && message.frame() != null) inu_placeholder = null;
-+        if (inu_placeholder != null) animating |= inu_placeholder.draw(canvas, width, laidOutHeight, root.isOut(), resourcesProvider(), player != null);
++        if (inu_placeholder != null) animating |= inu_placeholder.draw(canvas, width, laidOutHeight, root.isOut(), resourcesProvider(), player != null, true);
 +        if (animating && view != null) view.postInvalidateOnAnimation();
          canvas.restore();
      }
@@ -82,6 +84,48 @@ index 0000000..0000000 100644
          if (player == null || !running) return false;
          if (WidgetMedia.isPreview(embed.url)) return false;
          event.offsetLocation(bleedLeft, 0);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/WidgetInlinePreview.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/WidgetInlinePreview.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/WidgetInlinePreview.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/WidgetInlinePreview.java
+@@ -28,6 +28,7 @@ public final class WidgetInlinePreview implements WidgetSandboxPlayer.Host {
+     private final Theme.ResourcesProvider resourcesProvider;
+     private final Paint background = new Paint(Paint.ANTI_ALIAS_FLAG);
+     private final Path clip = new Path();
++    private desu.inugram.ui.WidgetPlaceholder inu_placeholder;
+     private WidgetSandboxPlayer player;
+     private int widthPx;
+     private boolean shown;
+@@ -51,8 +52,9 @@ public final class WidgetInlinePreview implements WidgetSandboxPlayer.Host {
+ 
+     /** UI: the view shows the preview at this width: the widget runs, laid out for it. */
+     public void show(int widthPx) {
+-        if (message == null || widthPx <= 0) return;
++        if (widthPx <= 0) return;
+         this.widthPx = widthPx;
++        if (message == null) return;
+         message.setWidthPx(widthPx);
+         if (shown) return;
+         shown = true;
+@@ -73,7 +75,9 @@ public final class WidgetInlinePreview implements WidgetSandboxPlayer.Host {
+     }
+ 
+     public void draw(Canvas canvas, float x, float y) {
+-        if (message == null || widthPx <= 0) return;
++        if (widthPx <= 0) return;
++        if (message == null && inu_placeholder == null && WidgetMedia.inu_isBlocked(url)) inu_placeholder = new desu.inugram.ui.WidgetPlaceholder(view::invalidate);
++        if (message == null && inu_placeholder == null) return;
+         int height = heightPx(widthPx);
+         // The bubble the result will be sent in has the chat's radius.
+         float radius = AndroidUtilities.dp(SharedConfig.bubbleRadius);
+@@ -85,6 +89,7 @@ public final class WidgetInlinePreview implements WidgetSandboxPlayer.Host {
+         canvas.clipPath(clip);
+         background.setColor(Theme.getColor(Theme.key_chat_outBubble, resourcesProvider) | 0xff000000);
+         canvas.drawRect(AndroidUtilities.rectTmp, background);
++        if (inu_placeholder != null) inu_placeholder.draw(canvas, widthPx, height, true, resourcesProvider, false, false);
+         if (player != null && player.draw(canvas, widthPx)) view.postInvalidateOnAnimation();
+         canvas.restore();
+     }
 diff --git a/TMessagesProj/src/main/java/org/telegram/utils/twidget/WidgetMedia.java b/TMessagesProj/src/main/java/org/telegram/utils/twidget/WidgetMedia.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/utils/twidget/WidgetMedia.java
@@ -94,13 +138,22 @@ index 0000000..0000000 100644
          synchronized (entry) {
              if (entry.message == null) {
                  if (entry.html == null) entry.html = inflate(entry.payload);
-@@ -362,6 +363,16 @@ public final class WidgetMedia {
+@@ -362,6 +363,25 @@ public final class WidgetMedia {
          }
      }
  
 +    public static boolean inu_isBlocked(String url) {
 +        Entry entry = isWidgetUrl(url) ? entries.get(url) : null;
-+        return entry != null && !entry.preview && !WidgetSandboxSession.disabledByConfig() && !desu.inugram.helpers.chat.WidgetAutoplayHelper.mayRun(entry.storageKey());
++        return entry != null && !WidgetSandboxSession.disabledByConfig() && !desu.inugram.helpers.chat.WidgetAutoplayHelper.mayRun(entry.storageKey());
++    }
++
++    public static void inu_onAutoplayDisabled() {
++        AndroidUtilities.runOnUIThread(() -> {
++            toMeasure.clear();
++            for (Entry entry : entries.values()) {
++                if (entry.message != null && entry.message.hasSession() && inu_isBlocked(entry.url)) entry.message.unload();
++            }
++        });
 +    }
 +
 +    public static void inu_allow(String url) {
@@ -111,3 +164,15 @@ index 0000000..0000000 100644
      /** The widget's width in px: the bubble's (`width` 0) or the anchor clamped to [200, bubble]. */
      public static int widgetWidthPx(String url, int bubbleWidthPx) {
          Entry entry = isWidgetUrl(url) ? entries.get(url) : null;
+diff --git a/TMessagesProj/src/main/java/org/telegram/utils/twidget/WidgetSandboxMessage.java b/TMessagesProj/src/main/java/org/telegram/utils/twidget/WidgetSandboxMessage.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/utils/twidget/WidgetSandboxMessage.java
++++ b/TMessagesProj/src/main/java/org/telegram/utils/twidget/WidgetSandboxMessage.java
+@@ -171,6 +171,7 @@ public final class WidgetSandboxMessage implements WidgetSandboxSession.Listener
+         if (active) return;
+         // Kill switch: nothing starts, the last frame (if any) stays as it is.
+         if (WidgetSandboxSession.disabledByConfig()) return;
++        if (WidgetMedia.inu_isBlocked(file)) return;
+         active = true;
+         if (session != null) {
+             session.releaseScripts();

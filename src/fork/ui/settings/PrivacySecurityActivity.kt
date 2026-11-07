@@ -20,6 +20,7 @@ import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.ItemOptions
 import org.telegram.ui.Components.UItem
 import org.telegram.ui.Components.UniversalAdapter
+import org.telegram.utils.twidget.WidgetMedia
 
 class PrivacySecurityActivity : SettingsPageActivity() {
     override fun getTitle(): CharSequence = LocaleController.getString(R.string.InuPrivacySecurity)
@@ -190,6 +191,7 @@ class PrivacySecurityActivity : SettingsPageActivity() {
             TOGGLE_DONT_AUTOPLAY_WIDGETS -> {
                 val new = InuConfig.DONT_AUTOPLAY_WIDGETS.toggle()
                 (view as? NotificationsCheckCell)?.isChecked = new
+                if (new) WidgetMedia.inu_onAutoplayDisabled()
             }
 
             TOGGLE_BIOMETRIC_DELETE_CHAT -> {

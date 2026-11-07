@@ -31,7 +31,7 @@ class WidgetPlaceholder(private val invalidate: Runnable) {
     private var pressed = false
     private var loading = false
 
-    fun draw(canvas: Canvas, width: Int, height: Int, out: Boolean, resourcesProvider: Theme.ResourcesProvider?, loading: Boolean): Boolean {
+    fun draw(canvas: Canvas, width: Int, height: Int, out: Boolean, resourcesProvider: Theme.ResourcesProvider?, loading: Boolean, interactive: Boolean): Boolean {
         this.loading = loading
         val textColor = Theme.getColor(if (out) Theme.key_chat_messageTextOut else Theme.key_chat_messageTextIn, resourcesProvider)
         paint.color = Theme.multAlpha(textColor, 0.06f)
@@ -47,7 +47,13 @@ class WidgetPlaceholder(private val invalidate: Runnable) {
         subtitlePaint.textSize = dp(13f).toFloat()
         subtitlePaint.color = Theme.getColor(if (out) Theme.key_chat_outTimeText else Theme.key_chat_inTimeText, resourcesProvider)
         val title = LocaleController.getString(R.string.InuWidgetPlaceholderTitle)
-        val subtitle = LocaleController.getString(if (loading) R.string.InuWidgetPlaceholderLoading else R.string.InuWidgetPlaceholderTap)
+        val subtitle = LocaleController.getString(
+            when {
+                !interactive -> R.string.InuWidgetPlaceholderPreview
+                loading -> R.string.InuWidgetPlaceholderLoading
+                else -> R.string.InuWidgetPlaceholderTap
+            }
+        )
 
         val cx: Float
         val cy: Float

@@ -246,6 +246,7 @@
     <string name="InuWidgetPlaceholderTitle">Interactive widget</string>
     <string name="InuWidgetPlaceholderTap">Tap to load</string>
     <string name="InuWidgetPlaceholderLoading">Loading…</string>
+    <string name="InuWidgetPlaceholderPreview">Preview disabled</string>
     <string name="InuHideCallActionButton">Hide call button in title</string>
     <string name="InuCallConfirmation">Ask before calling</string>
     <string name="InuCallConfirmationTitle">Confirm calling</string>
