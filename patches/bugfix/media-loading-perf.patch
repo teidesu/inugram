@@ -26,7 +26,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/FileLoadOperatio
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/FileLoadOperation.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/FileLoadOperation.java
-@@ -645,6 +645,11 @@ public class FileLoadOperation {
+@@ -656,6 +656,11 @@ public class FileLoadOperation {
                              filePartsStream.write(filesQueueByteBuffer.buf, 0, bufferSize);
                              writingToFilePartsStream = false;
                              if (closeFilePartsStreamOnWriteEnd) {
@@ -38,7 +38,7 @@ index 0000000..0000000 100644
                                  try {
                                      filePartsStream.getChannel().close();
                                  } catch (Exception e) {
-@@ -1174,7 +1179,7 @@ public class FileLoadOperation {
+@@ -1186,7 +1191,7 @@ public class FileLoadOperation {
                      cacheFileParts.delete();
                  }
                  try {
@@ -47,7 +47,7 @@ index 0000000..0000000 100644
                      long len = filePartsStream.length();
                      if (len % 8 == 4) {
                          len -= 4;
-@@ -1240,7 +1245,7 @@ public class FileLoadOperation {
+@@ -1252,7 +1257,7 @@ public class FileLoadOperation {
              if (fileNameIv != null) {
                  cacheIvTemp = new File(tempPath, fileNameIv);
                  try {
@@ -56,7 +56,7 @@ index 0000000..0000000 100644
                      if (downloadedBytes != 0 && !newKeyGenerated) {
                          long len = cacheIvTemp.length();
                          if (len > 0 && len % 64 == 0) {
-@@ -1267,7 +1272,7 @@ public class FileLoadOperation {
+@@ -1279,7 +1284,7 @@ public class FileLoadOperation {
              }
              updateProgress();
              try {
@@ -65,7 +65,7 @@ index 0000000..0000000 100644
                  if (downloadedBytes != 0) {
                      fileOutputStream.seek(downloadedBytes);
                  }
-@@ -1532,6 +1537,11 @@ public class FileLoadOperation {
+@@ -1544,6 +1549,11 @@ public class FileLoadOperation {
              if (filePartsStream != null) {
                  synchronized (FileLoadOperation.this) {
                      if (!writingToFilePartsStream) {
@@ -77,7 +77,7 @@ index 0000000..0000000 100644
                          try {
                              filePartsStream.getChannel().close();
                          } catch (Exception e) {
-@@ -1982,6 +1992,7 @@ public class FileLoadOperation {
+@@ -1994,6 +2004,7 @@ public class FileLoadOperation {
                      }
                      FileChannel channel = fileOutputStream.getChannel();
                      channel.write(bytes.buffer);
@@ -85,7 +85,7 @@ index 0000000..0000000 100644
                      addPart(notLoadedBytesRanges, requestInfo.offset, requestInfo.offset + currentBytesSize, true);
                      if (BuildVars.LOGS_ENABLED && FULL_LOGS) {
                          FileLog.d(fileName + " add part " + requestInfo.offset + " " + (requestInfo.offset + currentBytesSize));
-@@ -2045,6 +2056,7 @@ public class FileLoadOperation {
+@@ -2057,6 +2068,7 @@ public class FileLoadOperation {
                      if (fiv != null) {
                          fiv.seek(0);
                          fiv.write(iv);
@@ -141,7 +141,7 @@ index 0000000..0000000 100644
  
          private CacheImage cacheImage;
          private boolean isCancelled;
-@@ -2075,14 +2088,14 @@ public class ImageLoader {
+@@ -2087,14 +2100,14 @@ public class ImageLoader {
          int memoryClass = ((ActivityManager) ApplicationLoader.applicationContext.getSystemService(Context.ACTIVITY_SERVICE)).getMemoryClass();
          int maxSize;
          if (canForce8888 = memoryClass >= 192) {

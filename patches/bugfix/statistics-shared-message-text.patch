@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MessageStatisticActivit
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/MessageStatisticActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/MessageStatisticActivity.java
-@@ -496,7 +496,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
+@@ -499,7 +499,7 @@ public class MessageStatisticActivity extends BaseFragment implements Notificati
                  if (message.length() > 150) {
                      message = message.subSequence(0, 150);
                  }

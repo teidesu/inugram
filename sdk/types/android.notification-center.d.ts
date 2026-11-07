@@ -189,7 +189,7 @@ declare namespace inu {
       chatSearchResultsLoading(guid: number): void
 
       /** `tracksBegin`: `ArrayList<MessageObject>`, `tracksEnd`: `ArrayList<MessageObject>` */
-      musicDidLoad(dialogId: number, tracksBegin: JavaObject, tracksEnd: JavaObject): void
+      musicDidLoad(dialogId: number, tracksBegin: JavaObject, tracksEnd: JavaObject, topicId: number): void
 
       moreMusicDidLoad(addedCount: number): void
 
@@ -669,7 +669,7 @@ declare namespace inu {
       needShareTheme(theme: JavaObject, accent: JavaObject | null): void
 
       /** Global. `theme`: `Theme.ThemeInfo`, `pos`: `int[]`, `toDark`: `SparseIntArray` when loading a remote theme, `animatingView`: `RLottieImageView`, `rippleAbove`: `TextCell`, `then`: `Runnable` */
-      needSetDayNightTheme(theme: JavaObject, nightTheme: boolean, pos: JavaObject | null, accentId: number, toDark?: boolean | JavaObject, animatingView?: JavaObject | null, rippleAbove?: JavaObject | null, then?: JavaObject | null, colorNotDark?: boolean): void
+      needSetDayNightTheme(theme: JavaObject, nightTheme: boolean, pos: JavaObject | null, accentId: number, toDark?: boolean, animatingView?: JavaObject | null, rippleAbove?: JavaObject | null, then?: JavaObject | null, colorNotDark?: boolean): void
 
       /** Global. */
       goingToPreviewTheme(): void
@@ -805,7 +805,7 @@ declare namespace inu {
 
       topicsDidLoaded(chatId: number, fromCache: boolean): void
 
-      chatSwitchedForum(chatId: number, forum: boolean, forumTabs: boolean): void
+      chatSwitchedForum(chatId: number, forum: boolean, forumTabs: boolean, forumSidebar: boolean): void
 
       didUpdateGlobalAutoDeleteTimer(): void
 

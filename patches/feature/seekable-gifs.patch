@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMes
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
-@@ -10513,7 +10513,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -10499,7 +10499,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                  playerInjected = true;
                  updatePlayerState(videoPlayer.getPlayWhenReady(), videoPlayer.getPlaybackState());
              } else {
@@ -21,7 +21,7 @@ index 0000000..0000000 100644
                      @Override
                      public void play() {
                          super.play();
-@@ -10755,7 +10756,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -10726,7 +10727,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
              videoTimelineView.setProgress(videoTimelineView.getLeftProgress());
              videoPlayerSeekbar.setBufferedProgress(0);
  
@@ -30,7 +30,7 @@ index 0000000..0000000 100644
                  final int duration = (int) currentMessageObject.getDuration();
                  final String name = currentMessageObject.getFileNameFast();
                  if (!TextUtils.isEmpty(name)) {
-@@ -14542,7 +14543,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -14513,7 +14514,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                  NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.dialogPhotosUpdate, dialogPhotos);
              }
          }
@@ -39,7 +39,7 @@ index 0000000..0000000 100644
              playerAutoStarted = true;
              onActionClick(false);
          } else if (!imagesArrLocals.isEmpty()) {
-@@ -14651,7 +14652,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -14622,7 +14623,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
  
              boolean isInvoice = newMessageObject.isInvoice();
              boolean noforwards = MessagesController.getInstance(currentAccount).isPeerNoForwards(newMessageObject.getDialogId()) || (newMessageObject.messageOwner != null && newMessageObject.messageOwner.noforwards) || newMessageObject.hasRevealedExtendedMedia();
@@ -48,7 +48,7 @@ index 0000000..0000000 100644
                  bottomLayout.setVisibility(View.VISIBLE);
                  bottomLayout.setTag(1);
              } else {
-@@ -16940,7 +16941,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -16911,7 +16912,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                  if (!TextUtils.isEmpty(restrictionReason)) {
                      imageReceiver.setImageBitmap(parentActivity.getResources().getDrawable(R.drawable.photoview_placeholder));
                      return;
@@ -57,7 +57,7 @@ index 0000000..0000000 100644
                      if (messageObject.photoThumbs != null && !messageObject.photoThumbs.isEmpty()) {
                          ImageReceiver.BitmapHolder placeHolder = null;
                          if (currentThumb != null && imageReceiver == centerImage) {
-@@ -17692,7 +17693,13 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -17663,7 +17664,13 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
              if (messageObject != null) {
                  currentAnimation = object.allowTakeAnimation ? object.imageReceiver.getAnimation() : null;
                  if (currentAnimation != null) {

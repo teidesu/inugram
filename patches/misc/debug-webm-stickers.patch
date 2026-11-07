@@ -55,7 +55,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/FileLoadOperatio
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/FileLoadOperation.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/FileLoadOperation.java
-@@ -153,7 +153,7 @@ public class FileLoadOperation {
+@@ -154,7 +154,7 @@ public class FileLoadOperation {
          }
      }
  
@@ -64,7 +64,7 @@ index 0000000..0000000 100644
  
      private final static int stateIdle = 0;
      private final static int stateDownloading = 1;
-@@ -215,9 +215,9 @@ public class FileLoadOperation {
+@@ -216,9 +216,9 @@ public class FileLoadOperation {
      protected TLRPC.InputFileLocation location;
      private TLRPC.InputWebFileLocation webLocation;
      private WebFile webFile;
@@ -109,7 +109,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -9796,6 +9796,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -9083,6 +9083,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                              if (!loopStickers()) {
                                  photoImage.animatedFileDrawableRepeatMaxCount = 1;
                              }

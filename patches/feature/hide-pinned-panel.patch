@@ -11,16 +11,16 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -457,7 +457,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -468,7 +468,7 @@ public class ChatActivity extends BaseFragment implements
      private ComposeDrawable otherIcon;
      private ActionBarMenu.LazyItem attachItem;
      private ActionBarMenuItem.Item savedChatsItem, savedChatsGap;;
 -    private ActionBarMenuItem headerItem;
 +    public ActionBarMenuItem headerItem;
-     private ActionBarMenu.LazyItem editTextItem;
      protected ActionBarMenuItem searchItem;
      protected ActionBarMenuItem topicCreateItem;
-@@ -752,13 +752,13 @@ public class ChatActivity extends BaseFragment implements
+     private ActionBarMenuItem topicsPanelItem;
+@@ -773,13 +773,13 @@ public class ChatActivity extends BaseFragment implements
  
      private Runnable checkPaddingsRunnable;
  
@@ -36,15 +36,15 @@ index 0000000..0000000 100644
      private int maxPinnedMessageId;
      private HashMap<Integer, MessageObject> pinnedMessageObjects = new HashMap<>();
      private SparseArray<Boolean> loadingPinnedMessages = new SparseArray<>();
-@@ -11692,6 +11692,7 @@ public class ChatActivity extends BaseFragment implements
-         pinnedListButton.setBackgroundDrawable(Theme.createSelectorDrawable(getThemedColor(Theme.key_inappPlayerClose) & 0x19ffffff));
+@@ -12106,6 +12106,7 @@ public class ChatActivity extends BaseFragment implements
+         ThemeBind.selectorBackground(pinnedListButton, Theme.createSelectorDrawable(getThemedColor(Theme.key_inappPlayerClose) & 0x19ffffff), null, ThemeBind.alpha(Theme.key_inappPlayerClose, 0x19), getResourceProvider());
          pinnedMessageView.addView(pinnedListButton, LayoutHelper.createFrame(36, 48, Gravity.RIGHT | Gravity.TOP, 0, 0, 7, 0));
          pinnedListButton.setOnClickListener(v -> openPinnedMessagesList(false));
 +        pinnedListButton.setOnLongClickListener(v -> ChatActionsHelper.onPinnedPanelLongPressed(ChatActivity.this));
  
          closePinned = new ImageView(getContext());
          closePinned.setImageResource(R.drawable.miniplayer_close);
-@@ -11744,6 +11745,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -12158,6 +12159,7 @@ public class ChatActivity extends BaseFragment implements
                  updatePinnedMessageView(true);
              }
          });
@@ -52,7 +52,7 @@ index 0000000..0000000 100644
  
          updatePinnedListButton(false);
      }
-@@ -28659,7 +28661,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -29222,7 +29224,7 @@ public class ChatActivity extends BaseFragment implements
          return false;
      }
  
@@ -61,7 +61,7 @@ index 0000000..0000000 100644
          updatePinnedMessageView(animated, 0);
      }
  
-@@ -28778,6 +28780,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -29341,6 +29343,7 @@ public class ChatActivity extends BaseFragment implements
          if (currentEncryptedChat != null || chatMode != 0) {
              return;
          }

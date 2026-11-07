@@ -127,7 +127,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/MaskPaintView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/MaskPaintView.java
-@@ -48,6 +48,7 @@ public class MaskPaintView extends FrameLayout {
+@@ -49,6 +49,7 @@ public class MaskPaintView extends FrameLayout {
      private final RenderView renderView;
      private Bitmap bitmapToEdit;
      private int orientation;
@@ -135,7 +135,7 @@ index 0000000..0000000 100644
  
      private boolean inBubbleMode;
  
-@@ -102,6 +103,7 @@ public class MaskPaintView extends FrameLayout {
+@@ -103,6 +104,7 @@ public class MaskPaintView extends FrameLayout {
  
              @Override
              public void onFinishedDrawing(boolean moved) {
@@ -143,7 +143,7 @@ index 0000000..0000000 100644
                  undoStore.getDelegate().historyChanged();
                  weightChooserView.setViewHidden(false);
                  onDrawn();
-@@ -173,6 +175,10 @@ public class MaskPaintView extends FrameLayout {
+@@ -174,6 +176,10 @@ public class MaskPaintView extends FrameLayout {
  
      }
  
@@ -175,7 +175,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMes
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
-@@ -11602,6 +11602,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -11561,6 +11561,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
  
              photoPaintView.onCleanupEntities();
          } else if (currentEditMode == EDIT_MODE_STICKER_MASK) {

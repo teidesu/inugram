@@ -15,7 +15,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -1291,6 +1291,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -1290,6 +1290,7 @@ public class MessagesController extends BaseController implements NotificationCe
          public ArrayList<TLRPC.Dialog> dialogsForward = new ArrayList<>();
          public int color;
          public boolean title_noanimate;
@@ -35,7 +35,7 @@ index 0000000..0000000 100644
  
  import me.vkryl.core.BitwiseUtils;
  
-@@ -2690,6 +2691,8 @@ public class MessagesStorage extends BaseController {
+@@ -2808,6 +2809,8 @@ public class MessagesStorage extends BaseController {
                      return 0;
                  });
  
@@ -44,7 +44,7 @@ index 0000000..0000000 100644
                  if (updateCounters) {
                      calcUnreadCounters(true);
                  }
-@@ -2784,6 +2787,9 @@ public class MessagesStorage extends BaseController {
+@@ -2902,6 +2905,9 @@ public class MessagesStorage extends BaseController {
              while (cursor.next()) {
                  int folderId = cursor.intValue(1);
                  long did = cursor.longValue(0);
@@ -54,7 +54,7 @@ index 0000000..0000000 100644
                  int unread;
                  int mentions = 0;
                  if (isForum(did, FORUM_TYPE_CHAT | FORUM_TYPE_BOT | FORUM_TYPE_DIRECT)) {
-@@ -2830,6 +2836,11 @@ public class MessagesStorage extends BaseController {
+@@ -2948,6 +2954,11 @@ public class MessagesStorage extends BaseController {
                  getUsersInternal(usersToLoad, users, true);
                  for (int a = 0, N = users.size(); a < N; a++) {
                      TLRPC.User user = users.get(a);
@@ -66,7 +66,7 @@ index 0000000..0000000 100644
                      boolean muted = getMessagesController().isDialogMuted(user.id, 0);
                      int idx1 = dialogsByFolders.get(user.id);
                      int idx2 = muted ? 1 : 0;
-@@ -3341,6 +3352,10 @@ public class MessagesStorage extends BaseController {
+@@ -3459,6 +3470,10 @@ public class MessagesStorage extends BaseController {
                              changed = true;
                              filter.title_noanimate= newFilter.title_noanimate;
                          }
@@ -77,7 +77,7 @@ index 0000000..0000000 100644
                          final int color = (newFilter.flags & 134217728) != 0 ? newFilter.color : -1;
                          if (filter.color != color) {
                              filter.color = color;
-@@ -3482,6 +3497,7 @@ public class MessagesStorage extends BaseController {
+@@ -3600,6 +3615,7 @@ public class MessagesStorage extends BaseController {
                          filter.name = newFilter.title.text;
                          filter.entities = newFilter.title.entities;
                          filter.title_noanimate = newFilter.title_noanimate;
@@ -85,7 +85,7 @@ index 0000000..0000000 100644
                          filter.color = (newFilter.flags & 134217728) != 0 ? newFilter.color : -1;
                          filter.pendingUnreadCount = -1;
                          for (int c = 0; c < 2; c++) {
-@@ -3601,6 +3617,7 @@ public class MessagesStorage extends BaseController {
+@@ -3719,6 +3735,7 @@ public class MessagesStorage extends BaseController {
              saveDialogFilterInternal(filtersToSave.get(a), false, true);
              anythingChanged = true;
          }
@@ -93,7 +93,7 @@ index 0000000..0000000 100644
          boolean orderChanged = false;
          for (int a = 0, N = dialogFilters.size(); a < N; a++) {
              MessagesController.DialogFilter filter = dialogFilters.get(a);
-@@ -6076,6 +6093,17 @@ public class MessagesStorage extends BaseController {
+@@ -6257,6 +6274,17 @@ public class MessagesStorage extends BaseController {
                      continue;
                  }
                  long did = array.keyAt(a);
@@ -111,7 +111,7 @@ index 0000000..0000000 100644
                  if (read) {
                      if (b == 0) {
                          dialogsWithUnread.remove(did);
-@@ -6139,6 +6167,11 @@ public class MessagesStorage extends BaseController {
+@@ -6320,6 +6348,11 @@ public class MessagesStorage extends BaseController {
              getUsersInternal(usersToLoad, users);
              for (int a = 0, N = users.size(); a < N; a++) {
                  TLRPC.User user = users.get(a);
@@ -123,7 +123,7 @@ index 0000000..0000000 100644
                  boolean muted = getMessagesController().isDialogMuted(user.id, 0);
                  Integer folderId = dialogsByFolders.get(user.id);
                  int idx1 = folderId == null || folderId < 0 || folderId > 1 ? 0 : folderId;
-@@ -17897,6 +17930,7 @@ public class MessagesStorage extends BaseController {
+@@ -18082,6 +18115,7 @@ public class MessagesStorage extends BaseController {
      }
  
      public void resetAllUnreadCounters(boolean muted) {
@@ -147,9 +147,9 @@ index 0000000..0000000 100644
  import android.view.View;
  import android.view.ViewGroup;
  import android.view.accessibility.AccessibilityNodeInfo;
-@@ -67,10 +65,9 @@ import org.telegram.tgnet.ConnectionsManager;
- import org.telegram.tgnet.TLRPC;
+@@ -68,10 +66,9 @@ import org.telegram.tgnet.TLRPC;
  import org.telegram.ui.ActionBar.Theme;
+ import org.telegram.ui.ActionBar.ThemeBind;
  import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
 -import org.telegram.ui.Stories.recorder.HintView2;
  
@@ -159,7 +159,7 @@ index 0000000..0000000 100644
  
  @SuppressLint("ViewConstructor")
  public class FilterTabsView extends FrameLayout {
-@@ -124,6 +121,7 @@ public class FilterTabsView extends FrameLayout {
+@@ -125,6 +122,7 @@ public class FilterTabsView extends FrameLayout {
          public boolean isDefault;
          public boolean isLocked;
          public boolean noanimate;
@@ -167,7 +167,7 @@ index 0000000..0000000 100644
  
          public Tab(int i, CharSequence title, boolean noanimate) {
              this.id = i;
-@@ -132,7 +130,7 @@ public class FilterTabsView extends FrameLayout {
+@@ -133,7 +131,7 @@ public class FilterTabsView extends FrameLayout {
          }
  
          public int getWidth(boolean store) {
@@ -176,7 +176,7 @@ index 0000000..0000000 100644
              int c;
              if (store) {
                  c = delegate.getTabCounter(id);
-@@ -151,9 +149,15 @@ public class FilterTabsView extends FrameLayout {
+@@ -152,9 +150,15 @@ public class FilterTabsView extends FrameLayout {
                  String counterText = String.format("%d", c);
                  int counterWidth = (int) Math.ceil(textCounterPaint.measureText(counterText));
                  int countWidth = Math.max(dp(TAB_COUNTER_HEIGHT - 10), counterWidth) + dp(10);
@@ -194,7 +194,7 @@ index 0000000..0000000 100644
              }
              width += counterResultWidth;
  
-@@ -173,8 +177,8 @@ public class FilterTabsView extends FrameLayout {
+@@ -174,8 +178,8 @@ public class FilterTabsView extends FrameLayout {
          }
      }
  
@@ -205,7 +205,7 @@ index 0000000..0000000 100644
      private static final float TAB_COUNTER_HEIGHT = 17.333f;
  
      public class TabView extends View {
-@@ -191,6 +195,7 @@ public class FilterTabsView extends FrameLayout {
+@@ -192,6 +196,7 @@ public class FilterTabsView extends FrameLayout {
          private AnimatedEmojiSpan.EmojiGroupedSpans textLayoutEmojis;
          private StaticLayout textLayout;
          private int textOffsetX;
@@ -213,7 +213,7 @@ index 0000000..0000000 100644
  
          public boolean animateChange;
          public float changeProgress;
-@@ -243,6 +248,7 @@ public class FilterTabsView extends FrameLayout {
+@@ -244,6 +249,7 @@ public class FilterTabsView extends FrameLayout {
              currentTab = tab;
              currentPosition = position;
              setContentDescription(tab.title);
@@ -221,7 +221,7 @@ index 0000000..0000000 100644
              requestLayout();
  
              if (currentNoanimate != (currentTab != null && currentTab.noanimate)) {
-@@ -289,7 +295,7 @@ public class FilterTabsView extends FrameLayout {
+@@ -290,7 +296,7 @@ public class FilterTabsView extends FrameLayout {
  
          @Override
          protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
@@ -230,7 +230,7 @@ index 0000000..0000000 100644
              setMeasuredDimension(w, MeasureSpec.getSize(heightMeasureSpec));
          }
  
-@@ -386,7 +392,14 @@ public class FilterTabsView extends FrameLayout {
+@@ -387,7 +393,14 @@ public class FilterTabsView extends FrameLayout {
              }
  
              tabCounterVisible = (countWidth != 0 && !animateCounterRemove) ? (counterText != null ? 1.0f : editingStartAnimationProgress) : 0;
@@ -246,7 +246,7 @@ index 0000000..0000000 100644
              float textX = (getMeasuredWidth() - tabWidth) / 2f;
              if (animateTextX) {
                  textX = textX * changeProgress + animateFromTextX * (1f - changeProgress);
-@@ -401,12 +414,16 @@ public class FilterTabsView extends FrameLayout {
+@@ -402,12 +415,16 @@ public class FilterTabsView extends FrameLayout {
              }
  
  
@@ -264,7 +264,7 @@ index 0000000..0000000 100644
                      titleAnimateStableLayout.draw(canvas);
                      AnimatedEmojiSpan.drawAnimatedEmojis(canvas, titleAnimateStableLayout, titleAnimateStableLayoutEmojis, 0, null, computeVerticalScrollOffset() - dp(6), computeVerticalScrollOffset() + computeVerticalScrollExtent(), 0, 1.0f, emojiColorFilter);
                      canvas.restore();
-@@ -415,7 +432,7 @@ public class FilterTabsView extends FrameLayout {
+@@ -416,7 +433,7 @@ public class FilterTabsView extends FrameLayout {
                      canvas.save();
                      int alpha = textPaint.getAlpha();
                      textPaint.setAlpha((int) (alpha * (animateTextChangeOut ? 1f - changeProgress : changeProgress)));
@@ -273,7 +273,7 @@ index 0000000..0000000 100644
                      titleAnimateInLayout.draw(canvas);
                      AnimatedEmojiSpan.drawAnimatedEmojis(canvas, titleAnimateInLayout, titleAnimateInLayoutEmojis, 0, null, computeVerticalScrollOffset() - dp(6), computeVerticalScrollOffset() + computeVerticalScrollExtent(), 0, (animateTextChangeOut ? 1f - changeProgress : changeProgress), emojiColorFilter);
                      canvas.restore();
-@@ -425,7 +442,7 @@ public class FilterTabsView extends FrameLayout {
+@@ -426,7 +443,7 @@ public class FilterTabsView extends FrameLayout {
                      canvas.save();
                      int alpha = textPaint.getAlpha();
                      textPaint.setAlpha((int) (alpha * (animateTextChangeOut ? changeProgress : 1f - changeProgress)));
@@ -282,7 +282,7 @@ index 0000000..0000000 100644
                      titleAnimateOutLayout.draw(canvas);
                      AnimatedEmojiSpan.drawAnimatedEmojis(canvas, titleAnimateOutLayout, titleAnimateOutLayoutEmojis, 0, null, computeVerticalScrollOffset() - dp(6), computeVerticalScrollOffset() + computeVerticalScrollExtent(), 0, (animateTextChangeOut ? changeProgress : 1f - changeProgress), emojiColorFilter);
                      canvas.restore();
-@@ -434,12 +451,13 @@ public class FilterTabsView extends FrameLayout {
+@@ -435,12 +452,13 @@ public class FilterTabsView extends FrameLayout {
              } else {
                  if (textLayout != null) {
                      canvas.save();
@@ -297,7 +297,7 @@ index 0000000..0000000 100644
  
              if (animateCounterEnter || counterText != null || showRemove && (isEditing || editingStartAnimationProgress != 0)) {
                  if (aBackgroundColorKey < 0) {
-@@ -466,10 +484,11 @@ public class FilterTabsView extends FrameLayout {
+@@ -467,10 +485,11 @@ public class FilterTabsView extends FrameLayout {
                  if (animateTextChange) {
                      titleWidth = animateFromTitleWidth * (1f - changeProgress) + currentTab.titleWidth * changeProgress;
                  }
@@ -311,7 +311,7 @@ index 0000000..0000000 100644
                  }
                  int countTop = (getMeasuredHeight() - dp(TAB_COUNTER_HEIGHT)) / 2;
  
-@@ -655,7 +674,14 @@ public class FilterTabsView extends FrameLayout {
+@@ -656,7 +675,14 @@ public class FilterTabsView extends FrameLayout {
              } else {
                  countWidth = 0;
              }
@@ -327,7 +327,7 @@ index 0000000..0000000 100644
              int textX = (getMeasuredWidth() - tabWidth) / 2;
  
              if (textX != lastTextX) {
-@@ -949,6 +975,7 @@ public class FilterTabsView extends FrameLayout {
+@@ -950,6 +976,7 @@ public class FilterTabsView extends FrameLayout {
              }
          };
          listView.setClipChildren(false);
@@ -335,7 +335,7 @@ index 0000000..0000000 100644
          itemAnimator = new DefaultItemAnimator() {
  
              @Override
-@@ -1098,7 +1125,7 @@ public class FilterTabsView extends FrameLayout {
+@@ -1099,7 +1126,7 @@ public class FilterTabsView extends FrameLayout {
          });
          ItemTouchHelper itemTouchHelper = new ItemTouchHelper(new TouchHelperCallback());
          itemTouchHelper.attachToRecyclerView(listView);
@@ -344,7 +344,7 @@ index 0000000..0000000 100644
          listView.setPadding(listViewPaddingH, 0, listViewPaddingH, 0);
          listView.setClipToPadding(false);
          listView.setDrawSelectorBehind(true);
-@@ -1260,6 +1287,10 @@ public class FilterTabsView extends FrameLayout {
+@@ -1261,6 +1288,10 @@ public class FilterTabsView extends FrameLayout {
      }
  
      public void addTab(int id, int stableId, String text, ArrayList<TLRPC.MessageEntity> entities, boolean noanimate, boolean isDefault, boolean isLocked) {
@@ -355,7 +355,7 @@ index 0000000..0000000 100644
          int position = tabs.size();
          if (position == 0 && selectedTabId == -1) {
              selectedTabId = id;
-@@ -1274,7 +1305,8 @@ public class FilterTabsView extends FrameLayout {
+@@ -1275,7 +1306,8 @@ public class FilterTabsView extends FrameLayout {
          Tab tab = new Tab(id, text(text, entities), noanimate);
          tab.isDefault = isDefault;
          tab.isLocked = isLocked;
@@ -365,7 +365,7 @@ index 0000000..0000000 100644
          tabs.add(tab);
      }
  
-@@ -1293,7 +1325,7 @@ public class FilterTabsView extends FrameLayout {
+@@ -1294,7 +1326,7 @@ public class FilterTabsView extends FrameLayout {
          Tab tab = new Tab(id, text, noanimate);
          tab.isDefault = isDefault;
          tab.isLocked = isLocked;
@@ -374,7 +374,7 @@ index 0000000..0000000 100644
          tabs.add(tab);
      }
  
-@@ -1382,7 +1414,7 @@ public class FilterTabsView extends FrameLayout {
+@@ -1383,7 +1415,7 @@ public class FilterTabsView extends FrameLayout {
              positionToWidth.put(a, tabWidth);
              positionToCount.put(a, tabs.get(a).counter);
              positionToX.put(a, xOffset + additionalTabWidth / 2);
@@ -383,7 +383,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -1472,10 +1504,10 @@ public class FilterTabsView extends FrameLayout {
+@@ -1473,10 +1505,10 @@ public class FilterTabsView extends FrameLayout {
                      float prevH = positionToCount.get(idx1) != 0 ? 1 : 0;
                      float newH = positionToCount.get(idx2) != 0 ? 1 : 0;
                      if (additionalTabWidth != 0) {
@@ -396,7 +396,7 @@ index 0000000..0000000 100644
                      }
                      indicatorWidth = lerp(prevW, newW, animatingIndicatorProgress);
                      counterVisible = lerp(prevH, newH, animatingIndicatorProgress);
-@@ -1507,7 +1539,7 @@ public class FilterTabsView extends FrameLayout {
+@@ -1508,7 +1540,7 @@ public class FilterTabsView extends FrameLayout {
              final float add = additionalTabWidth / 2f;
  
              final int y = height / 2 - dp(14);
@@ -405,7 +405,7 @@ index 0000000..0000000 100644
              selectorDrawable.setAlpha(31);
              selectorDrawable.draw(canvas);
              canvas.restore();
-@@ -1544,12 +1576,15 @@ public class FilterTabsView extends FrameLayout {
+@@ -1545,12 +1577,15 @@ public class FilterTabsView extends FrameLayout {
          if (!tabs.isEmpty()) {
              final int width = MeasureSpec.getSize(widthMeasureSpec) - listViewPaddingH * 2;
              Tab firstTab = findDefaultTab();
@@ -423,7 +423,7 @@ index 0000000..0000000 100644
                  int prevWidth = additionalTabWidth;
                  additionalTabWidth = trueTabsWidth < width ? (width - trueTabsWidth) / tabs.size() : 0;
                  if (prevWidth != additionalTabWidth) {
-@@ -1562,7 +1597,6 @@ public class FilterTabsView extends FrameLayout {
+@@ -1563,7 +1598,6 @@ public class FilterTabsView extends FrameLayout {
                  }
                  updateTabsWidths();
                  invalidated = false;
@@ -431,7 +431,7 @@ index 0000000..0000000 100644
          }
          super.onMeasure(widthMeasureSpec, heightMeasureSpec);
      }
-@@ -1721,7 +1755,7 @@ public class FilterTabsView extends FrameLayout {
+@@ -1722,7 +1756,7 @@ public class FilterTabsView extends FrameLayout {
                      defaultTab.setTitle(LocaleController.getString(R.string.FilterAllChats), null, false);
                  }
                  for (int b = 0; b < N; b++) {
@@ -440,7 +440,7 @@ index 0000000..0000000 100644
                  }
                  break;
              }
-@@ -1757,7 +1791,7 @@ public class FilterTabsView extends FrameLayout {
+@@ -1758,7 +1792,7 @@ public class FilterTabsView extends FrameLayout {
                  defaultTab.setTitle(LocaleController.getString(R.string.FilterAllChats), null, false);
              }
              for (int b = 0, N = tabs.size(); b < N; b++) {
@@ -453,7 +453,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -280,6 +280,7 @@ import java.util.List;
+@@ -281,6 +281,7 @@ import java.util.List;
  import java.util.concurrent.ConcurrentHashMap;
  
  import desu.inugram.InuHooks;
@@ -461,7 +461,7 @@ index 0000000..0000000 100644
  import desu.inugram.helpers.dialogs.MainTabsHelper;
  import me.vkryl.android.animator.BoolAnimator;
  import me.vkryl.android.animator.FactorAnimator;
-@@ -3684,6 +3685,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -3607,6 +3608,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      if (initialDialogsType == DIALOGS_TYPE_FORWARD) {
                          return 0;
                      }
@@ -471,7 +471,7 @@ index 0000000..0000000 100644
                      if (tabId == filterTabsView.getDefaultTabId()) {
                          return getMessagesStorage().getMainUnreadCount();
                      }
-@@ -6888,12 +6892,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -6810,12 +6814,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      selectWithStableId = true;
                  }
                  filterTabsView.removeTabs();
@@ -489,7 +489,7 @@ index 0000000..0000000 100644
                      }
                  }
                  if (stableId >= 0) {
-@@ -6916,9 +6923,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -6838,9 +6845,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      if (viewPages[a].selectedType >= filters.size()) {
                          viewPages[a].selectedType = filters.size() - 1;
                      }
@@ -509,7 +509,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/FilterCreateActivity.ja
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/FilterCreateActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/FilterCreateActivity.java
-@@ -1148,6 +1148,10 @@ public class FilterCreateActivity extends BaseFragment {
+@@ -1161,6 +1161,10 @@ public class FilterCreateActivity extends BaseFragment {
              req.filter.flags |= 134217728;
              req.filter.color = newFilterColor;
          }

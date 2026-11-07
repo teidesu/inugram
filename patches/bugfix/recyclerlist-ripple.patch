@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerList
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java
-@@ -1273,10 +1273,13 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -1309,10 +1309,13 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
                  if (!interceptedByChild && currentChildView != null) {
                      float x = event.getX();
                      float y = event.getY();
@@ -26,7 +26,7 @@ index 0000000..0000000 100644
                          }
                      };
                      AndroidUtilities.runOnUIThread(selectChildRunnable, ViewConfiguration.getTapTimeout());
-@@ -1295,18 +1298,23 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -1331,18 +1334,23 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
                          }
                          updateSelectorState();
                      } else {
@@ -52,7 +52,7 @@ index 0000000..0000000 100644
                      onChildPressed(currentChildView, 0, 0, false);
                      currentChildView = null;
                      interceptedByChild = false;
-@@ -1395,7 +1403,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -1431,7 +1439,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
                  }
              }
          } else {
@@ -61,7 +61,7 @@ index 0000000..0000000 100644
          }
          updateSelectorState();
      }
-@@ -1413,7 +1421,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -1449,7 +1457,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
              currentChildView = null;
              removeSelection(child, null);
          }
@@ -70,7 +70,7 @@ index 0000000..0000000 100644
          if (clickRunnable != null) {
              AndroidUtilities.cancelRunOnUIThread(clickRunnable);
              clickRunnable = null;
-@@ -1433,7 +1441,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -1469,7 +1477,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
              if (resetSelectorOnChanged) {
                  currentFirst = -1;
                  if (removeHighlighSelectionRunnable == null) {
@@ -79,7 +79,7 @@ index 0000000..0000000 100644
                  }
              }
              invalidate();
-@@ -1543,6 +1551,11 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -1578,6 +1586,11 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
                  } else {
                      selectorRect.setEmpty();
                  }
@@ -91,7 +91,7 @@ index 0000000..0000000 100644
                  checkSection(false);
                  if (dy != 0 && fastScroll != null) {
                      fastScroll.showFloatingDate();
-@@ -2361,6 +2374,51 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -2405,6 +2418,51 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
          invalidate();
      }
  
@@ -143,7 +143,7 @@ index 0000000..0000000 100644
      private void positionSelector(int position, View sel) {
          positionSelector(position, sel, false, -1, -1, false);
      }
-@@ -2382,6 +2440,12 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -2426,6 +2484,12 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
              return;
          }
          final boolean positionChanged = position != selectorPosition;
@@ -156,7 +156,7 @@ index 0000000..0000000 100644
          int bottomPadding;
          if (getAdapter() instanceof SelectionAdapter) {
              bottomPadding = ((SelectionAdapter) getAdapter()).getSelectionBottomPadding(sel);
-@@ -2392,6 +2456,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -2436,6 +2500,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
              selectorPosition = position;
          }
          selectorView = sel;
@@ -164,7 +164,7 @@ index 0000000..0000000 100644
          if (selectorType == 8) {
              Theme.setMaskDrawableRad(selectorDrawable, selectorRadius, 0);
          } else if (selectorType == 42) {
-@@ -2445,9 +2510,12 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -2489,9 +2554,12 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
          }
      }
  
@@ -178,7 +178,7 @@ index 0000000..0000000 100644
                  if (selectorDrawable.setState(getDrawableStateForSelector())) {
                      invalidateDrawable(selectorDrawable);
                  }
-@@ -2488,7 +2556,15 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -2532,7 +2600,15 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
  
      @Override
      public boolean verifyDrawable(Drawable drawable) {
@@ -195,7 +195,7 @@ index 0000000..0000000 100644
      }
  
      @Override
-@@ -2637,9 +2713,33 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -2681,9 +2757,33 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
      }
  
      private void drawSelectors2(Canvas canvas) {
@@ -233,7 +233,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -1751,6 +1751,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -1750,6 +1750,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              super(context);
              parentPage = page;
              additionalClipBottom = dp(200);

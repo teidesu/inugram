@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -257,6 +257,7 @@ import java.util.Locale;
+@@ -262,6 +262,7 @@ import java.util.Locale;
  import java.util.Stack;
  import java.util.concurrent.atomic.AtomicReference;
  
@@ -19,7 +19,7 @@ index 0000000..0000000 100644
  import me.vkryl.android.animator.BoolAnimator;
  import me.vkryl.android.animator.FactorAnimator;
  import me.vkryl.core.BitwiseUtils;
-@@ -9676,9 +9677,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -8969,9 +8970,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                      float maxHeight;
                      int maxWidth;
                      if (AndroidUtilities.isTablet()) {
@@ -31,7 +31,7 @@ index 0000000..0000000 100644
                      }
                      String filter;
                      if (messageObject.isAnimatedEmoji() || messageObject.isDice()) {
-@@ -9793,6 +9794,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -9086,6 +9087,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                      } else {
                          photoImage.setImage(null, null, thumb, null, messageObject, 0);
                      }
@@ -41,7 +41,7 @@ index 0000000..0000000 100644
                      if (!reactionsLayoutInBubble.isSmall) {
                          reactionsLayoutInBubble.measure(maxWidth + dp(36), currentMessageObject.isOutOwner() && (currentMessageObject.isAnimatedEmoji() || currentMessageObject.isAnyKindOfSticker()) ? Gravity.RIGHT : Gravity.LEFT);
                          reactionsLayoutInBubble.drawServiceShaderBackground = 1f;
-@@ -18658,6 +18662,11 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -15762,6 +15766,11 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
          } else {
              signWidth = 0;
          }
@@ -53,7 +53,7 @@ index 0000000..0000000 100644
      }
  
      protected boolean shouldDrawSelectionOverlay() {
-@@ -23900,6 +23909,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -21248,6 +21257,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
          if (!drawFromPinchToZoom && delegate != null && delegate.getPinchToZoomHelper() != null && delegate.getPinchToZoomHelper().isInOverlayModeFor(this) && shouldDrawTimeOnMedia()) {
              return;
          }
@@ -63,7 +63,7 @@ index 0000000..0000000 100644
          if (currentMessageObject != null && currentMessageObject.type == MessageObject.TYPE_JOINED_CHANNEL) {
              return;
          }
-@@ -23977,6 +23989,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -21329,6 +21341,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
          if ((!drawTime || groupPhotoInvisible) && shouldDrawTimeOnMedia() || timeLayout == null || (currentMessageObject.deleted && currentPosition != null) || currentMessageObject.type == MessageObject.TYPE_PHONE_CALL) {
              return;
          }
@@ -73,7 +73,7 @@ index 0000000..0000000 100644
          if (currentMessageObject.type == MessageObject.TYPE_ROUND_VIDEO) {
              Theme.chat_timePaint.setColor(
                  ColorUtils.blendARGB(
-@@ -24078,7 +24093,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -21435,7 +21450,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
              if (effectId != 0) {
                  timeX -= dp(14 + 4);
              }
@@ -83,7 +83,7 @@ index 0000000..0000000 100644
              float offsetX = (currentMessageObject != null && currentMessageObject.isAnyKindOfSticker()) ? dp(2) : 0;
              float timeY;
              if (documentAttachType == DOCUMENT_ATTACH_TYPE_ROUND && (currentMessageObject == null || !currentMessageObject.isRoundOnce())) {
-@@ -24088,7 +24104,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -21445,7 +21461,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
              }
              float y1 = timeY - dp(23);
              float timeHeight = Math.max(dp(17), Theme.chat_timePaint.getTextSize() + dp(5));

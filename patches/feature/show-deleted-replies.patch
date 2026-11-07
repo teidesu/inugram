@@ -5,15 +5,16 @@ Subject: show deleted replies like tdesktop + click to go near
 
 ---
  .../org/telegram/messenger/MessageObject.java | 10 ++++++++
- .../telegram/ui/Cells/ChatMessageCell.java    | 25 +++++++++++++------
- .../java/org/telegram/ui/ChatActivity.java    |  4 +++
- 3 files changed, 32 insertions(+), 7 deletions(-)
+ .../ChatMessageAccessibilityNodeProvider.java |  2 +-
+ .../telegram/ui/Cells/ChatMessageCell.java    | 23 ++++++++++++++-----
+ .../java/org/telegram/ui/ChatActivity.java    |  4 ++++
+ 4 files changed, 32 insertions(+), 7 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
-@@ -3848,6 +3848,16 @@ public class MessageObject {
+@@ -4048,6 +4048,16 @@ public class MessageObject {
          return !(replyMessageObject == null || replyMessageObject.messageOwner instanceof TLRPC.TL_messageEmpty || replyMessageObject.messageOwner.action instanceof TLRPC.TL_messageActionHistoryClear || replyMessageObject.messageOwner.action instanceof TLRPC.TL_messageActionTopicCreate);
      }
  
@@ -30,11 +31,24 @@ index 0000000..0000000 100644
      @Deprecated
      public void generateSuggestionApprovalMessageText() {
          /*
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageAccessibilityNodeProvider.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageAccessibilityNodeProvider.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageAccessibilityNodeProvider.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageAccessibilityNodeProvider.java
+@@ -982,7 +982,7 @@ class ChatMessageAccessibilityNodeProvider extends AccessibilityNodeProvider {
+                         cell.delegate.didPressSideButton(cell);
+                     }
+                 } else if (virtualViewId == REPLY) {
+-                    if (cell.delegate != null && (!cell.isThreadChat || cell.isMonoForum || cell.currentMessageObject.getReplyTopMsgId() != 0) && (cell.currentMessageObject.hasValidReplyMessageObject() || cell.hasReplyQuote || cell.currentMessageObject.messageOwner != null && cell.currentMessageObject.messageOwner.reply_to != null && cell.currentMessageObject.messageOwner.reply_to.reply_from != null)) {
++                    if (cell.delegate != null && (!cell.isThreadChat || cell.isMonoForum || cell.currentMessageObject.getReplyTopMsgId() != 0) && (cell.currentMessageObject.hasValidReplyMessageObject() || cell.hasReplyQuote || cell.currentMessageObject.messageOwner != null && cell.currentMessageObject.messageOwner.reply_to != null && cell.currentMessageObject.messageOwner.reply_to.reply_from != null || cell.currentMessageObject.inu_isReplyToDeletedMessage())) {
+                         cell.delegate.didPressReplyMessage(cell, cell.currentMessageObject.getReplyMsgId(), 0, 0, false);
+                     }
+                 } else if (virtualViewId == FORWARD) {
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -4886,7 +4886,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -4296,7 +4296,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                          }
                      }
                  } else {
@@ -43,7 +57,7 @@ index 0000000..0000000 100644
                          delegate.didPressReplyMessage(this, currentMessageObject.getReplyMsgId(), x, y, false);
                      }
                  }
-@@ -12308,7 +12308,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -10782,7 +10782,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                  replyBounce.setPressed(false);
              }
              playSoundEffect(SoundEffectConstants.CLICK);
@@ -52,7 +66,7 @@ index 0000000..0000000 100644
                  delegate.didPressReplyMessage(this, currentMessageObject.getReplyMsgId(), replyBounceX, replyBounceY, true);
              }
              return true;
-@@ -19278,7 +19278,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -16388,7 +16388,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
              }
          }
  
@@ -61,7 +75,7 @@ index 0000000..0000000 100644
              if (currentPosition == null || currentPosition.minY == 0) {
                  if (isSideMenued && !drawBackground || !messageObject.isAnyKindOfSticker() && messageObject.type != MessageObject.TYPE_ROUND_VIDEO || messageObject.type == MessageObject.TYPE_EMOJIS) {
                      namesOffset += dp(20) + (Theme.chat_replyTextPaint.getTextSize() + Theme.chat_replyNamePaint.getTextSize());
-@@ -19305,7 +19305,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -16415,7 +16415,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                  CharSequence stringFinalText = null;
  
                  CharSequence name = null;
@@ -70,7 +84,7 @@ index 0000000..0000000 100644
                  isReplyQuote = hasReplyQuote && messageObject.messageOwner.reply_to.quote;
                  final boolean showQuote = isReplyQuote && messageObject.messageOwner.reply_to.quote;
                  if (isReplyQuote && showQuote && replyQuoteDrawable == null) {
-@@ -19328,7 +19328,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -16438,7 +16438,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                          stringFinalText = StoriesUtilities.createReplyStoryString();
                          maxWidth -= dp(16) + (textPaint.getTextSize() + Theme.chat_replyNamePaint.getTextSize());
                      }
@@ -79,7 +93,7 @@ index 0000000..0000000 100644
                      lastReplyMessage = messageObject.replyMessageObject == null ? null : messageObject.replyMessageObject.messageOwner;
                      int cacheType = 1;
                      int size = 0;
-@@ -19485,7 +19485,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -16595,7 +16595,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                          }
                      }
  
@@ -90,7 +104,7 @@ index 0000000..0000000 100644
                      if (name == null) {
                          name = getString("Loading", R.string.Loading);
                      }
-@@ -19594,6 +19596,15 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -16704,6 +16706,15 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                              MediaDataController.addTextStyleRuns(messageObject.replyMessageObject, (Spannable) stringFinalText);
                              stringFinalText = TextUtils.ellipsize(stringFinalText, textPaint, maxWidth, TextUtils.TruncateAt.END);
                          }
@@ -106,20 +120,11 @@ index 0000000..0000000 100644
                      }
                  } else {
                      replyImageReceiver.setImageBitmap((Drawable) null);
-@@ -28041,7 +28052,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
-                             delegate.didPressSideButton(ChatMessageCell.this);
-                         }
-                     } else if (virtualViewId == REPLY) {
--                        if (delegate != null && (!isThreadChat || isMonoForum || currentMessageObject.getReplyTopMsgId() != 0) && (currentMessageObject.hasValidReplyMessageObject() || hasReplyQuote || currentMessageObject.messageOwner != null && currentMessageObject.messageOwner.reply_to != null && currentMessageObject.messageOwner.reply_to.reply_from != null)) {
-+                        if (delegate != null && (!isThreadChat || isMonoForum || currentMessageObject.getReplyTopMsgId() != 0) && (currentMessageObject.hasValidReplyMessageObject() || hasReplyQuote || currentMessageObject.messageOwner != null && currentMessageObject.messageOwner.reply_to != null && currentMessageObject.messageOwner.reply_to.reply_from != null || currentMessageObject.inu_isReplyToDeletedMessage())) {
-                             delegate.didPressReplyMessage(ChatMessageCell.this, currentMessageObject.getReplyMsgId(), 0, 0, false);
-                         }
-                     } else if (virtualViewId == FORWARD) {
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -41507,6 +41507,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -42167,6 +42167,7 @@ public class ChatActivity extends BaseFragment implements
                      }
                      final Integer finalTaskId = task_id;
                      final byte[] finalPollOptionId = option_id;
@@ -127,7 +132,7 @@ index 0000000..0000000 100644
                      Runnable scroll = () -> {
                          scrollToMessageId(id, messageObject.getId(), true, messageObject.getDialogId() == mergeDialogId ? 1 : 0, true, 0, finalTaskId, finalPollOptionId, () -> {
                              progressDialogAtMessageId = messageObject.getId();
-@@ -41520,6 +41521,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -42180,6 +42181,9 @@ public class ChatActivity extends BaseFragment implements
                      } else {
                          scroll.run();
                      }

@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/PasscodeView
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/PasscodeView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/PasscodeView.java
-@@ -1410,6 +1410,7 @@ public class PasscodeView extends FrameLayout implements NotificationCenter.Noti
+@@ -1411,6 +1411,7 @@ public class PasscodeView extends FrameLayout implements NotificationCenter.Noti
                      final BiometricPrompt.PromptInfo promptInfo = new BiometricPrompt.PromptInfo.Builder()
                              .setTitle(LocaleController.getString(R.string.UnlockToUse))
                              .setNegativeButtonText(LocaleController.getString(R.string.UsePIN))

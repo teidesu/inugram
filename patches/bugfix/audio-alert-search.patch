@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerA
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerAlert.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerAlert.java
-@@ -1338,6 +1338,10 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+@@ -1346,6 +1346,10 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
              actionBar.setAlpha(1.0f);
              actionBarBackground.setAlpha(0.0f);
              actionBarSlideProperty.set(actionBar, 0.0f);

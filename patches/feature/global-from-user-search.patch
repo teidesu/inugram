@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/MentionsAdapte
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/MentionsAdapter.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/MentionsAdapter.java
-@@ -101,7 +101,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
+@@ -104,7 +104,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
      private final boolean stories;
      private TLRPC.ChatFull info;
      private SearchAdapterHelper searchAdapterHelper;
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
      private LongSparseArray<TLObject> searchResultUsernamesMap;
      private Runnable searchGlobalRunnable;
      private String hintHashtag;
-@@ -120,7 +120,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
+@@ -123,7 +123,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
      private long searchResultBotContextSwitchUserId;
      private TLRPC.TL_inlineBotSwitchPM searchResultBotContextSwitch;
      private TLRPC.TL_inlineBotWebView searchResultBotWebViewSwitch;
@@ -29,7 +29,7 @@ index 0000000..0000000 100644
      private LongSparseArray<TL_bots.BotInfo> botInfo;
      private int resultStartPosition;
      private int resultLength;
-@@ -968,6 +968,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
+@@ -971,6 +971,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
              AndroidUtilities.cancelRunOnUIThread(searchGlobalRunnable);
              searchGlobalRunnable = null;
          }
@@ -37,7 +37,7 @@ index 0000000..0000000 100644
          if (checkAgainRunnable != null) {
              AndroidUtilities.cancelRunOnUIThread(checkAgainRunnable);
              checkAgainRunnable = null;
-@@ -1528,6 +1529,9 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
+@@ -1531,6 +1532,9 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
              } else {
                  showUsersResult(newResult, newMap, true);
              }
@@ -47,7 +47,7 @@ index 0000000..0000000 100644
          } else if (foundType == 1) {
              ArrayList<String> newResult = new ArrayList<>();
              String hashtagString = result.toString().toLowerCase();
-@@ -1661,6 +1665,9 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
+@@ -1664,6 +1668,9 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
              }
          }
          searchResultUsernamesMap = newMap;

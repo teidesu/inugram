@@ -5,8 +5,9 @@ Subject: an option to hide bubble tails
 
 ---
  .../ui/ActionBar/MessageDrawable.java         | 42 ++++++++++++++++++-
- .../telegram/ui/Cells/ChatMessageCell.java    | 11 +++--
- 2 files changed, 49 insertions(+), 4 deletions(-)
+ .../telegram/ui/Cells/ChatMessageCell.java    |  9 +++-
+ .../telegram/ui/Cells/ChatMessagePoll.java    |  2 +-
+ 3 files changed, 49 insertions(+), 4 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/MessageDrawable.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/MessageDrawable.java
 index 0000000..0000000 100644
@@ -21,7 +22,7 @@ index 0000000..0000000 100644
      private int[][] backgroundDrawableColor = new int[][]{
              {0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff},
              {0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff},
-@@ -326,6 +328,16 @@ public class MessageDrawable extends Drawable {
+@@ -348,6 +350,16 @@ public class MessageDrawable extends Drawable {
      }
  
      public Drawable getBackgroundDrawable() {
@@ -38,7 +39,7 @@ index 0000000..0000000 100644
          int newRad;
          if (overrideRoundRadius != 0) {
              newRad = overrideRoundRadius;
-@@ -452,6 +464,13 @@ public class MessageDrawable extends Drawable {
+@@ -478,6 +490,13 @@ public class MessageDrawable extends Drawable {
          if (gradientShader == null && !isSelected && crossfadeFromDrawable == null) {
              return null;
          }
@@ -52,7 +53,7 @@ index 0000000..0000000 100644
          int newRad = dp(SharedConfig.bubbleRadius);
          int idx;
          if (isTopNear && isBottomNear) {
-@@ -684,6 +703,8 @@ public class MessageDrawable extends Drawable {
+@@ -713,6 +732,8 @@ public class MessageDrawable extends Drawable {
                  int radToUse = botButtonsBottom ? nearRad : rad;
                  if (currentType == TYPE_MEDIA) {
                      path.moveTo(bounds.right - dp(8) - radToUse, bounds.bottom - padding);
@@ -61,7 +62,7 @@ index 0000000..0000000 100644
                  } else {
                      path.moveTo(bounds.right - dp(2.6f), bounds.bottom - padding);
                  }
-@@ -734,9 +755,16 @@ public class MessageDrawable extends Drawable {
+@@ -763,9 +784,16 @@ public class MessageDrawable extends Drawable {
                  }
              } else {
                  if (drawFullBubble || currentType == TYPE_PREVIEW || customPaint || drawFullBottom) {
@@ -78,7 +79,7 @@ index 0000000..0000000 100644
                  } else {
                      path.lineTo(bounds.right - dp(8), top - topY + currentBackgroundHeight);
                  }
-@@ -747,6 +775,8 @@ public class MessageDrawable extends Drawable {
+@@ -776,6 +804,8 @@ public class MessageDrawable extends Drawable {
  
                  if (currentType == TYPE_MEDIA) {
                      path.moveTo(bounds.left + dp(8) + radToUse, bounds.bottom - padding);
@@ -87,7 +88,7 @@ index 0000000..0000000 100644
                  } else {
                      path.moveTo(bounds.left + dp(2.6f), bounds.bottom - padding);
                  }
-@@ -791,9 +821,16 @@ public class MessageDrawable extends Drawable {
+@@ -820,9 +850,16 @@ public class MessageDrawable extends Drawable {
                  }
              } else {
                  if (drawFullBubble || currentType == TYPE_PREVIEW || customPaint || drawFullBottom) {
@@ -104,7 +105,7 @@ index 0000000..0000000 100644
                  } else {
                      path.lineTo(bounds.left + dp(8), top - topY + currentBackgroundHeight);
                  }
-@@ -863,12 +900,15 @@ public class MessageDrawable extends Drawable {
+@@ -892,12 +929,15 @@ public class MessageDrawable extends Drawable {
          Rect lastRect = new Rect();
          boolean lastDrawFullTop;
          boolean lastDrawFullBottom;
@@ -125,7 +126,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -13469,7 +13469,12 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -11956,7 +11956,12 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                          path.addCircle(rect.centerX(), rect.centerY(), dp(selectorDrawableMaskType[num] == 3 ? 16 : 20), Path.Direction.CW);
                      } else if (selectorDrawableMaskType[num] == 2) {
                          boolean out = currentMessageObject != null && currentMessageObject.isOutOwner();
@@ -138,30 +139,34 @@ index 0000000..0000000 100644
                              if (!instantTextNewLine) {
                                  if (a == (out ? 3 : 2)) {
                                      radii[a * 2] = radii[a * 2 + 1] = dp(SharedConfig.bubbleRadius);
-@@ -13482,7 +13487,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -11969,7 +11974,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                              }
                              radii[a * 2] = radii[a * 2 + 1] = 0;
                          }
--                        if (!out && !drawPinnedBottom && currentPosition == null && (currentPosition == null || pollInstantViewTouchesBottom)) {
-+                        if (inu_tails && !out && !drawPinnedBottom && currentPosition == null && (currentPosition == null || pollInstantViewTouchesBottom)) {
+-                        if (!out && !drawPinnedBottom && currentPosition == null && (currentPosition == null || poll != null && poll.instantViewTouchesBottom)) {
++                        if (inu_tails && !out && !drawPinnedBottom && currentPosition == null && (currentPosition == null || poll != null && poll.instantViewTouchesBottom)) {
                              path.moveTo(rect.left + dp(6), rect.top);
                              path.lineTo(rect.left + dp(6), rect.bottom - dp(6) - dp(2 + 3));
                              AndroidUtilities.rectTmp.set(
-@@ -23386,7 +23391,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -20714,7 +20719,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                  buttonX -= dp(10);
              }
              commentButtonRect.set(
--                    buttonX - dp((currentMessageObject == null || !currentMessageObject.isOutOwner()) && !drawPinnedBottom && currentPosition == null && (currentMessageObject == null || currentMessageObject.type != MessageObject.TYPE_POLL || pollInstantViewTouchesBottom) ? 6 : 0),
-+                    buttonX - dp(desu.inugram.InuConfig.BUBBLE_TAILS.getValue() && (currentMessageObject == null || !currentMessageObject.isOutOwner()) && !drawPinnedBottom && currentPosition == null && (currentMessageObject == null || currentMessageObject.type != MessageObject.TYPE_POLL || pollInstantViewTouchesBottom) ? 6 : 0),
+-                    buttonX - dp((currentMessageObject == null || !currentMessageObject.isOutOwner()) && !drawPinnedBottom && currentPosition == null && (currentMessageObject == null || currentMessageObject.type != MessageObject.TYPE_POLL || poll != null && poll.instantViewTouchesBottom) ? 6 : 0),
++                    buttonX - dp(desu.inugram.InuConfig.BUBBLE_TAILS.getValue() && (currentMessageObject == null || !currentMessageObject.isOutOwner()) && !drawPinnedBottom && currentPosition == null && (currentMessageObject == null || currentMessageObject.type != MessageObject.TYPE_POLL || poll != null && poll.instantViewTouchesBottom) ? 6 : 0),
                      (int) buttonY,
                      endX - dp(14),
                      layoutHeight - dp(h) + 1
-@@ -26114,7 +26119,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessagePoll.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessagePoll.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessagePoll.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessagePoll.java
+@@ -2015,7 +2015,7 @@ class ChatMessagePoll {
  
-                 instantButtonRect.set(textX, instantY, textX + instantWidth, instantY + dp(44));
-                 if (selectorDrawable[0] != null && selectorDrawableMaskType[0] == 2) {
--                    selectorDrawable[0].setBounds(textX - dp(pollInstantViewTouchesBottom ? 6 : 0), instantY, textX + instantWidth, instantY + dp(44));
-+                    selectorDrawable[0].setBounds(textX - dp(pollInstantViewTouchesBottom && desu.inugram.InuConfig.BUBBLE_TAILS.getValue() ? 6 : 0), instantY, textX + instantWidth, instantY + dp(44));
-                     selectorDrawable[0].draw(canvas);
-                 }
-                 if (currentMessageObject.isPoll() && pollInstantButtonDrawable != null) {
+             cell.instantButtonRect.set(textX, instantY, textX + cell.instantWidth, instantY + dp(44));
+             if (cell.selectorDrawable[0] != null && cell.selectorDrawableMaskType[0] == 2) {
+-                cell.selectorDrawable[0].setBounds(textX - dp(instantViewTouchesBottom ? 6 : 0), instantY, textX + cell.instantWidth, instantY + dp(44));
++                cell.selectorDrawable[0].setBounds(textX - dp(instantViewTouchesBottom && desu.inugram.InuConfig.BUBBLE_TAILS.getValue() ? 6 : 0), instantY, textX + cell.instantWidth, instantY + dp(44));
+                 cell.selectorDrawable[0].draw(canvas);
+             }
+             if (cell.currentMessageObject.isPoll() && instantButtonDrawable != null) {

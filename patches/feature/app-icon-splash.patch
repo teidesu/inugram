@@ -12,14 +12,14 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-@@ -7556,6 +7556,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -7683,6 +7683,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                  checkNavigationBarColor = (boolean) args[1];
              }
              checkSystemBarColors(args.length > 2 && (boolean) args[2], true, checkNavigationBarColor && !isNavigationBarColorFrozen && !actionBarLayout.isTransitionAnimationInProgress());
 +            desu.inugram.helpers.SplashScreenHelper.sync(this);
          } else if (id == NotificationCenter.needSetDayNightTheme) {
-             boolean instant = false;
-             if (args[2] != null) {
+             debugInstantThemeSwitch = false;
+             // theme colors never fade: a switch either plays the reveal from a point or recolors everything in one frame
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LauncherIconController.java b/TMessagesProj/src/main/java/org/telegram/ui/LauncherIconController.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LauncherIconController.java

@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -11710,13 +11710,15 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -11747,13 +11747,15 @@ public class MessagesController extends BaseController implements NotificationCe
                              if (!res.dialogs.isEmpty()) {
                                  TLRPC.Dialog dialog = res.dialogs.get(0);
  
@@ -33,7 +33,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
-@@ -17325,6 +17325,27 @@ public class MessagesStorage extends BaseController {
+@@ -17510,6 +17510,27 @@ public class MessagesStorage extends BaseController {
          }
      }
  

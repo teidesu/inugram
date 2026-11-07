@@ -20,7 +20,7 @@ index 0000000..0000000 100644
  
  public class NotificationsController extends BaseController implements NotificationCenter.NotificationCenterDelegate {
  
-@@ -1125,6 +1125,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -1134,6 +1134,7 @@ public class NotificationsController extends BaseController implements Notificat
  
              for (int a = 0; a < messageObjects.size(); a++) {
                  MessageObject messageObject = messageObjects.get(a);
@@ -28,7 +28,7 @@ index 0000000..0000000 100644
                  if (messageObject.messageOwner != null && (messageObject.isImportedForward() ||
                          messageObject.messageOwner.action instanceof TLRPC.TL_messageActionSetMessagesTTL ||
                          messageObject.messageOwner.silent && (messageObject.messageOwner.action instanceof TLRPC.TL_messageActionContactSignUp || messageObject.messageOwner.action instanceof TLRPC.TL_messageActionUserJoined)) ||
-@@ -4155,7 +4156,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -4170,7 +4171,7 @@ public class NotificationsController extends BaseController implements Notificat
      }
  
      private void showOrUpdateNotification(boolean notifyAboutLast) {
@@ -37,7 +37,7 @@ index 0000000..0000000 100644
              dismissNotification();
              return;
          }
-@@ -4639,7 +4640,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -4654,7 +4655,7 @@ public class NotificationsController extends BaseController implements Notificat
              PendingIntent contentIntent = PendingIntent.getActivity(ApplicationLoader.applicationContext, 0, intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_ONE_SHOT);
  
              mBuilder.setContentTitle(name)
@@ -46,7 +46,7 @@ index 0000000..0000000 100644
                      .setAutoCancel(true)
                      .setNumber(total_unread_count)
                      .setContentIntent(contentIntent)
-@@ -5641,7 +5642,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -5657,7 +5658,7 @@ public class NotificationsController extends BaseController implements Notificat
  
              NotificationCompat.Builder builder = new NotificationCompat.Builder(ApplicationLoader.applicationContext)
                      .setContentTitle(name)

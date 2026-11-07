@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMes
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
-@@ -8693,7 +8693,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -8695,7 +8695,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                      }
                      title.setSpan(new ForegroundColorSpan(Theme.multAlpha(0xFFFFFFFF, .5f)), start, title.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                  }

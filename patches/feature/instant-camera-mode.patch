@@ -13,7 +13,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
-@@ -193,6 +193,7 @@ import me.vkryl.core.BitwiseUtils;
+@@ -189,6 +189,7 @@ import me.vkryl.core.BitwiseUtils;
  
  public class ChatAttachAlert extends BottomSheet implements NotificationCenter.NotificationCenterDelegate, BottomSheet.BottomSheetDelegateInterface, FactorAnimator.Target {
  
@@ -21,7 +21,7 @@ index 0000000..0000000 100644
      public static final int LAYOUT_TYPE_PHOTO = 1;
      public static final int LAYOUT_TYPE_MUSIC = 3;
      public static final int LAYOUT_TYPE_DOCUMENTS = 4;
-@@ -1022,7 +1023,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -1026,7 +1027,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
      private MessageSendPreview messageSendPreview;
      public boolean allowLivePhotos = false;
  
@@ -30,7 +30,7 @@ index 0000000..0000000 100644
      private ChatAttachAlertContactsLayout contactsLayout;
      private ChatAttachAlertAudioLayout audioLayout;
      private ChatAttachAlertPollLayout pollLayout;
-@@ -1040,8 +1041,8 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -1044,8 +1045,8 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
      private float gramSendExitTranslationY;
      private AttachAlertLayout[] layouts = new AttachAlertLayout[12];
      private LongSparseArray<ChatAttachAlertBotWebViewLayout> botAttachLayouts = new LongSparseArray<>();
@@ -41,7 +41,7 @@ index 0000000..0000000 100644
  
      private BlurredBackgroundDrawable emojiViewChildBg;
      private BlurredBackgroundDrawable captionContainerBg;
-@@ -1153,7 +1154,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -1157,7 +1158,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
  
      private DecelerateInterpolator decelerateInterpolator = new DecelerateInterpolator();
  
@@ -50,7 +50,7 @@ index 0000000..0000000 100644
      private EmojiView.EmojiViewDelegate emojiViewDelegate;
  
      public int[] scrollOffsetY = new int[2];
-@@ -2788,6 +2789,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -2762,6 +2763,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
          containerView.addView(buttonsRecyclerViewWrapper, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 70, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
          NonIslandHelper.applyChatAttachTabBar(buttonsRecyclerViewWrapper, buttonsRecyclerView);
          desu.inugram.helpers.chat.VoiceRecorderHelper.addFab(this, (FrameLayout) containerView, resourcesProvider);
@@ -58,7 +58,7 @@ index 0000000..0000000 100644
          buttonsRecyclerView.setOnItemClickListener((view, position) -> {
              BaseFragment lastFragment = baseFragment;
              if (lastFragment == null) {
-@@ -2929,6 +2931,8 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -2903,6 +2905,8 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                          layouts[10] = richLayout = new ChatAttachAlertRichLayout(this, getContext(), currentAccount, resourcesProvider);
                      }
                      showLayout(richLayout);
@@ -67,7 +67,7 @@ index 0000000..0000000 100644
                  } else if (view.getTag() instanceof Integer) {
                      delegate.didPressedButton((Integer) view.getTag(), true, true, 0, 0, 0, isCaptionAbove(), false, 0);
                  }
-@@ -2966,6 +2970,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -2940,6 +2944,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
              }
          });
          buttonsRecyclerView.setOnItemLongClickListener((view, position) -> {
@@ -75,7 +75,7 @@ index 0000000..0000000 100644
              if (view instanceof AttachBotButton) {
                  AttachBotButton button = (AttachBotButton) view;
                  if (destroyed || button.currentUser == null) {
-@@ -6518,6 +6523,14 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -6580,6 +6585,14 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
          return true;
      }
  
@@ -90,7 +90,7 @@ index 0000000..0000000 100644
      private static boolean checkPhotoAndDocumentsPermission(Context context) {
          if (Build.VERSION.SDK_INT >= 33) {
              return ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED
-@@ -6622,6 +6635,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -6684,6 +6697,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
  
          private Context mContext;
          private int galleryButton;
@@ -98,7 +98,7 @@ index 0000000..0000000 100644
  
          private int attachBotsStartRow;
          private int attachBotsEndRow;
-@@ -6675,10 +6689,14 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -6737,10 +6751,14 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                      if (position == galleryButton) {
                          attachButton.setTextAndIcon(1, getString(R.string.ChatGallery), GlassTabView.TabAnimation.GALLERY);
                          attachButton.setTag(1);
@@ -114,7 +114,7 @@ index 0000000..0000000 100644
                      } else if (position == documentButton) {
                          attachButton.setTextAndIcon(4, getString(R.string.ChatDocument), GlassTabView.TabAnimation.FILES);
                          attachButton.setTag(4);
-@@ -6763,6 +6781,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -6825,6 +6843,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
          public void notifyDataSetChanged() {
              buttonsCount = 0;
              galleryButton = -1;
@@ -122,7 +122,7 @@ index 0000000..0000000 100644
              documentButton = -1;
              moneyButton = -1;
              musicButton = -1;
-@@ -6781,6 +6800,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -6843,6 +6862,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
  
              if (isPollAttach) {
                  galleryButton = buttonsCount++;
@@ -130,7 +130,7 @@ index 0000000..0000000 100644
                  if (pollAllowedLayouts == 0 || BitwiseUtils.hasFlag(pollAllowedLayouts, 1 << LAYOUT_TYPE_DOCUMENTS)) {
                      documentButton = buttonsCount++;
                  }
-@@ -6808,11 +6828,13 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -6870,11 +6890,13 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
              } else if (editingMessageObject != null) {
                  if (editType == EDITMEDIA_TYPE_ANY) {
                      galleryButton = buttonsCount++;
@@ -144,7 +144,7 @@ index 0000000..0000000 100644
                      }
                      if (editType == EDITMEDIA_TYPE_FILE) {
                          documentButton = buttonsCount++;
-@@ -6826,6 +6848,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -6888,6 +6910,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                  TLRPC.Chat chat = baseFragment instanceof ChatActivity ? ((ChatActivity) baseFragment).getCurrentChat() : null;
                  final boolean paidUser = user != null && ((ChatActivity) baseFragment).getMessagesController().getSendPaidMessagesStars(user.id) > 0;
                  galleryButton = buttonsCount++;
@@ -156,7 +156,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlertPhotoLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlertPhotoLayout.java
-@@ -132,6 +132,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -134,6 +134,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
      private static final int VIEW_TYPE_AVATAR_CONSTRUCTOR = 4;
      private static final int SHOW_FAST_SCROLL_MIN_COUNT = 30;
      private final boolean needCamera;
@@ -164,7 +164,7 @@ index 0000000..0000000 100644
  
      private RecyclerListView cameraPhotoRecyclerView;
      private LinearLayoutManager cameraPhotoLayoutManager;
-@@ -217,7 +218,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -219,7 +220,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
      private int itemsPerRow = 3;
  
      private boolean deviceHasGoodCamera;
@@ -173,7 +173,7 @@ index 0000000..0000000 100644
      private boolean noGalleryPermissions;
      private boolean requestingPermissions;
  
-@@ -399,6 +400,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -401,6 +402,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
  
          @Override
          public void onClose() {
@@ -181,7 +181,7 @@ index 0000000..0000000 100644
              resumeCameraPreview();
              AndroidUtilities.runOnUIThread(()-> setCurrentSpoilerVisible(-1, true), 150);
              onSelectedItemsCountChanged(getSelectedCount());
-@@ -433,9 +435,11 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -435,9 +437,11 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
                  object.scale = cell.getScale();
                  object.clipBottomAddition = (int) parentAlert.getClipLayoutBottom();
                  cell.showCheck(false);
@@ -193,15 +193,15 @@ index 0000000..0000000 100644
              return null;
          }
  
-@@ -740,6 +744,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -742,6 +746,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
          super(alert, context, resourcesProvider);
          this.forceDarkTheme = forceDarkTheme;
          this.needCamera = needCamera;
 +        this.inu_cameraOutsideGrid = needCamera && desu.inugram.helpers.chat.AttachCameraHelper.hasCameraOutsideGrid(alert);
-         NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.albumsDidLoad);
-         NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.cameraInitied);
+         NotificationCenter.getGlobalInstance().addWeakObserver(this, NotificationCenter.albumsDidLoad);
+         NotificationCenter.getGlobalInstance().addWeakObserver(this, NotificationCenter.cameraInitied);
          FrameLayout container = alert.getContainer();
-@@ -826,7 +831,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -828,7 +833,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
          gridView.getFastScroll().setAlpha(0f);
          gridView.getFastScroll().usePadding = false;
          gridView.getFastScroll().topOffset = ActionBar.getCurrentActionBarHeight(); // + AndroidUtilities.statusBarHeight;
@@ -210,7 +210,7 @@ index 0000000..0000000 100644
          gridView.addItemDecoration(cameraViewItemDecoration = new CameraViewItemDecoration(gridView));
          adapter.createCache();
          gridView.setClipToPadding(false);
-@@ -900,10 +905,11 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -902,10 +907,11 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
          layoutManager.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
              @Override
              public int getSpanSize(int position) {
@@ -224,7 +224,7 @@ index 0000000..0000000 100644
                      position--;
                  }
                  return itemSize + (position % itemsPerRow != itemsPerRow - 1 ? dp(GAP) : 0);
-@@ -950,11 +956,11 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -952,11 +958,11 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
                  return;
              }
  
@@ -238,7 +238,7 @@ index 0000000..0000000 100644
                      position--;
                  }
                  if (showAvatarConstructor) {
-@@ -1079,7 +1085,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -1084,7 +1090,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
              if (parentAlert.storyMediaPicker) {
                  return false;
              }
@@ -247,7 +247,7 @@ index 0000000..0000000 100644
                  if (parentAlert.delegate != null) {
                      parentAlert.delegate.didPressedButton(0, false, true, 0, 0, 0, parentAlert.isCaptionAbove(), false, 0);
                  }
-@@ -1538,9 +1544,18 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -1543,9 +1549,18 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
          openCameraByClick();
      }
  
@@ -268,7 +268,7 @@ index 0000000..0000000 100644
          } else {
              if (parentAlert.delegate != null) {
                  parentAlert.delegate.didPressedButton(0, false, true, 0, 0, 0, parentAlert.isCaptionAbove(), false, 0);
-@@ -2453,7 +2468,11 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -2458,7 +2473,11 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
          if ((old != deviceHasGoodCamera || old2 != noCameraPermissions) && adapter != null) {
              adapter.notifyDataSetChanged();
          }
@@ -281,7 +281,7 @@ index 0000000..0000000 100644
              showCamera();
          }
      }
-@@ -2619,6 +2638,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -2624,6 +2643,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
                  }
              });
              cameraView.setClipToOutline(true);
@@ -289,7 +289,7 @@ index 0000000..0000000 100644
              cameraView.setContentDescription(LocaleController.getString(R.string.AccDescrInstantCamera));
              parentAlert.getContainer().addView(cameraView, 1, new FrameLayout.LayoutParams(itemSize, itemSize));
              cameraView.setDelegate(new CameraView.CameraViewDelegate() {
-@@ -2716,7 +2736,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -2721,7 +2741,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
      }
  
      private void saveLastCameraBitmap() {
@@ -298,7 +298,7 @@ index 0000000..0000000 100644
              return;
          }
          try {
-@@ -2846,6 +2866,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -2868,6 +2888,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
          if (takingPhoto || cameraView == null) {
              return;
          }
@@ -306,7 +306,7 @@ index 0000000..0000000 100644
          animateCameraValues[1] = itemSize;
          animateCameraValues[2] = itemSize * 2 + dp(GAP);
          if (zoomControlHideRunnable != null) {
-@@ -2940,6 +2961,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -2962,6 +2983,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
              if (gridView != null) {
                  gridView.invalidate();
              }
@@ -314,7 +314,7 @@ index 0000000..0000000 100644
          }
          if (cameraView != null) {
              cameraView.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);
-@@ -3892,10 +3914,11 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -3916,10 +3938,11 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
              checkCameraWhenShown = false;
              checkCamera(true);
          }
@@ -327,7 +327,7 @@ index 0000000..0000000 100644
      }
  
      @Override
-@@ -3984,7 +4007,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -4008,7 +4031,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
  //                    afterCameraInitRunnable = null;
  //                    isCameraFrontfaceBeforeEnteringEditMode = null;
  //                };
@@ -336,7 +336,7 @@ index 0000000..0000000 100644
              }
          }
      }
-@@ -4109,7 +4132,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -4133,7 +4156,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
  
      @Override
      public void onOpenAnimationEnd() {
@@ -345,7 +345,7 @@ index 0000000..0000000 100644
      }
  
      @Override
-@@ -4868,11 +4891,13 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -4894,11 +4917,13 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
  
          public void updateBitmap() {
              Bitmap bitmap = null;
@@ -363,7 +363,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/glass/GlassT
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/glass/GlassTabView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/glass/GlassTabView.java
-@@ -580,6 +580,7 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
+@@ -597,6 +597,7 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
          REPLIES(R.raw.tab_reply, R.raw.tab_reply_reverse),
          WALLET(R.raw.tab_wallet, R.raw.tab_wallet_reverse),
          LINK(TabAnimationType.STATIC, R.drawable.tabs_link_24),

@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/StickerEmojiCell.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/StickerEmojiCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/StickerEmojiCell.java
-@@ -248,7 +248,10 @@ public class StickerEmojiCell extends FrameLayout implements NotificationCenter.
+@@ -251,7 +251,10 @@ public class StickerEmojiCell extends FrameLayout implements NotificationCenter.
                      imageView.setImage(ImageLocation.getForDocument(document), imageFilter, null, null, parentObject, 1);
                  }
              } else {

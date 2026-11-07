@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerA
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerAlert.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerAlert.java
-@@ -313,8 +313,32 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+@@ -316,8 +316,32 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
              private int lastMeasturedHeight;
              private int lastMeasturedWidth;
  
@@ -44,7 +44,7 @@ index 0000000..0000000 100644
                  return !isDismissed() && super.onTouchEvent(e);
              }
  
-@@ -346,6 +370,9 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+@@ -349,6 +373,9 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
                  int contentSize = dp(179 + (!isMyList() && !noforwards ? 52 : 0));
                  if (playlist.size() > 1) {
                      contentSize += backgroundPaddingTop + playlist.size() * dp(56);
@@ -54,7 +54,7 @@ index 0000000..0000000 100644
                  }
                  int padding;
                  if (searching || keyboardVisible) {
-@@ -382,6 +409,45 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+@@ -385,6 +412,45 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
  
              @Override
              public boolean onInterceptTouchEvent(MotionEvent ev) {
@@ -100,7 +100,7 @@ index 0000000..0000000 100644
                  if (ev.getAction() == MotionEvent.ACTION_DOWN && scrollOffsetY != 0 && actionBar.getAlpha() == 0.0f) {
                      boolean dismiss;
                      if (listAdapter.getItemCount() > 0) {
-@@ -466,8 +532,9 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+@@ -469,8 +535,9 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
  
                      if (isProfilePlaylist) {
                          actionBar.setVisibility(View.VISIBLE);

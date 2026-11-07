@@ -11,15 +11,15 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -348,6 +348,7 @@ import java.util.zip.ZipEntry;
- import java.util.zip.ZipOutputStream;
+@@ -355,6 +355,7 @@ import java.util.zip.ZipOutputStream;
  
+ import me.vkryl.android.animator.FactorAnimator;
  import desu.inugram.helpers.dialogs.MainTabsHelper;
 +import desu.inugram.helpers.profile.ProfileHelper;
  import me.vkryl.android.animator.BoolAnimator;
  import me.vkryl.core.reference.ReferenceList;
  
-@@ -623,6 +624,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -631,6 +632,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
      public int birthdayRow;
      private int setUsernameRow;
      private int bioRow;
@@ -27,7 +27,7 @@ index 0000000..0000000 100644
      private int phoneSuggestionSectionRow;
      private int graceSuggestionRow;
      private int graceSuggestionSectionRow;
-@@ -4517,6 +4519,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -4464,6 +4466,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                          showDialog(new CommunitySheet(this, user.linked_community_id));
                      }
                  }
@@ -36,7 +36,7 @@ index 0000000..0000000 100644
              } else if (position == locationRow) {
                  if (chatInfo.location instanceof TLRPC.TL_channelLocation) {
                      LocationActivity fragment = new LocationActivity(LocationActivity.LOCATION_TYPE_GROUP_VIEW);
-@@ -5068,6 +5072,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -5015,6 +5019,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                  } else if (position == noteRow) {
                      editNotes(view, position);
                      return true;
@@ -46,7 +46,7 @@ index 0000000..0000000 100644
                  } else {
                      if (editRow(view, position)) return true;
                      return processOnClickOrPress(position, view, view.getWidth() / 2f, (int) (view.getHeight() * .75f));
-@@ -10505,6 +10512,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -10711,6 +10718,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          birthdayRow = -1;
          setUsernameRow = -1;
          bioRow = -1;
@@ -54,7 +54,7 @@ index 0000000..0000000 100644
          channelRow = -1;
          channelDividerRow = -1;
          phoneSuggestionSectionRow = -1;
-@@ -10671,6 +10679,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -10877,6 +10885,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                  numberSectionRow = rowCount++;
                  numberRow = rowCount++;
                  setUsernameRow = rowCount++;
@@ -62,7 +62,7 @@ index 0000000..0000000 100644
                  bioRow = rowCount++;
  
                  settingsSectionRow = rowCount++;
-@@ -10763,6 +10772,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -10969,6 +10978,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                  if (user != null && username != null) {
                      usernameRow = rowCount++;
                  }
@@ -70,7 +70,7 @@ index 0000000..0000000 100644
                  if (userInfo != null) {
                      if (userInfo.birthday != null) {
                          birthdayRow = rowCount++;
-@@ -10922,6 +10932,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -11128,6 +11138,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                      usernameRow = rowCount++;
                  }
              }
@@ -78,7 +78,7 @@ index 0000000..0000000 100644
              if (emptyRow < 0 && emptyRow2 < 0) {
                  if (hasMusic || hasBalance || peerColor != null || actionsView == null) {
                      emptyRow2 = rowCount++;
-@@ -13558,6 +13569,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -13557,6 +13568,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                          }
                          isFragmentPhoneNumber = phoneNumber != null && phoneNumber.matches("888\\d{8}");
                          detailCell.setTextAndValue(text, LocaleController.getString(isFragmentPhoneNumber ? R.string.AnonymousNumber : R.string.PhoneMobile), false);
@@ -87,7 +87,7 @@ index 0000000..0000000 100644
                      } else if (position == noteRow) {
                          final TLRPC.UserFull userInfo = getMessagesController().getUserFull(userId);
                          if (userInfo == null) return;
-@@ -14373,7 +14386,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -14375,7 +14388,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              if (position == infoHeaderRow || position == membersHeaderRow || position == settingsSectionRow2 ||
                      position == numberSectionRow || position == helpHeaderRow || position == debugHeaderRow || position == botPermissionsHeader) {
                  return VIEW_TYPE_HEADER;
@@ -96,7 +96,7 @@ index 0000000..0000000 100644
                  return VIEW_TYPE_TEXT_DETAIL;
              } else if (position == usernameRow || position == setUsernameRow) {
                  return VIEW_TYPE_TEXT_DETAIL_MULTILINE;
-@@ -15811,6 +15824,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -15732,6 +15745,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              put(++pointer, bizHoursRow, sparseIntArray);
              put(++pointer, bizLocationRow, sparseIntArray);
              put(++pointer, birthdayRow, sparseIntArray);

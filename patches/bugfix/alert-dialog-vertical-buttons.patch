@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/AlertDialog.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/AlertDialog.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/AlertDialog.java
-@@ -976,7 +976,7 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
+@@ -1084,7 +1084,7 @@ public class AlertDialog extends Dialog implements Drawable.Callback, Notificati
                      if (buttonsWidth > 0) buttonsWidth += dp(8);
                      buttonsWidth += paint.measureText(neutralButtonText, 0, neutralButtonText.length()) + dp(12 + 12);
                  }

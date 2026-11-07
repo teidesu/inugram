@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/UserCell.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/UserCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/UserCell.java
-@@ -318,6 +318,7 @@ public class UserCell extends FrameLayout implements NotificationCenter.Notifica
+@@ -322,6 +322,7 @@ public class UserCell extends FrameLayout implements NotificationCenter.Notifica
              adminTextView.setTranslationX(0);
              adminTextView.setBackground(null);
              adminTextView.setOnClickListener(onClick);
@@ -24,7 +24,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerList
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java
-@@ -1236,6 +1236,9 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -1272,6 +1272,9 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
                      final int count = viewGroup.getChildCount();
                      for (int i = count - 1; i >= 0; i--) {
                          final View child = viewGroup.getChildAt(i);

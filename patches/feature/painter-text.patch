@@ -139,7 +139,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/LPhotoPaintView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/LPhotoPaintView.java
-@@ -999,6 +999,7 @@ public class LPhotoPaintView extends SizeNotifierFrameLayoutPhoto implements IPh
+@@ -1001,6 +1001,7 @@ public class LPhotoPaintView extends SizeNotifierFrameLayoutPhoto implements IPh
              textOptionsView.setAlignment(align);
              textOptionsView.setTypeface(((TextPaintView) entityView).getTypeface().getKey());
              textOptionsView.setOutlineType(((TextPaintView) entityView).getType(), true);
@@ -147,7 +147,7 @@ index 0000000..0000000 100644
              overlayLayout.invalidate();
          }
  
-@@ -2350,7 +2351,17 @@ public class LPhotoPaintView extends SizeNotifierFrameLayoutPhoto implements IPh
+@@ -2378,7 +2379,17 @@ public class LPhotoPaintView extends SizeNotifierFrameLayoutPhoto implements IPh
  
      @Override
      public void onTextOutlineSelected(View v) {
@@ -321,7 +321,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stories/recorder/PaintV
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Stories/recorder/PaintView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Stories/recorder/PaintView.java
-@@ -1432,6 +1432,7 @@ public class PaintView extends SizeNotifierFrameLayoutPhoto implements IPhotoPai
+@@ -1439,6 +1439,7 @@ public class PaintView extends SizeNotifierFrameLayoutPhoto implements IPhotoPai
                  textOptionsView.setTypeface(typeface.getKey());
              }
              textOptionsView.setOutlineType(((TextPaintView) entityView).getType(), true);
@@ -329,7 +329,7 @@ index 0000000..0000000 100644
              overlayLayout.invalidate();
          }
  
-@@ -3724,6 +3725,16 @@ public class PaintView extends SizeNotifierFrameLayoutPhoto implements IPhotoPai
+@@ -3752,6 +3753,16 @@ public class PaintView extends SizeNotifierFrameLayoutPhoto implements IPhotoPai
          setTextType((selectedTextType + 1) % 4);
      }
  

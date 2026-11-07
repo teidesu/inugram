@@ -81,12 +81,12 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LocationActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LocationActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LocationActivity.java
-@@ -760,7 +760,7 @@ public class LocationActivity extends BaseFragment implements NotificationCenter
-         mapTypeButton.setAdditionalYOffset(-dp(10));
-         mapTypeButton.addSubItem(map_list_menu_map, R.drawable.msg_map, getString(R.string.Map), getResourceProvider());
-         mapTypeButton.addSubItem(map_list_menu_satellite, R.drawable.msg_satellite, getString(R.string.Satellite), getResourceProvider());
--        mapTypeButton.addSubItem(map_list_menu_hybrid, R.drawable.msg_hybrid, getString(R.string.Hybrid), getResourceProvider());
-+        if (desu.inugram.helpers.maps.MapsHelper.isHybridAvailable()) mapTypeButton.addSubItem(map_list_menu_hybrid, R.drawable.msg_hybrid, getString(R.string.Hybrid), getResourceProvider());
+@@ -452,7 +452,7 @@ public class LocationActivity extends BaseFragment implements NotificationCenter
+         mapTypeButton = menu.addItem(0, R.drawable.msg_map_type);
+         mapTypeButton.addSubItem(map_list_menu_map, R.drawable.msg_map, getString(R.string.Map));
+         mapTypeButton.addSubItem(map_list_menu_satellite, R.drawable.msg_satellite, getString(R.string.Satellite));
+-        mapTypeButton.addSubItem(map_list_menu_hybrid, R.drawable.msg_hybrid, getString(R.string.Hybrid));
++        if (desu.inugram.helpers.maps.MapsHelper.isHybridAvailable()) mapTypeButton.addSubItem(map_list_menu_hybrid, R.drawable.msg_hybrid, getString(R.string.Hybrid));
          mapTypeButton.setContentDescription(getString(R.string.AccDescrMoreOptions));
-         Drawable drawable = Theme.createSimpleSelectorCircleDrawable(dp(40), getThemedColor(Theme.key_location_actionBackground), getThemedColor(Theme.key_location_actionPressedBackground));
-         ScaleStateListAnimator.apply(mapTypeButton);
+         if (chatLocation != null) {
+             simpleActionBar.setTitle(getString(R.string.ChatLocation));

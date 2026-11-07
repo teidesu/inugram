@@ -13,7 +13,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayo
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
-@@ -1839,7 +1839,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -1944,7 +1944,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                      dt = 18;
                  }
                  lastFrameTime = newTime;
@@ -43,7 +43,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -8554,7 +8554,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -8812,7 +8812,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                          if (!ignoreScrollOnFullExpand && view != null /*&& hasActions*/) {
                              justFullyExpanded = true;
                              final int actionBarHeight = ActionBar.getCurrentActionBarHeight() + (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0);
@@ -51,4 +51,4 @@ index 0000000..0000000 100644
 +                            listView.smoothScrollBy(0, view.getTop() - listView.getMeasuredWidth() - getActionsExtraHeight() + actionBarHeight, Math.max(1, Math.round(expandAnimator.getDuration() / desu.inugram.InuConfig.ANIMATION_SPEED.getValue())), (Interpolator) expandAnimator.getInterpolator());
                              listView.canStopFlinger = false;
                          }
-                         expandNameYStartedFrom = nameTextView[1].getTranslationY();
+                         expandNameYStartedFrom = nameTextView.getTranslationY();

@@ -11,12 +11,12 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenu
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java
-@@ -335,7 +335,7 @@ public class ActionBarMenuItem extends FrameLayout {
-                     View child = popupLayout.getItemAt(a);
-                     child.getHitRect(rect);
-                     Object tag = child.getTag();
--                    if (tag instanceof Integer && (Integer) tag < 100) {
-+                    if (tag instanceof Integer && child.getTag(R.id.object_tag) == null) {
-                         if (!rect.contains((int) x, (int) y)) {
-                             child.setPressed(false);
-                             child.setSelected(false);
+@@ -418,7 +418,7 @@ public class ActionBarMenuItem extends FrameLayout {
+             View child = popupLayout.getItemAt(a);
+             Object tag = child.getTag();
+             // the items of the menu, and rows with an action of their own (a nested page)
+-            if (tag instanceof Integer ? (Integer) tag >= 100 : !child.hasOnClickListeners()) {
++            if (tag instanceof Integer ? child.getTag(R.id.object_tag) != null : !child.hasOnClickListeners()) {
+                 continue;
+             }
+             // the items are in a scrolled list inside the popup: relative to their own parent

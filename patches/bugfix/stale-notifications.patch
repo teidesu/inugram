@@ -15,7 +15,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -20735,6 +20735,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -20792,6 +20792,7 @@ public class MessagesController extends BaseController implements NotificationCe
                      } else if (baseUpdate instanceof TL_update.TL_updateReadChannelDiscussionInbox) {
                          TL_update.TL_updateReadChannelDiscussionInbox update = (TL_update.TL_updateReadChannelDiscussionInbox) baseUpdate;
                          getNotificationCenter().postNotificationName(NotificationCenter.threadMessagesRead, -update.channel_id, update.top_msg_id, update.read_max_id, 0);
@@ -23,7 +23,7 @@ index 0000000..0000000 100644
                          if ((update.flags & 1) != 0) {
                              getMessagesStorage().updateRepliesMaxReadId(update.broadcast_id, update.broadcast_post, update.read_max_id, 0,true);
                              getNotificationCenter().postNotificationName(NotificationCenter.commentsRead, update.broadcast_id, update.broadcast_post, update.read_max_id);
-@@ -21379,6 +21380,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -21436,6 +21437,7 @@ public class MessagesController extends BaseController implements NotificationCe
      }
  
      public void checkUnreadReactions(long dialogId, long topicId, SparseBooleanArray unreadReactions) {
@@ -35,7 +35,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
-@@ -14522,6 +14522,16 @@ public class MessagesStorage extends BaseController {
+@@ -14703,6 +14703,16 @@ public class MessagesStorage extends BaseController {
          });
      }
  
@@ -65,7 +65,7 @@ index 0000000..0000000 100644
          AndroidUtilities.runOnUIThread(() -> {
              getNotificationCenter().addObserver(this, NotificationCenter.fileLoaded);
          });
-@@ -569,6 +571,76 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -578,6 +580,76 @@ public class NotificationsController extends BaseController implements Notificat
          });
      }
  
@@ -142,7 +142,7 @@ index 0000000..0000000 100644
      public void removeDeletedMessagesFromNotifications(LongSparseArray<ArrayList<Integer>> deletedMessages, boolean isReactions) {
          ArrayList<MessageObject> popupArrayRemove = new ArrayList<>(0);
          notificationsQueue.postRunnable(() -> {
-@@ -631,6 +703,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -640,6 +712,7 @@ public class NotificationsController extends BaseController implements Notificat
                  }
              }
              if (!popupArrayRemove.isEmpty()) {
@@ -150,7 +150,7 @@ index 0000000..0000000 100644
                  AndroidUtilities.runOnUIThread(() -> {
                      for (int a = 0, size = popupArrayRemove.size(); a < size; a++) {
                          popupMessages.remove(popupArrayRemove.get(a));
-@@ -638,7 +711,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -647,7 +720,7 @@ public class NotificationsController extends BaseController implements Notificat
                      NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.pushMessagesUpdated);
                  });
              }
@@ -159,7 +159,7 @@ index 0000000..0000000 100644
                  if (!notifyCheck) {
                      delayedPushMessages.clear();
                      showOrUpdateNotification(notifyCheck);
-@@ -716,7 +789,8 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -725,7 +798,8 @@ public class NotificationsController extends BaseController implements Notificat
                      pushDialogsOverrideMention.remove(dialogId);
                  }
              }
@@ -169,7 +169,7 @@ index 0000000..0000000 100644
                  AndroidUtilities.runOnUIThread(() -> {
                      for (int a = 0, size = popupArrayRemove.size(); a < size; a++) {
                          popupMessages.remove(popupArrayRemove.get(a));
-@@ -724,7 +798,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -733,7 +807,7 @@ public class NotificationsController extends BaseController implements Notificat
                      NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.pushMessagesUpdated);
                  });
              }
@@ -178,7 +178,7 @@ index 0000000..0000000 100644
                  if (!notifyCheck) {
                      delayedPushMessages.clear();
                      showOrUpdateNotification(notifyCheck);
-@@ -896,7 +970,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -905,7 +979,7 @@ public class NotificationsController extends BaseController implements Notificat
                      int messageId = inbox.get(key);
                      for (int a = 0; a < pushMessages.size(); a++) {
                          MessageObject messageObject = pushMessages.get(a);
@@ -187,7 +187,7 @@ index 0000000..0000000 100644
                              if (isPersonalMessage(messageObject)) {
                                  personalCount--;
                              }
-@@ -971,6 +1045,9 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -980,6 +1054,9 @@ public class NotificationsController extends BaseController implements Notificat
                  }
              }
              if (!popupArrayRemove.isEmpty()) {
@@ -197,7 +197,7 @@ index 0000000..0000000 100644
                  AndroidUtilities.runOnUIThread(() -> {
                      for (int a = 0, size = popupArrayRemove.size(); a < size; a++) {
                          popupMessages.remove(popupArrayRemove.get(a));
-@@ -1509,7 +1586,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -1518,7 +1595,7 @@ public class NotificationsController extends BaseController implements Notificat
                      pushDialogsOverrideMention.remove(dialogId);
                      for (int a = 0; a < pushMessages.size(); a++) {
                          MessageObject messageObject = pushMessages.get(a);
@@ -206,7 +206,7 @@ index 0000000..0000000 100644
                              if (isPersonalMessage(messageObject)) {
                                  personalCount--;
                              }
-@@ -1551,7 +1628,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -1560,7 +1637,7 @@ public class NotificationsController extends BaseController implements Notificat
                      NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.pushMessagesUpdated);
                  });
              }
@@ -215,7 +215,7 @@ index 0000000..0000000 100644
                  if (!notifyCheck) {
                      delayedPushMessages.clear();
                      showOrUpdateNotification(notifyCheck);
-@@ -3348,6 +3425,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -3363,6 +3440,7 @@ public class NotificationsController extends BaseController implements Notificat
              }
              wearNotificationsIds.clear();
              NotificationsHelper.clearPostedSignatures(currentAccount);
@@ -223,7 +223,7 @@ index 0000000..0000000 100644
          });
      }
  
-@@ -3367,6 +3445,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -3382,6 +3460,7 @@ public class NotificationsController extends BaseController implements Notificat
              }
              wearNotificationsIds.clear();
              NotificationsHelper.clearPostedSignatures(currentAccount);
@@ -231,7 +231,7 @@ index 0000000..0000000 100644
              AndroidUtilities.runOnUIThread(() -> NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.pushMessagesUpdated));
          } catch (Exception e) {
              FileLog.e(e);
-@@ -5938,6 +6017,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -5955,6 +6034,7 @@ public class NotificationsController extends BaseController implements Notificat
                  ShortcutManagerCompat.removeDynamicShortcuts(ApplicationLoader.applicationContext, ids);
              }
          }
@@ -255,7 +255,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoriesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoriesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoriesController.java
-@@ -1339,6 +1339,7 @@ public class StoriesController {
+@@ -1386,6 +1386,7 @@ public class StoriesController {
              int maxStoryReadId = Math.max(dialogIdToMaxReadId.get(dialogId, 0), maxStoryId);
              dialogIdToMaxReadId.put(dialogId, maxStoryReadId);
              storiesStorage.updateMaxReadId(dialogId, maxStoryReadId);

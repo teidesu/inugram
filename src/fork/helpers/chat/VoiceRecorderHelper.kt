@@ -108,7 +108,6 @@ object VoiceRecorderHelper {
                                 val hint =
                                     activity.inu_makeMediaBannedHint(isVideoMode, container, container.childCount)
                                 hint ?: return@Runnable
-                                hint.setBottomOffset(fabLayoutParams.bottomMargin + 8)
                                 hint.showForView(this, true)
                                 return@Runnable
                             }

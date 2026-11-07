@@ -4,29 +4,31 @@ Date: Sun, 26 Jul 2026 17:53:34 +0400
 Subject: fix sticky date pill in chat jumping when sticking
 
 ---
- .../java/org/telegram/ui/Cells/ChatActionCell.java    | 11 +++--------
- .../src/main/java/org/telegram/ui/ChatActivity.java   |  5 ++---
- 2 files changed, 5 insertions(+), 11 deletions(-)
+ .../java/org/telegram/ui/Cells/ChatActionCell.java  | 13 +++----------
+ .../src/main/java/org/telegram/ui/ChatActivity.java |  5 ++---
+ 2 files changed, 5 insertions(+), 13 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatActionCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatActionCell.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatActionCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatActionCell.java
-@@ -3704,16 +3704,11 @@ public class ChatActionCell extends BaseCell implements DownloadController.FileD
+@@ -3704,18 +3704,11 @@ public class ChatActionCell extends BaseCell implements DownloadController.FileD
  
          int oldAlpha = -1;
          int oldAlpha2 = -1;
+-        // compact mode has a solid background, keep the floating date opaque too
+-        final float floatingAlpha = isFloating() && !Theme.isCompactMode(themeDelegate) ? .75f : 1f;
 -        if (fromParent && (getAlpha() != 1f || isFloating())) {
 +        if (fromParent && getAlpha() != 1f) {
              oldAlpha = backgroundPaint.getAlpha();
              oldAlpha2 = darkenBackgroundPaint.getAlpha();
--            backgroundPaint.setAlpha((int) (oldAlpha * getAlpha() * (isFloating() ? .75f : 1f)));
--            darkenBackgroundPaint.setAlpha((int) (oldAlpha2 * getAlpha() * (isFloating() ? .75f : 1f)));
+-            backgroundPaint.setAlpha((int) (oldAlpha * getAlpha() * floatingAlpha));
+-            darkenBackgroundPaint.setAlpha((int) (oldAlpha2 * getAlpha() * floatingAlpha));
 -        } else if (isFloating()) {
 -            oldAlpha = backgroundPaint.getAlpha();
 -            oldAlpha2 = darkenBackgroundPaint.getAlpha();
--            backgroundPaint.setAlpha((int) (oldAlpha * (isFloating() ? .75f : 1f)));
--            darkenBackgroundPaint.setAlpha((int) (oldAlpha2 * (isFloating() ? .75f : 1f)));
+-            backgroundPaint.setAlpha((int) (oldAlpha * floatingAlpha));
+-            darkenBackgroundPaint.setAlpha((int) (oldAlpha2 * floatingAlpha));
 +            backgroundPaint.setAlpha((int) (oldAlpha * getAlpha()));
 +            darkenBackgroundPaint.setAlpha((int) (oldAlpha2 * getAlpha()));
          }
@@ -36,7 +38,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -7190,7 +7190,6 @@ public class ChatActivity extends BaseFragment implements
+@@ -7184,7 +7184,6 @@ public class ChatActivity extends BaseFragment implements
              protected void onDraw(Canvas canvas) {
                  if (scrimBlurBitmap != null) return;
                  float clipTop = chatListView.getY() + chatListViewPaddingTop - getY();
@@ -44,7 +46,7 @@ index 0000000..0000000 100644
                  if (clipTop > 0) {
                      if (clipTop < getMeasuredHeight()) {
                          canvas.save();
-@@ -12140,7 +12139,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -12554,7 +12553,7 @@ public class ChatActivity extends BaseFragment implements
          }
  
          if (floatingDateView != null) {
@@ -53,7 +55,7 @@ index 0000000..0000000 100644
          }
          updateFloatingTopicView();
  
-@@ -16911,7 +16910,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -17393,7 +17392,7 @@ public class ChatActivity extends BaseFragment implements
          }
          if (floatingDateView != null) {
              floatingDateView.setTranslationX(getSideMenuWidth() / 2f);

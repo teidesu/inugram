@@ -14,7 +14,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/FiltersListB
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/FiltersListBottomSheet.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/FiltersListBottomSheet.java
-@@ -140,7 +140,6 @@ public class FiltersListBottomSheet extends BottomSheet implements NotificationC
+@@ -166,7 +166,6 @@ public class FiltersListBottomSheet extends BottomSheet implements NotificationC
                  int statusBarHeight = 0;
                  float radProgress = 1.0f;
                  top += AndroidUtilities.statusBarHeight;
@@ -26,7 +26,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/PhonebookSha
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/PhonebookShareAlert.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/PhonebookShareAlert.java
-@@ -420,7 +420,6 @@ public class PhonebookShareAlert extends BottomSheet {
+@@ -442,7 +442,6 @@ public class PhonebookShareAlert extends BottomSheet {
  
                  if (Build.VERSION.SDK_INT >= 21) {
                      top += AndroidUtilities.statusBarHeight;
@@ -38,7 +38,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ThemeEditorV
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ThemeEditorView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ThemeEditorView.java
-@@ -717,7 +717,6 @@ public class ThemeEditorView {
+@@ -792,7 +792,6 @@ public class ThemeEditorView {
                      if (!isFullscreen) {
                          top += AndroidUtilities.statusBarHeight;
                          y += AndroidUtilities.statusBarHeight;
@@ -50,7 +50,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/UsersAlertBa
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/UsersAlertBase.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/UsersAlertBase.java
-@@ -522,7 +522,6 @@ public class UsersAlertBase extends BottomSheet {
+@@ -523,7 +523,6 @@ public class UsersAlertBase extends BottomSheet {
              if (Build.VERSION.SDK_INT >= 21) {
                  top += AndroidUtilities.statusBarHeight;
                  y += AndroidUtilities.statusBarHeight;

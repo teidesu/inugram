@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsCon
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
-@@ -3347,6 +3347,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -3362,6 +3362,7 @@ public class NotificationsController extends BaseController implements Notificat
                  notificationManager.cancel(wearNotificationsIds.valueAt(a));
              }
              wearNotificationsIds.clear();
@@ -19,7 +19,7 @@ index 0000000..0000000 100644
          });
      }
  
-@@ -3365,6 +3366,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -3380,6 +3381,7 @@ public class NotificationsController extends BaseController implements Notificat
                  notificationManager.cancel(wearNotificationsIds.valueAt(a));
              }
              wearNotificationsIds.clear();
@@ -27,7 +27,7 @@ index 0000000..0000000 100644
              AndroidUtilities.runOnUIThread(() -> NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.pushMessagesUpdated));
          } catch (Exception e) {
              FileLog.e(e);
-@@ -3465,6 +3467,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -3480,6 +3482,7 @@ public class NotificationsController extends BaseController implements Notificat
              int hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
              if (hour >= 11 && hour <= 22) {
                  notificationManager.cancel(notificationId);
@@ -35,7 +35,7 @@ index 0000000..0000000 100644
                  showOrUpdateNotification(true);
              } else {
                  scheduleNotificationRepeat();
-@@ -4169,6 +4172,234 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -4184,6 +4187,234 @@ public class NotificationsController extends BaseController implements Notificat
          return channelId;
      }
  
@@ -270,7 +270,7 @@ index 0000000..0000000 100644
      private void showOrUpdateNotification(boolean notifyAboutLast) {
          if (!getUserConfig().isClientActivated() || pushMessages.isEmpty() && storyPushMessages.isEmpty() || NotificationsHelper.shouldSuppressNotifications(currentAccount) || !SharedConfig.showNotificationsForAllAccounts && currentAccount != UserConfig.selectedAccount) {
              dismissNotification();
-@@ -4456,149 +4687,17 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -4471,149 +4702,17 @@ public class NotificationsController extends BaseController implements Notificat
                  }
              }
  
@@ -430,7 +430,7 @@ index 0000000..0000000 100644
  
              Intent intent = new Intent(ApplicationLoader.applicationContext, LaunchActivity.class);
              intent.setAction("com.tmessages.openchat" + Math.random() + Integer.MAX_VALUE);
-@@ -4976,6 +5075,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -4992,6 +5091,7 @@ public class NotificationsController extends BaseController implements Notificat
          }
  
          ArrayList<NotificationHolder> holders = new ArrayList<>();
@@ -438,7 +438,7 @@ index 0000000..0000000 100644
  
          boolean useSummaryNotification = Build.VERSION.SDK_INT <= Build.VERSION_CODES.O_MR1 || sortedDialogs.size() > (storyPushMessages.isEmpty() ? 1 : 2);
          if (useSummaryNotification && Build.VERSION.SDK_INT >= 26) {
-@@ -5762,18 +5862,33 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -5779,18 +5879,33 @@ public class NotificationsController extends BaseController implements Notificat
                  builder.addPerson("tel:+" + user.phone);
              }
  
@@ -473,7 +473,7 @@ index 0000000..0000000 100644
              try {
                  notificationManager.notify(notificationId, mainNotification);
              } catch (SecurityException e) {
-@@ -5798,6 +5913,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -5815,6 +5930,7 @@ public class NotificationsController extends BaseController implements Notificat
              if (BuildVars.LOGS_ENABLED) {
                  FileLog.d("cancel notification id " + id);
              }
@@ -481,7 +481,7 @@ index 0000000..0000000 100644
              notificationManager.cancel(id);
          }
  
-@@ -5805,6 +5921,10 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -5822,6 +5938,10 @@ public class NotificationsController extends BaseController implements Notificat
          FileLog.d("showExtraNotifications: holders.size()=" + holders.size());
          for (int a = 0, size = holders.size(); a < size; a++) {
              NotificationHolder holder = holders.get(a);

@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileChannelCel
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileChannelCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileChannelCell.java
-@@ -301,6 +301,9 @@ public class ProfileChannelCell extends FrameLayout implements Theme.Colorable {
+@@ -302,6 +302,9 @@ public class ProfileChannelCell extends FrameLayout implements Theme.Colorable {
                          }
                      }
                      cursor.dispose();
@@ -21,7 +21,7 @@ index 0000000..0000000 100644
  
                      if (!messages.isEmpty()) {
                          if (!usersToLoad.isEmpty()) {
-@@ -370,7 +373,7 @@ public class ProfileChannelCell extends FrameLayout implements Theme.Colorable {
+@@ -371,7 +374,7 @@ public class ProfileChannelCell extends FrameLayout implements Theme.Colorable {
  
                              if (!res.messages.isEmpty()) {
                                  messageObjects.clear();

@@ -22,7 +22,7 @@ index 0000000..0000000 100644
  jmethodID jclass_ConnectionsManager_onIntegrityCheckClassic;
  jmethodID jclass_ConnectionsManager_onCaptchaCheck;
  
-@@ -398,6 +399,12 @@ class Delegate : public ConnectiosManagerDelegate {
+@@ -394,6 +395,12 @@ class Delegate : public ConnectiosManagerDelegate {
          jniEnv[instanceNum]->CallStaticVoidMethod(jclass_ConnectionsManager, jclass_ConnectionsManager_onPremiumFloodWait, instanceNum, requestToken, isUpload);
      }
  
@@ -35,7 +35,7 @@ index 0000000..0000000 100644
      void onIntegrityCheckClassic(int32_t instanceNum, int32_t requestToken, std::string project, std::string nonce) {
          jstring projectStr = jniEnv[instanceNum]->NewStringUTF(project.c_str());
          jstring nonceStr = jniEnv[instanceNum]->NewStringUTF(nonce.c_str());
-@@ -685,6 +692,10 @@ extern "C" int registerNativeTgNetFunctions(JavaVM *vm, JNIEnv *env) {
+@@ -681,6 +688,10 @@ extern "C" int registerNativeTgNetFunctions(JavaVM *vm, JNIEnv *env) {
      if (jclass_ConnectionsManager_onPremiumFloodWait == 0) {
          return JNI_FALSE;
      }
@@ -50,7 +50,7 @@ diff --git a/TMessagesProj/jni/tgnet/ConnectionsManager.cpp b/TMessagesProj/jni/
 index 0000000..0000000 100644
 --- a/TMessagesProj/jni/tgnet/ConnectionsManager.cpp
 +++ b/TMessagesProj/jni/tgnet/ConnectionsManager.cpp
-@@ -1368,6 +1368,9 @@ void ConnectionsManager::processServerResponse(TLObject *message, int64_t messag
+@@ -1385,6 +1385,9 @@ void ConnectionsManager::processServerResponse(TLObject *message, int64_t messag
                                          request->minStartTime = request->startTime + (request->serverFailureCount > 10 ? 10 : request->serverFailureCount);
                                      }
                                      request->serverFailureCount++;
@@ -64,10 +64,10 @@ diff --git a/TMessagesProj/jni/tgnet/Defines.h b/TMessagesProj/jni/tgnet/Defines
 index 0000000..0000000 100644
 --- a/TMessagesProj/jni/tgnet/Defines.h
 +++ b/TMessagesProj/jni/tgnet/Defines.h
-@@ -157,6 +157,7 @@ typedef struct ConnectiosManagerDelegate {
+@@ -158,6 +158,7 @@ typedef struct ConnectiosManagerDelegate {
      virtual void onPremiumFloodWait(int32_t instanceNum, int32_t requestToken, bool isUpload) = 0;
      virtual void onIntegrityCheckClassic(int32_t instanceNum, int32_t requestToken, std::string project, std::string nonce) = 0;
-     virtual void onCaptchaCheck(int32_t instanceNum, int32_t requestToken, std::string action, std::string key_id) = 0;
+     virtual void onCaptchaCheck(int32_t instanceNum, int32_t requestToken, int32_t generation, std::string action, std::string key_id) = 0;
 +    virtual void inu_onSendServerError(int32_t instanceNum, int32_t code, std::string message) = 0;
  } ConnectiosManagerDelegate;
  
@@ -76,7 +76,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
 +++ b/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
-@@ -1497,6 +1497,11 @@ public class ConnectionsManager extends BaseController {
+@@ -1521,6 +1521,11 @@ public class ConnectionsManager extends BaseController {
          }
      }
  

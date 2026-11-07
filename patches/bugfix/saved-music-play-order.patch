@@ -4,71 +4,33 @@ Date: Sun, 25 Oct 2026 18:02:28 +0400
 Subject: play saved music top to bottom
 
 ---
- .../java/org/telegram/messenger/MediaController.java   | 10 +++++++---
- .../org/telegram/ui/Components/AudioPlayerAlert.java   |  4 ++--
- 2 files changed, 9 insertions(+), 5 deletions(-)
+ .../src/main/java/org/telegram/messenger/MediaController.java   | 2 +-
+ .../main/java/org/telegram/ui/Components/AudioPlayerAlert.java  | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
-@@ -3032,7 +3032,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
-             return;
-         }
- 
--        boolean last = traversePlaylist(currentPlayList, SharedConfig.playOrderReversed ? +1 : -1);
-+        boolean last = traversePlaylist(currentPlayList, inu_isPlayOrderForward() ? +1 : -1);
-         if (last && byStop && SharedConfig.repeatMode == 0 && !forceLoopCurrentPlaylist) {
-             if (audioPlayer != null || videoPlayer != null) {
-                 if (audioPlayer != null) {
-@@ -3093,7 +3093,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
-             return;
-         }
- 
--        traversePlaylist(currentPlayList, SharedConfig.playOrderReversed ? -1 : 1);
-+        traversePlaylist(currentPlayList, inu_isPlayOrderForward() ? -1 : 1);
-         if (currentPlaylistNum >= currentPlayList.size()) {
-             return;
-         }
-@@ -3170,7 +3170,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
-             return;
-         }
-         int nextIndex;
--        if (SharedConfig.playOrderReversed) {
-+        if (inu_isPlayOrderForward()) {
-             nextIndex = currentPlaylistNum + 1;
-             if (nextIndex >= currentPlayList.size()) {
-                 nextIndex = 0;
-@@ -4491,6 +4491,10 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
-         return playlist;
+@@ -3177,7 +3177,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+     }
+     
+     // saved music lists are stored top to bottom, while chat playlists are stored oldest first
+-    private boolean isPlaylistOrderReversed() {
++    public boolean isPlaylistOrderReversed() {
+         return currentSavedMusicList != null ? !SharedConfig.playOrderReversed : SharedConfig.playOrderReversed;
      }
  
-+    public boolean inu_isPlayOrderForward() {
-+        return SharedConfig.playOrderReversed != (currentSavedMusicList != null);
-+    }
-+
-     public MessagesController.SavedMusicList getMusicList() {
-         return currentSavedMusicList;
-     }
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerAlert.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerAlert.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerAlert.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerAlert.java
-@@ -1622,7 +1622,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+@@ -1630,7 +1630,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
                      idx++;
                  }
                  if (idx >= 0) {
 -                    if (SharedConfig.playOrderReversed) {
-+                    if (MediaController.getInstance().inu_isPlayOrderForward()) {
++                    if (MediaController.getInstance().isPlaylistOrderReversed()) {
                          layoutManager.scrollToPosition(idx);
                      } else {
                          layoutManager.scrollToPosition(playlist.size() - idx);
-@@ -2589,7 +2589,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
-             if (searchWas) {
-                 messageObject = searchResult.get(position);
-                 needDivider = position + 1 < searchResult.size();
--            } else if (savedMusicList != null ? !SharedConfig.playOrderReversed : SharedConfig.playOrderReversed) {
-+            } else if (MediaController.getInstance().inu_isPlayOrderForward()) {
-                 messageObject = playlist.get(position);
-                 needDivider = position + 1 < playlist.size();
-             } else {

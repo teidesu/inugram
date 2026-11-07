@@ -46,7 +46,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/FileUploadOperat
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/FileUploadOperation.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/FileUploadOperation.java
-@@ -528,6 +528,7 @@ public class FileUploadOperation {
+@@ -548,6 +548,7 @@ public class FileUploadOperation {
              readBytesCount += currentRequestBytes;
          } catch (Exception e) {
              FileLog.e(e);
@@ -58,7 +58,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelp
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
-@@ -930,6 +930,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -931,6 +931,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
          }
  
          public void markAsError() {
@@ -66,7 +66,7 @@ index 0000000..0000000 100644
              if (type == 4) {
                  for (int a = 0; a < messageObjects.size(); a++) {
                      MessageObject obj = messageObjects.get(a);
-@@ -8842,6 +8843,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -8884,6 +8885,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                      if (!found) {
                          String fileName = size2.location.volume_id + "_" + size2.location.local_id;
                          File cacheFile = new File(FileLoader.getDirectory(FileLoader.MEDIA_DIR_CACHE), fileName + ".jpg");
@@ -74,7 +74,7 @@ index 0000000..0000000 100644
                          cacheFile.delete();
                          if ("s".equals(size2.type) && strippedNew != null) {
                              newMedia.photo.sizes.set(b, strippedNew);
-@@ -8997,6 +8999,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -9039,6 +9041,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                          if (!found) {
                              String fileName = coverSize2.location.volume_id + "_" + coverSize2.location.local_id;
                              File cacheFile = new File(FileLoader.getDirectory(FileLoader.MEDIA_DIR_CACHE), fileName + ".jpg");
@@ -82,7 +82,7 @@ index 0000000..0000000 100644
                              cacheFile.delete();
                              if ("s".equals(coverSize2.type) && coverStrippedNew != null) {
                                  newPhoto.sizes.set(b, coverStrippedNew);
-@@ -9167,6 +9170,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -9209,6 +9212,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
      }
  
      protected void processUnsentMessages(final ArrayList<TLRPC.Message> messages, final ArrayList<TLRPC.Message> scheduledMessages, final ArrayList<TLRPC.User> users, final ArrayList<TLRPC.Chat> chats, final ArrayList<TLRPC.EncryptedChat> encryptedChats) {

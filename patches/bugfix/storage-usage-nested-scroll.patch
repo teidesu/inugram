@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/CachedMediaLayout.java 
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/CachedMediaLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/CachedMediaLayout.java
-@@ -432,7 +432,7 @@ public class CachedMediaLayout extends FrameLayout implements NestedSizeNotifier
+@@ -538,7 +538,7 @@ public class CachedMediaLayout extends FrameLayout implements Theme.Colorable, N
  
      @Override
      public boolean isAttached() {
@@ -25,7 +25,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/NestedSizeNo
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/NestedSizeNotifierLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/NestedSizeNotifierLayout.java
-@@ -53,7 +53,7 @@ public class NestedSizeNotifierLayout extends SizeNotifierFrameLayout implements
+@@ -51,7 +51,7 @@ public class NestedSizeNotifierLayout extends SizeNotifierFrameLayout implements
          if (target == targetListView && childAttached()) {
              RecyclerListView innerListView = childLayout.getListView();
              int top = childLayout.getTop();
@@ -34,7 +34,7 @@ index 0000000..0000000 100644
                  consumed[1] = dyUnconsumed;
                  innerListView.scrollBy(0, dyUnconsumed);
              }
-@@ -133,9 +133,12 @@ public class NestedSizeNotifierLayout extends SizeNotifierFrameLayout implements
+@@ -131,9 +131,12 @@ public class NestedSizeNotifierLayout extends SizeNotifierFrameLayout implements
      public void setChildLayout(ChildLayout childLayout, int maxTopPadding) {
          this.maxTopPadding = maxTopPadding;
          if (this.childLayout != childLayout) {
@@ -49,7 +49,7 @@ index 0000000..0000000 100644
              }
          }
          updateMaxTop();
-@@ -160,7 +163,7 @@ public class NestedSizeNotifierLayout extends SizeNotifierFrameLayout implements
+@@ -158,7 +161,7 @@ public class NestedSizeNotifierLayout extends SizeNotifierFrameLayout implements
      }
  
      public boolean isPinnedToTop() {

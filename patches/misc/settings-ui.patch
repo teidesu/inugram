@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -14598,7 +14598,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -14600,7 +14600,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          private static SearchResult[] onCreateSearchArray(final BaseFragment f) {
              final int currentAccount = f.getCurrentAccount();
              final Theme.ResourcesProvider resourcesProvider = f.getResourceProvider();
@@ -21,7 +21,7 @@ index 0000000..0000000 100644
                      new SearchResult(500, getString(R.string.EditName), 0, () -> f.presentFragment(new ChangeNameActivity(resourcesProvider))),
                      new SearchResult(501, getString(R.string.ChangePhoneNumber), 0, () -> f.presentFragment(new ActionIntroActivity(ActionIntroActivity.ACTION_TYPE_CHANGE_PHONE_NUMBER))).withLink("tg://settings/edit/change-number"),
                      new SearchResult(502, getString(R.string.AddAnotherAccount), 0, () -> {
-@@ -14855,7 +14855,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -14862,7 +14862,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                      new SearchResult(402, getString(R.string.AskAQuestion), getString(R.string.SettingsHelp), R.drawable.msg2_help, () -> f.showDialog(AlertsCreator.createSupportAlert(f, null))).withLink("tg://settings/ask-question"),
                      new SearchResult(403, getString(R.string.TelegramFAQ), getString(R.string.SettingsHelp), R.drawable.msg2_help, () -> Browser.openUrl(f.getParentActivity(), getString(R.string.TelegramFaqUrl))).withLink("tg://settings/faq"),
                      new SearchResult(404, getString(R.string.PrivacyPolicy), getString(R.string.SettingsHelp), R.drawable.msg2_help, () -> Browser.openUrl(f.getParentActivity(), getString(R.string.PrivacyPolicyUrl))).withLink("tg://settings/privacy-policy"),
@@ -34,7 +34,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
-@@ -709,6 +709,11 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -788,6 +788,11 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
              items.add(UItem.asShadow(null));
          }
  
@@ -46,8 +46,8 @@ index 0000000..0000000 100644
          final boolean walletAbove = getConnectionsManager().getCurrentTime() - 1791538462 < 4 * 7 * 24 * 60 * 60;
          if (walletAbove && getMessagesController().config.walletAvailable.get()) {
              final GramWallet wallet = GramWallet.getInstance(currentAccount);
-@@ -770,7 +775,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
-             items.add(SettingCell.Factory.of(26, 0xFF55CA47, 0xFF27B434, 0, getString(R.string.AudioRecorderSettings)));
+@@ -850,7 +855,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+             items.add(SettingCell.Factory.of(27, 0xFF3D8BEB, 0xFF2A6FD9, 0, getString(R.string.HeaderSettings)));
          }
  
 -        if (BuildVars.LOGS_ENABLED || BuildVars.DEBUG_PRIVATE_VERSION) {
@@ -55,8 +55,8 @@ index 0000000..0000000 100644
              items.add(UItem.asShadow(null));
              items.add(UItem.asHeader(getString(R.string.SettingsDebug)));
              items.add(SettingCell.Factory.of(20, 0xFF55CA47, 0xFF27B434, 0, getString(R.string.DebugSendLogs)));
-@@ -919,6 +924,10 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
-                 presentFragment(new AudioRecorderSettingsActivity());
+@@ -1003,6 +1008,10 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+                 presentFragment(new HeaderSettingsActivity());
                  break;
              }
 +

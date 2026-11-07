@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelp
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
-@@ -2474,6 +2474,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -2477,6 +2477,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                          newMsg.flags = TLRPC.MESSAGE_FLAG_FWD;
                      }
                      if (peer == myId && newMsg.fwd_from != null) {

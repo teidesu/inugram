@@ -13,7 +13,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -22611,7 +22611,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -23152,7 +23152,7 @@ public class ChatActivity extends BaseFragment implements
              } else {
                  if (AndroidUtilities.isTablet() && parentLayout != null && parentLayout.getFragmentStack().size() > 1) {
                      finishFragment();
@@ -26,7 +26,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -7121,7 +7121,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -7230,7 +7230,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              if (!getMessagesController().checkCanOpenChat(args, ProfileActivity.this)) {
                  return;
              }
@@ -35,7 +35,7 @@ index 0000000..0000000 100644
              if (!AndroidUtilities.isTablet() && removeFragment) {
                  getNotificationCenter().removeObserver(ProfileActivity.this, NotificationCenter.closeChats);
                  getNotificationCenter().postNotificationName(NotificationCenter.closeChats);
-@@ -9225,7 +9225,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -9431,7 +9431,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                      TLRPC.EncryptedChat encryptedChat = (TLRPC.EncryptedChat) args[0];
                      Bundle args2 = new Bundle();
                      args2.putInt("enc_id", encryptedChat.id);
@@ -44,7 +44,7 @@ index 0000000..0000000 100644
                  });
              }
          } else if (id == NotificationCenter.encryptedChatUpdated) {
-@@ -9334,7 +9334,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -9540,7 +9540,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                      sharedMediaLayout.setChatInfo(chatInfo);
                  }
              }
@@ -57,15 +57,15 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/TopicsFragment.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/TopicsFragment.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/TopicsFragment.java
-@@ -2702,6 +2702,7 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
-         NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.notificationsSettingsUpdated);
-         NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.chatSwitchedForum);
-         NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.closeChats);
-+        NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.dialogDeleted);
-         NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.openedChatChanged);
+@@ -2710,6 +2710,7 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
+         NotificationCenter.getInstance(currentAccount).addWeakObserver(this, NotificationCenter.chatSwitchedForum);
+         NotificationCenter.getInstance(currentAccount).addWeakObserver(this, NotificationCenter.closeChats);
+         NotificationCenter.getInstance(currentAccount).addWeakObserver(this, NotificationCenter.openedChatChanged);
++        NotificationCenter.getInstance(currentAccount).addWeakObserver(this, NotificationCenter.dialogDeleted);
  
          updateTopicsList(false, false);
-@@ -2736,6 +2737,7 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
+         SelectAnimatedEmojiDialog.preload(currentAccount);
+@@ -2743,6 +2744,7 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
          NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.notificationsSettingsUpdated);
          NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.chatSwitchedForum);
          NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.closeChats);
@@ -73,7 +73,7 @@ index 0000000..0000000 100644
          NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.openedChatChanged);
  
          TLRPC.Chat chatLocal = getMessagesController().getChat(chatId);
-@@ -2864,8 +2866,17 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
+@@ -2871,8 +2873,17 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
              updateChatInfo(true);
          } else if (id == NotificationCenter.chatSwitchedForum) {
  

@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayo
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
-@@ -2532,7 +2532,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -2631,7 +2631,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
          fragment.setInMenuMode(false);
  
          try {
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
          } catch (Exception ignore) {}
      }
  
-@@ -2572,7 +2572,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -2675,7 +2675,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
          }
  
          if (previousFragment != null) {

@@ -27,7 +27,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelp
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
-@@ -2211,7 +2211,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -2212,7 +2212,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
              } else {
                  params = null;
              }
@@ -36,7 +36,7 @@ index 0000000..0000000 100644
              sendMessageParams.replyToStoryItem = storyItem;
              sendMessageParams.replyQuote = quote;
              sendMessageParams.sendMessageChatArguments = sendMessageChatArguments;
-@@ -9071,6 +9071,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -9113,6 +9113,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
              newMedia.document.size = sentMedia.document.size;
              newMedia.document.mime_type = sentMedia.document.mime_type;
  
@@ -48,7 +48,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -9804,7 +9804,13 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -9091,7 +9091,13 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                          flipImage = true;
                      }
                      if (messageObject.getDocument() != null) {
@@ -67,7 +67,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ContentPreviewViewer.ja
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ContentPreviewViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ContentPreviewViewer.java
-@@ -784,6 +784,7 @@ public class ContentPreviewViewer {
+@@ -785,6 +785,7 @@ public class ContentPreviewViewer {
                  }
  
                  desu.inugram.helpers.StickerDownloadHelper.addPreviewMenuItems(currentDocument, items, icons, actions);
@@ -75,7 +75,7 @@ index 0000000..0000000 100644
  
                  if (items.isEmpty()) {
                      return;
-@@ -802,6 +803,10 @@ public class ContentPreviewViewer {
+@@ -803,6 +804,10 @@ public class ContentPreviewViewer {
                              dismissPopupWindow();
                              return;
                          }

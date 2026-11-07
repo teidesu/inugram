@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.ja
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
-@@ -102,6 +102,7 @@ import org.telegram.ui.Stars.StarsController;
+@@ -105,6 +105,7 @@ import org.telegram.ui.Stars.StarsController;
  import org.telegram.ui.Stars.StarsIntroActivity;
  import org.telegram.ui.Stories.StoriesController;
  import org.telegram.ui.Wallet.GramWallet;
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
  import org.telegram.ui.community.CommunityUtils;
  import org.telegram.ui.web.BotWebViewContainer;
  import org.telegram.utils.code.highlight.CodeHighlighting;
-@@ -6487,6 +6488,15 @@ public class MessageObject {
+@@ -6691,6 +6692,15 @@ public class MessageObject {
                      return out;
                  }
              }
@@ -40,7 +40,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
-@@ -1635,7 +1635,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
+@@ -1681,7 +1681,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                      } else {
                          CharSequence mess;
                          if (draftMessage != null && draftMessage.rich_message != null) {
@@ -49,7 +49,7 @@ index 0000000..0000000 100644
                          } else if (draftVoice) {
                              mess = getString(R.string.AttachAudio);
                          } else if (draftMessage != null) {
-@@ -6039,7 +6039,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
+@@ -6085,7 +6085,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                  final TL_iv.PageBlock block = message.messageOwner.rich_message.blocks.get(0);
                  accentColor = MessageObject.isBlueBlock(block);
              }

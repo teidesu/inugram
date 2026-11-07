@@ -13,7 +13,7 @@ diff --git a/TMessagesProj/jni/tgnet/ConnectionsManager.cpp b/TMessagesProj/jni/
 index 0000000..0000000 100644
 --- a/TMessagesProj/jni/tgnet/ConnectionsManager.cpp
 +++ b/TMessagesProj/jni/tgnet/ConnectionsManager.cpp
-@@ -151,9 +151,18 @@ ConnectionsManager& ConnectionsManager::getInstance(int32_t instanceNum) {
+@@ -152,9 +152,18 @@ ConnectionsManager& ConnectionsManager::getInstance(int32_t instanceNum) {
              static ConnectionsManager instance3(3);
              return instance3;
          case 4:
@@ -37,9 +37,9 @@ diff --git a/TMessagesProj/jni/tgnet/Defines.h b/TMessagesProj/jni/tgnet/Defines
 index 0000000..0000000 100644
 --- a/TMessagesProj/jni/tgnet/Defines.h
 +++ b/TMessagesProj/jni/tgnet/Defines.h
-@@ -27,7 +27,7 @@
+@@ -28,7 +28,7 @@
  #define DOWNLOAD_CONNECTIONS_COUNT 8
- #define UPLOAD_CONNECTIONS_COUNT 4
+ #define UPLOAD_CONNECTIONS_COUNT 8
  #define CONNECTION_BACKGROUND_KEEP_TIME 10000
 -#define MAX_ACCOUNT_COUNT 5
 +#define MAX_ACCOUNT_COUNT 8
@@ -50,7 +50,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/UserConfig.java 
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/UserConfig.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/UserConfig.java
-@@ -24,8 +24,8 @@ import java.util.Arrays;
+@@ -25,8 +25,8 @@ import java.util.Arrays;
  public class UserConfig extends BaseController {
  
      public static int selectedAccount;

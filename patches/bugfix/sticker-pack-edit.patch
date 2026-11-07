@@ -14,7 +14,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/StickerSetNameCel
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/StickerSetNameCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/StickerSetNameCell.java
-@@ -199,6 +199,8 @@ public class StickerSetNameCell extends FrameLayout {
+@@ -205,6 +205,8 @@ public class StickerSetNameCell extends FrameLayout {
          editView.setVisibility(View.VISIBLE);
          editView.setText(LocaleController.getString(R.string.EditPack));
          editView.setOnClickListener(whenClickedEdit);
@@ -23,7 +23,7 @@ index 0000000..0000000 100644
      }
  
      public void setCreate(View.OnClickListener whenClickedEdit, View.OnLongClickListener whenLongClickedEdit) {
-@@ -227,6 +229,10 @@ public class StickerSetNameCell extends FrameLayout {
+@@ -233,6 +235,10 @@ public class StickerSetNameCell extends FrameLayout {
          buttonView.setOnClickListener(onIconClickListener);
      }
  

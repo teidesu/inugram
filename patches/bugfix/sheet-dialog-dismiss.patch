@@ -14,7 +14,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BaseFragment.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BaseFragment.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BaseFragment.java
-@@ -113,6 +113,9 @@ public abstract class BaseFragment {
+@@ -125,6 +125,9 @@ public abstract class BaseFragment {
  
          public boolean onAttachedBackPressed();
          public boolean showDialog(Dialog dialog);
@@ -24,7 +24,7 @@ index 0000000..0000000 100644
  
          public void setKeyboardHeightFromParent(int keyboardHeight);
  
-@@ -834,7 +837,7 @@ public abstract class BaseFragment {
+@@ -963,7 +966,7 @@ public abstract class BaseFragment {
          if (sheetsStack != null) {
              for (int i = sheetsStack.size() - 1; i >= 0; --i) {
                  if (sheetsStack.get(i).isShown()) {
@@ -37,7 +37,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Premium/Prem
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Premium/PremiumPreviewBottomSheet.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Premium/PremiumPreviewBottomSheet.java
-@@ -206,11 +206,19 @@ public class PremiumPreviewBottomSheet extends BottomSheetWithRecyclerListView i
+@@ -207,11 +207,19 @@ public class PremiumPreviewBottomSheet extends BottomSheetWithRecyclerListView i
  
      @Override
      public boolean showDialog(Dialog dialog) {
@@ -61,7 +61,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoryViewer.jav
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoryViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoryViewer.java
-@@ -1905,9 +1905,17 @@ public class StoryViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -1898,9 +1898,17 @@ public class StoryViewer implements NotificationCenter.NotificationCenterDelegat
  
      @Override
      public boolean showDialog(Dialog dialog) {

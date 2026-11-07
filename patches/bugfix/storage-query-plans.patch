@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataControl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
-@@ -5601,7 +5601,7 @@ public class MediaDataController extends BaseController {
+@@ -5603,7 +5603,7 @@ public class MediaDataController extends BaseController {
              try {
                  int lastTime = 0;
                  int lastMid = 0;
@@ -25,7 +25,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
-@@ -3996,7 +3996,7 @@ public class MessagesStorage extends BaseController {
+@@ -4114,7 +4114,7 @@ public class MessagesStorage extends BaseController {
                              if (chat != null && (ChatObject.isNotInChat(chat) || chat.min || chat.migrated_to != null)) {
                                  long did = -chat.id;
                                  database.executeFast("UPDATE dialogs SET unread_count = 0 WHERE did = " + did).stepThis().dispose();
@@ -34,7 +34,7 @@ index 0000000..0000000 100644
                                  chats.remove(a);
                                  a--;
                                  pushDialogs.remove(did);
-@@ -8917,9 +8917,9 @@ public class MessagesStorage extends BaseController {
+@@ -9098,9 +9098,9 @@ public class MessagesStorage extends BaseController {
              try {
                  int result;
                  if (topicId != 0) {
@@ -46,7 +46,7 @@ index 0000000..0000000 100644
                  }
                  if (cursor.next() && cursor.intValue(1) == expectedCount) {
                      result = cursor.intValue(0);
-@@ -14833,25 +14833,25 @@ public class MessagesStorage extends BaseController {
+@@ -15014,25 +15014,25 @@ public class MessagesStorage extends BaseController {
                  for (int i = 0; i < 5; i++) {
                      if (i == 0) {
                          if (dialogId != 0) {
@@ -79,7 +79,7 @@ index 0000000..0000000 100644
                      }
                      TLRPC.TL_messageEmpty emptyMessage = new TLRPC.TL_messageEmpty();
                      NativeByteBuffer data = new NativeByteBuffer(emptyMessage.getObjectSize());
-@@ -14859,9 +14859,8 @@ public class MessagesStorage extends BaseController {
+@@ -15040,9 +15040,8 @@ public class MessagesStorage extends BaseController {
  
                      state.requery();
                      state.bindByteBuffer(1, data);

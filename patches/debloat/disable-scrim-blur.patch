@@ -17,7 +17,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
-@@ -6041,6 +6041,13 @@ public class AndroidUtilities {
+@@ -6103,6 +6103,13 @@ public class AndroidUtilities {
              return;
          }
  
@@ -89,7 +89,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ContentPreviewViewer.ja
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ContentPreviewViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ContentPreviewViewer.java
-@@ -2056,7 +2056,7 @@ public class ContentPreviewViewer {
+@@ -2055,7 +2055,7 @@ public class ContentPreviewViewer {
                  containerView.invalidate();
              }
  
@@ -98,7 +98,7 @@ index 0000000..0000000 100644
                  paint.setAlpha((int) (blurProgress * 255));
                  if (paint.getAlpha() != 255) {
                      canvas.drawColor(Theme.multAlpha(Theme.getColor(Theme.key_windowBackgroundGray, resourcesProvider), blurProgress));
-@@ -2065,7 +2065,7 @@ public class ContentPreviewViewer {
+@@ -2064,7 +2064,7 @@ public class ContentPreviewViewer {
              }
          }
  
@@ -111,7 +111,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -9053,6 +9053,16 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8987,6 +8987,16 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          if (blurredView == null) {
              return;
          }
@@ -132,7 +132,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MessageSendPreview.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/MessageSendPreview.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/MessageSendPreview.java
-@@ -1159,7 +1159,9 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
+@@ -1160,7 +1160,9 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
                  WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS |
                  WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION |
                  WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS;
@@ -143,7 +143,7 @@ index 0000000..0000000 100644
          params.flags |= WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON;
          window.setAttributes(params);
  
-@@ -1687,6 +1689,15 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
+@@ -1688,6 +1690,15 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
          if (dismissing) return;
          dismissing = true;
  
@@ -159,7 +159,7 @@ index 0000000..0000000 100644
          SpoilerEffect2.pause(SpoilerEffect2.TYPE_DEFAULT, false);
          if (spoilerEffect2 != null) {
              spoilerEffect2.detach(windowView);
-@@ -1765,13 +1776,13 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
+@@ -1766,13 +1777,13 @@ public class MessageSendPreview extends Dialog implements NotificationCenter.Not
                      closing = false;
                  }
                  if (editText != null) {
@@ -179,7 +179,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/TopicsFragment.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/TopicsFragment.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/TopicsFragment.java
-@@ -4033,6 +4033,18 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
+@@ -4052,6 +4052,18 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
          if (blurredView == null || parentLayout == null) {
              return;
          }

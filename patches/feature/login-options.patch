@@ -21,7 +21,7 @@ index 0000000..0000000 100644
      <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
      <uses-permission android:name="android.permission.INTERNET" />
      <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-@@ -298,6 +299,9 @@
+@@ -296,6 +297,9 @@
                  <data android:host="telegram.dog" android:scheme="https" />
                  <data android:host="t.me" android:scheme="http" />
                  <data android:host="t.me" android:scheme="https" />
@@ -35,7 +35,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -18503,6 +18503,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -18549,6 +18549,7 @@ public class MessagesController extends BaseController implements NotificationCe
              if (BuildVars.LOGS_ENABLED && baseUpdate != null) {
                  FileLog.d("process update " + baseUpdate.getClass().getSimpleName());
              }
@@ -47,15 +47,15 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/PasskeysControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/PasskeysController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/PasskeysController.java
-@@ -26,6 +26,7 @@ import androidx.credentials.exceptions.GetCredentialException;
+@@ -21,6 +21,7 @@ import androidx.credentials.exceptions.GetCredentialException;
  import androidx.credentials.exceptions.GetCredentialInterruptedException;
  import androidx.credentials.exceptions.NoCredentialException;
  
 +import desu.inugram.helpers.LoginHelper;
  import org.json.JSONObject;
- import org.json.JSONStringer;
- import org.telegram.messenger.browser.Browser;
-@@ -74,10 +75,16 @@ public class PasskeysController {
+ import org.telegram.tgnet.ConnectionsManager;
+ import org.telegram.tgnet.TLObject;
+@@ -56,10 +57,16 @@ public class PasskeysController {
                  }
  
                  final String requestJson;
@@ -72,7 +72,7 @@ index 0000000..0000000 100644
                  } catch (Exception e) {
                      FileLog.e(e);
                      done.run(null, e.getMessage());
-@@ -85,7 +92,7 @@ public class PasskeysController {
+@@ -67,7 +74,7 @@ public class PasskeysController {
                  }
  
                  final CreatePublicKeyCredentialRequest credentialRequest =
@@ -81,7 +81,7 @@ index 0000000..0000000 100644
  
                  try {
                      credentialManager.createCredential(context, credentialRequest, ktxCallback((res2, err2) -> {
-@@ -120,7 +127,7 @@ public class PasskeysController {
+@@ -102,7 +109,7 @@ public class PasskeysController {
                              final JSONObject response = json.getJSONObject("response");
                              final TL_account.inputPasskeyResponseRegister passkeyResponse = new TL_account.inputPasskeyResponseRegister();
                              passkeyResponse.client_data = new TLRPC.TL_dataJSON();
@@ -90,7 +90,7 @@ index 0000000..0000000 100644
                              passkeyResponse.attestation_object = Base64.decode(response.getString("attestationObject"), Base64.URL_SAFE);
  
                              FileLog.d("AAGUID: " + bytesToHex(Arrays.copyOfRange(passkeyResponse.attestation_object, 67, 67 + 16)));
-@@ -182,20 +189,27 @@ public class PasskeysController {
+@@ -164,20 +171,27 @@ public class PasskeysController {
              }
  
              final String requestJson;
@@ -119,7 +119,7 @@ index 0000000..0000000 100644
                      .build();
  
              try {
-@@ -221,7 +235,7 @@ public class PasskeysController {
+@@ -203,7 +217,7 @@ public class PasskeysController {
                              final JSONObject response = json.getJSONObject("response");
                              final TL_account.inputPasskeyResponseLogin passkeyResponse = new TL_account.inputPasskeyResponseLogin();
                              passkeyResponse.client_data = new TLRPC.TL_dataJSON();

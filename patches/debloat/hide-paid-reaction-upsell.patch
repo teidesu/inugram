@@ -25,7 +25,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ReactionsCon
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ReactionsContainerLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ReactionsContainerLayout.java
-@@ -744,7 +744,7 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
+@@ -746,7 +746,7 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
                  }
              }
  
@@ -34,7 +34,7 @@ index 0000000..0000000 100644
                  boolean isStarSelected = false;
                  for (ReactionsLayoutInBubble.VisibleReaction r : selectedReactions) {
                      if (r.isStar) {
-@@ -2292,7 +2292,7 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
+@@ -2327,7 +2327,7 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
                      loopImageView.animatedEmojiDrawable.getImageReceiver().setRoundRadius(selected ? dp(6) : 0);
                  }
              }

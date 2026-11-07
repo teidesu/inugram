@@ -21,7 +21,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/CalendarActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/CalendarActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/CalendarActivity.java
-@@ -419,6 +419,7 @@ public class CalendarActivity extends BaseFragment implements NotificationCenter
+@@ -439,6 +439,7 @@ public class CalendarActivity extends BaseFragment implements NotificationCenter
                  AlertsCreator.createClearDaysDialogAlert(this, lastDaysSelected, getMessagesController().getUser(dialogId), null, false, new MessagesStorage.BooleanCallback() {
                      @Override
                      public void run(boolean forAll) {
@@ -29,7 +29,7 @@ index 0000000..0000000 100644
                          finishFragment();
                          if (parentLayout != null && parentLayout.getFragmentStack().size() >= 2) {
                              BaseFragment fragment = parentLayout.getFragmentStack().get(parentLayout.getFragmentStack().size() - 2);
-@@ -428,6 +429,7 @@ public class CalendarActivity extends BaseFragment implements NotificationCenter
+@@ -448,6 +449,7 @@ public class CalendarActivity extends BaseFragment implements NotificationCenter
                          } else if (chatActivity != null) {
                              chatActivity.deleteHistory(dateSelectedStart, dateSelectedEnd + 86400, forAll);
                          }
@@ -37,7 +37,7 @@ index 0000000..0000000 100644
                      }
                  }, null);
              });
-@@ -964,8 +966,10 @@ public class CalendarActivity extends BaseFragment implements NotificationCenter
+@@ -1073,8 +1075,10 @@ public class CalendarActivity extends BaseFragment implements NotificationCenter
                                          AlertsCreator.createClearDaysDialogAlert(CalendarActivity.this, 1, getMessagesController().getUser(dialogId), null, false, new MessagesStorage.BooleanCallback() {
                                              @Override
                                              public void run(boolean forAll) {
@@ -52,7 +52,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -3895,12 +3895,12 @@ public class ChatActivity extends BaseFragment implements
+@@ -3867,12 +3867,12 @@ public class ChatActivity extends BaseFragment implements
                          if (getThreadId() != 0) {
                              final TLRPC.User user = getMessagesController().getUser(getThreadId());
                              if (user != null) {
@@ -67,7 +67,7 @@ index 0000000..0000000 100644
                              }
                          }
                          return;
-@@ -3911,6 +3911,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -3883,6 +3883,7 @@ public class ChatActivity extends BaseFragment implements
                          AlertsCreator.createClearDaysDialogAlert(ChatActivity.this, -1, currentUser, currentChat, canDeleteHistory, new MessagesStorage.BooleanCallback() {
                              @Override
                              public void run(boolean revoke) {
@@ -75,7 +75,7 @@ index 0000000..0000000 100644
                                  if (revoke && (currentUser != null || canDeleteHistory)) {
                                      getMessagesStorage().getMessagesCount(dialog_id, (count) -> {
                                          if (count >= 50) {
-@@ -3922,11 +3923,12 @@ public class ChatActivity extends BaseFragment implements
+@@ -3894,11 +3895,12 @@ public class ChatActivity extends BaseFragment implements
                                  } else {
                                      performHistoryClear(revoke, canDeleteHistory);
                                  }
@@ -89,7 +89,7 @@ index 0000000..0000000 100644
                          if (id == clear_history && ChatObject.isChannel(currentChat) && (!currentChat.megagroup || ChatObject.isPublic(currentChat))) {
                              getMessagesController().deleteDialog(dialog_id, 2, param);
                          } else {
-@@ -3939,7 +3941,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -3911,7 +3913,7 @@ public class ChatActivity extends BaseFragment implements
                                  performHistoryClear(param, canDeleteHistory);
                              }
                          }
@@ -98,7 +98,7 @@ index 0000000..0000000 100644
                  } else if (id == share_contact) {
                      if (currentUser == null || getParentActivity() == null) {
                          return;
-@@ -8726,12 +8728,12 @@ public class ChatActivity extends BaseFragment implements
+@@ -8730,12 +8732,12 @@ public class ChatActivity extends BaseFragment implements
                      }
                  } else {
                      boolean canDeleteHistory = chatInfo != null && chatInfo.can_delete_channel;
@@ -117,7 +117,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatEditActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatEditActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatEditActivity.java
-@@ -1588,7 +1588,7 @@ public class ChatEditActivity extends BaseFragment implements ImageUpdater.Image
+@@ -1602,7 +1602,7 @@ public class ChatEditActivity extends BaseFragment implements ImageUpdater.Image
              }
              deleteContainer.addView(deleteCell, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
              deleteCell.setOnClickListener(v -> {
@@ -126,7 +126,7 @@ index 0000000..0000000 100644
                      if (AndroidUtilities.isTablet()) {
                          getNotificationCenter().postNotificationName(NotificationCenter.closeChats, -chatId);
                      } else {
-@@ -1596,7 +1596,7 @@ public class ChatEditActivity extends BaseFragment implements ImageUpdater.Image
+@@ -1610,7 +1610,7 @@ public class ChatEditActivity extends BaseFragment implements ImageUpdater.Image
                      }
                      finishFragment();
                      getNotificationCenter().postNotificationName(NotificationCenter.needDeleteDialog, -currentChat.id, null, currentChat, param);
@@ -139,7 +139,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreato
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java
-@@ -1462,7 +1462,7 @@ public class AlertsCreator {
+@@ -1508,7 +1508,7 @@ public class AlertsCreator {
              }
              reportText = LocaleController.getString(R.string.ReportChat);
          }
@@ -148,7 +148,7 @@ index 0000000..0000000 100644
              if (currentUser != null) {
                  accountInstance.getMessagesController().blockPeer(currentUser.id);
              }
-@@ -1483,7 +1483,7 @@ public class AlertsCreator {
+@@ -1529,7 +1529,7 @@ public class AlertsCreator {
              } else {
                  callback.run(0);
              }
@@ -161,29 +161,29 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaL
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
-@@ -2066,7 +2066,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
-                         })
-                         .add(R.drawable.msg_delete, getString(R.string.DeleteAll), () -> {
-                             TLRPC.User currentUser = profileActivity.getUserConfig().getCurrentUser();
--                            AlertsCreator.createClearOrDeleteDialogAlert(profileActivity, false, null, currentUser, false, true, false, true, (param) -> {
-+                            AlertsCreator.createClearOrDeleteDialogAlert(profileActivity, false, null, currentUser, false, true, false, true, (param) -> desu.inugram.helpers.security.BiometricHelper.gate(profileActivity.getParentActivity(), desu.inugram.InuConfig.BIOMETRIC_CONFIRM_DELETE_CHAT.getValue(), () -> {
-                                 profileActivity.finishFragment();
-                                 if (profileActivity instanceof NotificationCenter.NotificationCenterDelegate) {
-                                     profileActivity.getNotificationCenter().removeObserver((NotificationCenter.NotificationCenterDelegate) profileActivity, NotificationCenter.closeChats);
-@@ -2074,7 +2074,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
-                                 profileActivity.getNotificationCenter().postNotificationName(NotificationCenter.closeChats);
-                                 profileActivity.getNotificationCenter().postNotificationName(NotificationCenter.needDeleteDialog, dialog_id, currentUser, null, param);
-                                 profileActivity.getMessagesController().setSavedViewAs(false);
--                            });
-+                            }));
-                         })
-                         .translate(0, -dp(52))
-                         .setDimAlpha(0)
+@@ -12903,7 +12903,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+             });
+             o.add(R.drawable.msg_delete, getString(R.string.DeleteAll), false, true, () -> {
+                 TLRPC.User currentUser = profileActivity.getUserConfig().getCurrentUser();
+-                AlertsCreator.createClearOrDeleteDialogAlert(profileActivity, false, null, currentUser, false, true, false, true, (param) -> {
++                AlertsCreator.createClearOrDeleteDialogAlert(profileActivity, false, null, currentUser, false, true, false, true, (param) -> desu.inugram.helpers.security.BiometricHelper.gate(profileActivity.getParentActivity(), desu.inugram.InuConfig.BIOMETRIC_CONFIRM_DELETE_CHAT.getValue(), () -> {
+                     profileActivity.finishFragment();
+                     if (profileActivity instanceof NotificationCenter.NotificationCenterDelegate) {
+                         profileActivity.getNotificationCenter().removeObserver((NotificationCenter.NotificationCenterDelegate) profileActivity, NotificationCenter.closeChats);
+@@ -12911,7 +12911,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+                     profileActivity.getNotificationCenter().postNotificationName(NotificationCenter.closeChats);
+                     profileActivity.getNotificationCenter().postNotificationName(NotificationCenter.needDeleteDialog, dialog_id, currentUser, null, param);
+                     profileActivity.getMessagesController().setSavedViewAs(false);
+-                });
++                }));
+             });
+             return true;
+         }
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/TopicsTabsView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/TopicsTabsView.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/TopicsTabsView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/TopicsTabsView.java
-@@ -876,11 +876,11 @@ public class TopicsTabsView extends FrameLayout implements NotificationCenter.No
+@@ -960,11 +960,11 @@ public class TopicsTabsView extends FrameLayout implements NotificationCenter.No
                          options.dismiss();
                          final TLRPC.User user = MessagesController.getInstance(currentAccount).getUser(topicId);
                          if (user != null) {
@@ -201,7 +201,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -9490,7 +9490,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9424,7 +9424,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                  }
              }
  
@@ -210,7 +210,7 @@ index 0000000..0000000 100644
                      if (selectedDialogs.isEmpty()) {
                          return;
                      }
-@@ -9514,7 +9514,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9448,7 +9448,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                          }, null);
                      }
                      hideActionMode(action == clear);
@@ -219,7 +219,7 @@ index 0000000..0000000 100644
              return;
          } else if (action == block && alert) {
              TLRPC.User user;
-@@ -9524,7 +9524,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9458,7 +9458,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              } else {
                  user = null;
              }
@@ -228,7 +228,7 @@ index 0000000..0000000 100644
                  for (int a = 0, N = selectedDialogs.size(); a < N; a++) {
                      long did = selectedDialogs.get(a);
                      if (report) {
-@@ -9537,7 +9537,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9471,7 +9471,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      getMessagesController().blockPeer(did);
                  }
                  hideActionMode(false);
@@ -237,7 +237,7 @@ index 0000000..0000000 100644
              return;
          }
          int minPinnedNum = Integer.MAX_VALUE;
-@@ -9621,7 +9621,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9555,7 +9555,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                          builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
                          showDialog(builder.create());
                      } else {
@@ -246,7 +246,7 @@ index 0000000..0000000 100644
                              hideActionMode(false);
                              if (action == clear && ChatObject.isChannel(chat) && (!chat.megagroup || ChatObject.isPublic(chat))) {
                                  getMessagesController().deleteDialog(selectedDialog, 2, param);
-@@ -9669,7 +9669,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9603,7 +9603,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                                      }
                                  }
                              }
@@ -259,7 +259,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LogoutActivity.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LogoutActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LogoutActivity.java
-@@ -190,7 +190,7 @@ public class LogoutActivity extends BaseFragment {
+@@ -223,7 +223,7 @@ public class LogoutActivity extends BaseFragment {
              .setTitle(getString(R.string.LogOut))
              .setMessage(AndroidUtilities.replaceTags(grams > 0 ? formatString(R.string.AreYouSureLogoutGrams, GramWallet.formatGramsWithUnit(grams)) : getString(R.string.AreYouSureLogout)))
              .setPositiveButton(getString(R.string.LogOut), (dialogInterface, i) -> {
@@ -272,7 +272,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -6238,7 +6238,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -6367,7 +6367,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              }
          } else {
              if (!userBlocked || fromActions) {
@@ -281,7 +281,7 @@ index 0000000..0000000 100644
                      if (getParentLayout() != null) {
                          List<BaseFragment> fragmentStack = getParentLayout().getFragmentStack();
                          BaseFragment prevFragment = fragmentStack == null || fragmentStack.size() < 2 ? null : fragmentStack.get(fragmentStack.size() - 2);
-@@ -6249,7 +6249,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -6378,7 +6378,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                      disableProfileAnimation = true;
                      finishFragment();
                      getNotificationCenter().postNotificationName(NotificationCenter.needDeleteDialog, dialogId, user, currentChat, param);
@@ -290,7 +290,7 @@ index 0000000..0000000 100644
              } else {
                  getMessagesController().unblockPeer(userId, () -> getSendMessagesHelper().sendMessage(SendMessagesHelper.SendMessageParams.of("/start", userId, null, null, null, false, null, null, null, true, 0, 0, null, false)));
                  finishFragment();
-@@ -7740,13 +7740,13 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -7849,13 +7849,13 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
  
      private void leaveChatPressed(boolean delete) {
          boolean isForum = ChatObject.isForum(currentChat);
@@ -310,7 +310,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/TopicsFragment.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/TopicsFragment.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/TopicsFragment.java
-@@ -724,12 +724,12 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
+@@ -725,12 +725,12 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
                          break;
                      case delete_chat_id:
                          TLRPC.Chat chatLocal = getMessagesController().getChat(chatId);
@@ -329,7 +329,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/community/CommunityEdit
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/community/CommunityEditActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/community/CommunityEditActivity.java
-@@ -357,10 +357,10 @@ public class CommunityEditActivity extends BaseFragment implements ImageUpdater.
+@@ -377,10 +377,10 @@ public class CommunityEditActivity extends BaseFragment implements ImageUpdater.
          } else if (id == ROW_ID_ADD_ONLY_ADMINS) {
              setAllowedManageLinkedPeers(false);
          } else if (id == ROW_ID_DELETE_COMMUNITY) {

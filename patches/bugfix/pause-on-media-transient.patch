@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
-@@ -3213,7 +3213,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+@@ -3293,7 +3293,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
              if (neededAudioFocus == 3) {
                  result = NotificationsController.audioManager.requestAudioFocus(this, AudioManager.STREAM_VOICE_CALL, AudioManager.AUDIOFOCUS_GAIN);
              } else {

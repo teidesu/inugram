@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
-@@ -4579,14 +4579,25 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
+@@ -4625,14 +4625,25 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                          mentionLayout.draw(canvas);
                          canvas.restore();
                      } else {
@@ -37,7 +37,7 @@ index 0000000..0000000 100644
                      }
                  }
  
-@@ -4599,15 +4610,31 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
+@@ -4645,15 +4656,31 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                          s = drawReactionMention ? reactionsMentionsChangeProgress : (1f - reactionsMentionsChangeProgress);
                      }
  

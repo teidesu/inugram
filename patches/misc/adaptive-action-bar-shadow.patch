@@ -11,12 +11,12 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.jav
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
-@@ -2501,7 +2501,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
+@@ -2777,7 +2777,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
          }
  
          setBackgroundColor(ColorUtils.blendARGB(lowerColor, topColor, factor));
--        setShadowAlpha((int) ((1.0f - onTopAnimated) * 0xFF));
-+        setShadowAlpha((int) ((1.0f - onTopAnimated) * 0x7F));
+-        setShadowAlpha((int) ((1.0f - factor) * 0xFF));
++        setShadowAlpha((int) ((1.0f - factor) * 0x7F));
          if (blurredBackground) {
              invalidate();
          }

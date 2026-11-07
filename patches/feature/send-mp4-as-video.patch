@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelp
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
-@@ -9431,7 +9431,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -9473,7 +9473,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
      private final static int ERROR_TYPE_UNSUPPORTED = 1;
      private final static int ERROR_TYPE_FILE_TOO_LARGE = 2;
  
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
          final long forcedPollGroupId = pollSendParams != null ? pollSendParams.groupId : 0;
  
          if ((path == null || path.length() == 0) && uri == null) {
-@@ -9682,6 +9682,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -9724,6 +9724,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                  }
              }
          }
@@ -28,7 +28,7 @@ index 0000000..0000000 100644
          final String captionFinal = caption != null ? caption.toString() : "";
  
          final TLRPC.TL_document documentFinal = document;
-@@ -9691,7 +9692,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -9733,7 +9734,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
          if (originalPath != null) {
              params.put("originalPath", originalPath);
          }
@@ -37,7 +37,7 @@ index 0000000..0000000 100644
              params.put("forceDocument", "1");
          }
          if (parentFinal != null) {
-@@ -10157,7 +10158,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -10200,7 +10201,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                      mediaCount++;
                      long prevGroupId = groupId[0];
                      final boolean isGroupFinal = !forcedPollDoNotSendFinal && (pollSendParams == null && mediaCount == 10 || a == count - 1);
@@ -46,7 +46,7 @@ index 0000000..0000000 100644
                      first = false;
                      if (prevGroupId != groupId[0] || groupId[0] == -1) {
                          mediaCount = 1;
-@@ -10187,7 +10188,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -10230,7 +10231,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                      mediaCount++;
                      long prevGroupId = groupId[0];
                      final boolean isGroupFinal = !forcedPollDoNotSendFinal && (pollSendParams == null && mediaCount == 10 || a == count - 1);
@@ -55,7 +55,7 @@ index 0000000..0000000 100644
                      first = false;
                      if (prevGroupId != groupId[0] || groupId[0] == -1) {
                          mediaCount = 1;
-@@ -11753,7 +11754,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -11818,7 +11819,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                          mediaCount = 0;
                      }
                      mediaCount++;
@@ -64,7 +64,7 @@ index 0000000..0000000 100644
                      handleError(error, accountInstance);
                  }
              }
-@@ -12302,7 +12303,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -12364,7 +12365,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                      }
                  });
              } else {

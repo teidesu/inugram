@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivity
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
-@@ -5150,7 +5150,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -5207,7 +5207,7 @@ public class ChatActivityEnterView extends FrameLayout implements
          }
          messageSendPreview.setItemOptions(options);
  

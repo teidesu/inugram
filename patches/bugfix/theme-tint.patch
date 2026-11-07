@@ -4,21 +4,21 @@ Date: Sat, 30 May 2026 18:26:42 +0400
 Subject: fix hardcoded usage of white color instead of theme colors
 
 ---
- .../ui/Cells/PhotoAttachPhotoCell.java        |  3 +-
- .../telegram/ui/Cells/ProfileSearchCell.java  |  2 +-
- .../ui/Cells/SharedPhotoVideoCell.java        |  3 +-
- .../ui/Cells/SharedPhotoVideoCell2.java       |  8 +++--
- .../Components/Premium/LimitPreviewView.java  | 31 ++++++++++++-------
- .../ui/Components/RLottieDrawable.java        |  4 +++
- .../org/telegram/ui/ManageLinksActivity.java  |  2 ++
- .../org/telegram/ui/SettingsActivity.java     |  1 +
- 8 files changed, 38 insertions(+), 16 deletions(-)
+ .../org/telegram/ui/Cells/PhotoAttachPhotoCell.java  |  3 ++-
+ .../org/telegram/ui/Cells/ProfileSearchCell.java     |  2 +-
+ .../org/telegram/ui/Cells/SharedPhotoVideoCell.java  |  3 ++-
+ .../org/telegram/ui/Cells/SharedPhotoVideoCell2.java |  8 ++++++--
+ .../ui/Components/Premium/LimitPreviewView.java      | 12 +++++++++++-
+ .../org/telegram/ui/Components/RLottieDrawable.java  |  4 ++++
+ .../java/org/telegram/ui/ManageLinksActivity.java    |  2 ++
+ .../main/java/org/telegram/ui/SettingsActivity.java  |  1 +
+ 8 files changed, 29 insertions(+), 6 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/PhotoAttachPhotoCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/PhotoAttachPhotoCell.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/PhotoAttachPhotoCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/PhotoAttachPhotoCell.java
-@@ -262,10 +262,11 @@ public class PhotoAttachPhotoCell extends FrameLayout {
+@@ -263,10 +263,11 @@ public class PhotoAttachPhotoCell extends FrameLayout {
  
          videoPlayImageView = new ImageView(context);
          videoPlayImageView.setImageResource(R.drawable.play_mini_video);
@@ -35,7 +35,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileSearchCell
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileSearchCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileSearchCell.java
-@@ -1118,7 +1118,7 @@ public class ProfileSearchCell extends BaseCell implements NotificationCenter.No
+@@ -1121,7 +1121,7 @@ public class ProfileSearchCell extends BaseCell implements NotificationCenter.No
              final float s = openButtonBounce.getScale(.06f);
              canvas.scale(s, s, openButtonRect.centerX(), openButtonRect.centerY());
              canvas.drawRoundRect(openButtonRect, openButtonRect.height() / 2.0f, openButtonRect.height() / 2.0f, openButtonBackgroundPaint);
@@ -48,7 +48,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedPhotoVideoC
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedPhotoVideoCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedPhotoVideoCell.java
-@@ -113,10 +113,11 @@ public class SharedPhotoVideoCell extends FrameLayout {
+@@ -115,10 +115,11 @@ public class SharedPhotoVideoCell extends FrameLayout implements Theme.Colorable
  
              ImageView imageView1 = new ImageView(context);
              imageView1.setImageResource(R.drawable.play_mini_video);
@@ -98,7 +98,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Premium/Limi
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Premium/LimitPreviewView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Premium/LimitPreviewView.java
-@@ -94,6 +94,13 @@ public class LimitPreviewView extends LinearLayout {
+@@ -96,6 +96,13 @@ public class LimitPreviewView extends LinearLayout implements Theme.Colorable {
      private boolean isRatingStyle;
  
      Theme.ResourcesProvider resourcesProvider;
@@ -112,40 +112,15 @@ index 0000000..0000000 100644
      private boolean animate;
      private boolean animateArrowFadeIn, animateArrowFadeOut, animateBackgroundFade;
      private boolean animateIncrease;
-@@ -279,13 +286,13 @@ public class LimitPreviewView extends LinearLayout {
-                             width1 = (int) (leftWidth + availableWidth * percent);
-                             if (!animateArrowFadeIn && !animateArrowFadeOut) {
-                                 premiumCount.setTextColor(isRatingNegative ? Color.WHITE : hasDarkGradientProvider() ? Color.WHITE : Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
--                                defaultText.setTextColor(Color.WHITE);
-+                                defaultText.setTextColor(inu_filledTextColor());
-                             }
-                         } else {
+@@ -291,6 +298,7 @@ public class LimitPreviewView extends LinearLayout implements Theme.Colorable {
                              width1 = width;
                              if (!animateArrowFadeIn && !animateArrowFadeOut) {
--                                premiumCount.setTextColor(Color.WHITE);
--                                defaultText.setTextColor(Color.WHITE);
+                                 setPremiumCountColor(true);
 +                                premiumCount.setTextColor(inu_filledTextColor());
-+                                defaultText.setTextColor(inu_filledTextColor());
+                                 setDefaultTextColor(true);
                              }
                          }
-                     } else {
-@@ -643,7 +650,7 @@ public class LimitPreviewView extends LinearLayout {
-         premiumText.setVisibility(View.GONE);
- 
-         premiumCount.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
--        defaultText.setTextColor(Color.WHITE);
-+        defaultText.setTextColor(inu_filledTextColor());
- 
-         setIconValue(boosts.boosts, false);
-         isBoostsStyle = true;
-@@ -665,12 +672,13 @@ public class LimitPreviewView extends LinearLayout {
-         premiumText.setVisibility(View.GONE);
- 
-         premiumCount.setTextColor(isRatingNegative ? Color.WHITE : Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
--        defaultText.setTextColor(Color.WHITE);
-+        defaultText.setTextColor(inu_filledTextColor());
- 
-         setIconValue((int) current_stars, false);
+@@ -677,6 +685,7 @@ public class LimitPreviewView extends LinearLayout implements Theme.Colorable {
          isBoostsStyle = true;
          isSimpleStyle = true;
          isRatingStyle = true;
@@ -153,14 +128,7 @@ index 0000000..0000000 100644
      }
  
      public void setStarRating(TL_stars.Tl_starsRating rating) {
-@@ -698,12 +706,13 @@ public class LimitPreviewView extends LinearLayout {
-         premiumText.setVisibility(View.GONE);
- 
-         premiumCount.setTextColor(isRatingNegative ? Color.WHITE : Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
--        defaultText.setTextColor(Color.WHITE);
-+        defaultText.setTextColor(inu_filledTextColor());
- 
-         setIconValue((int) rating.stars, (int) rating.next_level_stars, true, false);
+@@ -710,6 +719,7 @@ public class LimitPreviewView extends LinearLayout implements Theme.Colorable {
          isBoostsStyle = true;
          isSimpleStyle = true;
          isRatingStyle = true;
@@ -168,51 +136,15 @@ index 0000000..0000000 100644
      }
  
      private Runnable animateStarRatingRunnable;
-@@ -738,7 +747,7 @@ public class LimitPreviewView extends LinearLayout {
-             requestLayout();
+@@ -991,7 +1001,7 @@ public class LimitPreviewView extends LinearLayout implements Theme.Colorable {
  
-             premiumCount.setTextColor(isRatingNegative ? Color.WHITE : Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
--            defaultText.setTextColor(Color.WHITE);
-+            defaultText.setTextColor(inu_filledTextColor());
+     private void setDefaultTextColor(boolean white) {
+         defaultTextThemed = !white;
+-        defaultText.setTextColor(white ? Color.WHITE : Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
++        defaultText.setTextColor(white ? inu_filledTextColor() : Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
+     }
  
-             setIconValue((int) to.stars, (int) to.next_level_stars, true, false);
-         } else if (to.level > from.level) {
-@@ -768,7 +777,7 @@ public class LimitPreviewView extends LinearLayout {
-             requestLayout();
- 
-             premiumCount.setTextColor(isRatingNegative ? Color.WHITE: Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
--            defaultText.setTextColor(Color.WHITE);
-+            defaultText.setTextColor(inu_filledTextColor());
-             defaultText.animate()
-                 .alpha(0).scaleX(0.7f).scaleY(0.7f)
-                 .setDuration(320)
-@@ -832,7 +841,7 @@ public class LimitPreviewView extends LinearLayout {
-                     .start();
- 
-                 premiumCount.setTextColor(isRatingNegative ? Color.WHITE: Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
--                defaultText.setTextColor(Color.WHITE);
-+                defaultText.setTextColor(inu_filledTextColor());
- 
-                 setIconValue((int) to.stars, (int) to.next_level_stars, true, false);
-             }, 600);
-@@ -873,7 +882,7 @@ public class LimitPreviewView extends LinearLayout {
-                 .start();
- 
-             premiumCount.setTextColor(isRatingNegative ? Color.WHITE: Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
--            defaultText.setTextColor(Color.WHITE);
-+            defaultText.setTextColor(inu_filledTextColor());
- 
-             setIconValue((int) from.stars, (int) from.next_level_stars, true, false);
- 
-@@ -926,7 +935,7 @@ public class LimitPreviewView extends LinearLayout {
-                     .start();
- 
-                 premiumCount.setTextColor(isRatingNegative ? Color.WHITE : Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
--                defaultText.setTextColor(Color.WHITE);
-+                defaultText.setTextColor(inu_filledTextColor());
- 
-                 setIconValue((int) to.stars, (int) to.next_level_stars, true, false);
-             }, 600);
+     private void updateDefaultTextColor() {
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/RLottieDrawable.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/RLottieDrawable.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/RLottieDrawable.java
@@ -232,7 +164,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ManageLinksActivity.jav
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ManageLinksActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ManageLinksActivity.java
-@@ -1287,6 +1287,8 @@ public class ManageLinksActivity extends BaseFragment implements NotificationCen
+@@ -1294,6 +1294,8 @@ public class ManageLinksActivity extends BaseFragment implements NotificationCen
                  linkIconRevoked.setBounds(cX - dp(12), cY - dp(12), cX + dp(12), cY + dp(12));
                  linkIconRevoked.draw(canvas);
              } else {
@@ -245,11 +177,11 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
-@@ -466,6 +466,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -439,6 +439,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
          cameraImageView = new ImageView(context);
          cameraImageView.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
          cameraImageView.setImageResource(R.drawable.filled_premium_camera);
 +        cameraImageView.setColorFilter(getThemedColor(Theme.key_featuredStickers_buttonText), android.graphics.PorterDuff.Mode.SRC_IN);
          cameraBackground.addView(cameraImageView, LayoutHelper.createFrame(22, 22, Gravity.CENTER));
          cameraButton.addView(cameraBackground, LayoutHelper.createFrame(30, 30));
-         avatarContainer.addView(cameraButton, LayoutHelper.createFrame(34, 34, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 32, 75, 0, 0));
+         // over the avatar, so it scales and hides with it; its touches go to the place of the avatar in the list

@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/GroupCallActivity.java 
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/GroupCallActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/GroupCallActivity.java
-@@ -1634,7 +1634,7 @@ public class GroupCallActivity extends BottomSheet implements NotificationCenter
+@@ -1643,7 +1643,7 @@ public class GroupCallActivity extends BottomSheet implements NotificationCenter
              return;
          }
          int time = accountInstance.getConnectionsManager().getCurrentTime() - call.call.record_start_date;

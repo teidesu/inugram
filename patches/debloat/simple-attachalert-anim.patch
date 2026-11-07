@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
-@@ -4687,6 +4687,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -4688,6 +4688,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
              updateDoneItemEnabled();
          };
  
@@ -19,7 +19,7 @@ index 0000000..0000000 100644
          if (!(currentAttachLayout instanceof ChatAttachAlertPhotoLayoutPreview || nextAttachLayout instanceof ChatAttachAlertPhotoLayoutPreview)) {
              if (animated) {
                  AnimatorSet animator = new AnimatorSet();
-@@ -4732,6 +4733,14 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -4735,6 +4736,14 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                  ATTACH_ALERT_LAYOUT_TRANSLATION.set(currentAttachLayout, 0f);
                  animator.start();
              } else {
@@ -34,7 +34,7 @@ index 0000000..0000000 100644
                  currentAttachLayout.setAlpha(0.0f);
                  onEnd.run();
                  updateSelectedPosition(0);
-@@ -5374,7 +5383,10 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -5377,7 +5386,10 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
              appearSpringAnimation.cancel();
          }
          appearSpringAnimation = new SpringAnimation(super.containerView, DynamicAnimation.TRANSLATION_Y, 0);

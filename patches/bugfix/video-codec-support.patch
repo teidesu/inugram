@@ -14,7 +14,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelp
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
-@@ -11352,6 +11352,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -11417,6 +11417,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                                  }
                                  if (videoEditedInfo.inu_originalQuality) {
                                      originalPath += "_oq";
@@ -24,7 +24,7 @@ index 0000000..0000000 100644
                                  }
                                  startTime = videoEditedInfo.startTime >= 0 ? videoEditedInfo.startTime : 0;
                              }
-@@ -12198,6 +12201,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -12261,6 +12264,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                          }
                          if (videoEditedInfo.inu_originalQuality) {
                              originalPath += "_oq";
@@ -46,7 +46,7 @@ index 0000000..0000000 100644
  import android.media.MediaExtractor;
  import android.media.MediaFormat;
  import android.media.MediaMuxer;
-@@ -1534,6 +1535,10 @@ public class MediaCodecVideoConvertor {
+@@ -1714,6 +1715,10 @@ public class MediaCodecVideoConvertor {
              try {
                  String mime = types.remove(0);
                  format.setString(MediaFormat.KEY_MIME, mime);
@@ -73,7 +73,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMes
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
-@@ -9951,7 +9951,6 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -9938,7 +9938,6 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
          videoEditedInfo.end = videoCutEnd;
          videoEditedInfo.compressQuality = selectedCompression;
          videoEditedInfo.inu_originalQuality = inu_isOriginalVideoQuality();
@@ -81,7 +81,7 @@ index 0000000..0000000 100644
          videoEditedInfo.inu_preferHevc = inu_encodesToHevc();
          videoEditedInfo.rotationValue = rotationValue;
          videoEditedInfo.originalWidth = originalWidth;
-@@ -15253,6 +15252,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -15224,6 +15223,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                          animateCaption = false;
                      }
                      isCurrentVideo = false;
@@ -90,7 +90,7 @@ index 0000000..0000000 100644
                      if (object instanceof MediaController.PhotoEntry && !((MediaController.PhotoEntry) object).isVideo) {
                          final MediaController.PhotoEntry entry = (MediaController.PhotoEntry) object;
                          if (!entry.isVideo && sendPhotoType != SELECT_TYPE_STICKER && sendPhotoType != SELECT_TYPE_QR && (currentIndex == index ? getCurrentVideoEditedInfo() : entry.editedInfo) == null) {
-@@ -21431,10 +21432,6 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -21409,10 +21410,6 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
          return inu_originalQualitySelected && inu_originalVideoQualityAvailable();
      }
  
@@ -101,7 +101,7 @@ index 0000000..0000000 100644
      private boolean inu_encodesToHevc() {
          return inu_isOriginalVideoQuality() && desu.inugram.helpers.media.OriginalVideoQualityHelper.isHevc(inu_videoCodecMime);
      }
-@@ -21688,7 +21685,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -21666,7 +21663,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                  ? (editState.croppedMediaEntities != null && !editState.croppedMediaEntities.isEmpty() ? editState.croppedMediaEntities : null)
                  : (editState.mediaEntities != null && !editState.mediaEntities.isEmpty() ? editState.mediaEntities : null);
          Object paintPath = editState.croppedPaintPath != null ? editState.croppedPaintPath : editState.paintPath;
@@ -110,7 +110,7 @@ index 0000000..0000000 100644
                  || editState.cropState != null || mediaEntities != null || paintPath != null || editState.savedFilterState != null || sendPhotoType == SELECT_TYPE_AVATAR;
      }
  
-@@ -22118,6 +22115,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -22096,6 +22093,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                      }
  
                      updateVideoInfo();

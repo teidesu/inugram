@@ -39,7 +39,7 @@ index 0000000..0000000 100644
  import org.telegram.messenger.LocaleController;
  import org.telegram.messenger.MediaController;
  import org.telegram.messenger.MessageObject;
-@@ -191,6 +192,7 @@ public class AudioPlayerCell extends FrameLayout implements DownloadController.F
+@@ -204,6 +205,7 @@ public class AudioPlayerCell extends FrameLayout implements DownloadController.F
                  radialProgress.setImageOverlay(null, null, null);
              }
          }
@@ -47,7 +47,7 @@ index 0000000..0000000 100644
          requestLayout();
          updateButtonState(false, false);
      }
-@@ -476,6 +478,22 @@ public class AudioPlayerCell extends FrameLayout implements DownloadController.F
+@@ -489,6 +491,22 @@ public class AudioPlayerCell extends FrameLayout implements DownloadController.F
      public void onSuccessDownload(String fileName) {
          radialProgress.setProgress(1, true);
          updateButtonState(false, true);
@@ -74,7 +74,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerA
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerAlert.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerAlert.java
-@@ -2407,8 +2407,8 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+@@ -2416,8 +2416,8 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
              TLRPC.Document document = messageObject.getDocument();
              currentFile = FileLoader.getAttachFileName(document);
              currentAudioFinishedLoading = false;

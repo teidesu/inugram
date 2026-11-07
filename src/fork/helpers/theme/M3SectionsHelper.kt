@@ -17,7 +17,6 @@ import androidx.recyclerview.widget.RecyclerView
 import desu.inugram.InuConfig
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.R
-import org.telegram.messenger.Utilities
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Cells.HeaderCell
 import org.telegram.ui.Cells.TextCheckCell
@@ -97,14 +96,13 @@ object M3SectionsHelper {
 
     @JvmStatic
     fun drawSectionsBackgrounds(canvas: Canvas, listView: RecyclerListView) {
-        val deco = listView.sectionsItemDecoration ?: return
-        val isSection = deco.isSectionItem
+        if (!listView.hasSections()) return
         val bgColor = Theme.getColor(Theme.key_windowBackgroundWhite, listView.resourcesProvider)
         for (i in 0 until listView.childCount) {
             val child = listView.getChildAt(i) ?: continue
             if (child.visibility != View.VISIBLE || child.alpha <= 0f) continue
-            if (!isSection.run(child)) continue
-            val (tR, bR) = computeRadii(listView, child, i, isSection)
+            if (!listView.isVisualSectionItem(child)) continue
+            val (tR, bR) = computeRadii(listView, child, i)
             rect.set(
                 child.left.toFloat(),
                 RecyclerListView.top(child),
@@ -121,12 +119,9 @@ object M3SectionsHelper {
 
     @JvmStatic
     fun clipChild(canvas: Canvas, child: View?, listView: RecyclerListView) {
-        if (child == null) return
-        val deco = listView.sectionsItemDecoration ?: return
-        val isSection = deco.isSectionItem
-        if (!isSection.run(child)) return
+        if (child == null || !listView.hasSections() || !listView.isVisualSectionItem(child)) return
         val index = listView.indexOfChild(child)
-        val (tR, bR) = computeRadii(listView, child, index, isSection)
+        val (tR, bR) = computeRadii(listView, child, index)
         rect.set(
             child.x,
             RecyclerListView.top(child),
@@ -143,14 +138,13 @@ object M3SectionsHelper {
         listView: RecyclerListView,
         child: View,
         childIndex: Int,
-        isSection: Utilities.CallbackReturn<View, Boolean>,
     ): Pair<Float, Float> {
         val prev = if (childIndex >= 0) visualSibling(listView, childIndex, forward = false) else null
         val next = if (childIndex >= 0) visualSibling(listView, childIndex, forward = true) else null
         return m3Radii(
             child,
-            prev?.takeIf { isSection.run(it) },
-            next?.takeIf { isSection.run(it) },
+            prev?.takeIf { listView.isVisualSectionItem(it) },
+            next?.takeIf { listView.isVisualSectionItem(it) },
         )
     }
 
@@ -168,12 +162,10 @@ object M3SectionsHelper {
     // M3 corner radii for an attached section child, via the same visual-sibling walk the
     // background/clip paths use. null = not a section / not attached → caller falls back to stock.
     private fun sectionRadiiFor(listView: RecyclerListView, child: View): Pair<Float, Float>? {
-        val deco = listView.sectionsItemDecoration ?: return null
-        val isSection = deco.isSectionItem
-        if (!isSection.run(child)) return null
+        if (!listView.hasSections() || !listView.isVisualSectionItem(child)) return null
         val index = listView.indexOfChild(child)
         if (index < 0) return null
-        return computeRadii(listView, child, index, isSection)
+        return computeRadii(listView, child, index)
     }
 
     private fun m3Radii(child: View, prev: View?, next: View?): Pair<Float, Float> {
@@ -362,10 +354,7 @@ object M3SectionsHelper {
     @JvmStatic
     fun applyScrimClip(canvas: Canvas, child: View) {
         val listView = child.parent as? RecyclerListView ?: return
-        if (!listView.hasSections()) return
-        val deco = listView.sectionsItemDecoration ?: return
-        val isSection = deco.isSectionItem
-        if (!isSection.run(child)) return
+        if (!listView.hasSections() || !listView.isVisualSectionItem(child)) return
         rect.set(0f, 0f, child.width.toFloat(), child.height.toFloat())
         path.rewind()
         if (isEnabled()) {
@@ -377,8 +366,8 @@ object M3SectionsHelper {
             val position = listView.getChildAdapterPosition(child)
             val prevView = if (position != RecyclerView.NO_POSITION) listView.findViewByPosition(position - 1) else null
             val nextView = if (position != RecyclerView.NO_POSITION) listView.findViewByPosition(position + 1) else null
-            val prev = prevView != null && isSection.run(prevView)
-            val next = nextView != null && isSection.run(nextView)
+            val prev = prevView != null && listView.isVisualSectionItem(prevView)
+            val next = nextView != null && listView.isVisualSectionItem(nextView)
             if (prev && next) return
             when {
                 !prev && !next -> path.addRoundRect(rect, listView.sectionRadius, listView.sectionRadius, Path.Direction.CW)

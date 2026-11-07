@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/LocaleController
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/LocaleController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/LocaleController.java
-@@ -78,6 +78,9 @@ public class LocaleController {
+@@ -82,6 +82,9 @@ public class LocaleController {
  
      private volatile FastDateFormat formatterDay;
      public FastDateFormat getFormatterDay() {

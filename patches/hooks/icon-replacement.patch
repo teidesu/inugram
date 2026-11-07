@@ -14,7 +14,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivity
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterViewAnimatedIconView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterViewAnimatedIconView.java
-@@ -50,6 +50,12 @@ public class ChatActivityEnterViewAnimatedIconView extends RLottieImageView {
+@@ -56,6 +56,12 @@ public class ChatActivityEnterViewAnimatedIconView extends RLottieImageView {
          this.sizeDp = sizeDp;
      }
  
@@ -31,7 +31,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ProfileActio
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ProfileActionsView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ProfileActionsView.java
-@@ -565,7 +565,7 @@ public class ProfileActionsView extends View {
+@@ -524,7 +524,7 @@ public class ProfileActionsView extends View {
                          hit.isLoading = true;
                          invalidate();
                      }
@@ -40,7 +40,7 @@ index 0000000..0000000 100644
                          hit.updateDrawable(true, hit.supportsAnimate);
                      }
                      hit.startTime = System.currentTimeMillis();
-@@ -679,7 +679,11 @@ public class ProfileActionsView extends View {
+@@ -638,7 +638,11 @@ public class ProfileActionsView extends View {
      }
  
      private void updateNotification(Action notificationAction, boolean animated) {
@@ -53,7 +53,7 @@ index 0000000..0000000 100644
              if (isNotificationsEnabled) {
                  notificationAction.setText(getString(ActionButton.NOTIFICATION_MUTE.title));
                  notificationAction.updateDrawable(
-@@ -1190,7 +1194,10 @@ public class ProfileActionsView extends View {
+@@ -1149,7 +1153,10 @@ public class ProfileActionsView extends View {
              return bounce.getScale(0.04f);
          }
  
@@ -135,7 +135,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-@@ -27,7 +27,9 @@ import android.content.Context;
+@@ -29,7 +29,9 @@ import android.content.BroadcastReceiver;
  import android.content.Intent;
  import android.content.IntentFilter;
  import android.content.SharedPreferences;
@@ -143,9 +143,9 @@ index 0000000..0000000 100644
  import android.content.res.Configuration;
 +import android.content.res.Resources;
  import android.database.Cursor;
- import android.graphics.Bitmap;
- import android.graphics.Canvas;
-@@ -394,6 +396,20 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+ import android.animation.ObjectAnimator;
+ import android.graphics.drawable.Drawable;
+@@ -401,6 +403,20 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
      private FrameMetricsOverlayView frameMetricsOverlayView;
      // private RefreshRateController refreshRateController;
  

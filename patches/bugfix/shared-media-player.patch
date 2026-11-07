@@ -4,14 +4,14 @@ Date: Wed, 15 Apr 2026 01:39:38 +0300
 Subject: fixed a few visual glitches with the media player inside the shared media view
 
 ---
- .../telegram/ui/Components/SharedMediaLayout.java | 15 ++++++++++++---
- 1 file changed, 12 insertions(+), 3 deletions(-)
+ .../telegram/ui/Components/SharedMediaLayout.java   | 13 ++++++++++---
+ 1 file changed, 10 insertions(+), 3 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
-@@ -3726,10 +3726,17 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -3496,10 +3496,17 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
                              );
                              final int paddingTopNew = page.listView.getPaddingTop();
                              final int scroll = paddingTopOld - paddingTopNew;
@@ -24,24 +24,22 @@ index 0000000..0000000 100644
                      }
                  }
 +                if (savedMessagesContainer != null && savedMessagesContainer.getParent() instanceof MediaPage) {
-+                    ((FrameLayout.LayoutParams) savedMessagesContainer.getLayoutParams()).topMargin = dp(48 + 8) + topLayoutPadding;
++                    ((FrameLayout.LayoutParams) savedMessagesContainer.getLayoutParams()).topMargin = pagesTabsTop + dp(48 + 8) + topLayoutPadding;
 +                    savedMessagesContainer.requestLayout();
 +                }
                  // SharedMediaLayout.this.setPadding(0, , 0, 0);
              });
              fragmentContextView = new FragmentContextView(context, parent, this, false, resourcesProvider) {
-@@ -7369,7 +7376,9 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
-                 }
+@@ -7161,7 +7168,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
                  if (savedMessagesContainer.getParent() != mediaPages[a]) {
                      AndroidUtilities.removeFromParent(savedMessagesContainer);
--                    mediaPages[a].addView(savedMessagesContainer, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.FILL, 0, 48 + 8, 0, 0));
-+                    final FrameLayout.LayoutParams savedLp = LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.FILL, 0, 48 + 8, 0, 0);
-+                    savedLp.topMargin += topLayoutPadding;
-+                    mediaPages[a].addView(savedMessagesContainer, savedLp);
+                     mediaPages[a].addView(savedMessagesContainer, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.FILL, 0, 48 + 8, 0, 0));
+-                    setTopMargin(savedMessagesContainer, pagesTabsTop + dp(48 + 8));
++                    setTopMargin(savedMessagesContainer, pagesTabsTop + dp(48 + 8) + topLayoutPadding);
                  }
              } else if (mediaPages[a].selectedType == TAB_BOT_PREVIEWS) {
                  if (currentAdapter != null) {
-@@ -11934,7 +11943,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -11950,7 +11957,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
      private void updateProgressViewLayout(MediaPage page) {
          final boolean photos = page.selectedType == TAB_PHOTOVIDEO || isAnyStoryPageType(page.selectedType);
          final FrameLayout.LayoutParams lp = LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.FILL, photos ? 0 : 12, 48 + (photos ? 8 : 12), photos ? 0 : 12, photos ? 0 : 12);

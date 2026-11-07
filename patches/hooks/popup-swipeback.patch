@@ -15,7 +15,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenu
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java
-@@ -2619,6 +2619,11 @@ public class ActionBarMenuItem extends FrameLayout {
+@@ -2834,6 +2834,11 @@ public class ActionBarMenuItem extends FrameLayout {
          item.swipeBackViewFactory = viewFactory;
          return putLazyItem(item);
      }
@@ -39,7 +39,7 @@ index 0000000..0000000 100644
          private boolean startAnimationPending = false;
          private int backAlpha = 255;
          private int lastStartedChild = 0;
-@@ -492,7 +493,8 @@ public class ActionBarPopupWindow extends PopupWindow {
+@@ -494,7 +495,8 @@ public class ActionBarPopupWindow extends PopupWindow {
                          canvas.clipRect(0, bgPaddings.top, getMeasuredWidth(), getMeasuredHeight());
                      }
                      backgroundDrawable.setAlpha(applyAlpha ? backAlpha : 255);
@@ -49,7 +49,7 @@ index 0000000..0000000 100644
                          final int height = getMeasuredHeight();
                          AndroidUtilities.rectTmp2.set(0, (int) (height * (1.0f - backScaleY)), (int) (getMeasuredWidth() * backScaleX), height);
                      } else {
-@@ -532,6 +534,7 @@ public class ActionBarPopupWindow extends PopupWindow {
+@@ -534,6 +536,7 @@ public class ActionBarPopupWindow extends PopupWindow {
                          rect.set(AndroidUtilities.rectTmp2.right, AndroidUtilities.rectTmp2.top, AndroidUtilities.rectTmp2.right, AndroidUtilities.rectTmp2.top);
                          AndroidUtilities.lerp(rect, AndroidUtilities.rectTmp2, reactionsEnterProgress, AndroidUtilities.rectTmp2);
                      }
@@ -61,7 +61,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -32925,6 +32925,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -33562,6 +33562,9 @@ public class ChatActivity extends BaseFragment implements
              } else {
                  popupY = inBubbleMode ? 0 : AndroidUtilities.statusBarHeight;
              }
@@ -165,7 +165,7 @@ index 0000000..0000000 100644
  
      private Rect hitRect = new Rect();
  
-@@ -178,8 +189,11 @@ public class PopupSwipeBackLayout extends FrameLayout {
+@@ -205,8 +216,11 @@ public class PopupSwipeBackLayout extends FrameLayout {
          float bSc = 0.95f + (1f - transitionProgress) * 0.05f;
          backgroundView.setScaleX(bSc);
          backgroundView.setScaleY(bSc);
@@ -177,7 +177,7 @@ index 0000000..0000000 100644
          }
          invalidateVisibility();
  
-@@ -204,6 +218,7 @@ public class PopupSwipeBackLayout extends FrameLayout {
+@@ -231,6 +245,7 @@ public class PopupSwipeBackLayout extends FrameLayout {
          if (applyBackScaleY) {
              p.setBackScaleY(Math.min(1, h / p.getMeasuredHeight()));
          }
@@ -185,7 +185,7 @@ index 0000000..0000000 100644
          p.updateAnimation = true;
  
          for (int i = 0; i < getChildCount(); i++) {
-@@ -241,7 +256,10 @@ public class PopupSwipeBackLayout extends FrameLayout {
+@@ -268,7 +283,10 @@ public class PopupSwipeBackLayout extends FrameLayout {
          View bv = getChildAt(0);
          View fv = getChildAt(currentForegroundIndex);
  
@@ -197,7 +197,7 @@ index 0000000..0000000 100644
          if (!b && act == MotionEvent.ACTION_DOWN) {
              return true;
          }
-@@ -311,6 +329,11 @@ public class PopupSwipeBackLayout extends FrameLayout {
+@@ -338,6 +356,11 @@ public class PopupSwipeBackLayout extends FrameLayout {
                  transitionProgress = f;
                  if (f <= 0) {
                      currentForegroundIndex = -1;
@@ -209,7 +209,7 @@ index 0000000..0000000 100644
                  }
                  invalidateTransforms();
                  isAnimationInProgress = false;
-@@ -345,9 +368,18 @@ public class PopupSwipeBackLayout extends FrameLayout {
+@@ -372,9 +395,18 @@ public class PopupSwipeBackLayout extends FrameLayout {
          }
          currentForegroundIndex = viewIndex;
          overrideForegroundHeight = overrideHeightIndex.get(viewIndex);
@@ -228,7 +228,7 @@ index 0000000..0000000 100644
      public void closeForeground() {
          closeForeground(true);
      }
-@@ -383,10 +415,11 @@ public class PopupSwipeBackLayout extends FrameLayout {
+@@ -410,10 +442,11 @@ public class PopupSwipeBackLayout extends FrameLayout {
                      ch.layout(0, bottom - top - ch.getMeasuredHeight(), ch.getMeasuredWidth(), bottom - top);
                  }
              } else {
@@ -242,7 +242,7 @@ index 0000000..0000000 100644
                  }
              }
          }
-@@ -412,9 +445,10 @@ public class PopupSwipeBackLayout extends FrameLayout {
+@@ -439,9 +472,10 @@ public class PopupSwipeBackLayout extends FrameLayout {
              h = fH;
          } else {
              View foregroundView = getChildAt(currentForegroundIndex);
@@ -254,7 +254,7 @@ index 0000000..0000000 100644
              if (backgroundView.getMeasuredWidth() == 0 || backgroundView.getMeasuredHeight() == 0 || foregroundView.getMeasuredWidth() == 0 || foregroundView.getMeasuredHeight() == 0) {
                  y = fY;
                  w = fW;
-@@ -429,6 +463,7 @@ public class PopupSwipeBackLayout extends FrameLayout {
+@@ -456,6 +490,7 @@ public class PopupSwipeBackLayout extends FrameLayout {
          int s = canvas.save();
          mPath.rewind();
          int rad = AndroidUtilities.dp(12);
@@ -262,7 +262,7 @@ index 0000000..0000000 100644
          if (stickToRight) {
              mRect.set(getWidth() - w, y, getWidth(), y + h);
          } else {
-@@ -442,6 +477,11 @@ public class PopupSwipeBackLayout extends FrameLayout {
+@@ -469,6 +504,11 @@ public class PopupSwipeBackLayout extends FrameLayout {
          if (onHeightUpdateListener != null && lastHeightReported != mRect.height()) {
              onHeightUpdateListener.run(lastHeightReported = (int) mRect.height());
          }

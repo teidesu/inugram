@@ -18,8 +18,8 @@ index 0000000..0000000 100644
 +import android.content.res.Resources;
  import android.icu.text.RelativeDateTimeFormatter;
  import android.os.Build;
- import android.telephony.TelephonyManager;
-@@ -727,7 +728,7 @@ public class LocaleController {
+ import android.os.SystemClock;
+@@ -731,7 +732,7 @@ public class LocaleController {
          }
  
          systemDefaultLocale = Locale.getDefault();
@@ -28,7 +28,7 @@ index 0000000..0000000 100644
          LocaleInfo currentInfo = null;
          boolean override = false;
  
-@@ -2044,7 +2045,7 @@ public class LocaleController {
+@@ -2078,7 +2079,7 @@ public class LocaleController {
          if (changingConfiguration) {
              return;
          }

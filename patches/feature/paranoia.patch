@@ -50,7 +50,7 @@ index 0000000..0000000 100644
      public final ConfigBoolean walletPaidMessageRecipientMessageAmountCheck = ofBoolean("wallet_paid_message_recipient_message_amount_check", true);
      public final ConfigLong walletTransferMinNanos = ofLong("wallet_transfer_min_nanos", 100_000_000);
      public final ConfigLong walletGaslessMinNanos = ofLong("wallet_gasless_min_nanos", 100_000_000);
-@@ -383,6 +391,10 @@ public class AppGlobalConfig {
+@@ -460,6 +468,10 @@ public class AppGlobalConfig {
              return handler.value;
          }
  
@@ -73,7 +73,7 @@ index 0000000..0000000 100644
  
                  final Collator collator = getLocaleCollator();
                  Collections.sort(contactsArr, (tl_contact, tl_contact2) -> {
-@@ -2728,6 +2729,7 @@ public class ContactsController extends BaseController {
+@@ -2783,6 +2784,7 @@ public class ContactsController extends BaseController {
              getConnectionsManager().sendRequest(req, (response, error) -> AndroidUtilities.runOnUIThread(() -> {
                  if (error == null) {
                      TL_account.privacyRules rules = (TL_account.privacyRules) response;
@@ -81,7 +81,7 @@ index 0000000..0000000 100644
                      getMessagesController().putUsers(rules.users, false);
                      getMessagesController().putChats(rules.chats, false);
  
-@@ -2845,6 +2847,7 @@ public class ContactsController extends BaseController {
+@@ -2900,6 +2902,7 @@ public class ContactsController extends BaseController {
      }
  
      public void setPrivacyRules(ArrayList<TLRPC.PrivacyRule> rules, int type) {
@@ -93,7 +93,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataControl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
-@@ -5183,6 +5183,7 @@ public class MediaDataController extends BaseController {
+@@ -5185,6 +5185,7 @@ public class MediaDataController extends BaseController {
                          arrayList.clear();
                      }
                  }
@@ -101,7 +101,7 @@ index 0000000..0000000 100644
              } catch (Throwable ignore) {
  
              }
-@@ -5257,6 +5258,7 @@ public class MediaDataController extends BaseController {
+@@ -5259,6 +5260,7 @@ public class MediaDataController extends BaseController {
                          inlineBots = inlineBotsNew;
                          guestBots = guestsBotsNew;
                          webapps = webappsNew;
@@ -109,7 +109,7 @@ index 0000000..0000000 100644
                          buildShortcuts();
                          getNotificationCenter().postNotificationName(NotificationCenter.reloadHints);
                          getNotificationCenter().postNotificationName(NotificationCenter.reloadInlineHints);
-@@ -5316,6 +5318,7 @@ public class MediaDataController extends BaseController {
+@@ -5318,6 +5320,7 @@ public class MediaDataController extends BaseController {
                          }
                      }
                      getUserConfig().saveConfig(false);
@@ -121,7 +121,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -7799,7 +7799,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -7784,7 +7784,7 @@ public class MessagesController extends BaseController implements NotificationCe
                          getMediaDataController().putBotInfo(user.id, userFull.bot_info);
                      }
                      int index = blockePeers.indexOfKey(user.id);
@@ -130,7 +130,7 @@ index 0000000..0000000 100644
                          if (index < 0) {
                              blockePeers.put(user.id, 1);
                              getNotificationCenter().postNotificationName(NotificationCenter.blockedUsersDidLoad);
-@@ -8698,7 +8698,10 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -8735,7 +8735,10 @@ public class MessagesController extends BaseController implements NotificationCe
          if (blockePeers.indexOfKey(id) >= 0) {
              return;
          }
@@ -142,7 +142,7 @@ index 0000000..0000000 100644
          if (user != null) {
              if (user.bot) {
                  getMediaDataController().removeInline(id);
-@@ -8706,7 +8709,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -8743,7 +8746,7 @@ public class MessagesController extends BaseController implements NotificationCe
                  getMediaDataController().removePeer(id);
              }
          }
@@ -151,7 +151,7 @@ index 0000000..0000000 100644
              totalBlockedCount++;
          }
          getNotificationCenter().postNotificationName(NotificationCenter.blockedUsersDidLoad);
-@@ -8891,8 +8894,10 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -8928,8 +8931,10 @@ public class MessagesController extends BaseController implements NotificationCe
                  return;
              }
          }
@@ -164,7 +164,7 @@ index 0000000..0000000 100644
          if (user != null) {
              req.id = getInputPeer(user);
          } else {
-@@ -8912,7 +8917,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -8949,7 +8954,7 @@ public class MessagesController extends BaseController implements NotificationCe
          }
          loadingBlockedPeers = true;
          TLRPC.TL_contacts_getBlocked req = new TLRPC.TL_contacts_getBlocked();
@@ -173,7 +173,7 @@ index 0000000..0000000 100644
          req.limit = reset ? 20 : 100;
          getConnectionsManager().sendRequest(req, (response, error) -> AndroidUtilities.runOnUIThread(() -> {
              if (response != null) {
-@@ -8922,13 +8927,16 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -8959,13 +8964,16 @@ public class MessagesController extends BaseController implements NotificationCe
                  getMessagesStorage().putUsersAndChats(res.users, res.chats, true, true);
                  if (reset) {
                      blockePeers.clear();
@@ -190,7 +190,7 @@ index 0000000..0000000 100644
                  loadingBlockedPeers = false;
                  getNotificationCenter().postNotificationName(NotificationCenter.blockedUsersDidLoad);
              }
-@@ -9637,7 +9645,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -9674,7 +9682,7 @@ public class MessagesController extends BaseController implements NotificationCe
      }
  
      public ArrayList<TLRPC.Dialog> getAllDialogs() {
@@ -199,7 +199,7 @@ index 0000000..0000000 100644
      }
  
      public void putDialogsEndReachedAfterRegistration() {
-@@ -10479,7 +10487,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -10516,7 +10524,7 @@ public class MessagesController extends BaseController implements NotificationCe
                      StarsController.getInstance(currentAccount).invalidateProfileGifts(info);
  
                      int index = blockePeers.indexOfKey(user.id);
@@ -208,7 +208,7 @@ index 0000000..0000000 100644
                          if (index < 0) {
                              blockePeers.put(user.id, 1);
                              getNotificationCenter().postNotificationName(NotificationCenter.blockedUsersDidLoad);
-@@ -19241,7 +19249,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -19287,7 +19295,7 @@ public class MessagesController extends BaseController implements NotificationCe
                  TL_update.TL_updatePeerBlocked finalUpdate = (TL_update.TL_updatePeerBlocked) baseUpdate;
                  getMessagesStorage().getStorageQueue().postRunnable(() -> AndroidUtilities.runOnUIThread(() -> {
                      long id = MessageObject.getPeerId(finalUpdate.peer_id);
@@ -217,7 +217,7 @@ index 0000000..0000000 100644
                          if (blockePeers.indexOfKey(id) < 0) {
                              blockePeers.put(id, 1);
                          }
-@@ -22228,6 +22236,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -22286,6 +22294,7 @@ public class MessagesController extends BaseController implements NotificationCe
          }
          for (int a = 0, N = allDialogs.size(); a < N; a++) {
              TLRPC.Dialog d = allDialogs.get(a);
@@ -225,7 +225,7 @@ index 0000000..0000000 100644
              final boolean isCommunity = d instanceof TLRPC.TL_dialogCommunity;
              if (d instanceof TLRPC.TL_dialog || isCommunity) {
                  long dialogId = d.id;
-@@ -22441,6 +22450,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -22499,6 +22508,7 @@ public class MessagesController extends BaseController implements NotificationCe
                  }
                  for (int a = 0, N = allDialogs.size(); a < N; a++) {
                      final TLRPC.Dialog d = allDialogs.get(a);
@@ -233,7 +233,7 @@ index 0000000..0000000 100644
                      final boolean isCommunity = d instanceof TLRPC.TL_dialogCommunity;
                      if (d instanceof TLRPC.TL_dialog || isCommunity) {
                          long dialogId = d.id;
-@@ -22480,6 +22490,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -22538,6 +22548,7 @@ public class MessagesController extends BaseController implements NotificationCe
          }
          for (int a = 0, N = allDialogs.size(); a < N; a++) {
              TLRPC.Dialog d = allDialogs.get(a);
@@ -245,7 +245,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
-@@ -10197,6 +10197,7 @@ public class MessagesStorage extends BaseController {
+@@ -10378,6 +10378,7 @@ public class MessagesStorage extends BaseController {
                      if (id == -1) {
                          continue;
                      }
@@ -253,7 +253,7 @@ index 0000000..0000000 100644
                      dids.add(id);
                      if (users != null && chats != null) {
                          if (DialogObject.isUserDialog(id)) {
-@@ -10282,6 +10283,7 @@ public class MessagesStorage extends BaseController {
+@@ -10463,6 +10464,7 @@ public class MessagesStorage extends BaseController {
                      if (id == -1) {
                          continue;
                      }
@@ -261,7 +261,7 @@ index 0000000..0000000 100644
                      dids.add(id);
                      if (DialogObject.isUserDialog(id)) {
                          usersToLoad.add(id);
-@@ -10316,6 +10318,7 @@ public class MessagesStorage extends BaseController {
+@@ -10497,6 +10499,7 @@ public class MessagesStorage extends BaseController {
                      if (DialogObject.isFolderDialogId(dialogId)) {
                          continue;
                      }
@@ -269,7 +269,7 @@ index 0000000..0000000 100644
                      if (add) {
                          dids.add(dialogId);
                      }
-@@ -18287,6 +18290,7 @@ public class MessagesStorage extends BaseController {
+@@ -18472,6 +18475,7 @@ public class MessagesStorage extends BaseController {
              }
              while (cursor.next()) {
                  long id = cursor.longValue(0);
@@ -277,7 +277,7 @@ index 0000000..0000000 100644
                  DialogsSearchAdapter.DialogSearchResult dialogSearchResult = new DialogsSearchAdapter.DialogSearchResult();
                  dialogSearchResult.date = cursor.intValue(1);
                  dialogsResult.put(id, dialogSearchResult);
-@@ -18562,6 +18566,9 @@ public class MessagesStorage extends BaseController {
+@@ -18747,6 +18751,9 @@ public class MessagesStorage extends BaseController {
                  cursor = getDatabase().queryFinalized("SELECT u.data, u.status, u.name, u.uid FROM users as u INNER JOIN contacts as c ON u.uid = c.uid");
                  while (cursor.next()) {
                      long uid = cursor.longValue(3);
@@ -291,7 +291,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsCon
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
-@@ -1443,6 +1443,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -1452,6 +1452,7 @@ public class NotificationsController extends BaseController implements Notificat
              SharedPreferences preferences = getAccountInstance().getNotificationsSettings();
              for (int b = 0; b < dialogsToUpdate.size(); b++) {
                  long dialogId = dialogsToUpdate.keyAt(b);
@@ -299,7 +299,7 @@ index 0000000..0000000 100644
                  Integer currentCount = pushDialogs.get(dialogId);
                  int newCount = dialogsToUpdate.get(dialogId);
                  boolean forum = false;
-@@ -1797,6 +1798,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -1806,6 +1807,7 @@ public class NotificationsController extends BaseController implements Notificat
                          final ArrayList<TLRPC.Dialog> dialogs = new ArrayList<>(MessagesController.getInstance(a).allDialogs);
                          for (int i = 0, N = dialogs.size(); i < N; i++) {
                              TLRPC.Dialog dialog = dialogs.get(i);
@@ -307,7 +307,7 @@ index 0000000..0000000 100644
                              if (dialog != null && DialogObject.isChatDialog(dialog.id)) {
                                  TLRPC.Chat chat = getMessagesController().getChat(-dialog.id);
                                  if (ChatObject.isNotInChat(chat) || ChatObject.isCommunity(chat)) {
-@@ -1818,6 +1820,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -1827,6 +1829,7 @@ public class NotificationsController extends BaseController implements Notificat
                      try {
                          for (int i = 0, N = MessagesController.getInstance(a).allDialogs.size(); i < N; i++) {
                              TLRPC.Dialog dialog = MessagesController.getInstance(a).allDialogs.get(i);
@@ -319,7 +319,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchA
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java
-@@ -284,6 +284,8 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+@@ -285,6 +285,8 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
      }
  
      private boolean filter(Object obj) {
@@ -328,7 +328,7 @@ index 0000000..0000000 100644
          if (dialogsType != DialogsActivity.DIALOGS_TYPE_START_ATTACH_BOT) {
              return true;
          }
-@@ -467,6 +469,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+@@ -468,6 +470,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                          for (int a = 0; a < res.messages.size(); a++) {
                              TLRPC.Message message = res.messages.get(a);
                              long did = MessageObject.getDialogId(message);
@@ -336,7 +336,7 @@ index 0000000..0000000 100644
                              int maxId = MessagesController.getInstance(currentAccount).deletedHistory.get(did);
                              if (maxId != 0 && message.id <= maxId) {
                                  continue;
-@@ -625,6 +628,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+@@ -626,6 +629,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                          for (int a = 0; a < res.messages.size(); a++) {
                              TLRPC.Message message = res.messages.get(a);
                              long did = MessageObject.getDialogId(message);
@@ -344,7 +344,7 @@ index 0000000..0000000 100644
                              int maxId = MessagesController.getInstance(currentAccount).deletedHistory.get(did);
                              if (maxId != 0 && message.id <= maxId) {
                                  continue;
-@@ -743,6 +747,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+@@ -744,6 +748,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                  final LongSparseArray<RecentSearchObject> hashMap = new LongSparseArray<>();
                  while (cursor.next()) {
                      long did = cursor.longValue(0);
@@ -352,7 +352,7 @@ index 0000000..0000000 100644
  
                      boolean add = false;
                      if (DialogObject.isEncryptedDialog(did)) {
-@@ -1046,7 +1051,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+@@ -1047,7 +1052,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                                      newDialog.flags = ChatObject.isChannel((TLRPC.Chat) obj) ? 1 : 0;
                                  }
                                  MessagesController.getInstance(currentAccount).dialogs_dict.put(finalDialogId, newDialog);
@@ -401,7 +401,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/CallLogActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/CallLogActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/CallLogActivity.java
-@@ -294,6 +294,7 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
+@@ -262,6 +262,7 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
  				if (msg.messageOwner.action instanceof TLRPC.TL_messageActionPhoneCall) {
  					long fromId = msg.getFromChatId();
  					long userID = fromId == getUserConfig().getClientUserId() ? msg.messageOwner.peer_id.user_id : fromId;
@@ -409,7 +409,7 @@ index 0000000..0000000 100644
  					int callType = fromId == getUserConfig().getClientUserId() ? TYPE_OUT : TYPE_IN;
  					TLRPC.PhoneCallDiscardReason reason = msg.messageOwner.action.reason;
  					if (callType == TYPE_IN && (reason instanceof TLRPC.TL_phoneCallDiscardReasonMissed || reason instanceof TLRPC.TL_phoneCallDiscardReasonBusy)) {
-@@ -326,6 +327,7 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
+@@ -294,6 +295,7 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
  					long fromId = msg.getFromChatId();
  					final Set<Long> userIds = action.other_participants.stream().map(DialogObject::getPeerDialogId).collect(Collectors.toSet());
  					userIds.add(fromId == getUserConfig().getClientUserId() ? msg.messageOwner.peer_id.user_id : fromId);
@@ -417,7 +417,7 @@ index 0000000..0000000 100644
  					int callType = fromId == getUserConfig().getClientUserId() ? TYPE_OUT : TYPE_IN;
  					if (callType == TYPE_IN && action.missed) {
  						callType = TYPE_MISSED_IN;
-@@ -1346,6 +1348,7 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
+@@ -1231,6 +1233,7 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
  						final TLRPC.TL_messageActionConferenceCall action = (TLRPC.TL_messageActionConferenceCall) msg.action;
  						userIds.add(userID);
  						userIds.addAll(action.other_participants.stream().map(DialogObject::getPeerDialogId).collect(Collectors.toSet()));
@@ -425,7 +425,7 @@ index 0000000..0000000 100644
  						if (callType == TYPE_IN && action.missed) {
  							callType = TYPE_MISSED_IN;
  						}
-@@ -1403,6 +1406,7 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
+@@ -1288,6 +1291,7 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
  
  					} else {
  						userIds.add(userID);
@@ -437,7 +437,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/AppIconsSelectorC
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/AppIconsSelectorCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/AppIconsSelectorCell.java
-@@ -151,6 +151,7 @@ public class AppIconsSelectorCell extends RecyclerListView implements Notificati
+@@ -153,6 +153,7 @@ public class AppIconsSelectorCell extends RecyclerListView implements Notificati
      private void updateIconsVisibility() {
          availableIcons.clear();
          availableIcons.addAll(Arrays.asList(LauncherIconController.LauncherIcon.values()));
@@ -449,7 +449,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/SessionCell.java 
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/SessionCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/SessionCell.java
-@@ -251,6 +251,10 @@ public class SessionCell extends FrameLayout {
+@@ -254,6 +254,10 @@ public class SessionCell extends FrameLayout {
              stringBuilder.append(session.app_name);
              stringBuilder.append(" ").append(session.app_version);
  
@@ -464,7 +464,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaL
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
-@@ -1644,7 +1644,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -1699,7 +1699,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
              this.initialTab = TAB_BOT_PREVIEWS;
          } else if (userInfo != null && userInfo.bot_info != null && userInfo.bot_info.has_preview_medias) {
              this.initialTab = TAB_STORIES;
@@ -473,7 +473,7 @@ index 0000000..0000000 100644
              this.initialTab = TAB_STORIES;
          } else if (main_tab instanceof TLRPC.TL_profileTabGifts && (userInfo != null && userInfo.stargifts_count > 0 || chatInfo != null && chatInfo.stargifts_count > 0)) {
              this.initialTab = TAB_GIFTS;
-@@ -1658,7 +1658,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -1713,7 +1713,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
              this.initialTab = TAB_AUDIO;
          } else if (main_tab instanceof TLRPC.TL_profileTabVoice && (hasMedia[2] == -1 || hasMedia[2] > 0)) {
              this.initialTab = TAB_VOICE;
@@ -482,7 +482,7 @@ index 0000000..0000000 100644
              this.initialTab = getInitialTab();
          } else if (!inuPreferMediaTab && (userInfo != null && userInfo.stargifts_count > 0 || chatInfo != null && chatInfo.stargifts_count > 0)) {
              this.initialTab = TAB_GIFTS;
-@@ -6827,10 +6827,10 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -6595,10 +6595,10 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
      }
  
      public void setUserInfo(TLRPC.UserFull userInfo) {
@@ -495,7 +495,7 @@ index 0000000..0000000 100644
              scrollToPage(TAB_STORIES);
          }
      }
-@@ -6930,7 +6930,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -6720,7 +6720,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
          final TLRPC.User user = dialog_id <= 0 || profileActivity == null ? null : profileActivity.getMessagesController().getUser(dialog_id);
          boolean hasEditBotPreviews = user != null && user.bot && user.bot_has_main_app && user.bot_can_edit;
          boolean hasBotPreviews = user != null && user.bot && !user.bot_can_edit && (userInfo != null && userInfo.bot_info != null && userInfo.bot_info.has_preview_medias) && !hasEditBotPreviews;
@@ -504,7 +504,7 @@ index 0000000..0000000 100644
          boolean hasGifts = giftsContainer != null && (userInfo != null && userInfo.stargifts_count > 0 || info != null && info.stargifts_count > 0);
          final TLRPC.ProfileTab main_tab = info != null ? info.main_tab : userInfo != null ? userInfo.main_tab : null;
          int changed = 0;
-@@ -7044,7 +7044,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -6834,7 +6834,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
              }
              if (hasBotPreviews) {
                  tabs.add(new Pair(TAB_STORIES, getString(R.string.ProfileBotPreviewTab)));
@@ -517,7 +517,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -6989,7 +6989,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -6911,7 +6911,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              filterOptions = null;
          }
          final ArrayList<MessagesController.DialogFilter> filters = getMessagesController().getDialogFilters();
@@ -526,7 +526,7 @@ index 0000000..0000000 100644
              if (force || filterTabsView.getVisibility() != View.VISIBLE) {
                  boolean animatedUpdateItems = animated;
                  if (filterTabsView.getVisibility() != View.VISIBLE) {
-@@ -8646,7 +8646,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8580,7 +8580,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              getMessagesController().filtersEnabled &&
              getMessagesController().dialogFiltersLoaded &&
              getMessagesController().dialogFilters != null &&
@@ -540,7 +540,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/GroupCreateActivity.jav
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/GroupCreateActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/GroupCreateActivity.java
-@@ -144,6 +144,7 @@ public class GroupCreateActivity extends BaseFragment implements NotificationCen
+@@ -146,6 +146,7 @@ public class GroupCreateActivity extends BaseFragment implements NotificationCen
      private final int chatAddType;
      private final boolean allowPremium;
      private final boolean allowMiniApps;
@@ -548,7 +548,7 @@ index 0000000..0000000 100644
      private GroupCreateSpan selectedPremium;
      private GroupCreateSpan selectedMiniApps;
      private LongSparseArray<GroupCreateSpan> selectedContacts = new LongSparseArray<>();
-@@ -236,6 +237,7 @@ public class GroupCreateActivity extends BaseFragment implements NotificationCen
+@@ -238,6 +239,7 @@ public class GroupCreateActivity extends BaseFragment implements NotificationCen
          chatAddType = args.getInt("chatAddType", 0);
          allowPremium = args.getBoolean("allowPremium", false);
          allowMiniApps = args.getBoolean("allowMiniapps", false);
@@ -556,7 +556,7 @@ index 0000000..0000000 100644
          chatId = args.getLong("chatId");
          channelId = args.getLong("channelId");
          if (isAlwaysShare || isNeverShare || addToGroup) {
-@@ -1222,7 +1224,7 @@ public class GroupCreateActivity extends BaseFragment implements NotificationCen
+@@ -1223,7 +1225,7 @@ public class GroupCreateActivity extends BaseFragment implements NotificationCen
                              continue;
                          }
                          TLRPC.Chat chat = getMessagesController().getChat(-dialog.id);
@@ -569,7 +569,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LogoutActivity.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LogoutActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LogoutActivity.java
-@@ -170,7 +170,7 @@ public class LogoutActivity extends BaseFragment {
+@@ -203,7 +203,7 @@ public class LogoutActivity extends BaseFragment {
          GramWallet.ensureLocalWalletBalances(currentAccount, () -> {
              progressDialog.dismiss();
              long localGramBalance = 0L;
@@ -582,7 +582,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PrivacyControlActivity.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/PrivacyControlActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/PrivacyControlActivity.java
-@@ -930,6 +930,7 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
+@@ -959,6 +959,7 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
                  Collections.sort(currentPlus);
                  if (!initialPlus.equals(currentPlus)) {
                      done[0] = false;
@@ -590,7 +590,7 @@ index 0000000..0000000 100644
                      TL_account.setPrivacy req = new TL_account.setPrivacy();
                      req.key = new TLRPC.TL_inputPrivacyKeyNoPaidMessages();
                      req.rules.add(new TLRPC.TL_inputPrivacyValueAllowContacts());
-@@ -953,6 +954,7 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
+@@ -982,6 +983,7 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
                          req.rules.add(usersRule);
                          req.rules.add(chatsRule);
                      }
@@ -598,7 +598,7 @@ index 0000000..0000000 100644
                      getConnectionsManager().sendRequest(req, (response, error) -> AndroidUtilities.runOnUIThread(() -> {
                          if (error == null) {
                              final TL_account.privacyRules privacyRules = (TL_account.privacyRules) response;
-@@ -1069,6 +1071,7 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
+@@ -1098,6 +1100,7 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
          } else {
              req.key = new TLRPC.TL_inputPrivacyKeyStatusTimestamp();
          }
@@ -606,7 +606,7 @@ index 0000000..0000000 100644
          if (currentType != 0 && currentPlus.size() > 0) {
              TLRPC.TL_inputPrivacyValueAllowUsers usersRule = new TLRPC.TL_inputPrivacyValueAllowUsers();
              TLRPC.TL_inputPrivacyValueAllowChatParticipants chatsRule = new TLRPC.TL_inputPrivacyValueAllowChatParticipants();
-@@ -1109,6 +1112,7 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
+@@ -1138,6 +1141,7 @@ public class PrivacyControlActivity extends BaseFragment implements Notification
              req.rules.add(usersRule);
              req.rules.add(chatsRule);
          }
@@ -618,7 +618,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -10683,7 +10683,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -10896,7 +10896,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              }
          }
          if (!hasMedia && userInfo != null) {
@@ -631,7 +631,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SessionBottomSheet.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SessionBottomSheet.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SessionBottomSheet.java
-@@ -112,6 +112,9 @@ public class SessionBottomSheet extends BottomSheet {
+@@ -113,6 +113,9 @@ public class SessionBottomSheet extends BottomSheet {
          stringBuilder = new StringBuilder();
          stringBuilder.append(session.app_name);
          stringBuilder.append(" ").append(session.app_version);
@@ -640,17 +640,17 @@ index 0000000..0000000 100644
 +        }
          applicationItemView.valueText.setText(stringBuilder);
          Drawable drawable = ContextCompat.getDrawable(context, R.drawable.menu_devices).mutate();
-         drawable.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_windowBackgroundWhiteGrayIcon), PorterDuff.Mode.SRC_IN));
+         ThemeBind.drawableColorFilter(applicationItemView.iconView, drawable, Theme.key_windowBackgroundWhiteGrayIcon, PorterDuff.Mode.SRC_IN);
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stars/BotStarsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/Stars/BotStarsActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Stars/BotStarsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Stars/BotStarsActivity.java
-@@ -739,6 +739,7 @@ public class BotStarsActivity extends BaseFragment implements NotificationCenter
+@@ -986,6 +986,7 @@ public class BotStarsActivity extends BaseFragment implements NotificationCenter
      private int stats_dc = -1;
      @Override
      public boolean onFragmentCreate() {
 +        if (desu.inugram.helpers.security.ParanoiaHelper.shouldHideRevenue(currentAccount, bot_id, type == TYPE_TON)) return false;
-         NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.botStarsUpdated);
+         NotificationCenter.getInstance(currentAccount).addWeakObserver(this, NotificationCenter.botStarsUpdated);
          checkStats();
          return super.onFragmentCreate();
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stars/BotStarsController.java b/TMessagesProj/src/main/java/org/telegram/ui/Stars/BotStarsController.java
@@ -679,7 +679,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stars/StarsController.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Stars/StarsController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Stars/StarsController.java
-@@ -182,6 +182,7 @@ public class StarsController {
+@@ -211,6 +211,7 @@ public class StarsController {
                  lastBalanceLoaded = System.currentTimeMillis();
                  if (res instanceof TL_stars.StarsStatus) {
                      TL_stars.StarsStatus r = (TL_stars.StarsStatus) res;
@@ -687,7 +687,7 @@ index 0000000..0000000 100644
                      MessagesController.getInstance(currentAccount).putUsers(r.users, false);
                      MessagesController.getInstance(currentAccount).putChats(r.chats, false);
  
-@@ -263,6 +264,7 @@ public class StarsController {
+@@ -292,6 +293,7 @@ public class StarsController {
      }
  
      public void updateBalance(TL_stars.StarsAmount balance) {
@@ -695,7 +695,7 @@ index 0000000..0000000 100644
          if (!this.balance.equals(balance)) {
              this.balance = balance;
              this.minus = 0;
-@@ -599,6 +601,7 @@ public class StarsController {
+@@ -628,6 +630,7 @@ public class StarsController {
              loading[type] = false;
              if (res instanceof TL_stars.StarsStatus) {
                  TL_stars.StarsStatus r = (TL_stars.StarsStatus) res;
@@ -707,7 +707,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoriesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoriesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoriesController.java
-@@ -250,6 +250,9 @@ public class StoriesController {
+@@ -251,6 +251,9 @@ public class StoriesController {
          if (dialogId == 0) {
              return false;
          }
@@ -717,7 +717,7 @@ index 0000000..0000000 100644
          if (hasUploadingStories(dialogId)) {
              return true;
          }
-@@ -264,6 +267,9 @@ public class StoriesController {
+@@ -265,6 +268,9 @@ public class StoriesController {
      }
  
      public TL_stories.PeerStories getStoriesFromFullPeer(long dialogId) {
@@ -727,7 +727,7 @@ index 0000000..0000000 100644
          if (dialogId > 0) {
              TLRPC.UserFull userFull = MessagesController.getInstance(currentAccount).getUserFull(dialogId);
              if (userFull != null && userFull.stories != null && !userFull.stories.checkedExpired) {
-@@ -468,6 +474,7 @@ public class StoriesController {
+@@ -469,6 +475,7 @@ public class StoriesController {
          for (int i = 0; i < storiesResponse.peer_stories.size(); i++) {
              TL_stories.PeerStories userStories = storiesResponse.peer_stories.get(i);
              final long dialogId = DialogObject.getPeerDialogId(userStories.peer);
@@ -735,7 +735,7 @@ index 0000000..0000000 100644
              for (int j = 0; j < userStories.stories.size(); j++) {
                  TL_stories.StoryItem story = userStories.stories.get(j);
                  if (story instanceof TL_stories.TL_storyItemDeleted ||
-@@ -679,6 +686,9 @@ public class StoriesController {
+@@ -726,6 +733,9 @@ public class StoriesController {
      }
  
      public TL_stories.PeerStories getStories(long peerId) {
@@ -745,7 +745,7 @@ index 0000000..0000000 100644
          return allStoriesMap.get(peerId);
      }
  
-@@ -1070,6 +1080,9 @@ public class StoriesController {
+@@ -1117,6 +1127,9 @@ public class StoriesController {
      }
  
      public boolean hasSelfStories() {
@@ -755,7 +755,7 @@ index 0000000..0000000 100644
          long clientUserId = UserConfig.getInstance(currentAccount).clientUserId;
          TL_stories.PeerStories storyItem = allStoriesMap.get(clientUserId);
          if (storyItem != null && !storyItem.stories.isEmpty()) {
-@@ -1082,6 +1095,9 @@ public class StoriesController {
+@@ -1129,6 +1142,9 @@ public class StoriesController {
      }
  
      public int getSelfStoriesCount() {
@@ -765,7 +765,7 @@ index 0000000..0000000 100644
          int count = 0;
          TL_stories.PeerStories storyItem = allStoriesMap.get(UserConfig.getInstance(currentAccount).clientUserId);
          if (storyItem != null) {
-@@ -1336,6 +1352,9 @@ public class StoriesController {
+@@ -1383,6 +1399,9 @@ public class StoriesController {
      }
  
      public boolean hasUnreadStories(long dialogId) {
@@ -775,7 +775,7 @@ index 0000000..0000000 100644
          TL_stories.PeerStories userStories = allStoriesMap.get(dialogId);
          if (userStories == null) {
              userStories = getStoriesFromFullPeer(dialogId);
-@@ -3346,6 +3365,10 @@ public class StoriesController {
+@@ -3393,6 +3412,10 @@ public class StoriesController {
          }
  
          public void fill(ArrayList<MessageObject> arrayList, boolean showPhotos, boolean showVideos) {
@@ -786,7 +786,7 @@ index 0000000..0000000 100644
              tempArr.clear();
              if (type == TYPE_PINNED && albumId <= 0) {
                  for (int id : pinnedIds) {
-@@ -3733,6 +3756,9 @@ public class StoriesController {
+@@ -3780,6 +3803,9 @@ public class StoriesController {
          }
  
          protected boolean canLoad() {
@@ -796,7 +796,7 @@ index 0000000..0000000 100644
              if (lastLoadTime == null) {
                  return true;
              }
-@@ -3794,6 +3820,9 @@ public class StoriesController {
+@@ -3841,6 +3867,9 @@ public class StoriesController {
              if (loading || (done || error || !canLoad()) && !force) {
                  return false;
              }
@@ -806,7 +806,7 @@ index 0000000..0000000 100644
              if (preloading) {
                  toLoad = i -> load(force, count, ids);
                  return false;
-@@ -4933,6 +4962,10 @@ public class StoriesController {
+@@ -4980,6 +5009,10 @@ public class StoriesController {
  
          public void load() {
              if (loading || loaded) return;

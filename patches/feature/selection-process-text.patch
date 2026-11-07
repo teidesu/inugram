@@ -13,7 +13,7 @@ diff --git a/TMessagesProj/src/main/AndroidManifest.xml b/TMessagesProj/src/main
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/AndroidManifest.xml
 +++ b/TMessagesProj/src/main/AndroidManifest.xml
-@@ -94,6 +94,10 @@
+@@ -92,6 +92,10 @@
              <action android:name="android.intent.action.VIEW"/>
              <data android:scheme="ton"/>
          </intent>
@@ -28,7 +28,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/FloatingToolb
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/FloatingToolbar.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/FloatingToolbar.java
-@@ -1018,6 +1018,9 @@ public final class FloatingToolbar {
+@@ -1026,6 +1026,9 @@ public final class FloatingToolbar {
                  /*if (!isFirstItem && menuItem.requiresOverflow()) {
                      break;
                  }*/
@@ -42,7 +42,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/TextSelectionHelp
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/TextSelectionHelper.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/TextSelectionHelper.java
-@@ -1550,6 +1550,7 @@ public abstract class TextSelectionHelper<Cell extends TextSelectionHelper.Selec
+@@ -1589,6 +1589,7 @@ public abstract class TextSelectionHelper<Cell extends TextSelectionHelper.Selec
                  menu.add(Menu.NONE, android.R.id.cut, 3, android.R.string.cut);
                  menu.add(Menu.NONE, android.R.id.paste, 4, android.R.string.paste);
                  menu.add(Menu.NONE, android.R.id.selectAll, 5, android.R.string.selectAll);
@@ -50,7 +50,7 @@ index 0000000..0000000 100644
                  return true;
              }
  
-@@ -1584,6 +1585,7 @@ public abstract class TextSelectionHelper<Cell extends TextSelectionHelper.Selec
+@@ -1623,6 +1624,7 @@ public abstract class TextSelectionHelper<Cell extends TextSelectionHelper.Selec
                  if (pasteItem != null) {
                      pasteItem.setVisible(canPaste() && clipboardHasContent());
                  }
@@ -58,7 +58,7 @@ index 0000000..0000000 100644
                  if (onTranslateListener != null && LanguageDetector.hasSupport() && getSelectedText() != null) {
                      LanguageDetector.detectLanguage(getSelectedText().toString(), lng -> {
                          translateFromLanguage = lng;
-@@ -1662,6 +1664,7 @@ public abstract class TextSelectionHelper<Cell extends TextSelectionHelper.Selec
+@@ -1701,6 +1703,7 @@ public abstract class TextSelectionHelper<Cell extends TextSelectionHelper.Selec
                      hideActions();
                      return true;
                  } else {

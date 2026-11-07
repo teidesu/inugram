@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayo
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
-@@ -405,11 +405,6 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -406,11 +406,6 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
              getWindowVisibleDisplayFrame(rect);
              int usableViewHeight = rootView.getHeight() - (rect.top != 0 ? AndroidUtilities.statusBarHeight : 0) - AndroidUtilities.getViewInset(rootView);
              isKeyboardVisible = usableViewHeight - (rect.bottom - rect.top) > 0;
@@ -23,7 +23,7 @@ index 0000000..0000000 100644
          }
  
          @Override
-@@ -582,7 +577,6 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -583,7 +578,6 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
      private static Drawable layerShadowDrawable;
      private static Paint scrimPaint;
  
@@ -31,7 +31,7 @@ index 0000000..0000000 100644
      private Runnable delayedOpenAnimationRunnable;
  
      private boolean inBubbleMode;
-@@ -704,7 +698,6 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -796,7 +790,6 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
      private List<BaseFragment> fragmentsStack;
      private List<BackButtonMenu.PulledDialog> pulledDialogs;
      private Rect rect = new Rect();
@@ -39,7 +39,7 @@ index 0000000..0000000 100644
      private Runnable onFragmentStackChangedListener;
  
      private int overrideWidthOffset = -1;
-@@ -1746,10 +1739,6 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -1845,10 +1838,6 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
      private void onAnimationEndCheck(boolean byCheck) {
          onCloseAnimationEnd();
          onOpenAnimationEnd();
@@ -50,7 +50,7 @@ index 0000000..0000000 100644
          if (currentAnimation != null) {
              if (byCheck) {
                  currentAnimation.cancel();
-@@ -1966,8 +1955,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -2065,8 +2054,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
  
      @Override
      public void resumeDelayedFragmentAnimation() {
@@ -60,7 +60,7 @@ index 0000000..0000000 100644
              return;
          }
          AndroidUtilities.cancelRunOnUIThread(delayedOpenAnimationRunnable);
-@@ -2261,7 +2249,6 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -2360,7 +2348,6 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                      fragment.onTransitionAnimationStart(true, false);
                  }
  
@@ -68,7 +68,7 @@ index 0000000..0000000 100644
                  oldFragment = currentFragment;
                  newFragment = fragment;
                  AnimatorSet animation = null;
-@@ -2279,51 +2266,10 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -2378,51 +2365,10 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                          containerView.setScaleX(1.0f);
                          containerView.setScaleY(1.0f);
                      }
@@ -124,7 +124,7 @@ index 0000000..0000000 100644
                          delayedOpenAnimationRunnable = new Runnable() {
                              @Override
                              public void run() {
-@@ -2331,6 +2277,9 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -2430,6 +2376,9 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                                      return;
                                  }
                                  delayedOpenAnimationRunnable = null;
@@ -134,7 +134,7 @@ index 0000000..0000000 100644
                                  fragment.onTransitionAnimationStart(true, false);
                                  startLayoutAnimation(true, true, preview);
                              }
-@@ -2718,21 +2667,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -2821,21 +2770,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                      animation = currentFragment.onCustomTransitionAnimation(false, () -> onAnimationEndCheck(false));
                  }
                  if (animation == null) {

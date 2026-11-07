@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ItemOptions.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ItemOptions.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ItemOptions.java
-@@ -2031,6 +2031,12 @@ public class ItemOptions {
+@@ -2152,6 +2152,12 @@ public class ItemOptions {
              }
          }
  

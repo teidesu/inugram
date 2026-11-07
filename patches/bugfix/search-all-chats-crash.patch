@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchA
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java
-@@ -1714,9 +1714,8 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+@@ -1715,9 +1715,8 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                  view = messagesEmptyLayout = new EmptyLayout(mContext, resourcesProvider, () -> {
                      currentMessagesFilter = Filter.All;
                      searchResultMessages.clear();

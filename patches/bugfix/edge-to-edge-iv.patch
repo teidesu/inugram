@@ -4,16 +4,16 @@ Date: Thu, 13 Aug 2026 00:50:48 +0400
 Subject: proper edge-to-edge for instant view
 
 ---
- .../telegram/ui/ActionBar/ActionBarLayout.java | 12 ++++++++++--
+ .../telegram/ui/ActionBar/ActionBarLayout.java | 18 ++++++++++--------
  .../telegram/ui/ActionBar/BaseFragment.java    |  6 +++++-
  .../java/org/telegram/ui/ArticleViewer.java    | 18 ++++++++++++++++--
- 3 files changed, 31 insertions(+), 5 deletions(-)
+ 3 files changed, 31 insertions(+), 11 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
-@@ -266,6 +266,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -267,6 +267,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                  drawerLayoutContainer.getInternalNavbarPaint().getColor() :
                  Theme.getColor(Theme.key_windowBackgroundGray);
  
@@ -21,7 +21,7 @@ index 0000000..0000000 100644
              if (this == sheetContainer) {
                  final float hasSheets = hasSheetsAnimator.set(sheetFragment != null && sheetFragment.hasSheet());
                  if (hasSheets > 0) {
-@@ -275,20 +276,27 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -276,26 +277,27 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                  final BaseFragment fragment = getLastFragment();
                  if (fragment != null && !fragment.inPreviewMode) {
                      boolean drawNavbar = false;
@@ -40,6 +40,12 @@ index 0000000..0000000 100644
                      }
  
                      drawInsets(canvas, color, drawNavbar);
+-                    if (drawNavbar && isSupportEdgeToEdge && getBottomTabsHeight(false) <= 0 && systemAndDisplayInsets != null && systemAndDisplayInsets.bottom > 0) {
+-                        // attached sheets are measured above the navigation bar, while an edge-to-edge fragment draws under it
+-                        super.dispatchDraw(canvas);
+-                        canvas.drawRect(0, getHeight() - systemAndDisplayInsets.bottom, getWidth(), getHeight(), Theme.fillingPaint(color));
+-                        return;
+-                    }
 +                    inu_drawNavbarOverChildren = inu_hasNonOccupyingSheet && getPaddingBottom() <= 0;
                  }
              }
@@ -50,7 +56,7 @@ index 0000000..0000000 100644
          }
  
          private void drawInsets(Canvas canvas, int color, boolean drawNavigationBar) {
-@@ -345,7 +353,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -352,7 +354,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                  View child = getChildAt(a);
                  if (!(child instanceof ActionBar)) {
                      if (child instanceof BaseFragment.AttachedSheetWindow) {
@@ -63,7 +69,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BaseFragment.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BaseFragment.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BaseFragment.java
-@@ -128,7 +128,11 @@ public abstract class BaseFragment {
+@@ -140,7 +140,11 @@ public abstract class BaseFragment {
          }
      }
  
@@ -80,7 +86,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ArticleViewer.java b/TM
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ArticleViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ArticleViewer.java
-@@ -4319,6 +4319,9 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
+@@ -4352,6 +4352,9 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
          }
          bulletinContainer = new FrameLayout(activity);
          containerView.addView(bulletinContainer, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.FILL, 0, !BOTTOM_ACTION_BAR && sheet != null && !sheet.halfSize() ? 56 : 0, 0, BOTTOM_ACTION_BAR && sheet != null && !sheet.halfSize() ? 24 : 0));
@@ -90,7 +96,7 @@ index 0000000..0000000 100644
  
          headerPaint.setColor(0xff000000);
          statusBarPaint.setColor(0xff000000);
-@@ -4958,8 +4961,14 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
+@@ -4991,8 +4994,14 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
          searchPanel.setClickable(true);
          searchPanel.setPadding(0, dp(3), 0, 0);
          containerView.addView(searchPanel, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 51, Gravity.BOTTOM));
@@ -105,7 +111,7 @@ index 0000000..0000000 100644
              searchPanel.setTranslationY((searchPanelTranslation = -keyboardHeight) + dp(51) * (1f - searchPanelAlpha));
          });
  
-@@ -14794,7 +14803,7 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
+@@ -15071,7 +15080,7 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
              if (BOTTOM_ACTION_BAR) {
                  listView.setPadding(0, (int) (AndroidUtilities.statusBarHeight * 1.25f), 0, dp(24));
              } else {
@@ -114,7 +120,7 @@ index 0000000..0000000 100644
                  listView.setTopGlowOffset(dp(56));
              }
              ((DefaultItemAnimator) listView.getItemAnimator()).setDelayAnimations(false);
-@@ -14832,7 +14841,7 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
+@@ -15109,7 +15118,7 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
                      ignoreLayout = true;
                      setOffsetY(MeasureSpec.getSize(heightMeasureSpec) * .4f);
                      ignoreLayout = false;
@@ -123,7 +129,7 @@ index 0000000..0000000 100644
                  }
                  @Override
                  public void requestLayout() {
-@@ -16074,6 +16083,11 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
+@@ -16352,6 +16361,11 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
                  super(context);
              }
  

@@ -135,7 +135,7 @@ diff --git a/TMessagesProj/jni/tgnet/ConnectionsManager.cpp b/TMessagesProj/jni/
 index 0000000..0000000 100644
 --- a/TMessagesProj/jni/tgnet/ConnectionsManager.cpp
 +++ b/TMessagesProj/jni/tgnet/ConnectionsManager.cpp
-@@ -964,6 +964,9 @@ void ConnectionsManager::onConnectionDataReceived(Connection *connection, Native
+@@ -965,6 +965,9 @@ void ConnectionsManager::onConnectionDataReceived(Connection *connection, Native
          uint32_t messageLength = data->readUint32(&error);
  
          int32_t processedStatus = connection->isMessageIdProcessed(messageId);
@@ -145,7 +145,7 @@ index 0000000..0000000 100644
  
          if (messageSeqNo % 2 != 0) {
              connection->addMessageToConfirm(messageId);
-@@ -980,38 +983,28 @@ void ConnectionsManager::onConnectionDataReceived(Connection *connection, Native
+@@ -981,38 +984,28 @@ void ConnectionsManager::onConnectionDataReceived(Connection *connection, Native
                  req_msg_id = res->req_msg_id;
              }
              if (processedStatus == 2) {
@@ -192,7 +192,7 @@ index 0000000..0000000 100644
                      delegate->onUnparsedMessageReceived(messageId, data, connection->getConnectionType(), instanceNum);
                  }
              }
-@@ -1155,42 +1148,25 @@ void ConnectionsManager::processServerResponse(TLObject *message, int64_t messag
+@@ -1171,42 +1164,25 @@ void ConnectionsManager::processServerResponse(TLObject *message, int64_t messag
          auto response = (TL_msg_container *) message;
          size_t count = response->messages.size();
          if (LOGS_ENABLED) DEBUG_D("received container with %d items", (int32_t) count);
@@ -240,7 +240,7 @@ index 0000000..0000000 100644
          }
      } else if (typeInfo == typeid(TL_pong)) {
          if (connection->getConnectionType() == ConnectionTypePush) {
-@@ -1762,7 +1738,7 @@ void ConnectionsManager::processServerResponse(TLObject *message, int64_t messag
+@@ -1779,7 +1755,7 @@ void ConnectionsManager::processServerResponse(TLObject *message, int64_t messag
              delete object;
          } else {
              if (LOGS_ENABLED) DEBUG_D("connection(%p, account%u, dc%u, type %d) received unparsed from gzip object on 0x%" PRIx64, connection, instanceNum, datacenter->getDatacenterId(), connection->getConnectionType(), messageId);
@@ -249,7 +249,7 @@ index 0000000..0000000 100644
                  delegate->onUnparsedMessageReceived(messageId, data, connection->getConnectionType(), instanceNum);
              }
          }
-@@ -1782,7 +1758,7 @@ void ConnectionsManager::processServerResponse(TLObject *message, int64_t messag
+@@ -1799,7 +1775,7 @@ void ConnectionsManager::processServerResponse(TLObject *message, int64_t messag
                  delegate->onInternalPushReceived(instanceNum);
              }
          } else {
@@ -258,7 +258,7 @@ index 0000000..0000000 100644
                  NativeByteBuffer *data = BuffersStorage::getInstance().getFreeBuffer(message->getObjectSize());
                  message->serializeToStream(data);
                  data->position(0);
-@@ -1793,6 +1769,30 @@ void ConnectionsManager::processServerResponse(TLObject *message, int64_t messag
+@@ -1810,6 +1786,30 @@ void ConnectionsManager::processServerResponse(TLObject *message, int64_t messag
      }
  }
  

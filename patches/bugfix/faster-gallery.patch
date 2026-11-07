@@ -22,7 +22,7 @@ index 0000000..0000000 100644
  
  import org.telegram.ui.AspectRatioFrameLayout;
  import com.google.android.gms.cast.MediaMetadata;
-@@ -641,7 +640,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+@@ -706,7 +705,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
                  final ExifInterface ei = new ExifInterface(new File(path));
                  final String xmp = ei.getAttribute(ExifInterface.TAG_XMP);
                  if (xmp != null) {
@@ -31,7 +31,7 @@ index 0000000..0000000 100644
                      if (motionPhoto != null) {
                          MotionPhotoDescription.ContainerItem photo = null, video = null;
                          for (int i = 0; i < motionPhoto.items.size(); ++i) {
-@@ -1272,8 +1271,10 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+@@ -1337,8 +1336,10 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
                      return;
                  }
                  refreshGalleryRunnable = null;
@@ -44,7 +44,7 @@ index 0000000..0000000 100644
          }
  
          @Override
-@@ -1284,6 +1285,18 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+@@ -1349,6 +1350,18 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
              }
              scheduleReloadRunnable();
          }
@@ -63,7 +63,7 @@ index 0000000..0000000 100644
      }
  
      private static class GalleryObserverExternal extends ContentObserver {
-@@ -1299,8 +1312,22 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+@@ -1364,8 +1377,22 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
              }
              AndroidUtilities.runOnUIThread(refreshGalleryRunnable = () -> {
                  refreshGalleryRunnable = null;
@@ -88,7 +88,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -6861,7 +6888,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+@@ -6941,7 +6968,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
              AndroidUtilities.cancelRunOnUIThread(broadcastPhotosRunnable);
          }
          AndroidUtilities.runOnUIThread(broadcastPhotosRunnable = () -> {
@@ -97,7 +97,7 @@ index 0000000..0000000 100644
                  broadcastNewPhotos(guid, mediaAlbumsSorted, photoAlbumsSorted, cameraAlbumIdFinal, allMediaAlbumFinal, allPhotosAlbumFinal, allVideosAlbumFinal, 1000);
                  return;
              }
-@@ -6871,6 +6898,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+@@ -6951,6 +6978,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
              allPhotosAlbumEntry = allPhotosAlbumFinal;
              allMediaAlbumEntry = allMediaAlbumFinal;
              allVideosAlbumEntry = allVideosAlbumFinal;
@@ -109,7 +109,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/PhotoAttachPhotoC
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/PhotoAttachPhotoCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/PhotoAttachPhotoCell.java
-@@ -512,6 +512,7 @@ public class PhotoAttachPhotoCell extends FrameLayout {
+@@ -513,6 +513,7 @@ public class PhotoAttachPhotoCell extends FrameLayout {
  
      public void setPhotoEntry(MediaController.PhotoEntry entry, boolean selectedMultiple, boolean needCheckShow, boolean last, boolean allowLivePhotos) {
          pressed = false;
@@ -121,7 +121,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlertPhotoLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlertPhotoLayout.java
-@@ -529,7 +529,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -531,7 +531,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
          @Override
          public void sendButtonPressed(int index, VideoEditedInfo videoEditedInfo, boolean notify, int scheduleDate, int scheduleRepeatPeriod, boolean forceDocument) {
              parentAlert.sent = true;
@@ -130,7 +130,7 @@ index 0000000..0000000 100644
              if (photoEntry != null) {
                  photoEntry.editedInfo = videoEditedInfo;
              }
-@@ -4267,6 +4267,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -4293,6 +4293,7 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
                          }
                      }
                  }
@@ -142,7 +142,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMes
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
-@@ -19503,6 +19503,32 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -19486,6 +19486,32 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
          return imagesArrLocals;
      }
  

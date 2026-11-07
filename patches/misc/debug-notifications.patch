@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsCon
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
-@@ -1207,6 +1207,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -1216,6 +1216,7 @@ public class NotificationsController extends BaseController implements Notificat
              for (int a = 0; a < messageObjects.size(); a++) {
                  MessageObject messageObject = messageObjects.get(a);
                  if (desu.inugram.helpers.NotificationsHelper.shouldSuppressMessageNotification(messageObject)) {
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
                      desu.inugram.helpers.NotificationsHelper.removeFromNotifications(messageObject);
                      continue;
                  }
-@@ -5376,6 +5377,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -5392,6 +5393,7 @@ public class NotificationsController extends BaseController implements Notificat
                  }
              }
  
@@ -28,7 +28,7 @@ index 0000000..0000000 100644
              if (chat != null) {
                  Person.Builder personBuilder = new Person.Builder().setName(name);
                  if (avatarFile != null && avatarFile.exists() && Build.VERSION.SDK_INT >= 28) {
-@@ -5584,6 +5586,9 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -5600,6 +5602,9 @@ public class NotificationsController extends BaseController implements Notificat
  
                      if (person == null || !TextUtils.equals(person.getName(), personName)) {
                          Person.Builder personBuilder = new Person.Builder().setName(personName);
@@ -38,7 +38,7 @@ index 0000000..0000000 100644
                          if (preview[0] && !DialogObject.isEncryptedDialog(dialogId) && Build.VERSION.SDK_INT >= 28) {
                              File avatar = null;
                              if (DialogObject.isUserDialog(dialogId) || isChannel) {
-@@ -5600,6 +5605,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -5616,6 +5621,7 @@ public class NotificationsController extends BaseController implements Notificat
                                  if (sender != null && sender.photo != null && sender.photo.photo_small != null && sender.photo.photo_small.volume_id != 0 && sender.photo.photo_small.local_id != 0) {
                                      avatar = getFileLoader().getPathToAttach(sender.photo.photo_small, true);
                                  }
@@ -46,7 +46,7 @@ index 0000000..0000000 100644
                              }
                              if (avatar == null && dialogId == UserObject.VERIFY && messageObject.getForwardedFromId() != null) {
                                  if (uid >= 0) {
-@@ -6013,6 +6019,7 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -6030,6 +6036,7 @@ public class NotificationsController extends BaseController implements Notificat
              }
              FileLog.d("showExtraNotifications: holders["+a+"].call()");
              holder.call();
@@ -54,7 +54,7 @@ index 0000000..0000000 100644
              if (!unsupportedNotificationShortcut() && !ids.isEmpty()) {
                  ShortcutManagerCompat.removeDynamicShortcuts(ApplicationLoader.applicationContext, ids);
              }
-@@ -6110,8 +6117,8 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -6127,8 +6134,8 @@ public class NotificationsController extends BaseController implements Notificat
                  });
                  IconCompat icon = IconCompat.createWithBitmap(bitmap);
                  personBuilder.setIcon(icon);

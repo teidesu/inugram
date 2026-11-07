@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataControl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
-@@ -5120,7 +5120,7 @@ public class MediaDataController extends BaseController {
+@@ -5122,7 +5122,7 @@ public class MediaDataController extends BaseController {
                  ShortcutInfoCompat shortcut = new ShortcutInfoCompat.Builder(ApplicationLoader.applicationContext, "compose")
                          .setShortLabel(LocaleController.getString(R.string.NewConversationShortcut))
                          .setLongLabel(LocaleController.getString(R.string.NewConversationShortcut))
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
                          .setRank(0)
                          .setIntent(intent)
                          .build();
-@@ -5184,29 +5184,6 @@ public class MediaDataController extends BaseController {
+@@ -5186,29 +5186,6 @@ public class MediaDataController extends BaseController {
                          try {
                              File path = getFileLoader().getPathToAttach(photo, true);
                              bitmap = BitmapFactory.decodeFile(path.toString());
@@ -50,7 +50,7 @@ index 0000000..0000000 100644
                          } catch (Throwable e) {
                              FileLog.e(e);
                          }
-@@ -5224,11 +5201,7 @@ public class MediaDataController extends BaseController {
+@@ -5226,11 +5203,7 @@ public class MediaDataController extends BaseController {
                      if (SharedConfig.directShare) {
                          builder.setCategories(category);
                      }
@@ -63,7 +63,7 @@ index 0000000..0000000 100644
  
                      if (recreateShortcuts) {
                          ShortcutManagerCompat.pushDynamicShortcut(ApplicationLoader.applicationContext, builder.build());
-@@ -5823,47 +5796,6 @@ public class MediaDataController extends BaseController {
+@@ -5825,47 +5798,6 @@ public class MediaDataController extends BaseController {
                          File path = getFileLoader().getPathToAttach(photo, true);
                          bitmap = BitmapFactory.decodeFile(path.toString());
                      }
@@ -111,7 +111,7 @@ index 0000000..0000000 100644
                  } catch (Throwable e) {
                      FileLog.e(e);
                  }
-@@ -5875,23 +5807,7 @@ public class MediaDataController extends BaseController {
+@@ -5877,23 +5809,7 @@ public class MediaDataController extends BaseController {
                          .setShortLabel(name)
                          .setIntent(shortcutIntent);
  

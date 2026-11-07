@@ -13,7 +13,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
-@@ -6447,6 +6447,10 @@ public class AndroidUtilities {
+@@ -6509,6 +6509,10 @@ public class AndroidUtilities {
          if (context == null) {
              return;
          }

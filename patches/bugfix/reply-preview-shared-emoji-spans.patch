@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -19601,9 +19601,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -16705,9 +16705,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                          if (mess.length() > 150) {
                              mess = mess.subSequence(0, 150);
                          }
@@ -23,7 +23,7 @@ index 0000000..0000000 100644
                          mess = AndroidUtilities.removeSpans(mess, QuoteSpan.class);
                          mess = AndroidUtilities.removeSpans(mess, QuoteSpan.QuoteStyleSpan.class);
                          mess = AndroidUtilities.replaceNewLines(mess);
-@@ -19719,7 +19717,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -16823,7 +16821,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                  try {
                      replyTextWidth = dp(4) + (needReplyImage ? dp(33) : 0);
                      if (stringFinalText != null) {

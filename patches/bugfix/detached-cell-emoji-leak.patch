@@ -4,15 +4,16 @@ Date: Fri, 23 Oct 2026 14:02:59 +0400
 Subject: fix detached message cells leaking chats through animated emoji
 
 ---
- .../telegram/ui/Cells/ChatMessageCell.java    | 46 +++++++++++++++----
- .../ui/Components/AnimatedEmojiSpan.java      |  3 +-
- 2 files changed, 39 insertions(+), 10 deletions(-)
+ .../telegram/ui/Cells/ChatMessageCell.java    | 22 +++++++++++++++++--
+ .../telegram/ui/Cells/ChatMessagePoll.java    |  4 +++-
+ .../ui/Components/AnimatedEmojiSpan.java      |  3 +--
+ 3 files changed, 24 insertions(+), 5 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -979,6 +979,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -992,6 +992,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
              if (pollButtonDrawable != null) {
                  pollButtonDrawable.attach();
              }
@@ -21,7 +22,7 @@ index 0000000..0000000 100644
          }
  
          public void detach() {
-@@ -988,6 +990,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -1001,6 +1003,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
              if (pollButtonDrawable != null) {
                  pollButtonDrawable.detach();
              }
@@ -30,9 +31,9 @@ index 0000000..0000000 100644
          }
  
          public void destroy() {
-@@ -6675,6 +6679,12 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -6117,6 +6121,12 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                  }
-                 animatedEmojiReplyStack = AnimatedEmojiSpan.update(AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES, this, false, animatedEmojiReplyStack, replyTextLayout);
+                 animatedEmojiReplyStack = AnimatedEmojiSpan.update(AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES, this, false, animatedEmojiReplyStack, drawCompactReply && compactReplyRow != null ? compactReplyRow.text : replyTextLayout);
                  animatedEmojiDescriptionStack = AnimatedEmojiSpan.update(AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES, this, false, animatedEmojiDescriptionStack, descriptionLayout);
 +                if (currentMessageObject != null && currentMessageObject.type == MessageObject.TYPE_POLL) {
 +                    animatedEmojiPollQuestion = AnimatedEmojiSpan.update(AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES, this, false, animatedEmojiPollQuestion, titleLayout);
@@ -43,7 +44,7 @@ index 0000000..0000000 100644
                  updateAnimatedEmojis();
              } else {
                  radialProgress.onDetachedFromWindow();
-@@ -6708,6 +6718,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -6150,6 +6160,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                  AnimatedEmojiSpan.release(this, animatedEmojiDescriptionStack);
                  AnimatedEmojiSpan.release(this, animatedEmojiReplyStack);
                  AnimatedEmojiSpan.release(this, animatedEmojiStack);
@@ -52,16 +53,16 @@ index 0000000..0000000 100644
              }
          }
  
-@@ -7117,6 +7129,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -6584,6 +6596,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
              captionOffsetX = 0;
              currentCaption = null;
              explanationLayout = null;
 +            AnimatedEmojiSpan.release(this, animatedEmojiPollQuestion);
 +            AnimatedEmojiSpan.release(this, animatedEmojiPollExplanation);
-             explanationTitleLayout = null;
-             currentExplanation = null;
-             explanationHeight = 0;
-@@ -8204,7 +8218,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+             if (poll != null) {
+                 poll.explanationTitleLayout = null;
+                 poll.currentExplanation = null;
+@@ -7695,7 +7709,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                                  restLines = restLinesCount;
                                  descriptionLayout = generateStaticLayout(text, Theme.chat_replyTextPaint, linkPreviewMaxWidth - (isRTL ? smallImageSide + 2 * smallSideMargin : 0), linkPreviewMaxWidth - smallImageSide - 2 * smallSideMargin, restLinesCount, maxLines);
                              }
@@ -72,69 +73,7 @@ index 0000000..0000000 100644
  
                              int height = descriptionLayout.getLineBottom(descriptionLayout.getLineCount() - 1);
                              linkPreviewHeight += height;
-@@ -11433,7 +11449,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
-                         Theme.chat_replyNamePaint, maxWidth - dp(30), Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
-                 explanationLayout = new MessageObject.TextLayoutBlocks(messageObject, currentExplanation, Theme.chat_quoteTextPaint, explanationWidth - dp(11));
-                 explanationHeight = explanationLayout.textHeight() + dp(26 + 8 + 3) + (explanationContentHeight > 0 ? explanationContentHeight + dp(8 + 6) : 0);
--                animatedEmojiPollExplanation = AnimatedEmojiSpan.update(AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES, this, false, animatedEmojiPollExplanation, explanationLayout.textLayoutBlocks);
-+                if (imageReceiversAttachState) {
-+                    animatedEmojiPollExplanation = AnimatedEmojiSpan.update(AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES, this, false, animatedEmojiPollExplanation, explanationLayout.textLayoutBlocks);
-+                }
-             }
-         } else {
-             TLRPC.TL_messageMediaToDo media = (TLRPC.TL_messageMediaToDo) m;
-@@ -11472,7 +11490,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
-             MessageObject.addEntitiesToText(questionText, title.entities, currentMessageObject.isOutOwner(), false, false, false);
-         }
-         titleLayout = new StaticLayout(questionText, Theme.chat_audioTitlePaint, maxWidth + dp(2) - getExtraTextX() * 2, Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
--        animatedEmojiPollQuestion = AnimatedEmojiSpan.update(AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES, this, false, animatedEmojiPollQuestion, titleLayout);
-+        if (imageReceiversAttachState) {
-+            animatedEmojiPollQuestion = AnimatedEmojiSpan.update(AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES, this, false, animatedEmojiPollQuestion, titleLayout);
-+        }
-         boolean titleRtl = false;
-         if (titleLayout != null) {
-             for (int a = 0, N = titleLayout.getLineCount(); a < N; a++) {
-@@ -11706,13 +11726,17 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
-                 final int titleMaxWidth = maxWidth - dp(48 + (pollWithMediaInAnswers ? 48 : 0));
-                 button.title = new StaticLayout(answerText, Theme.chat_audioPerformerPaint, titleMaxWidth, Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
-                 button.moveTitleByCounter = false;
--                button.animatedEmoji = AnimatedEmojiSpan.update(AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES, this, false, button.animatedEmoji, button.title);
-+                if (imageReceiversAttachState) {
-+                    button.animatedEmoji = AnimatedEmojiSpan.update(AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES, this, false, button.animatedEmoji, button.title);
-+                }
-                 button.y = height + dp(52);
-                 button.height = button.title.getHeight();
-                 button.translated = translated;
-                 if (prevButton != null && prevButton.translated != translated) {
-                     button.animateTitle = prevButton.title;
--                    button.animateTitleEmoji = AnimatedEmojiSpan.update(AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES, this, false, button.animateTitleEmoji, button.animateTitle);
-+                    if (imageReceiversAttachState) {
-+                        button.animateTitleEmoji = AnimatedEmojiSpan.update(AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES, this, false, button.animateTitleEmoji, button.animateTitle);
-+                    }
-                     button.animateY = prevButton.y;
-                     button.animateHeight = prevButton.height;
-                 }
-@@ -11912,13 +11936,17 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
-                 }
-                 button.task = task;
-                 button.title = new StaticLayout(answerText, Theme.chat_audioPerformerPaint, maxWidth - dp(48 - 2), Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
--                button.animatedEmoji = AnimatedEmojiSpan.update(AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES, this, false, button.animatedEmoji, button.title);
-+                if (imageReceiversAttachState) {
-+                    button.animatedEmoji = AnimatedEmojiSpan.update(AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES, this, false, button.animatedEmoji, button.title);
-+                }
-                 button.y = height + dp(52);
-                 button.height = button.title.getHeight();
-                 button.translated = translated;
-                 if (prevButton != null && prevButton.translated != translated) {
-                     button.animateTitle = prevButton.title;
--                    button.animateTitleEmoji = AnimatedEmojiSpan.update(AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES, this, false, button.animateTitleEmoji, button.animateTitle);
-+                    if (imageReceiversAttachState) {
-+                        button.animateTitleEmoji = AnimatedEmojiSpan.update(AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES, this, false, button.animateTitleEmoji, button.animateTitle);
-+                    }
-                     button.animateY = prevButton.y;
-                     button.animateHeight = prevButton.height;
-                 }
-@@ -19783,7 +19811,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -16893,7 +16909,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                          if (hasReplyQuote || getMessageObject().replyMessageObject != null && !getMessageObject().replyMessageObject.isSpoilersRevealed) {
                              SpoilerEffect.addSpoilers(this, replyTextLayout, replyTextOffset, replyTextOffset + (inu_isCustomSpoiler ? replySpoilerTextWidth : replyTextWidth), replySpoilersPool, replySpoilers);
                          }
@@ -145,6 +84,21 @@ index 0000000..0000000 100644
                      }
                      if (replyNameWidth > replyTextWidth) {
                          replyNameWidth += dp(11);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessagePoll.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessagePoll.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessagePoll.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessagePoll.java
+@@ -217,7 +217,9 @@ class ChatMessagePoll {
+                         Theme.chat_replyNamePaint, maxWidth - dp(30), Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
+                 cell.explanationLayout = new MessageObject.TextLayoutBlocks(messageObject, currentExplanation, Theme.chat_quoteTextPaint, explanationWidth - dp(11));
+                 explanationHeight = cell.explanationLayout.textHeight() + dp(26 + 8 + 3) + (explanationContentHeight > 0 ? explanationContentHeight + dp(8 + 6) : 0);
+-                cell.animatedEmojiPollExplanation = AnimatedEmojiSpan.update(AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES, cell, false, cell.animatedEmojiPollExplanation, cell.explanationLayout.textLayoutBlocks);
++                if (cell.imageReceiversAttachState) {
++                    cell.animatedEmojiPollExplanation = AnimatedEmojiSpan.update(AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES, cell, false, cell.animatedEmojiPollExplanation, cell.explanationLayout.textLayoutBlocks);
++                }
+             }
+         } else {
+             TLRPC.TL_messageMediaToDo media = (TLRPC.TL_messageMediaToDo) m;
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedEmojiSpan.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedEmojiSpan.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedEmojiSpan.java

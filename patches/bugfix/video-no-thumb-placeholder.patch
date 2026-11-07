@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMes
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
-@@ -17024,6 +17024,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -16995,6 +16995,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                          if (currentThumb != null) {
                              imageReceiver.setOrientation(currentThumb.orientation, false);
                          }

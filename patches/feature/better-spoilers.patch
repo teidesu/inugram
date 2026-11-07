@@ -13,16 +13,16 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -1330,7 +1330,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
-     private int buttonY;
-     private int videoButtonX;
-     private int videoButtonY;
--    private int buttonState;
+@@ -1295,7 +1295,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+     int buttonY;
+     int videoButtonX;
+     int videoButtonY;
+-    int buttonState;
 +    public int buttonState;
-     private int buttonPressed;
-     private int videoButtonPressed;
-     private int miniButtonPressed;
-@@ -15320,6 +15320,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+     int buttonPressed;
+     int videoButtonPressed;
+     int miniButtonPressed;
+@@ -13492,6 +13492,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
      }
  
      public void drawBlurredPhotoParticles(Canvas canvas) {
@@ -32,15 +32,15 @@ index 0000000..0000000 100644
          if (mediaSpoilerEffect2 == null) {
              if (!LiteMode.isEnabled(LiteMode.FLAG_CHAT_SPOILER)) {
                  if (mediaSpoilerEffect == null) {
-@@ -19703,6 +19706,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
-                             replyTextWidth -= sz;
-                             maxWidth += sz;
+@@ -16819,6 +16822,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+                             final int richWidth = messageObject.richLayout.getMaxWidth() + getExtraTextX() * 2;
+                             maxWidth = Math.max(dp(40), Math.min(maxWidth, richWidth - replyTextWidth - dp(18)));
                          }
 +                        boolean inu_isCustomSpoiler = InuConfig.TEXT_SPOILER_MODE.getValue() != InuConfig.TextSpoilerModeItem.DEFAULT;
                          if (changed || !isReplyQuote) {
                              stringFinalText = TextUtils.ellipsize(sb, textPaint, maxWidth, TextUtils.TruncateAt.END);
                          } else {
-@@ -19730,6 +19734,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -16846,6 +16850,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                          if (isSideMenued && !drawBackground || (!messageObject.isAnyKindOfSticker() && messageObject.type != MessageObject.TYPE_ROUND_VIDEO || messageObject.type == MessageObject.TYPE_EMOJIS)) {
                              namesOffset += Math.max(0, replyTextHeight - dp(3.66f) - Theme.chat_replyTextPaint.getTextSize());
                          }
@@ -48,7 +48,7 @@ index 0000000..0000000 100644
                          if (replyTextLayout.getLineCount() > 0) {
                              int width = 0;
                              replyTextOffset = replyTextLayout.getWidth();
-@@ -19742,13 +19747,14 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -16858,13 +16863,14 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                                  replyTextOffset = Math.min(replyTextOffset, left);
                              }
                              replyTextWidth += width + dp(18);
@@ -68,7 +68,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
-@@ -4266,6 +4266,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
+@@ -4312,6 +4312,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
  
                              for (int i = 0; i < spoilers.size(); i++) {
                                  SpoilerEffect eff = spoilers.get(i);

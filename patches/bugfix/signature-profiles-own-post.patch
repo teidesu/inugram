@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelp
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
-@@ -5009,6 +5009,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -5025,6 +5025,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                      newMsg.from_id.channel_id = sendToPeer.channel_id;
                  } else if (fromPeer != null) {
                      newMsg.from_id = fromPeer;

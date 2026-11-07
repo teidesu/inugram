@@ -4,15 +4,15 @@ Date: Sat, 16 May 2026 16:08:00 +0400
 Subject: faster upload&download by tweaking chunk size params
 
 ---
- .../main/java/org/telegram/messenger/FileLoadOperation.java    | 2 +-
- .../main/java/org/telegram/messenger/FileUploadOperation.java  | 3 ++-
- 2 files changed, 3 insertions(+), 2 deletions(-)
+ .../src/main/java/org/telegram/messenger/FileLoadOperation.java | 2 +-
+ .../main/java/org/telegram/messenger/FileUploadOperation.java   | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/FileLoadOperation.java b/TMessagesProj/src/main/java/org/telegram/messenger/FileLoadOperation.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/FileLoadOperation.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/FileLoadOperation.java
-@@ -298,7 +298,7 @@ public class FileLoadOperation {
+@@ -299,7 +299,7 @@ public class FileLoadOperation {
      }
  
      private void updateParams() {
@@ -25,20 +25,12 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/FileUploadOperat
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/FileUploadOperation.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/FileUploadOperation.java
-@@ -38,6 +38,7 @@ public class FileUploadOperation {
-     private boolean nextPartFirst;
-     private int operationGuid;
-     private static final int minUploadChunkSize = 128;
-+    private static final int minUploadChunkSizeBoost = 512;
-     private static final int minUploadChunkSlowNetworkSize = 32;
-     private static final int initialRequestsCount = 8;
-     private static final int initialRequestsSlowNetworkCount = 1;
-@@ -309,7 +310,7 @@ public class FileUploadOperation {
+@@ -328,7 +328,7 @@ public class FileUploadOperation {
                  if (AccountInstance.getInstance(currentAccount).getUserConfig().isPremium() && totalFileSize > FileLoader.DEFAULT_MAX_FILE_SIZE) {
                      maxUploadParts = MessagesController.getInstance(currentAccount).uploadMaxFilePartsPremium;
                  }
--                uploadChunkSize = (int) Math.max(slowNetwork ? minUploadChunkSlowNetworkSize : minUploadChunkSize, (totalFileSize + 1024L * maxUploadParts - 1) / (1024L * maxUploadParts));
-+                uploadChunkSize = (int) Math.max(slowNetwork ? minUploadChunkSlowNetworkSize : (desu.inugram.InuConfig.FASTER_UPLOADS.getValue() ? minUploadChunkSizeBoost : minUploadChunkSize), (totalFileSize + 1024L * maxUploadParts - 1) / (1024L * maxUploadParts));
+-                uploadChunkSize = (int) Math.max(slowNetwork ? minUploadChunkSlowNetworkSize : isBigFile ? minUploadChunkSizeBig : minUploadChunkSize, (totalFileSize + 1024L * maxUploadParts - 1) / (1024L * maxUploadParts));
++                uploadChunkSize = (int) Math.max(slowNetwork ? minUploadChunkSlowNetworkSize : isBigFile || desu.inugram.InuConfig.FASTER_UPLOADS.getValue() ? minUploadChunkSizeBig : minUploadChunkSize, (totalFileSize + 1024L * maxUploadParts - 1) / (1024L * maxUploadParts));
                  if (1024 % uploadChunkSize != 0) {
                      int chunkSize = 64;
                      while (uploadChunkSize > chunkSize) {

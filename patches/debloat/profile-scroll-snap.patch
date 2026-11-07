@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -4127,6 +4127,14 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -4081,6 +4081,14 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
  
              private VelocityTracker velocityTracker;
  
@@ -26,12 +26,12 @@ index 0000000..0000000 100644
              @Override
              protected boolean canHighlightChildAt(View child, float x, float y) {
                  return !(child instanceof AboutLinkCell);
-@@ -4230,7 +4238,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
-                             } else {
-                                 listView.smoothScrollBy(0, view.getTop() - getHeaderExtraHeight(), CubicBezierInterpolator.EASE_OUT_QUINT);
-                             }
--                        } else {
-+                        } else if (!desu.inugram.InuConfig.DISABLE_PROFILE_SCROLL_SNAP.getValue()) {
-                             final boolean hasActions = getActionsExtraHeight() > 0;
-                             if (hasActions && extraHeight > 0 && (extraHeight < getHeaderExtraHeight() * 0.6f || listViewVelocityY < -1000f) && extraHeight > getActionsExtraHeight() * .6f) {
-                                 listView.smoothScrollBy(0, (int) (extraHeight - getActionsExtraHeight()), CubicBezierInterpolator.EASE_OUT_QUINT);
+@@ -6157,7 +6165,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+             } else {
+                 listView.smoothScrollBy(0, firstRow.getTop() - getHeaderExtraHeight(), CubicBezierInterpolator.EASE_OUT_QUINT);
+             }
+-        } else {
++        } else if (!desu.inugram.InuConfig.DISABLE_PROFILE_SCROLL_SNAP.getValue()) {
+             final boolean hasActions = getActionsExtraHeight() > 0;
+             if (hasActions && extraHeight > 0 && (extraHeight < getHeaderExtraHeight() * 0.6f || velocityY < -1000f) && extraHeight > getActionsExtraHeight() * .6f) {
+                 listView.smoothScrollBy(0, (int) (extraHeight - getActionsExtraHeight()), CubicBezierInterpolator.EASE_OUT_QUINT);

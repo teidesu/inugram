@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
-@@ -1904,6 +1904,9 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+@@ -1970,6 +1970,9 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
                          try {
                              File cacheFile = FileLoader.getInstance(UserConfig.selectedAccount).getPathToMessage(playingMessageObject.messageOwner);
                              audioInfo = AudioInfo.getAudioInfo(cacheFile);

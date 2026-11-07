@@ -13,7 +13,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/MentionsAdapte
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/MentionsAdapter.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/MentionsAdapter.java
-@@ -135,6 +135,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
+@@ -138,6 +138,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
      private boolean isDarkTheme;
      private int botsCount;
      private boolean inlineMediaEnabled = true;
@@ -21,7 +21,7 @@ index 0000000..0000000 100644
      private int channelLastReqId;
      private int channelReqId;
      private boolean isSearchingMentions;
-@@ -571,6 +572,8 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
+@@ -574,6 +575,8 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
                  TLRPC.Chat chat = parentFragment.getCurrentChat();
                  if (chat != null) {
                      inlineMediaEnabled = ChatObject.inu_canSendInline(chat);
@@ -34,7 +34,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -373,6 +373,7 @@ import desu.inugram.InuConfig;
+@@ -383,6 +383,7 @@ import desu.inugram.InuConfig;
  import desu.inugram.helpers.chat.ChatHelper;
  import desu.inugram.helpers.chat.ChatActionsHelper;
  import desu.inugram.helpers.search.SearchFilterHelper;
@@ -42,7 +42,7 @@ index 0000000..0000000 100644
  
  @SuppressWarnings("unchecked")
  public class ChatActivity extends BaseFragment implements
-@@ -1647,7 +1648,22 @@ public class ChatActivity extends BaseFragment implements
+@@ -1677,7 +1678,22 @@ public class ChatActivity extends BaseFragment implements
              if (index < 0 || index >= botContextResults.size()) {
                  return;
              }
@@ -66,7 +66,7 @@ index 0000000..0000000 100644
          }
      };
  
-@@ -7568,6 +7584,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -7563,6 +7579,9 @@ public class ChatActivity extends BaseFragment implements
                      return;
                  }
                  TLRPC.BotInlineResult result = (TLRPC.BotInlineResult) object;
@@ -76,7 +76,7 @@ index 0000000..0000000 100644
                  if (currentEncryptedChat != null) {
                      int error = 0;
                      if (result.send_message instanceof TLRPC.TL_botInlineMessageMediaAuto && "game".equals(result.type)) {
-@@ -7652,6 +7671,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -7647,6 +7666,10 @@ public class ChatActivity extends BaseFragment implements
                  int len = mentionContainer.getAdapter().getResultLength();
                  return ChatHelper.maybeHandleMentionLongTap(this, chatActivityEnterView, (TLRPC.User) object, start, len);
              }
@@ -87,7 +87,7 @@ index 0000000..0000000 100644
              if (!mentionContainer.getAdapter().isLongClickEnabled()) {
                  return false;
              }
-@@ -12674,7 +12697,24 @@ public class ChatActivity extends BaseFragment implements
+@@ -13085,7 +13108,24 @@ public class ChatActivity extends BaseFragment implements
          }
      }
  
@@ -112,7 +112,7 @@ index 0000000..0000000 100644
          if (mentionContainer == null) {
              return;
          }
-@@ -12684,6 +12724,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -13095,6 +13135,10 @@ public class ChatActivity extends BaseFragment implements
          params.put("query_id", "" + result.query_id);
          params.put("bot", "" + uid);
          params.put("bot_name", mentionContainer.getAdapter().getContextBotName());
@@ -127,7 +127,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMes
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
-@@ -2955,6 +2955,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -2947,6 +2947,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
  
      public interface PhotoViewerProvider {
          default void inu_spoilerToggled() { }
@@ -135,7 +135,7 @@ index 0000000..0000000 100644
          PlaceProviderObject getPlaceForPhoto(MessageObject messageObject, TLRPC.FileLocation fileLocation, int index, boolean needPreview, boolean closing);
          ImageReceiver.BitmapHolder getThumbForPhoto(MessageObject messageObject, TLRPC.FileLocation fileLocation, int index);
          void willSwitchFromPhoto(MessageObject messageObject, TLRPC.FileLocation fileLocation, int index);
-@@ -7527,6 +7528,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -7526,6 +7527,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                      entry.hasSpoiler = !entry.hasSpoiler;
                      if (placeProvider != null) placeProvider.inu_spoilerToggled();
                  });

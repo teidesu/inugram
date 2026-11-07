@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -11961,6 +11961,22 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -12001,6 +12001,22 @@ public class MessagesController extends BaseController implements NotificationCe
          }
          final boolean isInitialLoading = offset_date == 0 && max_id == 0;
          final boolean reload;
@@ -34,7 +34,7 @@ index 0000000..0000000 100644
          final LongSparseArray<TLRPC.User> usersDict = new LongSparseArray<>();
          final LongSparseArray<TLRPC.Chat> chatsDict = new LongSparseArray<>();
          for (int a = 0; a < messagesRes.users.size(); a++) {
-@@ -11982,7 +11998,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -12022,7 +12038,7 @@ public class MessagesController extends BaseController implements NotificationCe
          } else if (mode == ChatActivity.MODE_SAVED) {
              reload = resCount == 0 && (!isInitialLoading || (SystemClock.elapsedRealtime() - lastSavedServerQueryTime.get(threadMessageId, 0L)) > 60 * 1000 || isCache);
          } else {
@@ -43,7 +43,7 @@ index 0000000..0000000 100644
          }
          if (!DialogObject.isEncryptedDialog(dialogId) && isCache && reload) {
              if (mode == ChatActivity.MODE_SCHEDULED) {
-@@ -12042,8 +12058,10 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -12082,8 +12098,10 @@ public class MessagesController extends BaseController implements NotificationCe
                  }
              }
              final long finalHash = hash;
@@ -56,7 +56,7 @@ index 0000000..0000000 100644
                  return;
              }
          }
-@@ -12224,11 +12242,11 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -12264,11 +12282,11 @@ public class MessagesController extends BaseController implements NotificationCe
                      if (!needProcess) {
                          getNotificationCenter().postNotificationName(NotificationCenter.messagesDidLoadWithoutProcess, classGuid, resCount, isCache, isEnd, last_message_id);
                      } else {

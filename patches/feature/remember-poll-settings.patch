@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlertPollLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlertPollLayout.java
-@@ -292,6 +292,12 @@ public class ChatAttachAlertPollLayout extends ChatAttachAlert.AttachAlertLayout
+@@ -294,6 +294,12 @@ public class ChatAttachAlertPollLayout extends ChatAttachAlert.AttachAlertLayout
              allowAddingOptions = !quizPoll;
              allowRevoting = !quizPoll;
          }
@@ -24,7 +24,7 @@ index 0000000..0000000 100644
          updateRows();
  
          checkboxPaint.setColor(getThemedColor(Theme.key_telegram_color));
-@@ -873,6 +879,13 @@ public class ChatAttachAlertPollLayout extends ChatAttachAlert.AttachAlertLayout
+@@ -875,6 +881,13 @@ public class ChatAttachAlertPollLayout extends ChatAttachAlert.AttachAlertLayout
          poll.poll.open_answers = allowAddingOptions;
          poll.poll.revoting_disabled = !allowRevoting;
          poll.poll.shuffle_answers = shuffleOptions;

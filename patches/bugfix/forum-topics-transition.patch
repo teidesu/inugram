@@ -4,23 +4,14 @@ Date: Wed, 4 Nov 2026 01:08:20 +0400
 Subject: fix dialog list jumping when opening and closing forum topics
 
 ---
- .../java/org/telegram/ui/DialogsActivity.java | 55 +++++++++----------
- 1 file changed, 27 insertions(+), 28 deletions(-)
+ .../java/org/telegram/ui/DialogsActivity.java | 51 +++++++++----------
+ 1 file changed, 25 insertions(+), 26 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -1084,7 +1084,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
-                 float rightFragmentOffset = 0;
-                 if (rightFragmentTransitionInProgress) {
-                     float scrollOffset = rightFragmentTransitionIsOpen ? 0 : scrollYOffset;
--                    rightFragmentOffset = -AndroidUtilities.lerp(-scrollOffset + (dp(!rightFragmentTransitionIsOpen && canShowFilterTabsView ? 50 : 0)), scrollOffset, rightSlidingDialogContainer.openedProgress);
-+                    rightFragmentOffset = -AndroidUtilities.lerp(-scrollOffset, scrollOffset, rightSlidingDialogContainer.openedProgress);
-                 }
-                 float addH = 0;
-                 if (hasStories) {
-@@ -2091,31 +2091,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -2090,31 +2090,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              }
  
              ignoreLayout = true;
@@ -53,7 +44,7 @@ index 0000000..0000000 100644
  
              final int b = calculateListViewPaddingBottom();
              if (t != topPadding || b != getPaddingBottom()) {
-@@ -2151,6 +2127,29 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -2150,6 +2126,29 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              }
          }
  
@@ -83,7 +74,7 @@ index 0000000..0000000 100644
          @Override
          protected void onLayout(boolean changed, int l, int t, int r, int b) {
              super.onLayout(changed, l, t, r, b);
-@@ -2408,7 +2407,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -2407,7 +2406,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
  
              if (anchorView != null) {
                  if (animationSupportListView != null) {
@@ -92,12 +83,3 @@ index 0000000..0000000 100644
                      animationSupportListView.setPadding(getPaddingLeft(), topPadding, getPaddingLeft(), getPaddingBottom());
                      if (anchorView != null) {
                          DialogsAdapter adapter = (DialogsAdapter) animationSupportListView.getAdapter();
-@@ -2424,7 +2423,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
-                // if (!backward) {
-                     DialogsAdapter adapter = (DialogsAdapter) getAdapter();
-                     int p = adapter.findDialogPosition(anchorView.getDialogId());
--                    int offset = (int) (anchorView.getTop() - getPaddingTop());
-+                    int offset = (int) (anchorView.getTop() - anchorListView.getPaddingTop());
-                     if (backward && hasStories) {
-                         offset += dp(DialogStoriesCell.HEIGHT_IN_DP);
-                     }

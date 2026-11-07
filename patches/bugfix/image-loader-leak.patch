@@ -43,7 +43,7 @@ index 0000000..0000000 100644
      private static final android.util.LruCache<Integer, BitmapDrawable> inu_strippedCache = new android.util.LruCache<>(64);
  
      public static Drawable createStripedBitmap(ArrayList<TLRPC.PhotoSize> thumbs) {
-@@ -1257,12 +1275,7 @@ public class ImageLoader {
+@@ -1269,12 +1287,7 @@ public class ImageLoader {
                                  if (secureDocumentKey != null) {
                                      RandomAccessFile f = new RandomAccessFile(cacheFileFinal, "r");
                                      int len = (int) f.length();
@@ -57,7 +57,7 @@ index 0000000..0000000 100644
                                      f.readFully(data, 0, len);
                                      f.close();
                                      EncryptedFileInputStream.decryptBytesWithKeyFile(data, 0, len, secureDocumentKey);
-@@ -1355,12 +1368,7 @@ public class ImageLoader {
+@@ -1367,12 +1380,7 @@ public class ImageLoader {
                              RandomAccessFile f = new RandomAccessFile(cacheFileFinal, "r");
                              int len = (int) f.length();
                              int offset = 0;
@@ -71,7 +71,7 @@ index 0000000..0000000 100644
                              f.readFully(data, 0, len);
                              f.close();
                              boolean error = false;
-@@ -1463,20 +1471,23 @@ public class ImageLoader {
+@@ -1475,20 +1483,23 @@ public class ImageLoader {
                          }
  
                          opts.inDither = false;
@@ -99,7 +99,7 @@ index 0000000..0000000 100644
                              if (image == null) {
                                  FileInputStream is;
                                  if (secureDocumentKey != null) {
-@@ -1510,12 +1521,7 @@ public class ImageLoader {
+@@ -1522,12 +1533,7 @@ public class ImageLoader {
                                      RandomAccessFile f = new RandomAccessFile(cacheFileFinal, "r");
                                      int len = (int) f.length();
                                      int offset = 0;
@@ -113,7 +113,7 @@ index 0000000..0000000 100644
                                      f.readFully(data, 0, len);
                                      f.close();
                                      boolean error = false;
-@@ -1660,6 +1666,15 @@ public class ImageLoader {
+@@ -1672,6 +1678,15 @@ public class ImageLoader {
              return finalBitmap;
          }
  
@@ -129,7 +129,7 @@ index 0000000..0000000 100644
          private void loadLastFrame(RLottieDrawable lottieDrawable, int w, int h, boolean lastFrame, boolean reaction) {
              Bitmap bitmap;
              Canvas canvas;
-@@ -1811,12 +1826,7 @@ public class ImageLoader {
+@@ -1823,12 +1838,7 @@ public class ImageLoader {
  
          try {
              int len = photoBytes.length - 3 + Bitmaps.header.length + Bitmaps.footer.length;

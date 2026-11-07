@@ -4,66 +4,39 @@ Date: Mon, 31 Aug 2026 05:05:44 +0400
 Subject: fix channel reaction configuration page - all->off and vice versa
 
 ---
- .../ChatCustomReactionsEditActivity.java      | 31 ++++++++++++++++---
- 1 file changed, 26 insertions(+), 5 deletions(-)
+ .../ChatCustomReactionsEditActivity.java      | 25 ++++++++++++++++---
+ 1 file changed, 22 insertions(+), 3 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ChatCustomReactionsEditActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ChatCustomReactionsEditActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ChatCustomReactionsEditActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ChatCustomReactionsEditActivity.java
-@@ -96,6 +96,7 @@ public class ChatCustomReactionsEditActivity extends BaseFragment implements Not
-     private final HashMap<Long, AnimatedEmojiSpan> initialSelectedEmojis = new LinkedHashMap<>();
+@@ -109,6 +109,7 @@ public class ChatCustomReactionsEditActivity extends BaseFragment implements Not
      private final List<TLRPC.TL_availableReaction> allAvailableReactions = new ArrayList<>();
      private boolean initialPaid;
+     private int initialSelectedType;
 +    private boolean initialEnabled;
  
      private final int maxReactionsCount = getMessagesController().boostsChannelLevelMax;
      private boolean emojiKeyboardVisible = false;
-@@ -234,7 +235,7 @@ public class ChatCustomReactionsEditActivity extends BaseFragment implements Not
+@@ -271,7 +272,7 @@ public class ChatCustomReactionsEditActivity extends BaseFragment implements Not
              if (enableReactionsCell.isChecked() && paidCheckCell != null && paidCheckCell.isChecked()) {
                  toggleStarsEnabled();
              }
 -            setCheckedEnableReactionCell(enableReactionsCell.isChecked() ? SELECT_TYPE_NONE : SELECT_TYPE_SOME, enableReactionsCell.isChecked() ? false : paid, true);
 +            setCheckedEnableReactionCell(enableReactionsCell.isChecked() ? SELECT_TYPE_NONE : getEnabledSelectType(), enableReactionsCell.isChecked() ? false : paid, true);
          });
-         contentLayout.addView(enableReactionsCell, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
- 
-@@ -461,6 +462,7 @@ public class ChatCustomReactionsEditActivity extends BaseFragment implements Not
-         }
+         reactionsInfoCell = new TextInfoPrivacyCell(context, 12, resourceProvider);
+         ThemeBind.textColor(reactionsInfoCell.getTextView(), Theme.key_windowBackgroundWhiteGrayText4);
+@@ -523,6 +524,7 @@ public class ChatCustomReactionsEditActivity extends BaseFragment implements Not
          initialSelectedEmojis.putAll(selectedEmojisMap);
          initialPaid = paid;
+         initialSelectedType = selectedType;
 +        initialEnabled = selectedType != SELECT_TYPE_NONE || paid;
  
          fragmentView = rootLayout;
          return rootLayout;
-@@ -667,10 +669,11 @@ public class ChatCustomReactionsEditActivity extends BaseFragment implements Not
-             if (animated) {
-                 actionButtonContainer.animate().setListener(null).cancel();
-                 switchLayout.animate().setListener(null).cancel();
--                switchLayout.animate().alpha(1f).setDuration(350).setInterpolator(CubicBezierInterpolator.DEFAULT).setListener(new AnimatorListenerAdapter() {
-+                switchLayout.animate().alpha(1f).setDuration(350).setInterpolator(CubicBezierInterpolator.DEFAULT).setUpdateListener(a -> scrollView.invalidate()).setListener(new AnimatorListenerAdapter() {
-                     @Override
-                     public void onAnimationEnd(Animator animation) {
-                         editText.setFocusableInTouchMode(true);
-+                        scrollView.invalidate();
-                     }
-                 }).start();
-                 actionButtonContainer.animate().alpha(1f).setDuration(350).setInterpolator(CubicBezierInterpolator.DEFAULT).start();
-@@ -703,11 +706,12 @@ public class ChatCustomReactionsEditActivity extends BaseFragment implements Not
-                         actionButtonContainer.setVisibility(View.INVISIBLE);
-                     }
-                 }).start();
--                switchLayout.animate().alpha(0f).setDuration(350).setInterpolator(CubicBezierInterpolator.DEFAULT).setListener(new AnimatorListenerAdapter() {
-+                switchLayout.animate().alpha(0f).setDuration(350).setInterpolator(CubicBezierInterpolator.DEFAULT).setUpdateListener(a -> scrollView.invalidate()).setListener(new AnimatorListenerAdapter() {
-                     @Override
-                     public void onAnimationEnd(Animator animation) {
-                         editText.setFocusableInTouchMode(false);
-                         switchLayout.setVisibility(View.INVISIBLE);
-+                        scrollView.invalidate();
-                     }
-                 }).start();
-             } else {
-@@ -766,7 +770,7 @@ public class ChatCustomReactionsEditActivity extends BaseFragment implements Not
+@@ -835,7 +837,7 @@ public class ChatCustomReactionsEditActivity extends BaseFragment implements Not
          if (boostsStatus != null && boostsStatus.level < selectedCustomReactions) {
              hasChanges = false;
          }
@@ -72,7 +45,7 @@ index 0000000..0000000 100644
              hasChanges = true;
          }
          if (invoked && hasChanges) {
-@@ -787,7 +791,7 @@ public class ChatCustomReactionsEditActivity extends BaseFragment implements Not
+@@ -856,7 +858,7 @@ public class ChatCustomReactionsEditActivity extends BaseFragment implements Not
          if (boostsStatus == null) {
              return;
          }
@@ -81,7 +54,7 @@ index 0000000..0000000 100644
              selectedType = SELECT_TYPE_SOME;
          }
          selectedCustomReactions = grabReactions(true).size();
-@@ -804,6 +808,23 @@ public class ChatCustomReactionsEditActivity extends BaseFragment implements Not
+@@ -873,6 +875,23 @@ public class ChatCustomReactionsEditActivity extends BaseFragment implements Not
          }
      }
  

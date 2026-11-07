@@ -20,7 +20,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -16154,11 +16154,14 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -16195,11 +16195,14 @@ public class MessagesController extends BaseController implements NotificationCe
              if (UserConfig.selectedAccount == currentAccount) {
                  int account = -1;
                  for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
@@ -40,7 +40,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreato
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java
-@@ -7726,7 +7726,7 @@ public class AlertsCreator {
+@@ -7712,7 +7712,7 @@ public class AlertsCreator {
          desu.inugram.helpers.dialogs.AccountOrderHelper.sort(inu_accountNumbers);
          for (int a : inu_accountNumbers) {
              TLRPC.User u = UserConfig.getInstance(a).getCurrentUser();
@@ -53,7 +53,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/PasscodeView
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/PasscodeView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/PasscodeView.java
-@@ -1107,7 +1107,7 @@ public class PasscodeView extends FrameLayout implements NotificationCenter.Noti
+@@ -1108,7 +1108,7 @@ public class PasscodeView extends FrameLayout implements NotificationCenter.Noti
                  onPasscodeError();
                  return;
              }
@@ -62,7 +62,7 @@ index 0000000..0000000 100644
                  SharedConfig.increaseBadPasscodeTries();
                  if (SharedConfig.passcodeRetryInMs > 0) {
                      checkRetryTextView();
-@@ -1380,7 +1380,7 @@ public class PasscodeView extends FrameLayout implements NotificationCenter.Noti
+@@ -1381,7 +1381,7 @@ public class PasscodeView extends FrameLayout implements NotificationCenter.Noti
  
      protected void checkFingerprint() {
          if (dismissing) return;
@@ -75,7 +75,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -158,6 +158,7 @@ import org.telegram.ui.ActionBar.ThemeDescription;
+@@ -160,6 +160,7 @@ import org.telegram.ui.ActionBar.ThemeDescription;
  import org.telegram.ui.Adapters.DialogsAdapter;
  import org.telegram.ui.Adapters.DialogsSearchAdapter;
  import org.telegram.ui.Adapters.FiltersView;
@@ -83,7 +83,7 @@ index 0000000..0000000 100644
  import org.telegram.ui.Cells.ActiveGiftAuctionsHintCell;
  import org.telegram.ui.Cells.AnimatedStatusView;
  import org.telegram.ui.Cells.ArchiveHintInnerCell;
-@@ -3929,6 +3930,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -3852,6 +3853,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              imageView.getImageReceiver().setCurrentAccount(currentAccount);
              Drawable thumb = user != null && user.photo != null && user.photo.strippedBitmap != null ? user.photo.strippedBitmap : avatarDrawable;
              imageView.setImage(ImageLocation.getForUserOrChat(currentAccount, user, ImageLocation.TYPE_SMALL), "50_50", ImageLocation.getForUserOrChat(user, ImageLocation.TYPE_STRIPPED), "50_50", thumb, user);
@@ -103,7 +103,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-@@ -1279,7 +1279,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -1296,7 +1296,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
      private void switchToAvailableAccountOrLogout() {
          int account = -1;
          for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
@@ -112,7 +112,7 @@ index 0000000..0000000 100644
                  account = a;
                  break;
              }
-@@ -1298,6 +1298,9 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -1315,6 +1315,9 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                  rightActionBarLayout.rebuildLogout();
              }
              presentFragment(new IntroActivity().setOnLogout());
@@ -126,7 +126,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java b/TM
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
-@@ -1644,6 +1644,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -1669,6 +1669,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
      private boolean pendingSwitchingAccount;
  
      private void onAuthSuccess(TLRPC.TL_auth_authorization res, boolean afterSignup) {
@@ -138,7 +138,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
-@@ -644,7 +644,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -662,7 +662,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
  
          accountNumbers.clear();
          for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
@@ -151,7 +151,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PasscodeActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/PasscodeActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/PasscodeActivity.java
-@@ -172,6 +172,8 @@ public class PasscodeActivity extends BaseFragment implements NotificationCenter
+@@ -176,6 +176,8 @@ public class PasscodeActivity extends BaseFragment implements NotificationCenter
          this.type = type;
      }
  
@@ -160,7 +160,7 @@ index 0000000..0000000 100644
      @Override
      public boolean onFragmentCreate() {
          super.onFragmentCreate();
-@@ -289,6 +291,7 @@ public class PasscodeActivity extends BaseFragment implements NotificationCenter
+@@ -313,6 +315,7 @@ public class PasscodeActivity extends BaseFragment implements NotificationCenter
                                  .setMessage(LocaleController.getString(R.string.DisablePasscodeConfirmMessage))
                                  .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
                                  .setPositiveButton(LocaleController.getString(R.string.DisablePasscodeTurnOff), (dialog, which) -> {
@@ -168,7 +168,7 @@ index 0000000..0000000 100644
                                      SharedConfig.passcodeHash = "";
                                      SharedConfig.appLocked = false;
                                      SharedConfig.saveConfig();
-@@ -985,6 +988,7 @@ public class PasscodeActivity extends BaseFragment implements NotificationCenter
+@@ -1009,6 +1012,7 @@ public class PasscodeActivity extends BaseFragment implements NotificationCenter
                  return;
              }
  
@@ -176,7 +176,7 @@ index 0000000..0000000 100644
              boolean isFirst = SharedConfig.passcodeHash.isEmpty();
              try {
                  SharedConfig.passcodeSalt = new byte[16];
-@@ -1038,7 +1042,7 @@ public class PasscodeActivity extends BaseFragment implements NotificationCenter
+@@ -1062,7 +1066,7 @@ public class PasscodeActivity extends BaseFragment implements NotificationCenter
                  onPasscodeError();
                  return;
              }
@@ -189,7 +189,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
-@@ -655,7 +655,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -733,7 +733,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
  
          accountNumbers.clear();
          for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {

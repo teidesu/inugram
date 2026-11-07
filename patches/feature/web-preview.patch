@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -14235,7 +14235,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -14712,7 +14712,11 @@ public class ChatActivity extends BaseFragment implements
      }
  
      public void searchLinks(final CharSequence charSequence, final boolean force) {
@@ -25,7 +25,7 @@ index 0000000..0000000 100644
              return;
          }
          if (currentChat != null && !ChatObject.canSendEmbed(currentChat)) {
-@@ -14250,6 +14254,12 @@ public class ChatActivity extends BaseFragment implements
+@@ -14727,6 +14731,12 @@ public class ChatActivity extends BaseFragment implements
              return;
          }
          checkEditLinkRemoved(charSequence);
@@ -38,7 +38,7 @@ index 0000000..0000000 100644
          if (force && foundWebPage != null && !(foundWebPage instanceof TLRPC.TL_webPagePending)) {
              if (foundWebPage.url != null) {
                  int index = TextUtils.indexOf(charSequence, foundWebPage.url);
-@@ -14378,6 +14388,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -14855,6 +14865,7 @@ public class ChatActivity extends BaseFragment implements
              } else {
                  req.message = textToCheck.toString();
              }
@@ -46,7 +46,7 @@ index 0000000..0000000 100644
              if (foundWebPage != null && req.message.equals(foundWebPage.displayedText)) {
                  return;
              }
-@@ -14423,6 +14434,34 @@ public class ChatActivity extends BaseFragment implements
+@@ -14900,6 +14911,34 @@ public class ChatActivity extends BaseFragment implements
  
      private HashMap<String, TLRPC.WebPage> lastLinkPreviewResults;
  
@@ -85,7 +85,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivity
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
-@@ -9956,6 +9956,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -10066,6 +10066,7 @@ public class ChatActivityEnterView extends FrameLayout implements
              }
  
              doneButton.setOnLongClickListener(v -> {
@@ -93,7 +93,7 @@ index 0000000..0000000 100644
                  if (messageObject.isMediaEmpty()) return false;
                  if (messageEditText == null || TextUtils.isEmpty(messageEditText.getTextToUse())) return false;
                  if (groupedMessages != null && (!groupedMessages.hasCaption || groupedMessages.isDocuments)) return false;
-@@ -10049,7 +10050,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -10159,7 +10160,7 @@ public class ChatActivityEnterView extends FrameLayout implements
                  draftMessage = messageEditText != null && messageEditText.length() > 0 ? messageEditText.getText() : null;
                  draftSearchWebpage = messageWebPageSearch;
              }

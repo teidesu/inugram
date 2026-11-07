@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchA
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java
-@@ -131,6 +131,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+@@ -132,6 +132,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
      private final ArrayList<String> searchResultHashtags = new ArrayList<>();
      public final ArrayList<TLRPC.TL_sponsoredPeer> sponsoredPeers = new ArrayList<>();
      private final HashSet<byte[]> seenSponsoredPeers = new HashSet<>();
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
      private String lastSearchText;
      private boolean searchWas;
      private int reqId = 0;
-@@ -1123,6 +1124,11 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+@@ -1124,6 +1125,11 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
          } else {
              query = null;
          }
@@ -32,7 +32,7 @@ index 0000000..0000000 100644
          filterRecent(query);
          if (!TextUtils.equals(sponsoredQuery, query)) {
              sponsoredQuery = query;
-@@ -1424,10 +1430,17 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+@@ -1425,10 +1431,17 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
          if (localMessagesSearchEndReached) {
              localMessagesLoadingRow = count;
          }
@@ -50,7 +50,7 @@ index 0000000..0000000 100644
          if (!publicPosts.isEmpty()) {
              if (i > 0 && i - 1 < publicPosts.size()) {
                  return publicPosts.get(i - 1);
-@@ -1535,6 +1548,10 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+@@ -1536,6 +1549,10 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
          if (!searchWas) {
              return false;
          }
@@ -61,7 +61,7 @@ index 0000000..0000000 100644
          if (!searchResultHashtags.isEmpty()) {
              return false;
          }
-@@ -1709,6 +1726,9 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+@@ -1710,6 +1727,9 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                  });
                  messagesEmptyLayout.setQuery(lastMessagesSearchString);
                  break;
@@ -71,7 +71,7 @@ index 0000000..0000000 100644
              case VIEW_TYPE_ADD_BY_PHONE:
              default:
                  view = new TextCell(mContext, 16, false);
-@@ -1780,6 +1800,9 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+@@ -1781,6 +1801,9 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                      user = MessagesController.getInstance(currentAccount).getUser(encryptedChat.user_id);
                  }
  
@@ -81,7 +81,7 @@ index 0000000..0000000 100644
                  if (!publicPosts.isEmpty()) {
                      position -= publicPosts.size() + 1;
                  }
-@@ -1940,6 +1963,9 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+@@ -1941,6 +1964,9 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
              }
              case VIEW_TYPE_GRAY_SECTION: {
                  final GraySectionCell cell = (GraySectionCell) holder.itemView;
@@ -91,7 +91,7 @@ index 0000000..0000000 100644
                  if (!searchResultHashtags.isEmpty()) {
                      cell.setText(LocaleController.getString(R.string.Hashtags), LocaleController.getString(R.string.ClearButton), v -> {
                          if (delegate != null) {
-@@ -2191,6 +2217,14 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+@@ -2192,6 +2218,14 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                  profileSearchCell.setData(contact, null, ContactsController.formatName(contact.first_name, contact.last_name), PhoneFormat.getInstance().format("+" + contact.shortPhones.get(0)), false, false);
                  break;
              }
@@ -106,7 +106,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -2210,6 +2244,10 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+@@ -2211,6 +2245,10 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
  
      @Override
      public int getItemViewType(int i) {
@@ -121,7 +121,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -13407,6 +13407,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13024,6 +13024,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          });
          searchViewPager.searchListView.setOnItemClickListener((view, position, x, y) -> {
              Object item = searchViewPager.dialogsSearchAdapter.getItem(position);

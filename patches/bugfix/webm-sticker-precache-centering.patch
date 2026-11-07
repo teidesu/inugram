@@ -25,7 +25,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedFile
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedFileDrawable.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedFileDrawable.java
-@@ -1239,7 +1239,6 @@ public final class AnimatedFileDrawable extends BitmapDrawable implements Animat
+@@ -1240,7 +1240,6 @@ public final class AnimatedFileDrawable extends BitmapDrawable implements Animat
          if (cacheGenerateDecoder == null) {
              return -1;
          }
@@ -33,7 +33,7 @@ index 0000000..0000000 100644
          if (generatingCacheBitmap == null) {
              generatingCacheBitmap = Bitmap.createBitmap(metaData[0], metaData[1], Bitmap.Config.ARGB_8888);
          }
-@@ -1254,12 +1253,7 @@ public final class AnimatedFileDrawable extends BitmapDrawable implements Animat
+@@ -1255,12 +1254,7 @@ public final class AnimatedFileDrawable extends BitmapDrawable implements Animat
              }
          }
          lastMetadata = metaData[3];
@@ -47,7 +47,7 @@ index 0000000..0000000 100644
          cacheGenerateTimestamp = metaData[3];
          return 1;
      }
-@@ -1269,8 +1263,6 @@ public final class AnimatedFileDrawable extends BitmapDrawable implements Animat
+@@ -1270,8 +1264,6 @@ public final class AnimatedFileDrawable extends BitmapDrawable implements Animat
          if (bitmap == null) {
              bitmap = Bitmap.createBitmap(renderingWidth, renderingHeight, Bitmap.Config.ARGB_8888);
          }
@@ -56,7 +56,7 @@ index 0000000..0000000 100644
          AnimatedFileNative tempDecoder = AnimatedFileNative.createDecoderFrom(path.getAbsolutePath(), metaData, currentAccount, streamFileSize, stream, false);
          if (tempDecoder == null) {
              return bitmap;
-@@ -1280,14 +1272,25 @@ public final class AnimatedFileDrawable extends BitmapDrawable implements Animat
+@@ -1281,14 +1273,25 @@ public final class AnimatedFileDrawable extends BitmapDrawable implements Animat
          }
          tempDecoder.getVideoFrame(generatingCacheBitmap, false, startTime, endTime, true);
          tempDecoder.recycle();

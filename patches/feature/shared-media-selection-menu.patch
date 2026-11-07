@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -33915,6 +33915,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -34556,6 +34556,10 @@ public class ChatActivity extends BaseFragment implements
      }
  
      public void saveMessageToGallery(MessageObject messageObject) {
@@ -23,7 +23,7 @@ index 0000000..0000000 100644
          String path = messageObject.messageOwner.attachPath;
          if (!TextUtils.isEmpty(path)) {
              File temp = new File(path);
-@@ -33958,11 +33962,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -34599,11 +34603,11 @@ public class ChatActivity extends BaseFragment implements
                  }
              }
              if (!TextUtils.isEmpty(videoPath)) {
@@ -41,7 +41,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaL
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
-@@ -718,6 +718,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -773,6 +773,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
      private ActionBarMenuItem gotoItem;
      private ActionBarMenuItem pinItem;
      private ActionBarMenuItem unpinItem;
@@ -49,15 +49,15 @@ index 0000000..0000000 100644
      private int searchItemState;
      private Drawable pinnedHeaderShadowDrawable;
      private boolean ignoreSearchCollapse;
-@@ -2306,6 +2307,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
-         actionModeLayout.addView(deleteItem, new LinearLayout.LayoutParams(dp(54), ViewGroup.LayoutParams.MATCH_PARENT));
-         actionModeViews.add(deleteItem);
-         deleteItem.setOnClickListener(v -> onActionBarItemClick(v, delete));
+@@ -2067,6 +2068,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+             updateForwardItem();
+         }
+         deleteItem = createActionModeItem(context, delete, R.drawable.msg_delete, getString("Delete", R.string.Delete));
 +        inu_selectionMenu = desu.inugram.helpers.chat.ChatActionsHelper.createSharedMediaMenu(this, profileActivity, dialog_id, topicId, selectedFiles, actionModeLayout, actionModeViews, v -> onActionBarItemClick(v, forward));
  
          photoVideoAdapter = new SharedPhotoVideoAdapter(context) {
              @Override
-@@ -5372,6 +5374,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -5138,6 +5140,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
                  cantDeleteMessagesCount = 0;
              }, null, resourcesProvider);
          } else if (id == forward) {
@@ -65,7 +65,7 @@ index 0000000..0000000 100644
              if (userInfo != null) {
                  if (profileActivity.getMessagesController().isUserNoForwards(userInfo)) {
                      if (fwdRestrictedHint != null) {
-@@ -5433,8 +5436,9 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -5199,8 +5202,9 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
                          if (message != null) {
                              profileActivity.getSendMessagesHelper().sendMessage(SendMessagesHelper.SendMessageParams.of(message.toString(), did, null, null, null, true, null, null, null, true, 0, 0, null, false));
                          }
@@ -76,7 +76,7 @@ index 0000000..0000000 100644
                      fragment1.finishFragment();
                      UndoView undoView = null;
                      if (profileActivity instanceof ProfileActivity) {
-@@ -6194,6 +6198,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -5962,6 +5966,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
      }
  
      private void updateStoriesPinButton() {

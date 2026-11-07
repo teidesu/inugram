@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -2394,6 +2394,17 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -2392,6 +2392,17 @@ public class MessagesController extends BaseController implements NotificationCe
                      }
                      sortDialogs(null);
                      getNotificationCenter().postNotificationName(NotificationCenter.dialogsNeedReload);
@@ -34,7 +34,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
-@@ -3434,10 +3434,10 @@ public class MessagesStorage extends BaseController {
+@@ -3552,10 +3552,10 @@ public class MessagesStorage extends BaseController {
                              existingIds.remove(id);
                              if (!existingDialogsIds.remove(id)) {
                                  changed = true;
@@ -49,7 +49,7 @@ index 0000000..0000000 100644
                              }
                          }
                          if (secretChatsMap != null) {
-@@ -3553,19 +3553,17 @@ public class MessagesStorage extends BaseController {
+@@ -3671,19 +3671,17 @@ public class MessagesStorage extends BaseController {
                  TLRPC.messages_Dialogs dialogs;
                  if (!dialogsToLoad.isEmpty()) {
                      dialogs = loadDialogsByIds(TextUtils.join(",", dialogsToLoad), usersToLoad, chatsToLoad, new ArrayList<>());
@@ -71,7 +71,7 @@ index 0000000..0000000 100644
                      }
                  }
                  ArrayList<TLRPC.Chat> chats = new ArrayList<>();
-@@ -3574,6 +3572,20 @@ public class MessagesStorage extends BaseController {
+@@ -3692,6 +3690,20 @@ public class MessagesStorage extends BaseController {
                      for (int a = 0, N = chats.size(); a < N; a++) {
                          TLRPC.Chat chat = chats.get(a);
                          chatsToLoadMap.remove(chat.id);

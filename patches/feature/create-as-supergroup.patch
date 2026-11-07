@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/GroupCreateFinalActivit
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/GroupCreateFinalActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/GroupCreateFinalActivity.java
-@@ -108,6 +108,7 @@ public class GroupCreateFinalActivity extends BaseFragment implements Notificati
+@@ -110,6 +110,7 @@ public class GroupCreateFinalActivity extends BaseFragment implements Notificati
      private String nameToSet;
      private int chatType;
      private boolean canToggleTopics;
@@ -19,7 +19,7 @@ index 0000000..0000000 100644
  
      private RLottieDrawable cameraDrawable;
      
-@@ -624,6 +625,14 @@ public class GroupCreateFinalActivity extends BaseFragment implements Notificati
+@@ -626,6 +627,14 @@ public class GroupCreateFinalActivity extends BaseFragment implements Notificati
                  });
                  presentFragment(fragment);
              }
@@ -34,7 +34,7 @@ index 0000000..0000000 100644
              if (view instanceof TextCell && chatType != ChatObject.CHAT_TYPE_FORUM) {
                  if (popupWindow != null && popupWindow.isShowing()) {
                      return;
-@@ -682,7 +691,7 @@ public class GroupCreateFinalActivity extends BaseFragment implements Notificati
+@@ -684,7 +693,7 @@ public class GroupCreateFinalActivity extends BaseFragment implements Notificati
                  createAfterUpload = true;
              } else {
                  showEditDoneProgress(true);
@@ -43,7 +43,7 @@ index 0000000..0000000 100644
              }
          });
  
-@@ -721,7 +730,7 @@ public class GroupCreateFinalActivity extends BaseFragment implements Notificati
+@@ -723,7 +732,7 @@ public class GroupCreateFinalActivity extends BaseFragment implements Notificati
                      if (delegate != null) {
                          delegate.didStartChatCreation();
                      }
@@ -52,7 +52,7 @@ index 0000000..0000000 100644
                  }
                  showAvatarProgress(false, true);
                  avatarEditor.setImageDrawable(null);
-@@ -902,6 +911,7 @@ public class GroupCreateFinalActivity extends BaseFragment implements Notificati
+@@ -904,6 +913,7 @@ public class GroupCreateFinalActivity extends BaseFragment implements Notificati
          private final static int VIEW_TYPE_TEXT_INFO_CELL = 5;
          private final static int VIEW_TYPE_TOPICS = 6;
          private final static int VIEW_TYPE_LAST_EMPTY_VIEW = 7;
@@ -60,7 +60,7 @@ index 0000000..0000000 100644
  
          ArrayList<InnerItem> items = new ArrayList<>();
  
-@@ -917,6 +927,9 @@ public class GroupCreateFinalActivity extends BaseFragment implements Notificati
+@@ -919,6 +929,9 @@ public class GroupCreateFinalActivity extends BaseFragment implements Notificati
                  items.add(new InnerItem(VIEW_TYPE_TOPICS));
                  items.add(new InnerItem(VIEW_TYPE_TEXT_INFO_CELL, getString(R.string.ForumToggleDescription)));
              } else {
@@ -70,7 +70,7 @@ index 0000000..0000000 100644
                  items.add(new InnerItem(VIEW_TYPE_AUTO_DELETE));
                  items.add(new InnerItem(VIEW_TYPE_TEXT_INFO_CELL, getString(R.string.GroupCreateAutodeleteDescription)));
              }
-@@ -944,6 +957,7 @@ public class GroupCreateFinalActivity extends BaseFragment implements Notificati
+@@ -946,6 +959,7 @@ public class GroupCreateFinalActivity extends BaseFragment implements Notificati
  
          @Override
          public boolean isEnabled(RecyclerView.ViewHolder holder) {
@@ -78,7 +78,7 @@ index 0000000..0000000 100644
              return holder.getItemViewType() == VIEW_TYPE_TEXT_SETTINGS || holder.getItemViewType() == VIEW_TYPE_AUTO_DELETE || holder.getItemViewType() == VIEW_TYPE_TOPICS && canToggleTopics;
          }
  
-@@ -980,6 +994,9 @@ public class GroupCreateFinalActivity extends BaseFragment implements Notificati
+@@ -982,6 +996,9 @@ public class GroupCreateFinalActivity extends BaseFragment implements Notificati
                      view = new View(context);
                      view.setTag(RecyclerListView.TAG_NOT_SECTION);
                      break;
@@ -88,7 +88,7 @@ index 0000000..0000000 100644
              }
              return new RecyclerListView.Holder(view);
          }
-@@ -1029,6 +1046,11 @@ public class GroupCreateFinalActivity extends BaseFragment implements Notificati
+@@ -1031,6 +1048,11 @@ public class GroupCreateFinalActivity extends BaseFragment implements Notificati
                      TextInfoPrivacyCell textInfoPrivacyCell = (TextInfoPrivacyCell) holder.itemView;
                      textInfoPrivacyCell.setText(items.get(position).string);
                      break;

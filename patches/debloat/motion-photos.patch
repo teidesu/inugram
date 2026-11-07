@@ -4,27 +4,36 @@ Date: Wed, 22 Apr 2026 08:10:29 +0300
 Subject: disable "motion photos" throughout the app, both sending and rendering
 
 ---
- .../main/java/org/telegram/messenger/MediaController.java  | 1 +
+ .../main/java/org/telegram/messenger/MediaController.java  | 3 ++-
  .../main/java/org/telegram/messenger/MessageObject.java    | 7 ++++++-
- 2 files changed, 7 insertions(+), 1 deletion(-)
+ 2 files changed, 8 insertions(+), 2 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
-@@ -634,6 +634,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+@@ -638,6 +638,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
          @Override
          public boolean isLivePhoto() {
-             if (isVideo || parsedXmp) return isLivePhoto;
+             if (parsedXmp) return isLivePhoto;
 +            if (desu.inugram.InuConfig.DISABLE_MOTION_PHOTOS.getValue()) return false;
-             parsedXmp = true;
-             final long start = System.currentTimeMillis();
-             try {
+             synchronized (this) {
+                 if (!parsedXmp) {
+                     if (!isVideo) {
+@@ -650,7 +651,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+         }
+ 
+         public boolean isLivePhotoLoaded() {
+-            return parsedXmp || isVideo && !loadingLivePhoto;
++            return parsedXmp || isVideo && !loadingLivePhoto || desu.inugram.InuConfig.DISABLE_MOTION_PHOTOS.getValue();
+         }
+ 
+         // UI thread only: returns true if isLivePhoto() won't block, otherwise parses it once on a background queue and calls onLoaded on the UI thread
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
-@@ -10694,6 +10694,9 @@ public class MessageObject {
+@@ -10991,6 +10991,9 @@ public class MessageObject {
          if (getMedia(message) instanceof TLRPC.TL_messageMediaWebPage) {
              return isVideoDocument(getMedia(message).webpage.document);
          }
@@ -34,7 +43,7 @@ index 0000000..0000000 100644
          return getMedia(message) != null && isVideoDocument(getMedia(message).document);
      }
  
-@@ -11218,7 +11221,8 @@ public class MessageObject {
+@@ -11515,7 +11518,8 @@ public class MessageObject {
      }
  
      public boolean isDocument() {
@@ -44,7 +53,7 @@ index 0000000..0000000 100644
      }
  
      public boolean isVoice() {
-@@ -11238,6 +11242,7 @@ public class MessageObject {
+@@ -11535,6 +11539,7 @@ public class MessageObject {
      }
  
      public boolean isLivePhoto() {

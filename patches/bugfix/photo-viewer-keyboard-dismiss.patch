@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaL
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
-@@ -1340,7 +1340,7 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -1395,7 +1395,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
                      object.viewX = coords[0];
                      object.viewY = coords[1] - (Build.VERSION.SDK_INT >= 21 ? 0 : AndroidUtilities.statusBarHeight);
                      object.parentView = listView;
@@ -25,7 +25,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-@@ -9353,14 +9353,18 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -9477,14 +9477,18 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
      private int reasonsToHideMainContent = 0;
      private int reasonsToHideDecorView = 0;
  

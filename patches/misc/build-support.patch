@@ -58,7 +58,7 @@ index 0000000..0000000 100644
      implementation 'androidx.core:core:1.16.0'
      implementation 'androidx.palette:palette:1.0.0'
      implementation 'androidx.exifinterface:exifinterface:1.3.6'
-@@ -72,7 +74,7 @@ dependencies {
+@@ -70,7 +72,7 @@ dependencies {
      implementation 'com.google.android.gms:play-services-location:21.0.1'
      implementation 'com.google.android.gms:play-services-wallet:19.1.0'
      implementation 'com.googlecode.mp4parser:isoparser:1.0.6'
@@ -67,7 +67,7 @@ index 0000000..0000000 100644
      implementation 'com.google.mlkit:language-id:17.0.6'
      implementation 'com.android.billingclient:billing:8.0.0'
      implementation 'com.google.code.gson:gson:2.11.0'
-@@ -102,11 +104,78 @@ dependencies {
+@@ -107,11 +109,78 @@ dependencies {
      api project(":TMessagesProj_Modules:media3:media-lib-session")
      api project(':jlatexmath')
  
@@ -147,7 +147,7 @@ index 0000000..0000000 100644
  }
  
  android {
-@@ -114,10 +183,19 @@ android {
+@@ -119,10 +188,19 @@ android {
      buildToolsVersion '36.0.0'
      ndkVersion "27.2.12479018"
  
@@ -167,7 +167,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -130,23 +208,34 @@ android {
+@@ -135,23 +213,34 @@ android {
      compileOptions {
          sourceCompatibility JavaVersion.VERSION_1_8
          targetCompatibility JavaVersion.VERSION_1_8
@@ -208,7 +208,7 @@ index 0000000..0000000 100644
              }
          }
      }
-@@ -157,64 +246,13 @@ android {
+@@ -162,64 +251,13 @@ android {
              shrinkResources false
              multiDexEnabled true
              ndk.debugSymbolLevel = 'FULL'
@@ -277,7 +277,7 @@ index 0000000..0000000 100644
          }
  
          release {
-@@ -222,12 +260,13 @@ android {
+@@ -227,12 +265,13 @@ android {
              shrinkResources false
              multiDexEnabled true
              ndk.debugSymbolLevel = 'FULL'
@@ -294,7 +294,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -245,7 +284,6 @@ def getProps(String propName) {
+@@ -250,7 +289,6 @@ def getProps(String propName) {
          return "";
      }
  }
@@ -302,7 +302,7 @@ index 0000000..0000000 100644
  
  task checkVisibility {
      doFirst {
-@@ -267,4 +305,10 @@ task checkVisibility {
+@@ -272,4 +310,10 @@ task checkVisibility {
      }
  }
  
@@ -431,7 +431,7 @@ diff --git a/TMessagesProj/jni/CMakeLists.txt b/TMessagesProj/jni/CMakeLists.txt
 index 0000000..0000000 100644
 --- a/TMessagesProj/jni/CMakeLists.txt
 +++ b/TMessagesProj/jni/CMakeLists.txt
-@@ -174,6 +174,9 @@ set_target_properties(sqlite PROPERTIES
+@@ -176,6 +176,9 @@ set_target_properties(sqlite PROPERTIES
          ANDROID_ARM_MODE arm)
  target_compile_definitions(sqlite PUBLIC
          NULL=0 SOCKLEN_T=socklen_t LOCALE_NOT_USED ANDROID_NDK DISABLE_IMPORTGL AVOID_TABLES ANDROID_TILE_BASED_DECODE HAVE_STRCHRNUL=0 ANDROID_ARMV6_IDCT)
@@ -458,7 +458,7 @@ diff --git a/TMessagesProj/proguard-rules.pro b/TMessagesProj/proguard-rules.pro
 index 0000000..0000000 100644
 --- a/TMessagesProj/proguard-rules.pro
 +++ b/TMessagesProj/proguard-rules.pro
-@@ -55,6 +55,21 @@
+@@ -76,6 +76,21 @@
  -keep class ru.noties.jlatexmath.** { *; }
  -dontwarn org.scilab.forge.jlatexmath.**
  
@@ -542,7 +542,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
 +++ b/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
-@@ -1068,7 +1068,7 @@ public class ConnectionsManager extends BaseController {
+@@ -1092,7 +1092,7 @@ public class ConnectionsManager extends BaseController {
          if (Build.VERSION.SDK_INT < 19) {
              return USE_IPV4_ONLY;
          }
@@ -571,7 +571,7 @@ index 0000000..0000000 100644
  
  import org.json.JSONArray;
  import org.json.JSONException;
-@@ -2982,7 +2980,7 @@ public class PaymentFormActivity extends BaseFragment implements NotificationCen
+@@ -2984,7 +2982,7 @@ public class PaymentFormActivity extends BaseFragment implements NotificationCen
                              put("parameters", new JSONObject() {{
                                  put("gateway", "stripe");
                                  put("stripe:publishableKey", providerApiKey);
@@ -580,7 +580,7 @@ index 0000000..0000000 100644
                              }});
                          }
                      }});
-@@ -3417,7 +3415,7 @@ public class PaymentFormActivity extends BaseFragment implements NotificationCen
+@@ -3419,7 +3417,7 @@ public class PaymentFormActivity extends BaseFragment implements NotificationCen
                                  cardName = "Android Pay";
                              }
                          } else {
@@ -589,7 +589,7 @@ index 0000000..0000000 100644
                              paymentJson = String.format(Locale.US, "{\"type\":\"%1$s\", \"id\":\"%2$s\"}", t.getType(), t.getId());
                              Card card = t.getCard();
                              cardName = card.getBrand() + " *" + card.getLast4();
-@@ -3906,16 +3904,16 @@ public class PaymentFormActivity extends BaseFragment implements NotificationCen
+@@ -3908,16 +3906,16 @@ public class PaymentFormActivity extends BaseFragment implements NotificationCen
              month = null;
              year = null;
          }
@@ -613,7 +613,7 @@ index 0000000..0000000 100644
          cardName = card.getBrand() + " *" + card.getLast4();
  
          boolean skipDateCheck = false;
-@@ -3932,7 +3930,7 @@ public class PaymentFormActivity extends BaseFragment implements NotificationCen
+@@ -3934,7 +3932,7 @@ public class PaymentFormActivity extends BaseFragment implements NotificationCen
          if (!card.validateNumber()) {
              shakeField(FIELD_CARD);
              return false;
@@ -622,7 +622,7 @@ index 0000000..0000000 100644
              shakeField(FIELD_EXPIRE_DATE);
              return false;
          } else if (need_card_name && inputFields[FIELD_CARDNAME].length() == 0) {
-@@ -3951,8 +3949,8 @@ public class PaymentFormActivity extends BaseFragment implements NotificationCen
+@@ -3953,8 +3951,8 @@ public class PaymentFormActivity extends BaseFragment implements NotificationCen
          showEditDoneProgress(true, true);
          try {
              if ("stripe".equals(paymentForm.native_provider)) {
@@ -637,7 +637,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
-@@ -954,29 +954,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -1038,29 +1038,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
      }
  
      public String getVersionName() {
@@ -1144,9 +1144,9 @@ index 0000000..0000000 100644
 --- a/build.gradle
 +++ b/build.gradle
 @@ -10,7 +10,7 @@ buildscript {
-         classpath 'com.google.gms:google-services:4.3.15'
+         classpath 'com.google.gms:google-services:4.5.0'
          classpath 'com.huawei.agconnect:agcp:1.9.1.301'
-         classpath 'com.google.firebase:firebase-crashlytics-gradle:2.9.0'
+         classpath 'com.google.firebase:firebase-crashlytics-gradle:3.0.8'
 -        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.0"
 +        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.20"
      }

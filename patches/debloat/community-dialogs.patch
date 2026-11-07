@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
-@@ -209,11 +209,17 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
+@@ -211,11 +211,17 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
      public final StoriesUtilities.AvatarStoryParams storyParams = new StoriesUtilities.AvatarStoryParams(false) {
          @Override
          public boolean isAvatarClickable(long dialogId, TLRPC.Chat chat, TLRPC.User user) {
@@ -29,7 +29,7 @@ index 0000000..0000000 100644
              if (parentFragment != null && !insideCommunityList) {
                  if (dialogId > 0) {
                      final TLRPC.User user = MessagesController.getInstance(currentAccount).getUser(dialogId);
-@@ -252,6 +258,9 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
+@@ -254,6 +260,9 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
              if (delegate == null) {
                  return;
              }
@@ -39,7 +39,7 @@ index 0000000..0000000 100644
              delegate.showChatPreview(DialogCell.this);
          }
      };
-@@ -4800,7 +4809,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
+@@ -4846,7 +4855,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                  storyParams.forceState = s;
              }
  

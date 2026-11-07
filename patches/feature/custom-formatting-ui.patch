@@ -13,7 +13,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextBold
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextBoldCursor.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextBoldCursor.java
-@@ -1207,8 +1207,10 @@ public class EditTextBoldCursor extends EditTextEffects {
+@@ -1250,8 +1250,10 @@ public class EditTextBoldCursor extends EditTextEffects {
              };
              callback.onCreateActionMode(floatingActionMode, floatingActionMode.getMenu());
              extendActionMode(floatingActionMode, floatingActionMode.getMenu());
@@ -30,16 +30,16 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextCapt
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextCaption.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextCaption.java
-@@ -81,7 +81,7 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
-     private int lineCount;
+@@ -83,7 +83,7 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
      private boolean isInitLineCount;
      private final Theme.ResourcesProvider resourcesProvider;
+     private int themedQuoteColor;
 -    private AlertDialog creationLinkDialog;
 +    public AlertDialog creationLinkDialog;
      public boolean adaptiveCreateLinkDialog;
  
      public interface EditTextCaptionDelegate {
-@@ -243,7 +243,8 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
+@@ -245,7 +245,8 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
          }
          final int setSelection = QuoteSpan.putQuoteToEditable(getText(), start, end, collapse);
          if (setSelection >= 0) {
@@ -53,7 +53,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextEffe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextEffects.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextEffects.java
-@@ -450,7 +450,19 @@ public class EditTextEffects extends EditText {
+@@ -451,7 +451,19 @@ public class EditTextEffects extends EditText {
          invalidateSpoilers();
      }
  

@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -6869,6 +6869,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -6791,6 +6791,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          }
      }
  
@@ -32,7 +32,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
-@@ -341,16 +341,15 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -356,16 +356,15 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          tabs[INDEX_SETTINGS] = GlassTabView.createMainTab(context, resourceProvider, GlassTabView.TabAnimation.SETTINGS, R.string.Settings);
          tabs[INDEX_CALLS] = GlassTabView.createMainTab(context, resourceProvider, GlassTabView.TabAnimation.CALLS, R.string.MainTabsCalls);
          tabs[INDEX_PROFILE] = GlassTabView.createAvatar(context, resourceProvider, currentAccount, R.string.MainTabsProfile);
@@ -50,7 +50,7 @@ index 0000000..0000000 100644
          for (GlassTabView tab : tabs) {
              tab.setMainTabsCompact(compact);
          }
-@@ -892,6 +891,16 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -910,6 +909,16 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          }
      }
  

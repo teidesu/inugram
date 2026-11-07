@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerList
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java
-@@ -333,6 +333,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -334,6 +334,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
          private int count;
  
          private ArrayList<Integer> hashes = new ArrayList<>();
@@ -19,7 +19,7 @@ index 0000000..0000000 100644
  
          public void cleanupCache() {
              if (sectionCache == null) {
-@@ -450,9 +451,10 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -451,9 +452,10 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
  
          public void update(boolean diff) {
              ArrayList<Integer> oldHashes = new ArrayList<>(hashes);
@@ -31,7 +31,7 @@ index 0000000..0000000 100644
                  DiffUtil.calculateDiff(new DiffUtil.Callback() {
                      @Override
                      public int getOldListSize() {
-@@ -482,6 +484,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -483,6 +485,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
          public void updateHashes() {
              cleanupCache();
  

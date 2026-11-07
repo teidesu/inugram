@@ -193,7 +193,7 @@ index 0000000..0000000 100644
                          AndroidUtilities.runOnUIThread(() -> {
                              final BaseFragment lastFragment = LaunchActivity.getSafeLastFragment();
                              if (lastFragment == null) return;
-@@ -993,6 +999,7 @@ public class GramWallet implements GramWalletStreaming.IGramWalletStreamingSubsc
+@@ -1093,6 +1099,7 @@ public class GramWallet implements GramWalletStreaming.IGramWalletStreamingSubsc
          public TL_wallet.sendTransfer transfer;
          public SecretPhrase newSecretPhrase;
          public byte[] newPublicKey;
@@ -201,7 +201,7 @@ index 0000000..0000000 100644
  
          @Override public void close() {
              if (newSecretPhrase != null) newSecretPhrase.close();
-@@ -1121,6 +1128,7 @@ public class GramWallet implements GramWalletStreaming.IGramWalletStreamingSubsc
+@@ -1221,6 +1228,7 @@ public class GramWallet implements GramWalletStreaming.IGramWalletStreamingSubsc
                  pending.msg_hash = sentTransfer.msg_hash;
                  pending.publicKey = prepared.newPublicKey;
                  pending.secretPhrase = replacement;
@@ -209,7 +209,7 @@ index 0000000..0000000 100644
  //                pending.publicKey = publicKey;
  //                pending.secretPhrase = currentPhrase;
                  if (sentTransfer.transaction != null) {
-@@ -1221,6 +1229,11 @@ public class GramWallet implements GramWalletStreaming.IGramWalletStreamingSubsc
+@@ -1321,6 +1329,11 @@ public class GramWallet implements GramWalletStreaming.IGramWalletStreamingSubsc
                      whenDone.run(error);
                  };
                  log("enable backup: got secret phrase");
@@ -221,7 +221,7 @@ index 0000000..0000000 100644
                  final byte[] public_key;
                  try {
                      public_key = WalletEngine2.secretPhraseToPublicKey(phrase);
-@@ -2056,6 +2069,7 @@ public class GramWallet implements GramWalletStreaming.IGramWalletStreamingSubsc
+@@ -2156,6 +2169,7 @@ public class GramWallet implements GramWalletStreaming.IGramWalletStreamingSubsc
              return;
          }
          final SecretPhrase owned = phrase.copy();
@@ -229,7 +229,7 @@ index 0000000..0000000 100644
          log("import wallet: requesting proof challenge");
          PasswordRequest.<TL_wallet.WalletState>open(currentAccount, (password, send) -> {
              proveChallenge(owned, true, (proof, err2) -> {
-@@ -2083,6 +2097,7 @@ public class GramWallet implements GramWalletStreaming.IGramWalletStreamingSubsc
+@@ -2183,6 +2197,7 @@ public class GramWallet implements GramWalletStreaming.IGramWalletStreamingSubsc
                  return;
              }
              updateState(state);
@@ -346,10 +346,10 @@ index 0000000..0000000 100644
 +import desu.inugram.helpers.wallet.WalletKeyHelper;
 +import desu.inugram.helpers.wallet.WalletKeyInput;
 +import desu.inugram.ui.ExpandableFrameLayout;
+ import android.graphics.PorterDuff;
  import org.telegram.ui.Wallet.GramWallet.SecretPhrase;
  import org.telegram.messenger.LocaleController;
- 
-@@ -61,6 +64,8 @@ public class WalletImportFragment extends BaseFragment {
+@@ -63,6 +66,8 @@ public class WalletImportFragment extends BaseFragment {
      private int keyboardInset;
      private boolean wipe;
      private byte[] matchPublicKey;
@@ -358,7 +358,7 @@ index 0000000..0000000 100644
  
      public WalletImportFragment setWipe(boolean wipe) {
          this.wipe = wipe;
-@@ -148,7 +153,8 @@ public class WalletImportFragment extends BaseFragment {
+@@ -150,7 +155,8 @@ public class WalletImportFragment extends BaseFragment {
          }
          root.addView(subtitleView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 32, 0, 32, 8));
  
@@ -368,7 +368,7 @@ index 0000000..0000000 100644
              setCount(tab == 0 ? 12 : 24);
          }, resourceProvider);
          tabs.shadowed = true;
-@@ -163,12 +169,18 @@ public class WalletImportFragment extends BaseFragment {
+@@ -165,12 +171,18 @@ public class WalletImportFragment extends BaseFragment {
          cellsContainer.setClipChildren(false);
          root.addView(cellsContainer, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 0, 16, 0, 0));
  
@@ -388,7 +388,7 @@ index 0000000..0000000 100644
  
          buildCells(context);
          updateImportButton();
-@@ -176,6 +188,19 @@ public class WalletImportFragment extends BaseFragment {
+@@ -178,6 +190,19 @@ public class WalletImportFragment extends BaseFragment {
          return fragmentView;
      }
  
@@ -408,7 +408,7 @@ index 0000000..0000000 100644
      private void setCount(int count) {
          if (currentCount == count) {
              return;
-@@ -240,6 +265,11 @@ public class WalletImportFragment extends BaseFragment {
+@@ -242,6 +267,11 @@ public class WalletImportFragment extends BaseFragment {
      }
  
      private void updateImportButton() {
@@ -420,7 +420,7 @@ index 0000000..0000000 100644
          boolean allFilled = true;
          for (WalletWordCell cell : cells) {
              if (cell.isEmpty()) {
-@@ -257,7 +287,8 @@ public class WalletImportFragment extends BaseFragment {
+@@ -259,7 +289,8 @@ public class WalletImportFragment extends BaseFragment {
          for (WalletWordCell cell : cells) {
              words.add(cell.getWord().toLowerCase().trim());
          }
@@ -430,7 +430,7 @@ index 0000000..0000000 100644
  
              importButton.setLoading(true);
  
-@@ -326,6 +357,7 @@ public class WalletImportFragment extends BaseFragment {
+@@ -328,6 +359,7 @@ public class WalletImportFragment extends BaseFragment {
              final BaseFragment previousFragment = getParentLayout() != null && getParentLayout().getFragmentStack().size() > 1
                      ? getParentLayout().getFragmentStack().get(getParentLayout().getFragmentStack().size() - 2)
                      : null;
@@ -438,7 +438,7 @@ index 0000000..0000000 100644
              wallet.importWallet(phrase, error -> {
                  importButton.setLoading(false);
                  if ("WRONG_CONTRACT".equalsIgnoreCase(error) || "INVALID_PHRASE".equalsIgnoreCase(error)) {
-@@ -349,11 +381,18 @@ public class WalletImportFragment extends BaseFragment {
+@@ -351,11 +383,18 @@ public class WalletImportFragment extends BaseFragment {
                                  .show();
                      }
                      finishFragment();
@@ -468,7 +468,7 @@ index 0000000..0000000 100644
  import static org.telegram.messenger.AndroidUtilities.dp;
  import static org.telegram.messenger.AndroidUtilities.getAccountInProduction;
  import static org.telegram.messenger.LocaleController.getString;
-@@ -116,6 +117,7 @@ public class WalletKeysBackupFragment extends UniversalFragment implements Notif
+@@ -118,6 +119,7 @@ public class WalletKeysBackupFragment extends UniversalFragment implements Notif
      private final int BTN_ENABLE_BACKUP = 2;
      private final int BTN_DISABLE_BACKUP = 3;
      private final int BTN_DELETE = 4;
@@ -476,7 +476,7 @@ index 0000000..0000000 100644
  
      @Override
      protected void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
-@@ -124,10 +126,11 @@ public class WalletKeysBackupFragment extends UniversalFragment implements Notif
+@@ -126,10 +128,11 @@ public class WalletKeysBackupFragment extends UniversalFragment implements Notif
          if (wallet.canExportPhrase() || wallet.cantAccessWallet()) {
              items.add(UItem.asHeader(LocaleController.getString(R.string.WalletRecoveryPhraseLearnTitle)));
              items.add(UItem.asButton(BTN_RECOVERY_PHRASE, LocaleController.getString(R.string.WalletRecoveryPhraseLearnButton)).accent());
@@ -489,7 +489,7 @@ index 0000000..0000000 100644
              items.add(UItem.asHeader(LocaleController.getString(R.string.WalletEncryptedBackup)));
              if (wallet.isBackupEnabled()) {
                  items.add(UItem.asButton(BTN_DISABLE_BACKUP, LocaleController.getString(R.string.WalletDisableBackup)).red());
-@@ -220,6 +223,8 @@ public class WalletKeysBackupFragment extends UniversalFragment implements Notif
+@@ -222,6 +225,8 @@ public class WalletKeysBackupFragment extends UniversalFragment implements Notif
  
      public static void showRecoveryPhraseAlert(Context context, ArrayList<String> words, Theme.ResourcesProvider resourcesProvider, Utilities.Callback<Utilities.Callback<String>> onImport, Runnable onDelete) {
          if (words == null) return;
@@ -498,7 +498,7 @@ index 0000000..0000000 100644
  
          BottomSheet.Builder b = new BottomSheet.Builder(context, false, resourcesProvider);
  
-@@ -271,6 +276,7 @@ public class WalletKeysBackupFragment extends UniversalFragment implements Notif
+@@ -273,6 +278,7 @@ public class WalletKeysBackupFragment extends UniversalFragment implements Notif
          columns.addView(gap, LayoutHelper.createLinear(10, 0));
          columns.addView(rightColumn, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1.0f, Gravity.TOP));
  
@@ -506,7 +506,7 @@ index 0000000..0000000 100644
          listWrap.addView(columns, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL));
          contentLayout.addView(listWrap, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 40, 32, 40, 28));
  
-@@ -385,6 +391,10 @@ public class WalletKeysBackupFragment extends UniversalFragment implements Notif
+@@ -390,6 +396,10 @@ public class WalletKeysBackupFragment extends UniversalFragment implements Notif
  
      @Override
      protected void onClick(UItem item, View view, int position, float x, float y) {
@@ -517,7 +517,7 @@ index 0000000..0000000 100644
          if (item.id == BTN_RECOVERY_PHRASE) {
              final GramWallet wallet = GramWallet.getInstance(currentAccount);
              if (wallet.cantAccessWallet()) {
-@@ -566,6 +576,11 @@ public class WalletKeysBackupFragment extends UniversalFragment implements Notif
+@@ -571,6 +581,11 @@ public class WalletKeysBackupFragment extends UniversalFragment implements Notif
          } else if (item.id == BTN_ENABLE_BACKUP) {
              final GramWallet wallet = GramWallet.getInstance(currentAccount);
              wallet.enableBackup(error -> {
@@ -540,7 +540,7 @@ index 0000000..0000000 100644
  import org.telegram.ui.Wallet.GramWallet.SecretPhrase;
  import org.telegram.messenger.LocaleController;
  
-@@ -40,6 +41,7 @@ public class WalletSecretPhraseFragment extends BaseFragment {
+@@ -41,6 +42,7 @@ public class WalletSecretPhraseFragment extends BaseFragment {
      private ButtonWithCounterView continueButton;
      private Runnable onTested;
      private boolean current;
@@ -548,7 +548,7 @@ index 0000000..0000000 100644
  
      public WalletSecretPhraseFragment onTested(Runnable onTested) {
          this.onTested = onTested;
-@@ -50,6 +52,8 @@ public class WalletSecretPhraseFragment extends BaseFragment {
+@@ -51,6 +53,8 @@ public class WalletSecretPhraseFragment extends BaseFragment {
          words.clear();
          if (secretPhrase != null && !secretPhrase.isEmpty()) {
              words.addAll(secretPhrase.toWordsForDisplay());
@@ -557,7 +557,7 @@ index 0000000..0000000 100644
          }
          updateWords();
          return this;
-@@ -112,6 +116,8 @@ public class WalletSecretPhraseFragment extends BaseFragment {
+@@ -113,6 +117,8 @@ public class WalletSecretPhraseFragment extends BaseFragment {
          subtitleView.setText(current ? LocaleController.getString(R.string.WalletCurrentSecretPhraseInfo) : LocaleController.getString(R.string.WalletNewSecretPhraseInfo));
          root.addView(subtitleView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 32, 0, 32, 8));
  
@@ -566,7 +566,7 @@ index 0000000..0000000 100644
          columns = new LinearLayout(context);
          columns.setOrientation(LinearLayout.HORIZONTAL);
          columns.setGravity(Gravity.CENTER_HORIZONTAL);
-@@ -140,11 +146,16 @@ public class WalletSecretPhraseFragment extends BaseFragment {
+@@ -141,11 +147,16 @@ public class WalletSecretPhraseFragment extends BaseFragment {
          columns.addView(new View(context), LayoutHelper.createLinear(10, 0));
          columns.addView(WalletKeysBackupFragment.makeWordColumn(context, resourceProvider, words, leftCount, words.size()), LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1.0f, Gravity.TOP));
          if (continueButton != null) {

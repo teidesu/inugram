@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -2244,7 +2244,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -2144,7 +2144,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                      } else if (currentChat != null) {
                          int id;
                          TLRPC.Chat chat = currentChat;
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
                              if (chat == null && (currentMessageObject.messageOwner.fwd_from.flags & 16) != 0) {
                                  id = currentMessageObject.messageOwner.fwd_from.saved_from_msg_id;
                              } else {
-@@ -5233,7 +5233,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -4657,7 +4657,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                              } else if (currentChat != null) {
                                  int id;
                                  TLRPC.Chat chat = currentChat;

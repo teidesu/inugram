@@ -13,7 +13,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayou
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java
-@@ -4259,14 +4259,7 @@ public class RichMessageLayout {
+@@ -4290,14 +4290,7 @@ public class RichMessageLayout {
              }
              tableLayout.setMinimumCellHeight(dp(block.compact ? 18 : 36));
  
@@ -33,7 +33,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ArticleViewer.java b/TM
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ArticleViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ArticleViewer.java
-@@ -9700,15 +9700,7 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
+@@ -9784,15 +9784,7 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
              tableLayout.setStriped(currentBlock.striped);
              tableLayout.setRtl(adapter != null && adapter.isRtl);
  

@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/FileLoadOperatio
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/FileLoadOperation.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/FileLoadOperation.java
-@@ -1173,6 +1173,7 @@ public class FileLoadOperation {
+@@ -1185,6 +1185,7 @@ public class FileLoadOperation {
                  }
              }
  
@@ -19,7 +19,7 @@ index 0000000..0000000 100644
              if (fileNameParts != null) {
                  cacheFileParts = new File(tempPath, fileNameParts);
                  if (!cacheFileTemp.exists()) {
-@@ -1191,6 +1192,7 @@ public class FileLoadOperation {
+@@ -1203,6 +1204,7 @@ public class FileLoadOperation {
                                  notLoadedBytesRanges.add(new Range(start, end));
                                  notRequestedBytesRanges.add(new Range(start, end));
                              }
@@ -27,7 +27,7 @@ index 0000000..0000000 100644
                          }
                      }
                  } catch (Exception e) {
-@@ -1215,8 +1217,9 @@ public class FileLoadOperation {
+@@ -1227,8 +1229,9 @@ public class FileLoadOperation {
                          requestedBytesCount = downloadedBytes = floorDiv(cacheFileTemp.length(), currentDownloadChunkSize) * currentDownloadChunkSize;
                      }
                      if (notLoadedBytesRanges != null && notLoadedBytesRanges.isEmpty()) {

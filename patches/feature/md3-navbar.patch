@@ -70,15 +70,15 @@ index 0000000..0000000 100644
      }
  
      public boolean isTabSelected() {
-@@ -270,6 +277,7 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
+@@ -287,6 +294,7 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
          colorSelected = Theme.getColor(Theme.key_glass_tabSelected, resourcesProvider);
          colorSelectedText = Theme.getColor(Theme.key_glass_tabSelectedText, resourcesProvider);
-         updateColors();
+         applyColors();
 +        M3MainTabsHelper.updateTabRipple(this, colorSelected);
          invalidate();
      }
  
-@@ -684,6 +692,20 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
+@@ -703,6 +711,20 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
  
      }
  
@@ -99,7 +99,7 @@ index 0000000..0000000 100644
      public void setMainTabsCompact(boolean compact) {
          if (textView.getVisibility() == (compact ? GONE : VISIBLE)) {
              return;
-@@ -698,9 +720,10 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
+@@ -717,9 +739,10 @@ public class GlassTabView extends FrameLayout implements MainTabsLayout.Tab, Fac
          }
  
          if (backupImageView != null) {
@@ -116,7 +116,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
-@@ -86,6 +86,7 @@ import java.util.ArrayList;
+@@ -91,6 +91,7 @@ import java.util.HashSet;
  import java.util.Collections;
  
  import desu.inugram.helpers.dialogs.MainTabsHelper;
@@ -124,7 +124,7 @@ index 0000000..0000000 100644
  import me.vkryl.android.animator.BoolAnimator;
  import me.vkryl.android.animator.FactorAnimator;
  
-@@ -334,6 +335,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -349,6 +350,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          final int paddingV = dp(mainTabsMargin + 4);
          tabsView.setPadding(paddingH, paddingV, paddingH, paddingV);
          tabsView.setMaxWidth(dp(tabsViewWidth));
@@ -132,7 +132,7 @@ index 0000000..0000000 100644
  
          tabs = new GlassTabView[5];
          tabs[INDEX_CHATS] = GlassTabView.createMainTab(context, resourceProvider, GlassTabView.TabAnimation.CHATS, R.string.MainTabsChats);
-@@ -351,6 +353,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -366,6 +368,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          tabsView.addTabToIgnoreClick(tabs[INDEX_PROFILE]);
          tabsView.addTabToIgnoreClick(tabs[INDEX_CALLS]);
          for (GlassTabView tab : tabs) {
@@ -140,7 +140,7 @@ index 0000000..0000000 100644
              tab.setMainTabsCompact(compact);
          }
  
-@@ -398,6 +401,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -416,6 +419,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          tabsViewBackground = iBlur3FactoryGlass.create(tabsView, BlurredBackgroundProviderImpl.mainTabs(resourceProvider));
          tabsViewBackground.setRadius(dp(MainTabsHelper.getMainTabsHeight() / 2f));
          tabsViewBackground.setPadding(dp(mainTabsMargin - 0.334f));
@@ -148,7 +148,7 @@ index 0000000..0000000 100644
          tabsView.setBackground(tabsViewBackground);
  
          BlurredBackgroundDrawableViewFactory iBlur3FactoryFade = new BlurredBackgroundDrawableViewFactory(iBlur3SourceColor);
-@@ -420,6 +424,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -438,6 +442,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          tabsViewWrapper.setOnClickListener(v -> {});
          tabsViewWrapper.addView(tabsView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, MainTabsHelper.getMainTabsHeightWithMargins(), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
          tabsViewWrapper.setClipToPadding(false);
@@ -156,7 +156,7 @@ index 0000000..0000000 100644
          contentView.addView(tabsViewWrapper, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM));
  
          updateLayoutWrapper = new UpdateLayoutWrapper(context);
-@@ -463,8 +468,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -481,8 +486,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          o.setBlur(true);
          o.translate(0, -dp(4));
          o.setGravity(Gravity.LEFT);
@@ -166,7 +166,7 @@ index 0000000..0000000 100644
          o.setScrimViewBackground(bg);
          o.show();
          return true;
-@@ -489,8 +493,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -507,8 +511,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          }
          o.setBlur(true);
          o.translate(0, -dp(4));
@@ -176,7 +176,7 @@ index 0000000..0000000 100644
          o.setScrimViewBackground(bg);
          o.show();
          return true;
-@@ -549,8 +552,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -567,8 +570,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
  //        o.setBlur(true);
          o.translate(-dp(8), -dp(4));
          o.setMaxHeight(dp(400));
@@ -186,7 +186,7 @@ index 0000000..0000000 100644
          o.setScrimViewBackground(bg);
          o.setGravity(Gravity.LEFT);
          o.show();
-@@ -696,8 +698,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -714,8 +716,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
  
          o.setBlur(true);
          o.translate(0, -dp(4));
@@ -196,7 +196,7 @@ index 0000000..0000000 100644
          o.setScrimViewBackground(bg);
  
          HintsController.Hint.AccountSwitchHint.doNotShowAgain();
-@@ -988,7 +989,9 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -1010,7 +1011,9 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
              }
          }
  
@@ -207,7 +207,7 @@ index 0000000..0000000 100644
  
          final WindowInsetsCompat consumed = isUpdateLayoutVisible ?
              insets.inset(0, 0, 0, navigationBarHeight) : insets;
-@@ -1278,6 +1281,9 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -1349,6 +1352,9 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          if (tabsView != null) {
              tabsView.invalidate();
          }

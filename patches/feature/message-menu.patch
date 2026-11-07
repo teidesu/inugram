@@ -17,7 +17,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarPopu
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarPopupWindow.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarPopupWindow.java
-@@ -416,6 +416,10 @@ public class ActionBarPopupWindow extends PopupWindow {
+@@ -418,6 +418,10 @@ public class ActionBarPopupWindow extends PopupWindow {
              linearLayout.addView(child, layoutParams);
          }
  
@@ -32,7 +32,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -31373,6 +31373,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -31994,6 +31994,10 @@ public class ChatActivity extends BaseFragment implements
              if (isReactionsViewAvailable || showMessageSeen || showSponsorInfo) {
                  flags |= ActionBarPopupWindow.ActionBarPopupWindowLayout.FLAG_USE_SWIPEBACK;
              }
@@ -43,16 +43,16 @@ index 0000000..0000000 100644
  
              ActionBarPopupWindow.ActionBarPopupWindowLayout popupLayout = new ActionBarPopupWindow.ActionBarPopupWindowLayout(getParentActivity(), R.drawable.popup_fixed_alert4, themeDelegate, flags);
              popupLayout.setMinimumWidth(AndroidUtilities.dp(200));
-@@ -31381,6 +31385,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -32002,6 +32006,8 @@ public class ChatActivity extends BaseFragment implements
              shadowDrawable.getPadding(backgroundPaddings);
-             popupLayout.setBackgroundColor(getThemedColor(Theme.key_actionBarDefaultSubmenuBackground));
+             ThemeBind.backgroundColor(popupLayout, Theme.key_actionBarDefaultSubmenuBackground, getResourceProvider());
              MessageSeenView messageSeenView = null;
 +            Runnable inu_viewsBottomAdder = null;
 +            boolean inu_addedBottomRegion = false;
  
              updateScrimSourceBitmap();
  
-@@ -31427,12 +31433,14 @@ public class ChatActivity extends BaseFragment implements
+@@ -32048,12 +32054,14 @@ public class ChatActivity extends BaseFragment implements
                      linearLayout.hasHeader = hasHeader;
                      linearLayout.setOrientation(LinearLayout.VERTICAL);
                      linearLayout.setLayoutParams(new FrameLayout.LayoutParams(AndroidUtilities.dp(200), AndroidUtilities.dp(6 * ReactedUsersListView.ITEM_HEIGHT_DP + (hasHeader ? 44 * 2 + 8 : 44)) + (!hasHeader ? 1 : 0)));
@@ -69,7 +69,7 @@ index 0000000..0000000 100644
  
                      int[] foregroundIndex = new int[1];
                      ReactedUsersListView reactedUsersListView = null;
-@@ -31480,12 +31488,15 @@ public class ChatActivity extends BaseFragment implements
+@@ -32101,12 +32109,15 @@ public class ChatActivity extends BaseFragment implements
                          }
                          tabsScrollView.setHorizontalScrollBarEnabled(false);
                          tabsScrollView.addView(tabsView);
@@ -89,7 +89,7 @@ index 0000000..0000000 100644
                          SparseIntArray cachedHeights = new SparseIntArray();
                          for (int i = 0; i < counters.size() + 1; i++) {
                              cachedHeights.put(i, head + AndroidUtilities.dp(ReactedUsersListView.ITEM_HEIGHT_DP * ReactedUsersListView.VISIBLE_ITEMS));
-@@ -31555,9 +31566,15 @@ public class ChatActivity extends BaseFragment implements
+@@ -32176,9 +32187,15 @@ public class ChatActivity extends BaseFragment implements
                                      reactedView.setSeenCallback(v::setSeenUsers);
                                  }
  
@@ -108,7 +108,7 @@ index 0000000..0000000 100644
                              }
  
                              @Override
-@@ -31604,8 +31621,14 @@ public class ChatActivity extends BaseFragment implements
+@@ -32225,8 +32242,14 @@ public class ChatActivity extends BaseFragment implements
                              }
                          });
                          linearLayout.addView(pager, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 0, 1f));
@@ -124,7 +124,7 @@ index 0000000..0000000 100644
  
                          reactedUsersListView = new ReactedUsersListView(contentView.getContext(), themeDelegate, currentAccount, primaryMessage, null, false, true)
                                  .setSeenUsers(reactedView.getSeenUsers())
-@@ -31692,6 +31715,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -32313,6 +32336,11 @@ public class ChatActivity extends BaseFragment implements
                          }
                      }
  
@@ -136,7 +136,7 @@ index 0000000..0000000 100644
                      foregroundIndex[0] = popupLayout.addViewToSwipeBack(linearLayout);
  
                      ReactedUsersListView finalReactedUsersListView = reactedUsersListView;
-@@ -31700,8 +31728,12 @@ public class ChatActivity extends BaseFragment implements
+@@ -32321,8 +32349,12 @@ public class ChatActivity extends BaseFragment implements
                              popupLayout.getSwipeBack().openForeground(foregroundIndex[0]);
                          }
                      });
@@ -151,7 +151,7 @@ index 0000000..0000000 100644
                  }
  
                  if (message.messageOwner != null && message.messageOwner.media instanceof TLRPC.TL_messageMediaPoll) {
-@@ -31735,7 +31767,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -32356,7 +32388,7 @@ public class ChatActivity extends BaseFragment implements
                      messageSeenLayout.addView(messageSeenView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
                      MessageSeenView finalMessageSeenView = messageSeenView;
  
@@ -160,7 +160,7 @@ index 0000000..0000000 100644
                      cell.setItemHeight(44);
                      cell.setTextAndIcon(LocaleController.getString(R.string.Back), R.drawable.msg_arrow_back);
                      cell.getTextView().setPadding(LocaleController.isRTL ? 0 : AndroidUtilities.dp(40), 0, LocaleController.isRTL ? AndroidUtilities.dp(40) : 0, 0);
-@@ -31747,8 +31779,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -32368,8 +32400,10 @@ public class ChatActivity extends BaseFragment implements
                      linearLayout.setOrientation(LinearLayout.VERTICAL);
                      RecyclerListView listView2 = finalMessageSeenView.createListView();
                      backContainer.addView(cell);
@@ -173,7 +173,7 @@ index 0000000..0000000 100644
                      backContainer.setOnClickListener(new View.OnClickListener() {
                          @Override
                          public void onClick(View view) {
-@@ -31794,7 +31828,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -32415,7 +32449,11 @@ public class ChatActivity extends BaseFragment implements
                              popupLayout.getSwipeBack().openForeground(foregroundIndex[0]);
                          }
                      });
@@ -186,7 +186,7 @@ index 0000000..0000000 100644
  
                      listView2.setOnItemClickListener((view1, position) -> {
                          TLObject object = finalMessageSeenView.users.get(position);
-@@ -31812,10 +31850,19 @@ public class ChatActivity extends BaseFragment implements
+@@ -32433,10 +32471,19 @@ public class ChatActivity extends BaseFragment implements
                          presentFragment(fragment);
                      });
  
@@ -208,16 +208,16 @@ index 0000000..0000000 100644
                  } else if (showPrivateMessageSeen) {
                      MessagePrivateSeenView messagePrivateSeenView = new MessagePrivateSeenView(getContext(), MessagePrivateSeenView.TYPE_SEEN, message, () -> {
                          closeMenu(true);
-@@ -32130,6 +32177,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -32751,6 +32798,8 @@ public class ChatActivity extends BaseFragment implements
                          popupLayout.addView(new ActionBarPopupWindow.GapView(contentView.getContext(), themeDelegate), LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 8));
                      }
                  }
 +                java.util.List<int[]> inu_bottomMenuRow = ChatHelper.extractBottomMenu(items, options, icons);
 +                ChatHelper.addTopRow(this, popupLayout, contentView.getContext(), themeDelegate, inu_bottomMenuRow, selectedObject, selectedObjectGroup);
                  scrimPopupWindowItems = new ActionBarMenuSubItem[items.size()];
+                 scrimPopupRedItem = null;
                  for (int a = 0, N = items.size(); a < N; a++) {
-                     final Integer option = options.get(a);
-@@ -32377,6 +32426,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -33012,6 +33061,7 @@ public class ChatActivity extends BaseFragment implements
                      layout.addView(infoText, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.FILL));
                      popupLayout.addView(layout);
                  }
@@ -225,7 +225,7 @@ index 0000000..0000000 100644
              }
  
              if (selectedObject != null && selectedObject.isEphemeral() && chatMode != MODE_WELCOME_MESSAGES && !showWelcomeMessageRevertOption(selectedObject)) {
-@@ -32448,7 +32498,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -33083,7 +33133,9 @@ public class ChatActivity extends BaseFragment implements
                  if (isReactionsAvailable && (!tags || !getMessagesController().premiumFeaturesBlocked())) {
                      int pad = 22;
                      int sPad = 24;
@@ -236,7 +236,7 @@ index 0000000..0000000 100644
  
                      ReactionsContainerLayout finalReactionsLayout = reactionsLayout;
                      reactionsLayout.setDelegate(new ReactionsContainerLayout.ReactionsContainerDelegate() {
-@@ -32485,8 +32537,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -33120,8 +33172,11 @@ public class ChatActivity extends BaseFragment implements
                          }
                      });
  
@@ -250,7 +250,7 @@ index 0000000..0000000 100644
                      scrimPopupContainerLayout.setReactionsLayout(reactionsLayout);
                      scrimPopupContainerLayout.setClipChildren(false);
                      MessageObject messageWithReactions = message;
-@@ -32520,6 +32575,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -33155,6 +33210,9 @@ public class ChatActivity extends BaseFragment implements
  
                  boolean showNoForwards = (isPeerNoForwards() || message.messageOwner.noforwards && currentUser != null && currentUser.bot) && message.messageOwner.action == null && message.isSent() && !message.isEditing() && chatMode != MODE_SCHEDULED && chatMode != MODE_SAVED && getDialogId() != UserObject.VERIFY;
                  scrimPopupContainerLayout.addView(popupLayout, LayoutHelper.createLinearRelatively(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT, isReactionsAvailable ? 16 : 0, 0, isReactionsAvailable ? 36 : 0, 0));
@@ -260,9 +260,9 @@ index 0000000..0000000 100644
                  scrimPopupContainerLayout.setPopupWindowLayout(popupLayout);
                  if (showNoForwards) {
                      popupLayout.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-@@ -32553,7 +32611,11 @@ public class ChatActivity extends BaseFragment implements
-                     FrameLayout fl = new FrameLayout(contentView.getContext());
+@@ -33189,7 +33247,11 @@ public class ChatActivity extends BaseFragment implements
                      fl.setBackground(shadowDrawable2);
+                     ThemeBind.drawableColorFilter(fl, shadowDrawable2, Theme.key_actionBarDefaultSubmenuBackground, getResourceProvider(), PorterDuff.Mode.MULTIPLY);
                      fl.addView(tv, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 11, 11, 11, 11));
 -                    scrimPopupContainerLayout.addView(fl, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT, isReactionsAvailable ? 16 : 0, -8, isReactionsAvailable ? 36 : 0, 0));
 +                    if (InuConfig.REACTION_BAR_BELOW.getValue()) {
@@ -273,9 +273,9 @@ index 0000000..0000000 100644
                      scrimPopupContainerLayout.applyViewBottom(fl);
                  }
  
-@@ -32576,7 +32638,11 @@ public class ChatActivity extends BaseFragment implements
-                     FrameLayout fl = new FrameLayout(contentView.getContext());
+@@ -33213,7 +33275,11 @@ public class ChatActivity extends BaseFragment implements
                      fl.setBackground(shadowDrawable2);
+                     ThemeBind.drawableColorFilter(fl, shadowDrawable2, Theme.key_actionBarDefaultSubmenuBackground, getResourceProvider(), PorterDuff.Mode.MULTIPLY);
                      fl.addView(tv, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 11, 11, 11, 11));
 -                    scrimPopupContainerLayout.addView(fl, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT, isReactionsAvailable ? 16 : 0, -8, isReactionsAvailable ? 36 : 0, 0));
 +                    if (InuConfig.REACTION_BAR_BELOW.getValue()) {
@@ -286,7 +286,7 @@ index 0000000..0000000 100644
                      scrimPopupContainerLayout.applyViewBottom(fl);
                  }
  
-@@ -32611,7 +32677,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -33248,7 +33314,9 @@ public class ChatActivity extends BaseFragment implements
                          }
  
                          if (stickerSets.size() > 0 && !getMessagesController().premiumFeaturesBlocked()) {
@@ -296,7 +296,7 @@ index 0000000..0000000 100644
  
                              View button = new MessageContainsEmojiButton(currentAccount, contentView.getContext(), themeDelegate, stickerSets, MessageContainsEmojiButton.EMOJI_TYPE);
                              button.setOnClickListener(e -> {
-@@ -32682,6 +32750,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -33319,6 +33387,9 @@ public class ChatActivity extends BaseFragment implements
              }
              scrimPopupWindow.setFocusable(true);
              scrimPopupContainerLayout.measure(View.MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(1000), View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(1000), View.MeasureSpec.AT_MOST));
@@ -371,7 +371,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/Cu
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/CustomEmojiReactionsWindow.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/CustomEmojiReactionsWindow.java
-@@ -386,7 +386,13 @@ public class CustomEmojiReactionsWindow {
+@@ -388,7 +388,13 @@ public class CustomEmojiReactionsWindow {
              reactionsContainerLayout.getLocationOnScreen(location);
          }
          windowView.getLocationOnScreen(windowLocation);
@@ -386,7 +386,7 @@ index 0000000..0000000 100644
  
          if (reactionsContainerLayout.showExpandableReactions()) {
              y = location[1] - windowLocation[1] - dp(12);
-@@ -812,6 +818,7 @@ public class CustomEmojiReactionsWindow {
+@@ -826,6 +832,7 @@ public class CustomEmojiReactionsWindow {
  
          @Override
          protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
@@ -394,7 +394,7 @@ index 0000000..0000000 100644
              int size;
              if (type == TYPE_STORY || type == TYPE_STORY_LIKES || type == TYPE_STICKER_SET_EMOJI) {
                  size = reactionsContainerLayout.getMeasuredWidth();
-@@ -819,7 +826,7 @@ public class CustomEmojiReactionsWindow {
+@@ -833,7 +840,7 @@ public class CustomEmojiReactionsWindow {
                  size = dp(36) * 8 + dp(12);
              } else {
                  size = Math.min(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.getSize(heightMeasureSpec));
@@ -403,7 +403,7 @@ index 0000000..0000000 100644
                  if (measuredSize < size) {
                      size = measuredSize;
                  }
-@@ -828,7 +835,7 @@ public class CustomEmojiReactionsWindow {
+@@ -842,7 +849,7 @@ public class CustomEmojiReactionsWindow {
              if (type == TYPE_STICKER_SET_EMOJI) {
                  height = dp(36) * 8 - dp(8);
              } else if (reactionsContainerLayout.showExpandableReactions()) {
@@ -416,7 +416,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ReactionsCon
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ReactionsContainerLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ReactionsContainerLayout.java
-@@ -162,7 +162,7 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
+@@ -164,7 +164,7 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
      public boolean hitLimit;
      private int currentAccount;
      private long waitingLoadingChatId;
@@ -425,7 +425,7 @@ index 0000000..0000000 100644
  
      private boolean mirrorX;
      private boolean isFlippedVertically;
-@@ -445,6 +445,15 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
+@@ -447,6 +447,15 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
          MediaDataController.getInstance(currentAccount).preloadDefaultReactions();
      }
  
@@ -441,7 +441,7 @@ index 0000000..0000000 100644
      public boolean showExpandableReactions() {
          return showExpandableReactions;
      }
-@@ -585,8 +594,9 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
+@@ -587,8 +596,9 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
          if (showCustomEmojiReaction()) {
              int i = 0;
              int n = (AndroidUtilities.displaySize.x - dp(36)) / dp(34);
@@ -453,7 +453,7 @@ index 0000000..0000000 100644
              }
              if (n < 1) {
                  n = 1;
-@@ -2520,7 +2530,7 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
+@@ -2555,7 +2565,7 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
              canvas.restore();
  
              canvas.save();
@@ -462,7 +462,7 @@ index 0000000..0000000 100644
              super.dispatchDraw(canvas);
              canvas.restore();
          }
-@@ -2576,6 +2586,9 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
+@@ -2611,6 +2621,9 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
                      customEmojiReactionsIconView = new InternalImageView(getContext());
                      customEmojiReactionsIconView.setImageResource(R.drawable.msg_reactions_expand);
                      customEmojiReactionsIconView.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
@@ -476,7 +476,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MessageSeenView.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/MessageSeenView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/MessageSeenView.java
-@@ -296,7 +296,8 @@ public class MessageSeenView extends FrameLayout {
+@@ -299,7 +299,8 @@ public class MessageSeenView extends FrameLayout implements Theme.Colorable {
              @Override
              protected void onMeasure(int widthSpec, int heightSpec) {
                  int height = MeasureSpec.getSize(heightSpec);
@@ -486,7 +486,7 @@ index 0000000..0000000 100644
  
                  if (listViewTotalHeight > height) {
                      listViewTotalHeight = height;
-@@ -310,7 +311,11 @@ public class MessageSeenView extends FrameLayout {
+@@ -313,7 +314,11 @@ public class MessageSeenView extends FrameLayout implements Theme.Colorable {
              @Override
              public void getItemOffsets(@NonNull Rect outRect, @NonNull View view, @NonNull RecyclerView parent, @NonNull RecyclerView.State state) {
                  int p = parent.getChildAdapterPosition(view);
@@ -503,7 +503,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SelectAnimatedEmojiDial
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SelectAnimatedEmojiDialog.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SelectAnimatedEmojiDialog.java
-@@ -164,9 +164,9 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
+@@ -165,9 +165,9 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
          return type == TYPE_SET_REPLY_ICON || type == TYPE_EMOJI_STATUS_CHANNEL_TOP || type == TYPE_EMOJI_STATUS_TOP || type == TYPE_AI_STYLE_ICON;
      }
  
@@ -515,7 +515,7 @@ index 0000000..0000000 100644
  
      private final int RECENT_MAX_LINES = 5;
      private final int EXPAND_MAX_LINES = 3;
-@@ -492,6 +492,10 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
+@@ -493,6 +493,10 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
          super(context);
          this.resourcesProvider = resourcesProvider;
          this.type = type;
@@ -526,7 +526,7 @@ index 0000000..0000000 100644
          this.includeEmpty = includeEmpty;
          this.baseFragment = baseFragment;
          this.includeHint = MessagesController.getGlobalMainSettings().getInt("emoji" + (type == TYPE_EMOJI_STATUS || type == TYPE_EMOJI_STATUS_TOP || type == TYPE_EMOJI_STATUS_CHANNEL || type == TYPE_EMOJI_STATUS_CHANNEL_TOP ? "status" : "reaction") + "usehint", 0) < 3;
-@@ -810,7 +814,7 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
+@@ -813,7 +817,7 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
                  } else if (position >= stickersStartRow && position < stickersEndRow) {
                      return 8;
                  } else {

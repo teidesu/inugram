@@ -5,14 +5,14 @@ Subject: hopefully fix pip opening with failed red snapshot
 
 ---
  .../telegram/messenger/AndroidUtilities.java  |  5 +--
- .../java/org/telegram/ui/PhotoViewer.java     | 36 +++++++++----------
- 2 files changed, 21 insertions(+), 20 deletions(-)
+ .../java/org/telegram/ui/PhotoViewer.java     | 32 +++++++++----------
+ 2 files changed, 19 insertions(+), 18 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
-@@ -1064,12 +1064,13 @@ public class AndroidUtilities {
+@@ -1127,12 +1127,13 @@ public class AndroidUtilities {
      }
  
      @RequiresApi(api = Build.VERSION_CODES.N)
@@ -32,18 +32,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMes
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
-@@ -1661,8 +1661,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
-                         }
-                     } else {
-                         currentBitmap = Bitmaps.createBitmap(videoSurfaceView.getWidth(), videoSurfaceView.getHeight(), Bitmap.Config.ARGB_8888);
--                        AndroidUtilities.getBitmapFromSurface(videoSurfaceView, currentBitmap, () -> {
--                            if (currentBitmap != null) {
-+                        AndroidUtilities.getBitmapFromSurface(videoSurfaceView, currentBitmap, success -> {
-+                            if (success && currentBitmap != null) {
-                                 if (textureImageView != null) {
-                                     textureImageView.setVisibility(View.VISIBLE);
-                                     textureImageView.setImageBitmap(currentBitmap);
-@@ -6586,8 +6586,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -6585,8 +6585,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
  
                  if (usedSurfaceView) {
                      Bitmap toBitmap = Bitmap.createBitmap(videoSurfaceView.getWidth(), videoSurfaceView.getHeight(), Bitmap.Config.ARGB_8888);
@@ -58,7 +47,7 @@ index 0000000..0000000 100644
                      });
                  } else {
                      Bitmap src = videoTextureView.getBitmap(videoTextureView.getWidth(), videoTextureView.getHeight());
-@@ -9053,8 +9057,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -9043,8 +9047,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                      try {
                          if (usedSurfaceView) {
                              Bitmap toBitmap = Bitmap.createBitmap(bitmap);
@@ -69,7 +58,7 @@ index 0000000..0000000 100644
                                  animation.replaceAnimatedBitmap(toBitmap);
                                  animation.invalidateInternal();
                              });
-@@ -9144,27 +9148,23 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -9134,27 +9138,23 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                      Bitmap bitmap = Bitmaps.createBitmap(videoSurfaceView.getWidth(), videoSurfaceView.getHeight(), Bitmap.Config.ARGB_8888);
                      awaitBeforeAnimation = true;
                      final boolean[] started = new boolean[1];

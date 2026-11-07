@@ -49,7 +49,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
 +++ b/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
-@@ -438,10 +438,7 @@ public class ConnectionsManager extends BaseController {
+@@ -462,10 +462,7 @@ public class ConnectionsManager extends BaseController {
                          }
                      }
                      if ((connectionType & ConnectionTypeDownload) != 0 && VideoPlayer.activePlayers.isEmpty()) {

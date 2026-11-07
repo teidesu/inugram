@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.ja
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.java
-@@ -2583,7 +2583,7 @@ public class EmojiView extends FrameLayout implements
+@@ -2585,7 +2585,7 @@ public class EmojiView extends FrameLayout implements
          pager = new ViewPager(context) {
              @Override
              public boolean onInterceptTouchEvent(MotionEvent ev) {

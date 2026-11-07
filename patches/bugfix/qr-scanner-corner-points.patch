@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/CameraScanActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/CameraScanActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/CameraScanActivity.java
-@@ -1223,6 +1223,9 @@ public class CameraScanActivity extends BaseFragment {
+@@ -1234,6 +1234,9 @@ public class CameraScanActivity extends BaseFragment {
      }
  
      private static PointF[] toPointF(Point[] points, int w, int h) {

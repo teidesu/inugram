@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelp
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
-@@ -7236,12 +7236,14 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -7273,12 +7273,14 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
          if (inputMedia != null) {
              TLRPC.TL_messages_uploadMedia req = new TLRPC.TL_messages_uploadMedia();
              req.media = inputMedia;
@@ -28,7 +28,7 @@ index 0000000..0000000 100644
                          getNotificationCenter().postNotificationName(NotificationCenter.fileUploadProgressChanged, key, -1L, -1L, false);
                          break;
                      }
-@@ -7252,7 +7254,8 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -7289,7 +7291,8 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                  TLRPC.TL_inputMediaPaidMedia multiMedia = (TLRPC.TL_inputMediaPaidMedia) sendMedia.media;
                  for (int a = 0; a < multiMedia.extended_media.size(); a++) {
                      if (multiMedia.extended_media.get(a) == inputMedia) {
@@ -38,7 +38,7 @@ index 0000000..0000000 100644
                          getNotificationCenter().postNotificationName(NotificationCenter.fileUploadProgressChanged, key, -1L, -1L, false);
                          break;
                      }
-@@ -7264,7 +7267,8 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -7301,7 +7304,8 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                  final int mediaPackIndex = PollAttachedMediaPack.findInputMedia(multiMedia, inputMedia);
                  for (int a = 0; a < message.pollIndexes.size(); a++) {
                      if (message.pollIndexes.get(a) == mediaPackIndex) {
@@ -48,7 +48,7 @@ index 0000000..0000000 100644
                          getNotificationCenter().postNotificationName(NotificationCenter.fileUploadProgressChanged, key, -1L, -1L, false);
                          break;
                      }
-@@ -7293,7 +7297,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -7330,7 +7334,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                      }
                  }
              }
@@ -57,7 +57,7 @@ index 0000000..0000000 100644
                  TLRPC.InputMedia newInputMedia = null;
                  if (response != null) {
                      final TLRPC.MessageMedia messageMedia = (TLRPC.MessageMedia) response;
-@@ -7384,6 +7388,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -7421,6 +7425,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                      message.markAsError();
                  }
              }));
@@ -67,7 +67,7 @@ index 0000000..0000000 100644
          } else if (inputEncryptedFile != null) {
              TLRPC.TL_messages_sendEncryptedMultiMedia multiMedia = (TLRPC.TL_messages_sendEncryptedMultiMedia) message.sendEncryptedRequest;
              for (int a = 0; a < multiMedia.files.size(); a++) {
-@@ -7719,7 +7726,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -7756,7 +7763,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
              return;
          }
  
@@ -76,7 +76,7 @@ index 0000000..0000000 100644
              if (error != null && FileRefController.isFileRefError(error.text)) {
                  final int fileRefIndex = FileRefController.getFileRefErrorIndex(error.text);
                  if (parentObjects != null) {
-@@ -8011,6 +8018,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -8048,6 +8055,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                  }
              });
          }, null, ConnectionsManager.RequestFlagCanCompress | ConnectionsManager.RequestFlagInvokeAfter);
@@ -90,7 +90,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -34453,9 +34453,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -35094,9 +35094,7 @@ public class ChatActivity extends BaseFragment implements
                  if (selectedObject.isEditing() || selectedObject.isSending() && selectedObjectGroup == null) {
                      getSendMessagesHelper().cancelSendingMessage(selectedObject);
                  } else if (selectedObject.isSending() && selectedObjectGroup != null) {

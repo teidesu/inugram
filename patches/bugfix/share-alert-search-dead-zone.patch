@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ShareAlert.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ShareAlert.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ShareAlert.java
-@@ -1192,7 +1192,7 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
+@@ -1163,7 +1163,7 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
  
              @Override
              protected boolean allowSelectChildAtPosition(float x, float y) {
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
              }
  
              @Override
-@@ -1276,7 +1276,7 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
+@@ -1243,7 +1243,7 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
  
              @Override
              protected boolean allowSelectChildAtPosition(float x, float y) {

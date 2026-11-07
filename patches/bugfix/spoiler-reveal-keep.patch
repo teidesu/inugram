@@ -14,7 +14,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataControl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
-@@ -6853,6 +6853,7 @@ public class MediaDataController extends BaseController {
+@@ -6855,6 +6855,7 @@ public class MediaDataController extends BaseController {
                  if (arrayList != null) {
                      for (int b = 0; b < arrayList.size(); b++) {
                          MessageObject m = arrayList.get(b);
@@ -26,7 +26,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.ja
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
-@@ -804,6 +804,7 @@ public class MessageObject {
+@@ -808,6 +808,7 @@ public class MessageObject {
              }
          }
          isSpoilersRevealed = old.isSpoilersRevealed;
@@ -38,7 +38,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -21017,6 +21017,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -21074,6 +21074,7 @@ public class MessagesController extends BaseController implements NotificationCe
                                      updateDialogs = true;
                                      break;
                                  } else if (oldObject.getDialogId() == newMessage.getDialogId() && oldObject.messageOwner.action instanceof TLRPC.TL_messageActionPinMessage && oldObject.replyMessageObject != null && oldObject.replyMessageObject.getId() == newMessage.getId()) {
@@ -50,7 +50,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -25772,6 +25772,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -26330,6 +26330,7 @@ public class ChatActivity extends BaseFragment implements
                  if (update == null) {
                      object.replyMessageObject = emptyMessage;
                  } else {

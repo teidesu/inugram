@@ -11,20 +11,20 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
-@@ -461,7 +461,6 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -434,7 +434,6 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
  
          cameraButton = new FrameLayout(context);
-         cameraButton.setBackground(Theme.createCircleDrawable(dp(32), getThemedColor(Theme.key_windowBackgroundGray)));
+         ThemeBind.fillBackground(cameraButton, Theme.createCircleDrawable(dp(32), getThemedColor(Theme.key_windowBackgroundGray)), ThemeBind.of(Theme.key_windowBackgroundGray), getResourceProvider());
 -        cameraButton.setPadding(dp(2), dp(2), dp(2), dp(2));
          cameraBackground = new FrameLayout(context);
-         cameraBackground.setBackground(Theme.createCircleDrawable(dp(30), getThemedColor(Theme.key_featuredStickers_addButton)));
+         ThemeBind.fillBackground(cameraBackground, Theme.createCircleDrawable(dp(30), getThemedColor(Theme.key_featuredStickers_addButton)), ThemeBind.of(Theme.key_featuredStickers_addButton), getResourceProvider());
          cameraImageView = new ImageView(context);
-@@ -469,7 +468,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -442,7 +441,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
          cameraImageView.setImageResource(R.drawable.filled_premium_camera);
          cameraImageView.setColorFilter(getThemedColor(Theme.key_featuredStickers_buttonText), android.graphics.PorterDuff.Mode.SRC_IN);
          cameraBackground.addView(cameraImageView, LayoutHelper.createFrame(22, 22, Gravity.CENTER));
 -        cameraButton.addView(cameraBackground, LayoutHelper.createFrame(30, 30));
 +        cameraButton.addView(cameraBackground, LayoutHelper.createFrame(30, 30, Gravity.CENTER));
-         avatarContainer.addView(cameraButton, LayoutHelper.createFrame(34, 34, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 32, 75, 0, 0));
-         ScaleStateListAnimator.apply(cameraButton);
- 
+         // over the avatar, so it scales and hides with it; its touches go to the place of the avatar in the list
+         // over the avatar layer, not in it: the goo is made of the avatar only. It follows the avatar
+         // (at its bottom right, past its edge), its touches go to the place of the avatar in the list

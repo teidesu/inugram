@@ -19,7 +19,7 @@ index 0000000..0000000 100644
              databaseCreated = true;
          } catch (Exception e) {
              FileLog.e(e);
-@@ -792,9 +793,12 @@ public class MessagesStorage extends BaseController {
+@@ -797,9 +798,12 @@ public class MessagesStorage extends BaseController {
          version = DatabaseMigrationHelper.migrate(MessagesStorage.this, version);
  
          FileLog.d("MessagesStorage db migration finished to varsion " + version);

@@ -31,7 +31,7 @@ diff --git a/TMessagesProj/build.gradle b/TMessagesProj/build.gradle
 index 0000000..0000000 100644
 --- a/TMessagesProj/build.gradle
 +++ b/TMessagesProj/build.gradle
-@@ -105,6 +105,7 @@ dependencies {
+@@ -109,6 +109,7 @@ dependencies {
      // inu
      implementation 'org.maplibre.gl:android-sdk:13.1.0'
      implementation 'com.caverock:androidsvg-aar:1.4'
@@ -43,7 +43,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
-@@ -2390,7 +2390,13 @@ public class AndroidUtilities {
+@@ -2499,7 +2499,13 @@ public class AndroidUtilities {
      }
  
      public static Typeface getTypeface(String assetPath) {
@@ -83,7 +83,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayou
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java
-@@ -224,6 +224,8 @@ public class RichMessageLayout {
+@@ -232,6 +232,8 @@ public class RichMessageLayout {
          density = AndroidUtilities.density;
          textPaint.setTextSize(dp(fontSize));
          numTextPaint.setTextSize(dp(fontSize));
@@ -92,7 +92,7 @@ index 0000000..0000000 100644
      }
  
      /** Uses the message renderer for editable inline buttons without laying out a message. */
-@@ -370,6 +372,8 @@ public class RichMessageLayout {
+@@ -378,6 +380,8 @@ public class RichMessageLayout {
          density = AndroidUtilities.density;
          textPaint.setTextSize(dp(SharedConfig.fontSize));
          numTextPaint.setTextSize(dp(SharedConfig.fontSize));
@@ -101,7 +101,7 @@ index 0000000..0000000 100644
          isPart = false;
  
          richMessage = null;
-@@ -7517,6 +7521,7 @@ public class RichMessageLayout {
+@@ -7625,6 +7629,7 @@ public class RichMessageLayout {
              this.currentMessageObject = root.audioBlocks.get(block);
              this.currentDocument = currentMessageObject != null ? currentMessageObject.getDocument() : null;
              this.observerTag = DownloadController.getInstance(root.currentAccount).generateObserverTag();
@@ -109,7 +109,7 @@ index 0000000..0000000 100644
  
              radialProgress = new RadialProgress2(null);
              radialProgress.setCircleRadius(dp(24));
-@@ -7859,6 +7864,7 @@ public class RichMessageLayout {
+@@ -8010,6 +8015,7 @@ public class RichMessageLayout {
              this.previewX = root.padLeft + dp(10);
              this.hasPreview = MessageObject.isDocumentHasThumb(document);
              observerTag = DownloadController.getInstance(root.currentAccount).generateObserverTag();
@@ -133,7 +133,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java
-@@ -7859,8 +7859,10 @@ public class Theme {
+@@ -7957,8 +7957,10 @@ public class Theme {
          if (dialogs_countTextPaint == null) {
              dialogs_countTextPaint = new TextPaint(TextPaint.ANTI_ALIAS_FLAG);
              dialogs_countTextPaint.setTypeface(AndroidUtilities.bold());
@@ -144,7 +144,7 @@ index 0000000..0000000 100644
              dialogs_countPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
              dialogs_onlineCirclePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
              dialogs_tagPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-@@ -7979,6 +7981,7 @@ public class Theme {
+@@ -8077,6 +8079,7 @@ public class Theme {
          dialogs_tagTextPaint.setTextSize(dp(10));
          dialogs_searchNamePaint.setTextSize(dp(16));
          dialogs_searchNameEncryptedPaint.setTextSize(dp(16));
@@ -152,7 +152,7 @@ index 0000000..0000000 100644
      }
  
      public static void applyDialogsTheme() {
-@@ -8231,6 +8234,7 @@ public class Theme {
+@@ -8329,6 +8332,7 @@ public class Theme {
              addChatPaint(key_paint_chatComposeBackground, chat_composeBackgroundPaint, key_chat_messagePanelBackground);
              addChatPaint(key_paint_chatTimeBackground, chat_timeBackgroundPaint, key_chat_mediaTimeBackground);
          }
@@ -160,7 +160,7 @@ index 0000000..0000000 100644
      }
  
      public static void createChatResources(Context context, boolean fontsOnly) {
-@@ -8938,6 +8942,7 @@ public class Theme {
+@@ -9064,6 +9068,7 @@ public class Theme {
          }
  
          profile_aboutTextPaint.setTextSize(dp(16));
@@ -172,7 +172,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
-@@ -3658,10 +3658,11 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
+@@ -3704,10 +3704,11 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                              }
                          }
  
@@ -191,7 +191,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileSearchCell
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileSearchCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileSearchCell.java
-@@ -705,6 +705,7 @@ public class ProfileSearchCell extends BaseCell implements NotificationCenter.No
+@@ -708,6 +708,7 @@ public class ProfileSearchCell extends BaseCell implements NotificationCenter.No
          if (customPaints) {
              if (statusPaint == null) {
                  statusPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
@@ -203,7 +203,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatPullingDownDrawable
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatPullingDownDrawable.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatPullingDownDrawable.java
-@@ -124,6 +124,7 @@ public class ChatPullingDownDrawable implements NotificationCenter.NotificationC
+@@ -126,6 +126,7 @@ public class ChatPullingDownDrawable implements NotificationCenter.NotificationC
  
          textPaint.setTextSize(AndroidUtilities.dp(13));
          textPaint.setTypeface(AndroidUtilities.bold());
@@ -448,7 +448,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/iv/RichAudioCell.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/iv/RichAudioCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/iv/RichAudioCell.java
-@@ -96,6 +96,7 @@ public class RichAudioCell extends RichBlockCell
+@@ -98,6 +98,7 @@ public class RichAudioCell extends RichBlockCell
          setWillNotDraw(false);
  
          observerTag = DownloadController.getInstance(currentAccount).generateObserverTag();
@@ -471,7 +471,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/iv/RichDocumentCell.jav
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/iv/RichDocumentCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/iv/RichDocumentCell.java
-@@ -89,6 +89,7 @@ public class RichDocumentCell extends RichBlockCell implements Theme.Colorable,
+@@ -92,6 +92,7 @@ public class RichDocumentCell extends RichBlockCell implements Theme.Colorable,
          setWillNotDraw(false);
          setMinimumHeight(dp(66));
          observerTag = DownloadController.getInstance(currentAccount).generateObserverTag();
@@ -483,7 +483,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/iv/RichMapCell.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/iv/RichMapCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/iv/RichMapCell.java
-@@ -76,6 +76,7 @@ public class RichMapCell extends RichBlockCell
+@@ -77,6 +77,7 @@ public class RichMapCell extends RichBlockCell
  
          hintPaint.setTextSize(dp(15));
          hintPaint.setTextAlign(Paint.Align.CENTER);

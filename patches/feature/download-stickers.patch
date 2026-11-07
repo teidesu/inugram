@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ContentPreviewViewer.ja
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ContentPreviewViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ContentPreviewViewer.java
-@@ -783,6 +783,8 @@ public class ContentPreviewViewer {
+@@ -784,6 +784,8 @@ public class ContentPreviewViewer {
                      }
                  }
  
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
                  if (items.isEmpty()) {
                      return;
                  }
-@@ -796,6 +798,10 @@ public class ContentPreviewViewer {
+@@ -797,6 +799,10 @@ public class ContentPreviewViewer {
                              return;
                          }
                          int which = (int) v.getTag();

@@ -13,7 +13,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -39812,7 +39812,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -40453,7 +40453,7 @@ public class ChatActivity extends BaseFragment implements
                      arrayList = new ArrayList<>();
                      arrayList.add(messageObject);
                  }
@@ -26,7 +26,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-@@ -6248,7 +6248,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -6286,7 +6286,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
  
      @Override
      public boolean canSelectStories() {
@@ -39,7 +39,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoriesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoriesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoriesController.java
-@@ -280,6 +280,7 @@ public class StoriesController {
+@@ -281,6 +281,7 @@ public class StoriesController {
      }
  
      public boolean hasStories() {

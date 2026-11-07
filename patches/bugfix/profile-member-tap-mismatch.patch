@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaL
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
-@@ -11070,6 +11070,15 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
+@@ -10861,6 +10861,15 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
  
          public ChatUsersAdapter(Context context) {
              mContext = context;
@@ -32,7 +32,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -4552,10 +4552,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -4502,10 +4502,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                  ReportBottomSheet.openChat(ProfileActivity.this, getDialogId());
              } else if (position >= membersStartRow && position < membersEndRow) {
                  TLRPC.ChatParticipant participant;
@@ -46,7 +46,7 @@ index 0000000..0000000 100644
                  }
                  onMemberClick(participant, false, view);
              } else if (position == addMemberRow) {
-@@ -5108,8 +5108,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -5058,8 +5058,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                      return true;
                  } else if (position >= membersStartRow && position < membersEndRow) {
                      final TLRPC.ChatParticipant participant;

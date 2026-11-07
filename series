@@ -137,7 +137,6 @@ feature/strip-tracking.patch
 feature/two-finger-select.patch
 debloat/reduce-menu-motion.patch
 feature/md3-components.patch
-bugfix/universal-fragment-theme-change.patch
 feature/clickable-web-preview-photos.patch
 debloat/volume-keys-videos.patch
 bugfix/chat-preview-reactions-read.patch
@@ -195,7 +194,6 @@ bugfix/spoiler-tile-blink.patch
 bugfix/deeplink-album-member-anchor.patch
 feature/biometric-confirmation.patch
 feature/painter-text.patch
-bugfix/chat-background-leak.patch
 bugfix/reaction-overlay-fragment-leak.patch
 bugfix/photo-viewer-leaks.patch
 bugfix/notification-center-leaks.patch
@@ -360,7 +358,6 @@ bugfix/notification-avatar-reload.patch
 bugfix/profile-post-button-flicker.patch
 bugfix/sticker-pack-edit.patch
 bugfix/forum-title-overlay.patch
-bugfix/animated-drawable-recycle-interrupt.patch
 bugfix/story-reactions-window-keyboard.patch
 bugfix/folder-slot-stolen-by-picker.patch
 bugfix/transcription-on-message-replace.patch
@@ -369,7 +366,6 @@ bugfix/item-options-touch-through.patch
 feature/join-request-open-profile.patch
 feature/join-request-open-page.patch
 feature/chat-search-filters.patch
-bugfix/scrim-menu-theme.patch
 bugfix/adaptive-shortcut-icons.patch
 bugfix/photo-viewer-reparent.patch
 bugfix/pin-unloaded-dialog.patch
@@ -387,7 +383,6 @@ feature/animated-avatars.patch
 misc/experimental-settings-in-release.patch
 bugfix/suggest-photo-notification.patch
 bugfix/rich-message-auto-entities.patch
-bugfix/rich-message-hashtag-tap.patch
 bugfix/slowmode-blocks-media-edit.patch
 bugfix/slowmode-edit-record-button.patch
 bugfix/chat-hint-runnable-leak.patch

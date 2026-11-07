@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/MentionsAdapte
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/MentionsAdapter.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/MentionsAdapter.java
-@@ -125,6 +125,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
+@@ -128,6 +128,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
      private int resultStartPosition;
      private int resultLength;
      private String lastText;
@@ -19,7 +19,7 @@ index 0000000..0000000 100644
      private boolean lastForSearch;
      private boolean lastUsernameOnly;
      private int lastPosition;
-@@ -969,6 +970,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
+@@ -972,6 +973,7 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
              searchGlobalRunnable = null;
          }
          desu.inugram.helpers.search.SearchFromHelper.cancel();
@@ -27,7 +27,7 @@ index 0000000..0000000 100644
          if (checkAgainRunnable != null) {
              AndroidUtilities.cancelRunOnUIThread(checkAgainRunnable);
              checkAgainRunnable = null;
-@@ -1610,7 +1612,11 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
+@@ -1613,7 +1615,11 @@ public class MentionsAdapter extends RecyclerListView.SelectionAdapter implement
                  MediaDataController.getInstance(currentAccount).fetchNewEmojiKeywords(newLanguage);
              }
              lastSearchKeyboardLanguage = newLanguage;

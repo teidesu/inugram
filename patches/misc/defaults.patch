@@ -13,7 +13,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/LiteMode.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/LiteMode.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/LiteMode.java
-@@ -53,35 +53,23 @@ public class LiteMode {
+@@ -58,35 +58,23 @@ public class LiteMode {
          FLAG_ANIMATED_EMOJI_CHAT_PREMIUM |
          FLAG_ANIMATED_EMOJI_KEYBOARD_PREMIUM |
          FLAG_ANIMATED_EMOJI_REACTIONS_PREMIUM |
@@ -58,7 +58,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SharedConfig.jav
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/SharedConfig.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/SharedConfig.java
-@@ -631,7 +631,7 @@ public class SharedConfig {
+@@ -635,7 +635,7 @@ public class SharedConfig {
              streamAllVideo = preferences.getBoolean("streamAllVideo", BuildVars.DEBUG_VERSION);
              streamMkv = preferences.getBoolean("streamMkv", false);
              suggestStickers = preferences.getInt("suggestStickers", 0);
@@ -67,9 +67,9 @@ index 0000000..0000000 100644
              overrideDevicePerformanceClass = preferences.getInt("overrideDevicePerformanceClass", -1);
              devicePerformanceClass = preferences.getInt("devicePerformanceClass", -1);
              sortContactsByName = preferences.getBoolean("sortContactsByName", false);
-@@ -683,7 +683,7 @@ public class SharedConfig {
+@@ -687,7 +687,7 @@ public class SharedConfig {
+             callEncryptionHintDisplayedCount = preferences.getInt("callEncryptionHintDisplayedCount", 0);
              debugVideoQualities = preferences.getBoolean("debugVideoQualities", false);
-             shadowsInSections = preferences.getBoolean("shadowsInSections", false);
              debugViewMetrics = preferences.getBoolean("debugViewMetrics", false);
 -            photoHighQualityDefault = preferences.getBoolean("photoHighQualityDefault", false);
 +            photoHighQualityDefault = preferences.getBoolean("photoHighQualityDefault", true);
@@ -80,7 +80,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java b/TM
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
-@@ -321,7 +321,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -327,7 +327,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
      private boolean checkPermissions = true;
      private boolean checkShowPermissions = true;
      private boolean newAccount;
@@ -89,7 +89,7 @@ index 0000000..0000000 100644
      private boolean testBackend = false;
  
      @ActivityMode
-@@ -686,7 +686,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -706,7 +706,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
          }
          if (savedInstanceState != null) {
              currentViewNum = savedInstanceState.getInt("currentViewNum", 0);
@@ -98,7 +98,7 @@ index 0000000..0000000 100644
              if (currentViewNum >= VIEW_CODE_MESSAGE && currentViewNum <= VIEW_CODE_CALL) {
                  int time = savedInstanceState.getInt("open");
                  if (time != 0 && Math.abs(System.currentTimeMillis() / 1000 - time) >= 24 * 60 * 60) {
-@@ -2350,7 +2350,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -2383,7 +2383,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                  });
              }
  

@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatUsersActivity.java 
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatUsersActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatUsersActivity.java
-@@ -1493,7 +1493,7 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
+@@ -1495,7 +1495,7 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
                  return -1;
              }
              if (lhs instanceof TLRPC.ChannelParticipant && rhs instanceof TLRPC.ChannelParticipant) {

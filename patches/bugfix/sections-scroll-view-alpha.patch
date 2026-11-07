@@ -11,8 +11,8 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SectionsScro
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/SectionsScrollView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/SectionsScrollView.java
-@@ -108,6 +108,10 @@ public class SectionsScrollView extends ScrollView {
-         if (child == contentView || !(child.getParent() instanceof View)) return child.getY();
+@@ -199,6 +199,10 @@ public class SectionsScrollView extends ScrollView implements IBlur3Capture {
+         if (!(child.getParent() instanceof View)) return child.getY();
          return getChildY((View) child.getParent()) + child.getY();
      }
 +    private float getChildAlpha(View child) {
@@ -20,23 +20,23 @@ index 0000000..0000000 100644
 +        return getChildAlpha((View) child.getParent()) * child.getAlpha();
 +    }
  
-     private void drawSectionsBackgrounds(Canvas canvas) {
-         children.clear();
-@@ -124,7 +128,7 @@ public class SectionsScrollView extends ScrollView {
+     private void collectSections() {
+         sectionsCount = 0;
+@@ -215,7 +219,7 @@ public class SectionsScrollView extends ScrollView implements IBlur3Capture {
                  start = prev = null;
                  continue;
              }
 -            if (start != null && Math.abs(prev.getAlpha() - child.getAlpha()) > 0.1f) {
 +            if (start != null && Math.abs(getChildAlpha(prev) - getChildAlpha(child)) > 0.1f) {
-                 drawSectionBackground(canvas, start, prev);
+                 addSection(start, prev);
                  start = null;
              }
-@@ -159,7 +163,7 @@ public class SectionsScrollView extends ScrollView {
-             Math.min(getHeight() + dp(16) + getScrollY(), contentView.getY() + getChildY(to) + to.getHeight() + toBottomMargin)
-         );
-         if (AndroidUtilities.rectTmp.bottom < AndroidUtilities.rectTmp.top) return;
--        RecyclerListView.drawBackgroundRect(canvas, AndroidUtilities.rectTmp, dp(16), dp(16), from.getAlpha(), resourcesProvider);
-+        RecyclerListView.drawBackgroundRect(canvas, AndroidUtilities.rectTmp, dp(16), dp(16), getChildAlpha(from), resourcesProvider);
+@@ -253,7 +257,7 @@ public class SectionsScrollView extends ScrollView implements IBlur3Capture {
+         sections[sectionsCount++] = top;
+         sections[sectionsCount++] = right;
+         sections[sectionsCount++] = bottom;
+-        sections[sectionsCount++] = from.getAlpha();
++        sections[sectionsCount++] = getChildAlpha(from);
      }
  
-     @Override
+     // bottom paddings of the gathered parents that end with this child (e.g. under LinkActionView buttons)

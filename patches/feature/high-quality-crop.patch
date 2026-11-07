@@ -39,7 +39,7 @@ index 0000000..0000000 100644
  
              entities = state.entities;
              savedFilterState = state.savedFilterState;
-@@ -794,12 +800,18 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+@@ -858,12 +864,18 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
                      new File(croppedPaintPath).delete();
                  } catch (Exception ignore) {}
              }
@@ -64,7 +64,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMes
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
-@@ -11528,7 +11528,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -11487,7 +11487,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
              if (entry.cropState == null) {
                  return currentEditMode != EDIT_MODE_CROP;
              }
@@ -78,7 +78,7 @@ index 0000000..0000000 100644
              if (currentCroppedBitmap == null) {
                  currentCroppedBitmap = desu.inugram.helpers.media.PhotoViewerHelper.rebakeCroppedBitmap(entry);
                  if (currentCroppedBitmap == null) {
-@@ -11545,6 +11550,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -11504,6 +11509,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
              }
              hasChanged = photoPaintView.hasChanges();
              bitmap = photoPaintView.getBitmap(entities, paintThumbBitmap);
@@ -88,7 +88,7 @@ index 0000000..0000000 100644
              stickers = photoPaintView.getMasks();
  
              photoPaintView.onCleanupEntities();
-@@ -11602,11 +11610,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -11561,11 +11569,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                      Bitmap croppedPaintBitmap = createCroppedBitmap(paintBitmap, entry.cropState, null, false);
  
                      if (!isCurrentVideo || entry.isLivePhoto()) {
@@ -103,7 +103,7 @@ index 0000000..0000000 100644
                          }
                      }
                      mergeImages(entry.thumbPath = getTempFileAbsolutePath(), null, croppedPaintBitmap, croppedBitmap, thumbSize, true);
-@@ -11618,7 +11627,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -11577,7 +11586,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                      }
                  } else {
                      if (!isCurrentVideo || entry.isLivePhoto()) {
@@ -113,7 +113,7 @@ index 0000000..0000000 100644
                          entry.imagePath = currentImagePath = FileLoader.getInstance(currentAccount).getPathToAttach(size, true).toString();
                      }
                      TLRPC.PhotoSize size = ImageLoader.scaleAndSaveImage(croppedBitmap, thumbSize, thumbSize, 70, false, 101, 101);
-@@ -11638,7 +11648,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -11597,7 +11607,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
              Bitmap b = entry.cropState != null ? createCroppedBitmap(bitmap, entry.cropState, null, true) : bitmap;
              if (entry.paintPath == null) {
                  if (!isCurrentVideo || entry.isLivePhoto()) {
@@ -123,7 +123,7 @@ index 0000000..0000000 100644
                      entry.imagePath = currentImagePath = FileLoader.getInstance(currentAccount).getPathToAttach(size, true).toString();
                  }
                  size = ImageLoader.scaleAndSaveImage(b, getCompressFormat(), thumbSize, thumbSize, 83, false, 101, 101);
-@@ -11662,11 +11673,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -11621,11 +11632,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                      recyclePaint = false;
                  }
                  if (!isCurrentVideo || entry.isLivePhoto()) {
@@ -138,7 +138,7 @@ index 0000000..0000000 100644
                      }
                  }
                  mergeImages(entry.thumbPath = getTempFileAbsolutePath(), path, paintBitmap, b, thumbSize, true);
-@@ -11782,11 +11794,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -11741,11 +11753,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                  }
              }
              if (!isCurrentVideo || entry.isLivePhoto()) {
@@ -153,7 +153,7 @@ index 0000000..0000000 100644
                  }
              }
              mergeImages(entry.thumbPath = getTempFileAbsolutePath(), null, croppedBitmap, paintBitmap, thumbSize, false);
-@@ -12064,6 +12077,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -12031,6 +12044,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
          if (currentEditMode == mode || (isCurrentVideo && photoProgressViews[0].backgroundState != 3) && !isCurrentVideo && (centerImage.getBitmap() == null || photoProgressViews[0].backgroundState != -1) || changeModeAnimation != null || imageMoveAnimation != null || isCaptionOpen()) {
              return;
          }
@@ -166,8 +166,8 @@ index 0000000..0000000 100644
          if (placeProvider != null && (currentEditMode == EDIT_MODE_NONE || mode == EDIT_MODE_NONE)) {
              placeProvider.onEditModeChanged(mode != EDIT_MODE_NONE);
          }
-@@ -12637,7 +12656,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
-                 photoFilterView = new PhotoFilterView(parentActivity, videoTextureView != null ? (VideoEditTextureView) videoTextureView : null, bitmap, bitmapMask, orientation, state, isCurrentVideo ? null : paintingOverlay, hasFaces, videoTextureView == null && (editState.cropState != null && editState.cropState.mirrored || cropTransform.isMirrored()), true, null, resourcesProvider);
+@@ -12608,7 +12627,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                 photoFilterView = new PhotoFilterView(parentActivity, filterVideo ? (VideoEditTextureView) videoTextureView : null, bitmap, bitmapMask, orientation, state, filterVideo ? null : paintingOverlay, hasFaces, !filterVideo && (editState.cropState != null && editState.cropState.mirrored || cropTransform.isMirrored()), true, null, resourcesProvider);
                  containerView.addView(photoFilterView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
                  photoFilterView.getDoneTextView().setOnClickListener(v -> {
 -                    applyCurrentEditMode();
@@ -175,7 +175,7 @@ index 0000000..0000000 100644
                      switchToEditMode(EDIT_MODE_NONE);
                  });
                  photoFilterView.getCancelTextView().setOnClickListener(v -> {
-@@ -13123,7 +13142,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -13094,7 +13113,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
              containerView.addView(photoPaintView.getView(), LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
              photoPaintView.setOnDoneButtonClickedListener(() -> {
                  savedState = null;
@@ -184,7 +184,7 @@ index 0000000..0000000 100644
                  switchToEditMode(EDIT_MODE_NONE);
              });
              photoPaintView.getCancelView().setOnClickListener(v -> closePaintMode());
-@@ -16827,7 +16846,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -16798,7 +16817,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                              imageReceiver.setOrientation(photoEntry.orientation, photoEntry.invert, false);
                              path = photoEntry.path;
                          }

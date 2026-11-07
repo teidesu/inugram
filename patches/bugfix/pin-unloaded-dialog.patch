@@ -22,7 +22,7 @@ index 0000000..0000000 100644
      private LongSparseArray<Boolean> checkingLastMessagesDialogs = new LongSparseArray<>();
  
      private ArrayList<TLRPC.Updates> updatesQueueSeq = new ArrayList<>();
-@@ -12843,6 +12844,85 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -12883,6 +12884,85 @@ public class MessagesController extends BaseController implements NotificationCe
          });
      }
  
@@ -108,7 +108,7 @@ index 0000000..0000000 100644
      private void fetchFolderInLoadedPinnedDialogs(TLRPC.TL_messages_peerDialogs res) {
          for (int a = 0, N = res.dialogs.size(); a < N; a++) {
              TLRPC.Dialog dialog = res.dialogs.get(a);
-@@ -17741,6 +17821,9 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -17782,6 +17862,9 @@ public class MessagesController extends BaseController implements NotificationCe
              }
          }
          getMessagesStorage().setDialogPinned(dialogId, dialog.pinnedNum);
@@ -118,7 +118,7 @@ index 0000000..0000000 100644
          return true;
      }
  
-@@ -22996,7 +23079,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -23054,7 +23137,7 @@ public class MessagesController extends BaseController implements NotificationCe
                          }
                      }
                      if (maxDate > Integer.MIN_VALUE) {
@@ -131,7 +131,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
-@@ -18059,6 +18059,33 @@ public class MessagesStorage extends BaseController {
+@@ -18244,6 +18244,33 @@ public class MessagesStorage extends BaseController {
          });
      }
  
@@ -169,7 +169,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchA
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java
-@@ -1042,17 +1042,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+@@ -1043,17 +1043,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                          long finalDialogId = dialogId;
                          MessagesStorage.getInstance(currentAccount).getDialogFolderId(dialogId, param -> {
                              if (param != -1) {
@@ -192,7 +192,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -9902,6 +9902,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9836,6 +9836,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          if (filter != null) {
              if (pin) {
                  filter.pinnedDialogs.put(selectedDialog, minPinnedNum);
@@ -202,7 +202,7 @@ index 0000000..0000000 100644
              } else {
                  filter.pinnedDialogs.delete(selectedDialog);
              }
-@@ -10236,6 +10239,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -10170,6 +10173,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
  
      private void showOrUpdateActionMode(long dialogId, View cell) {
          addOrRemoveSelectedDialog(dialogId, cell);

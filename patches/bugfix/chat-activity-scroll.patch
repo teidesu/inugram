@@ -13,7 +13,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -1316,6 +1316,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -1346,6 +1346,7 @@ public class ChatActivity extends BaseFragment implements
          }
      };
      private int chatEmojiViewPadding;
@@ -21,7 +21,7 @@ index 0000000..0000000 100644
      private int fixedKeyboardHeight = -1;
      private Runnable cancelFixedPositionRunnable;
      private boolean invalidateMessagesVisiblePart;
-@@ -18756,8 +18757,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -19266,8 +19267,7 @@ public class ChatActivity extends BaseFragment implements
              if (actionBar.getVisibility() == VISIBLE) {
                  heightSize -= actionBarHeight;
              }
@@ -31,7 +31,7 @@ index 0000000..0000000 100644
              if (lastHeight != allHeight) {
                  measureKeyboardHeight();
              }
-@@ -18773,7 +18773,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -19283,7 +19283,11 @@ public class ChatActivity extends BaseFragment implements
              }
              setEmojiKeyboardHeight(chatEmojiViewPadding);
  
@@ -44,25 +44,25 @@ index 0000000..0000000 100644
              boolean waitingChatListItemAnimator = false;
              if (MediaController.getInstance().getPlayingMessageObject() != null && MediaController.getInstance().getPlayingMessageObject().isRoundVideo() && keyboardVisibleOld != keyboardVisible) {
                  for (int i = 0; i < chatListView.getChildCount(); i++) {
-@@ -18784,7 +18788,16 @@ public class ChatActivity extends BaseFragment implements
+@@ -19294,7 +19298,16 @@ public class ChatActivity extends BaseFragment implements
                          if (messageObject.isRoundVideo() && MediaController.getInstance().isPlayingMessage(messageObject)) {
                              int p = chatListView.getChildAdapterPosition(child);
                              if (p >= 0) {
--                                chatLayoutManager.scrollToPositionWithOffset(p, (int) ((chatListView.getMeasuredHeight() - chatListViewPaddingTop - blurredViewBottomOffset + (keyboardHeight + chatEmojiViewPadding - keyboardHeightOld) - (keyboardVisible ? AndroidUtilities.roundMessageSize : AndroidUtilities.roundPlayingMessageSize(isSideMenued()))) / 2), false);
+-                                chatLayoutManager.scrollToPositionWithOffset(p, (int) ((chatListView.getMeasuredHeight() - chatListViewPaddingTop - blurredViewBottomOffset + (keyboardHeight + chatEmojiViewPadding - keyboardHeightOld) - (keyboardVisible ? AndroidUtilities.roundMessageSize : AndroidUtilities.roundPlayingMessageSize(isSideMenued(), isCompactMode()))) / 2), false);
 +                                // the bottom padding is still mid-animation here and the list content
 +                                // follows it 1:1, so aim at where the cell should end up and undo the
 +                                // slide that is still to come.
 +                                final float inu_targetPaddingBottom = chatListView.getPaddingBottom()
 +                                    - windowInsetsStateHolder.getAnimatedMaxBottomInset()
 +                                    + windowInsetsStateHolder.inu_getTargetMaxBottomInset();
-+                                final int inu_roundSize = keyboardVisible ? AndroidUtilities.roundMessageSize : AndroidUtilities.roundPlayingMessageSize(isSideMenued());
++                                final int inu_roundSize = keyboardVisible ? AndroidUtilities.roundMessageSize : AndroidUtilities.roundPlayingMessageSize(isSideMenued(), isCompactMode());
 +                                final float inu_targetCellTop = (chatListViewPaddingTop + chatListView.getMeasuredHeight() - inu_targetPaddingBottom) / 2 - inu_roundSize / 2f;
 +                                int inu_offset = (int) (inu_targetCellTop + inu_targetPaddingBottom - chatListView.getPaddingBottom() - chatListViewPaddingTop);
 +                                chatLayoutManager.scrollToPositionWithOffset(p, inu_offset, false);
                                  chatAdapter.notifyItemChanged(p);
                                  adjustPanLayoutHelper.delayAnimation();
                                  waitingChatListItemAnimator = true;
-@@ -21870,6 +21883,26 @@ public class ChatActivity extends BaseFragment implements
+@@ -22403,6 +22416,26 @@ public class ChatActivity extends BaseFragment implements
                      createUnreadMessageAfterId = 0;
                      if (!universalNotify && !chatAdapter.isFiltered) {
                          chatAdapter.notifyItemRemoved(chatAdapter.loadingDownRow);
@@ -89,7 +89,7 @@ index 0000000..0000000 100644
                      }
                  }
                  startLoadFromMessageId = 0;
-@@ -23375,7 +23408,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -23918,7 +23951,7 @@ public class ChatActivity extends BaseFragment implements
                                  if (MediaController.getInstance().isPlayingMessage(messageObject1)) {
                                      boolean keyboardIsVisible = contentView.getKeyboardHeight() >= AndroidUtilities.dp(20);
                                      float topPadding = chatListViewPaddingTop - (contentPanTranslation);

@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayo
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
-@@ -431,6 +431,9 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -438,6 +438,9 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
              if ((passivePreview || transitionAnimationPreviewMode) && (ev.getActionMasked() == MotionEvent.ACTION_DOWN || ev.getActionMasked() == MotionEvent.ACTION_POINTER_DOWN)) {
                  return false;
              }
@@ -22,7 +22,7 @@ index 0000000..0000000 100644
              try {
                  return (!passivePreview || this != containerView) && super.dispatchTouchEvent(ev);
              } catch (Throwable e) {
-@@ -978,7 +981,9 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -1076,7 +1079,9 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                  progress = value / containerView.getMeasuredWidth();
              }
              final BaseFragment prevFragment = fragmentsStack.get(fragmentsStack.size() - 2);
@@ -33,7 +33,7 @@ index 0000000..0000000 100644
              final BaseFragment currFragment = fragmentsStack.get(fragmentsStack.size() - 1);
              float ratio = MathUtils.clamp(2f * progress, 0f, 1f);
              if (currFragment.isBeginToShow()) {
-@@ -1109,11 +1114,13 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -1207,11 +1212,13 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
          int clipRight = width + getPaddingLeft();
          int backOffset = 0;
  
@@ -47,7 +47,7 @@ index 0000000..0000000 100644
  
          final int restoreCount2 = canvas.save();
          if (child != bottomSheetTabs && bottomSheetTabsClip != null) {
-@@ -1300,7 +1307,8 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -1398,7 +1405,8 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
          delegate = INavigationLayoutDelegate;
      }
  
@@ -57,7 +57,7 @@ index 0000000..0000000 100644
          if (!backAnimation) {
              if (fragmentsStack.size() < 2) {
                  checkBlackScreen("onSlideAnimationEnd exit");
-@@ -1530,8 +1538,8 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -1628,8 +1636,8 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
          return false;
      }
  
@@ -68,7 +68,7 @@ index 0000000..0000000 100644
      private boolean predictiveBackHasProgress;
      private float predictiveBackY;
      private boolean predictiveBackLeft;
-@@ -1604,6 +1612,8 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -1705,6 +1713,8 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
          return predictiveBackInProgress && predictiveBackHasProgress;
      }
  
@@ -77,7 +77,7 @@ index 0000000..0000000 100644
      private boolean backAnimatorIsBack;
      private AnimatorSet backAnimator;
      private void animateBackEndAnimation(boolean backAnimation) {
-@@ -1840,6 +1850,9 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -1945,6 +1955,9 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                  }
                  lastFrameTime = newTime;
                  float duration = (preview && open ? 190.0f : 150.0f) / desu.inugram.InuConfig.ANIMATION_SPEED.getValue();
@@ -87,7 +87,7 @@ index 0000000..0000000 100644
                  animationProgress += dt / duration;
                  if (animationProgress > 1.0f) {
                      animationProgress = 1.0f;
-@@ -1884,7 +1897,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -1989,7 +2002,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                  } else {
                      interpolated = decelerateInterpolator.getInterpolation(animationProgress);
                  }
@@ -96,7 +96,7 @@ index 0000000..0000000 100644
                      float clampedInterpolated = MathUtils.clamp(interpolated, 0, 1);
                      containerView.setAlpha(clampedInterpolated);
                      if (preview) {
-@@ -1903,7 +1916,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -2008,7 +2021,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                      } else {
                          containerView.setTranslationX(dp(48) * (1.0f - interpolated));
                      }
@@ -105,7 +105,7 @@ index 0000000..0000000 100644
                      float clampedReverseInterpolated = MathUtils.clamp(1f - interpolated, 0, 1);
                      containerViewBack.setAlpha(clampedReverseInterpolated);
                      if (preview) {
-@@ -3198,6 +3211,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -3322,6 +3335,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
              oldFragment = null;
              Runnable endRunnable = onCloseAnimationEndRunnable;
              onCloseAnimationEndRunnable = null;
@@ -113,7 +113,7 @@ index 0000000..0000000 100644
              if (endRunnable != null) {
                  endRunnable.run();
              }
-@@ -3231,6 +3245,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+@@ -3355,6 +3369,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
              oldFragment = null;
              Runnable endRunnable = onOpenAnimationEndRunnable;
              onOpenAnimationEndRunnable = null;
@@ -125,7 +125,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-@@ -735,7 +735,27 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -721,7 +721,27 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
          BackupAgent.requestBackup();
  
          RestrictedLanguagesSelectActivity.checkRestrictedLanguages(false);

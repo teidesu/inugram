@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
-@@ -566,7 +566,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -547,7 +547,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
          if (avatarUploadingRequest != -1) return;
  
          avatarDrawable.setInfo(user);

@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
-@@ -2039,9 +2039,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
+@@ -2085,9 +2085,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                                          }
                                          messageString = AndroidUtilities.replaceNewLines(messageString);
                                      }
@@ -23,7 +23,7 @@ index 0000000..0000000 100644
                                      checkMessage = false;
                                      SpannableStringBuilder builder = (SpannableStringBuilder) messageString;
                                      builder.insert(0, " ");
-@@ -3057,14 +3055,13 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
+@@ -3103,14 +3101,13 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
          }
      }
  
@@ -41,7 +41,7 @@ index 0000000..0000000 100644
      }
  
      int topMessageTopicStartIndex;
-@@ -5983,7 +5980,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
+@@ -6029,7 +6026,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                  stringBuilder = SpannableStringBuilder.valueOf(mess);
              }
              if (applyThumbs) {
@@ -54,7 +54,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -12322,7 +12322,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -12735,7 +12735,7 @@ public class ChatActivity extends BaseFragment implements
          }
  
          final float paddingBottom;
@@ -63,8 +63,8 @@ index 0000000..0000000 100644
              paddingBottom = AndroidUtilities.navigationBarHeight;
          } else {
              paddingBottom = blurredViewBottomOffset + dp(NonIslandHelper.chatElements() ? 3 : 9 + 7)
-@@ -46309,7 +46309,7 @@ public class ChatActivity extends BaseFragment implements
-                 removeTag.setColors(Theme.getColor(Theme.key_color_red), Theme.getColor(Theme.key_color_red));
+@@ -46607,7 +46607,7 @@ public class ChatActivity extends BaseFragment implements
+                 removeTag.setColorKeys(Theme.key_color_red, Theme.key_color_red);
                  popupLayout.addView(removeTag);
                  scrimPopupContainerLayout.addView(popupLayout);
 -            } else if (messageObject != null && messageObject.messageOwner != null && messageObject.messageOwner.reactions != null && messageObject.messageOwner.reactions.can_see_list || dialog_id >= 0) {
@@ -72,7 +72,7 @@ index 0000000..0000000 100644
                  final boolean canDeleteReactions = ChatObject.canUserDoAdminAction(currentChat, ChatObject.ACTION_DELETE_MESSAGES)
                      && (reaction.count > 1 || !reaction.chosen);
  
-@@ -47453,7 +47453,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -47751,7 +47751,7 @@ public class ChatActivity extends BaseFragment implements
              return;
          }
  
@@ -81,7 +81,7 @@ index 0000000..0000000 100644
          fadeHeight += dp(7 - 6);
          fadeHeight += getTopPanelHeightWithPadding(dp(7));
          if (topicsTabs != null) {
-@@ -47472,7 +47472,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -47770,7 +47770,7 @@ public class ChatActivity extends BaseFragment implements
              parentChatActivity.checkUi_messagesSearchListPadding();
          }
  

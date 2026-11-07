@@ -5,8 +5,9 @@ Subject: click to open photos in webpage preview
 
 ---
  .../src/main/java/org/telegram/messenger/FileLoader.java      | 4 ++--
- .../src/main/java/org/telegram/ui/Cells/ChatMessageCell.java  | 4 ++++
- 2 files changed, 6 insertions(+), 2 deletions(-)
+ .../src/main/java/org/telegram/ui/Cells/ChatMessageCell.java  | 2 +-
+ .../java/org/telegram/ui/Cells/ChatMessageLinkPreview.java    | 4 ++++
+ 3 files changed, 7 insertions(+), 3 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/FileLoader.java b/TMessagesProj/src/main/java/org/telegram/messenger/FileLoader.java
 index 0000000..0000000 100644
@@ -34,14 +35,27 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -3206,6 +3206,10 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -940,7 +940,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+         return delegate != null ? delegate.getDraftMessageMeasureController() : null;
+     }
+ 
+-    private final static int DOCUMENT_ATTACH_TYPE_NONE = 0;
++    final static int DOCUMENT_ATTACH_TYPE_NONE = 0;
+     final static int DOCUMENT_ATTACH_TYPE_DOCUMENT = 1;
+     final static int DOCUMENT_ATTACH_TYPE_GIF = 2;
+     final static int DOCUMENT_ATTACH_TYPE_AUDIO = 3;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageLinkPreview.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageLinkPreview.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageLinkPreview.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageLinkPreview.java
+@@ -933,6 +933,10 @@ class ChatMessageLinkPreview {
                          } else {
-                             MediaController.getInstance().pauseMessage(currentMessageObject);
+                             MediaController.getInstance().pauseMessage(cell.currentMessageObject);
                          }
-+                    } else if (drawPhotoImage && (documentAttachType == DOCUMENT_ATTACH_TYPE_NONE || documentAttachType == DOCUMENT_ATTACH_TYPE_GIF) && photoImage.isInsideImage(lastTouchX, lastTouchY) && currentMessageObject != null && !currentMessageObject.preview && MessageObject.getMedia(currentMessageObject.messageOwner).webpage != null && TextUtils.isEmpty(MessageObject.getMedia(currentMessageObject.messageOwner).webpage.embed_url)) {
-+                        if (delegate != null) {
-+                            delegate.didPressImage(this, lastTouchX, lastTouchY, false);
++                    } else if (cell.drawPhotoImage && (cell.documentAttachType == cell.DOCUMENT_ATTACH_TYPE_NONE || cell.documentAttachType == cell.DOCUMENT_ATTACH_TYPE_GIF) && cell.photoImage.isInsideImage(cell.lastTouchX, cell.lastTouchY) && cell.currentMessageObject != null && !cell.currentMessageObject.preview && MessageObject.getMedia(cell.currentMessageObject.messageOwner).webpage != null && TextUtils.isEmpty(MessageObject.getMedia(cell.currentMessageObject.messageOwner).webpage.embed_url)) {
++                        if (cell.delegate != null) {
++                            cell.delegate.didPressImage(cell, cell.lastTouchX, cell.lastTouchY, false);
 +                        }
-                     } else if (drawInstantView || currentMessageObject != null && currentMessageObject.currentEvent != null && currentMessageObject.currentEvent.action instanceof TLRPC.TL_channelAdminLogEventActionEditMessage) {
-                         if (delegate != null) {
-                             delegate.didPressInstantButton(this, drawInstantViewType);
+                     } else if (cell.drawInstantView || cell.currentMessageObject != null && cell.currentMessageObject.currentEvent != null && cell.currentMessageObject.currentEvent.action instanceof TLRPC.TL_channelAdminLogEventActionEditMessage) {
+                         if (cell.delegate != null) {
+                             cell.delegate.didPressInstantButton(cell, cell.drawInstantViewType);

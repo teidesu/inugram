@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/ImageLoader.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/ImageLoader.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/ImageLoader.java
-@@ -2530,6 +2530,9 @@ public class ImageLoader {
+@@ -2542,6 +2542,9 @@ public class ImageLoader {
                          File imagePath = new File(telegramPath, "Telegram Images");
                          imagePath.mkdir();
                          if (imagePath.isDirectory() && canMoveFiles(cachePath, imagePath, FileLoader.MEDIA_DIR_IMAGE)) {
@@ -21,7 +21,7 @@ index 0000000..0000000 100644
                              mediaDirs.put(FileLoader.MEDIA_DIR_IMAGE, imagePath);
                              if (BuildVars.LOGS_ENABLED) {
                                  FileLog.d("image path = " + imagePath);
-@@ -2543,6 +2546,9 @@ public class ImageLoader {
+@@ -2555,6 +2558,9 @@ public class ImageLoader {
                          File videoPath = new File(telegramPath, "Telegram Video");
                          videoPath.mkdir();
                          if (videoPath.isDirectory() && canMoveFiles(cachePath, videoPath, FileLoader.MEDIA_DIR_VIDEO)) {

@@ -19,7 +19,7 @@ index 0000000..0000000 100644
  import androidx.media3.exoplayer.DefaultLoadControl;
  import androidx.media3.exoplayer.DefaultRenderersFactory;
  import androidx.media3.exoplayer.ExoPlayer;
-@@ -610,22 +611,18 @@ public class VideoPlayer implements Player.Listener, VideoListener, AnalyticsLis
+@@ -618,22 +619,18 @@ public class VideoPlayer implements Player.Listener, VideoListener, AnalyticsLis
      public int getCurrentQualityIndex() {
          if (selectedQualityIndex == QUALITY_AUTO) {
              try {
@@ -48,7 +48,7 @@ index 0000000..0000000 100644
                      }
                  }
  
-@@ -2033,6 +2030,13 @@ public class VideoPlayer implements Player.Listener, VideoListener, AnalyticsLis
+@@ -2043,6 +2040,13 @@ public class VideoPlayer implements Player.Listener, VideoListener, AnalyticsLis
          isStory = true;
      }
  

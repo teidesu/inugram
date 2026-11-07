@@ -16,7 +16,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelp
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
-@@ -4429,6 +4429,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -4445,6 +4445,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
      }
  
      public void sendMessage(SendMessageParams sendMessageParams) {
@@ -24,7 +24,7 @@ index 0000000..0000000 100644
          final SendMessageChatArguments sendMessageChatArguments = sendMessageParams.sendMessageChatArguments != null ?
                  sendMessageParams.sendMessageChatArguments : SendMessageChatArguments.EMPTY;
          String message = sendMessageParams.message;
-@@ -7705,6 +7706,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -7742,6 +7743,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
          for (int a = 0, size = msgObjs.size(); a < size; a++) {
              putToSendingMessages(msgObjs.get(a).messageOwner, scheduled);
          }
@@ -34,7 +34,7 @@ index 0000000..0000000 100644
          if (!StarsController.getInstance(currentAccount).beforeSendingFinalRequest(request, msgObjs, () -> performSendMessageRequestMulti(request, msgObjs, originalPaths, parentObjects, delayedMessage, scheduled))) {
              return;
          }
-@@ -8096,6 +8100,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -8133,6 +8137,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
          }
          final TLRPC.Message newMsgObj = msgObj.messageOwner;
          putToSendingMessages(newMsgObj, scheduled);
@@ -48,19 +48,22 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/browser/Browser.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/browser/Browser.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/browser/Browser.java
-@@ -293,9 +293,17 @@ public class Browser {
+@@ -363,12 +363,20 @@ public class Browser {
      }
  
-     public static void openUrl(final Context context, Uri uri, boolean _allowCustom, boolean tryTelegraph, boolean forceNotInternalForApps, Progress inCaseLoading, String browser, boolean allowIntent, boolean allowInAppBrowser, boolean forceRequest) {
-+        if (context != null && uri != null && desu.inugram.helpers.UrlCleanerHelper.openResolvingRedirects(context, uri, inCaseLoading, resolved -> inu_openUrl(context, resolved, _allowCustom, tryTelegraph, forceNotInternalForApps, null, browser, allowIntent, allowInAppBrowser, forceRequest))) {
+     public static void openUrl(final Context context, Uri uri, boolean _allowCustom, boolean tryTelegraph, boolean forceNotInternalForApps, Progress inCaseLoading, String browser, boolean allowIntent, boolean allowInAppBrowser, boolean forceRequest, boolean keepWebAuthTokens) {
++        if (context != null && uri != null && desu.inugram.helpers.UrlCleanerHelper.openResolvingRedirects(context, uri, inCaseLoading, resolved -> inu_openUrl(context, resolved, _allowCustom, tryTelegraph, forceNotInternalForApps, null, browser, allowIntent, allowInAppBrowser, forceRequest, keepWebAuthTokens))) {
 +            return;
 +        }
-+        inu_openUrl(context, uri, _allowCustom, tryTelegraph, forceNotInternalForApps, inCaseLoading, browser, allowIntent, allowInAppBrowser, forceRequest);
++        inu_openUrl(context, uri, _allowCustom, tryTelegraph, forceNotInternalForApps, inCaseLoading, browser, allowIntent, allowInAppBrowser, forceRequest, keepWebAuthTokens);
 +    }
 +
-+    private static void inu_openUrl(final Context context, Uri uri, boolean _allowCustom, boolean tryTelegraph, boolean forceNotInternalForApps, Progress inCaseLoading, String browser, boolean allowIntent, boolean allowInAppBrowser, boolean forceRequest) {
++    private static void inu_openUrl(final Context context, Uri uri, boolean _allowCustom, boolean tryTelegraph, boolean forceNotInternalForApps, Progress inCaseLoading, String browser, boolean allowIntent, boolean allowInAppBrowser, boolean forceRequest, boolean keepWebAuthTokens) {
          if (context == null || uri == null) {
              return;
+         }
+         if (!keepWebAuthTokens) {
+             uri = withoutWebAuthTokens(uri);
          }
 +        uri = desu.inugram.helpers.UrlCleanerHelper.clean(uri);
          final int currentAccount = UserConfig.selectedAccount;
@@ -70,7 +73,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -14308,6 +14308,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -14789,6 +14789,9 @@ public class ChatActivity extends BaseFragment implements
      }
  
      public void searchLinks(final CharSequence charSequence, final boolean force, final boolean inu_force) {
@@ -84,7 +87,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivity
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
-@@ -5835,6 +5835,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -5893,6 +5893,7 @@ public class ChatActivityEnterView extends FrameLayout implements
          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
              messageEditText.setLocalePreferredLineHeightForMinimumUsed(false);
          }
@@ -92,7 +95,7 @@ index 0000000..0000000 100644
          messageEditText.setDelegate(() -> {
              messageEditText.invalidateEffects();
              if (delegate != null) {
-@@ -7450,6 +7451,9 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -7557,6 +7558,9 @@ public class ChatActivityEnterView extends FrameLayout implements
                  sendRichDraft(notify, scheduleDate, scheduleRepeatPeriod, payStars);
                  return;
              }
@@ -102,7 +105,7 @@ index 0000000..0000000 100644
              CharSequence message = messageEditText == null ? "" : messageEditText.getTextToUse();
              if (parentFragment != null) {
                  TLRPC.Chat chat = parentFragment.getCurrentChat();
-@@ -7712,6 +7716,9 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -7819,6 +7823,9 @@ public class ChatActivityEnterView extends FrameLayout implements
          if (editingMessageObject == null) {
              return;
          }
@@ -116,7 +119,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextCapt
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextCaption.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextCaption.java
-@@ -75,6 +75,7 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
+@@ -76,6 +76,7 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
      private boolean copyPasteShowed;
      private int hintColor;
      private EditTextCaptionDelegate delegate;
@@ -124,7 +127,7 @@ index 0000000..0000000 100644
      private int selectionStart = -1;
      private int selectionEnd = -1;
      private boolean allowTextEntitiesIntersection;
-@@ -135,7 +136,7 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
+@@ -137,7 +138,7 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
          delegate = editTextCaptionDelegate;
      }
  
@@ -133,7 +136,7 @@ index 0000000..0000000 100644
          if (delegate != null) {
              delegate.onSpansChanged();
          }
-@@ -351,7 +352,7 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
+@@ -353,7 +354,7 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
                      }
                  }
                  try {
@@ -142,7 +145,7 @@ index 0000000..0000000 100644
                  } catch (Exception ignore) {}
                  if (delegate != null) {
                      delegate.onSpansChanged();
-@@ -393,6 +394,17 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
+@@ -395,6 +396,17 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
              protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
                  super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(64), MeasureSpec.EXACTLY));
              }
@@ -160,7 +163,7 @@ index 0000000..0000000 100644
          };
          final String def = initial == null ? "" : initial;
          editText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
-@@ -445,7 +457,7 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
+@@ -447,7 +459,7 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
                  FileLog.e(e);
              }
              if (text != null) {
@@ -169,7 +172,7 @@ index 0000000..0000000 100644
                  editText.setSelection(0, editText.getText().length());
              }
              checkPaste.run();
-@@ -470,7 +482,7 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
+@@ -472,7 +484,7 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
                  FileLog.e(e);
              }
              if (text != null) {
@@ -178,7 +181,7 @@ index 0000000..0000000 100644
                  editText.setSelection(0, editText.getText().length());
              }
          }
-@@ -955,6 +967,7 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
+@@ -961,6 +973,7 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
          canvas.save();
          canvas.translate(0, offsetY);
          super.onDraw(canvas);
@@ -186,7 +189,7 @@ index 0000000..0000000 100644
          try {
              if (captionLayout != null && userNameLength == length()) {
                  Paint paint = getPaint();
-@@ -1030,6 +1043,7 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
+@@ -1036,6 +1049,7 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
                      String html = clipData.getItemAt(0).getHtmlText();
                      SpannableStringBuilder pasted = new SpannableStringBuilder(CopyUtilities.fromHTML(html));
                      Emoji.replaceEmoji(pasted, getPaint().getFontMetricsInt(), false, null);
@@ -194,7 +197,7 @@ index 0000000..0000000 100644
                      AnimatedEmojiSpan[] spans = pasted.getSpans(0, pasted.length(), AnimatedEmojiSpan.class);
                      if (spans != null) {
                          for (int k = 0; k < spans.length; ++k) {
-@@ -1048,6 +1062,7 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
+@@ -1054,6 +1068,7 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
                      } else {
                          QuoteSpan.normalizeQuotes(pasted);
                      }
@@ -202,7 +205,7 @@ index 0000000..0000000 100644
                      setText(getText().replace(start, end, pasted));
                      setSelection(start + pasted.length(), start + pasted.length());
                      return true;
-@@ -1055,6 +1070,7 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
+@@ -1061,6 +1076,7 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
                      FileLog.e(e);
                  }
              }
@@ -210,7 +213,7 @@ index 0000000..0000000 100644
          } else if (id == android.R.id.copy) {
              int start = Math.max(0, getSelectionStart());
              int end = Math.min(getText().length(), getSelectionEnd());
-@@ -1087,4 +1103,9 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
+@@ -1093,4 +1109,9 @@ public class EditTextCaption extends EditTextBoldCursor implements FloatingToolb
          }
          return super.onTextContextMenuItem(id);
      }
@@ -224,7 +227,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-@@ -1703,7 +1703,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -1731,7 +1731,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                              if ((text.startsWith("http://") || text.startsWith("https://")) && !TextUtils.isEmpty(subject)) {
                                  text = subject + "\n" + text;
                              }

@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/utils/settings/SharedSetti
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/utils/settings/SharedSettings.java
 +++ b/TMessagesProj/src/main/java/org/telegram/utils/settings/SharedSettings.java
-@@ -7,7 +7,7 @@ import org.telegram.utils.recorder.audio.AudioRecordingSession;
+@@ -8,7 +8,7 @@ import org.telegram.utils.recorder.audio.AudioRecordingSession;
  public final class SharedSettings {
  
      public static final BooleanSetting experimentalSettingsAllowed =

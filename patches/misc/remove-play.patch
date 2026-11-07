@@ -4,19 +4,21 @@ Date: Tue, 21 Apr 2026 08:54:19 +0300
 Subject: remove play services stuff only available for official apps
 
 ---
- TMessagesProj/build.gradle                    |   3 -
- .../telegram/messenger/CaptchaController.java | 114 ------
+ TMessagesProj/build.gradle                    |   4 -
+ .../telegram/messenger/CaptchaController.java |  95 ----
+ ...FirebasePhoneNumberVerificationHelper.java | 386 -------------
  .../messenger/MessagesController.java         |  12 -
- .../telegram/tgnet/ConnectionsManager.java    |  43 +--
- .../java/org/telegram/ui/LoginActivity.java   | 345 +-----------------
- 5 files changed, 13 insertions(+), 504 deletions(-)
+ .../telegram/tgnet/ConnectionsManager.java    |  43 +-
+ .../java/org/telegram/ui/LoginActivity.java   | 534 +-----------------
+ 6 files changed, 14 insertions(+), 1060 deletions(-)
  delete mode 100644 TMessagesProj/src/main/java/org/telegram/messenger/CaptchaController.java
+ delete mode 100644 TMessagesProj/src/main/java/org/telegram/messenger/FirebasePhoneNumberVerificationHelper.java
 
 diff --git a/TMessagesProj/build.gradle b/TMessagesProj/build.gradle
 index 0000000..0000000 100644
 --- a/TMessagesProj/build.gradle
 +++ b/TMessagesProj/build.gradle
-@@ -79,8 +79,6 @@ dependencies {
+@@ -77,8 +77,6 @@ dependencies {
      implementation 'com.android.billingclient:billing:8.0.0'
      implementation 'com.google.code.gson:gson:2.11.0'
      implementation 'com.google.guava:guava:31.1-android'
@@ -25,7 +27,15 @@ index 0000000..0000000 100644
  
      implementation 'com.google.android.gms:play-services-mlkit-subject-segmentation:16.0.0-beta1'
      implementation 'com.google.android.gms:play-services-mlkit-image-labeling:16.0.8'
-@@ -115,7 +113,6 @@ dependencies {
+@@ -90,7 +88,6 @@ dependencies {
+     // 34.19.0 is the last BoM for minSdk 23: BoM 35.x requires minSdk 24 (33.16.0 was the last for Android 5).
+     api platform('com.google.firebase:firebase-bom:34.19.0')
+     implementation 'com.google.firebase:firebase-messaging'
+-    implementation "com.google.firebase:firebase-pnv"
+     implementation 'com.google.firebase:firebase-appindexing:20.0.0'
+ 
+     implementation "io.noties.markwon:core:4.6.2"
+@@ -120,7 +117,6 @@ dependencies {
  
  //    implementation 'com.google.mlkit:translate:17.0.3'
  
@@ -38,71 +48,41 @@ deleted file mode 100644
 index 0000000..0000000
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/CaptchaController.java
 +++ /dev/null
-@@ -1,114 +0,0 @@
+@@ -1,95 +0,0 @@
 -package org.telegram.messenger;
 -
 -import android.app.Activity;
 -
--import com.google.android.gms.tasks.OnSuccessListener;
 -import com.google.android.recaptcha.Recaptcha;
 -import com.google.android.recaptcha.RecaptchaAction;
--import com.google.android.recaptcha.RecaptchaTasksClient;
 -
 -import org.telegram.tgnet.ConnectionsManager;
--import org.telegram.ui.LaunchActivity;
--
--import java.util.ArrayList;
--import java.util.HashMap;
--import java.util.HashSet;
--import java.util.Objects;
 -
 -public class CaptchaController {
 -
--    public static class Request {
--        public int currentAccount;
--        public String action;
--        public String key_id;
+-    private static class Request {
+-        private final int currentAccount;
+-        private final int requestToken;
+-        private final int generation;
+-        private boolean completed;
 -
--        public Request(int currentAccount, String action, String key_id) {
+-        private Request(int currentAccount, int requestToken, int generation) {
 -            this.currentAccount = currentAccount;
--            this.action = action;
--            this.key_id = key_id;
+-            this.requestToken = requestToken;
+-            this.generation = generation;
 -        }
 -
--        @Override
--        public int hashCode() {
--            return Objects.hash(currentAccount, action, key_id);
--        }
--
--        public HashSet<Integer> requestTokens = new HashSet<>();
--
--        public void done(String token) {
--            currentRequests.remove(this.hashCode());
--            int[] requestTokens = new int[this.requestTokens.size()];
--            int i = 0;
--            for (Integer requestTokenI : this.requestTokens) {
--                requestTokens[i++] = requestTokenI;
+-        private void done(String token) {
+-            if (completed) {
+-                return;
 -            }
--            ConnectionsManager.getInstance(currentAccount)
--                .native_receivedCaptchaResult(currentAccount, requestTokens, token);
+-            completed = true;
+-            ConnectionsManager.native_receivedCaptchaResult(currentAccount, requestToken, generation, token);
 -        }
 -    }
 -
--    public static HashMap<Integer, Request> currentRequests;
--
--    public static void request(int currentAccount, int requestToken, String action, String key_id) {
--        if (currentRequests == null) {
--            currentRequests = new HashMap<>();
--        }
--        final int key = Objects.hash(currentAccount, action, key_id);
--        Request r = currentRequests.get(key);
--        if (r != null) {
--            r.requestTokens.add(requestToken);
--            return;
--        }
--        r = new Request(currentAccount, action, key_id);
--        r.requestTokens.add(requestToken);
--        final Request finalRequest = r;
+-    public static void request(int currentAccount, int requestToken, int generation, String action, String key_id) {
+-        final Request finalRequest = new Request(currentAccount, requestToken, generation);
 -
 -        final Activity activity = AndroidUtilities.getActivity();
 -        if (activity == null) {
@@ -115,7 +95,18 @@ index 0000000..0000000
 -            .addOnSuccessListener(client -> {
 -                client.executeTask(getAction(action))
 -                    .addOnSuccessListener(token -> {
--                        FileLog.d("CaptchaController: got token for {action="+action+", key_id="+key_id+"}: " + token);
+-                        if (BuildVars.LOGS_ENABLED) {
+-                            final String tokenPreview = token == null
+-                                ? "null"
+-                                : token.substring(0, Math.min(24, token.length())) + "...";
+-
+-                            FileLog.d("CaptchaController: got token for account=" + currentAccount
+-                                + ", request=" + requestToken
+-                                + ", generation=" + generation
+-                                + ", token=" + tokenPreview
+-                                + ", length=" + (token == null ? 0 : token.length()));
+-                        }
+-
 -                        if (token == null) {
 -                            finalRequest.done("RECAPTCHA_FAILED_TOKEN_NULL");
 -                        } else {
@@ -153,11 +144,403 @@ index 0000000..0000000
 -    }
 -
 -}
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/FirebasePhoneNumberVerificationHelper.java b/TMessagesProj/src/main/java/org/telegram/messenger/FirebasePhoneNumberVerificationHelper.java
+deleted file mode 100644
+index 0000000..0000000
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/FirebasePhoneNumberVerificationHelper.java
++++ /dev/null
+@@ -1,386 +0,0 @@
+-package org.telegram.messenger;
+-
+-import android.Manifest;
+-import android.content.Context;
+-import android.content.pm.PackageManager;
+-import android.os.Build;
+-import android.os.CancellationSignal;
+-import android.telephony.SubscriptionInfo;
+-import android.telephony.SubscriptionManager;
+-import android.telephony.TelephonyManager;
+-import android.text.TextUtils;
+-
+-import androidx.annotation.NonNull;
+-import androidx.annotation.Nullable;
+-import androidx.annotation.OptIn;
+-import androidx.annotation.RequiresApi;
+-import androidx.credentials.Credential;
+-import androidx.credentials.CredentialManager;
+-import androidx.credentials.CredentialManagerCallback;
+-import androidx.credentials.ExperimentalDigitalCredentialApi;
+-import androidx.credentials.GetCredentialRequest;
+-import androidx.credentials.GetCredentialResponse;
+-import androidx.credentials.GetDigitalCredentialOption;
+-import androidx.credentials.exceptions.GetCredentialCancellationException;
+-import androidx.credentials.exceptions.GetCredentialException;
+-import androidx.credentials.exceptions.GetCredentialInterruptedException;
+-import androidx.credentials.exceptions.NoCredentialException;
+-
+-import com.google.android.gms.tasks.CancellationToken;
+-import com.google.android.gms.tasks.Task;
+-import com.google.android.gms.tasks.TaskCompletionSource;
+-import com.google.firebase.pnv.FirebasePhoneNumberVerification;
+-import com.google.firebase.pnv.VerificationSupportResult;
+-
+-import org.json.JSONArray;
+-import org.json.JSONObject;
+-import org.telegram.tgnet.ConnectionsManager;
+-import org.telegram.tgnet.TLRPC;
+-import org.telegram.ui.web.BotWebViewContainer;
+-
+-import java.util.ArrayList;
+-import java.util.Collections;
+-import java.util.List;
+-import java.util.Locale;
+-import java.util.concurrent.CancellationException;
+-
+-public class FirebasePhoneNumberVerificationHelper {
+-    private static FirebasePhoneNumberVerification instance;
+-
+-    private static FirebasePhoneNumberVerification getFpnvInstance() {
+-        if (instance == null) {
+-            instance = FirebasePhoneNumberVerification.getInstance();
+-        }
+-        return instance;
+-    }
+-
+-    private FirebasePhoneNumberVerificationHelper() {
+-
+-    }
+-
+-    // What the client can tell about the SIM that Firebase picked, for the consent dialog.
+-    // Fields are null when Android does not expose them (no permission, unknown slot mapping).
+-    public static class SimInfo {
+-        public int slot;
+-        public String carrierName;
+-        public String countryName;
+-        public String mccMnc;
+-        public String phoneNumber;
+-    }
+-
+-    public static SimInfo getSimInfo(Context context, VerificationSupportResult result) {
+-        final SimInfo info = new SimInfo();
+-        info.slot = result.getSimSlot();
+-        // Firebase's carrier id is the same carrier name Android reports (e.g. "o2 - de"),
+-        // so it only fills the Carrier row when the system gives nothing.
+-        info.carrierName = emptyToNull(result.getCarrierId());
+-        try {
+-            TelephonyManager tm = (TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE);
+-            if (tm == null) {
+-                return info;
+-            }
+-            final int subId = getSubscriptionId(context, info.slot);
+-            if (subId != SubscriptionManager.INVALID_SUBSCRIPTION_ID && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+-                tm = tm.createForSubscriptionId(subId);
+-            } else if (tm.getPhoneCount() > 1) {
+-                // The default TelephonyManager may describe the other SIM.
+-                return info;
+-            }
+-
+-            String carrierName = tm.getSimOperatorName();
+-            if (TextUtils.isEmpty(carrierName) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+-                final CharSequence idName = tm.getSimCarrierIdName();
+-                carrierName = idName == null ? null : idName.toString();
+-            }
+-            if (!TextUtils.isEmpty(carrierName)) {
+-                info.carrierName = carrierName;
+-            }
+-
+-            final String countryIso = tm.getSimCountryIso();
+-            if (!TextUtils.isEmpty(countryIso)) {
+-                final Locale locale = LocaleController.getInstance().getCurrentLocale();
+-                info.countryName = emptyToNull(new Locale("", countryIso.toUpperCase(Locale.US)).getDisplayCountry(locale != null ? locale : Locale.getDefault()));
+-            }
+-
+-            final String operator = tm.getSimOperator();
+-            if (operator != null && operator.length() >= 5) {
+-                info.mccMnc = operator.substring(0, 3) + " " + operator.substring(3);
+-            }
+-
+-            info.phoneNumber = emptyToNull(readPhoneNumber(context, tm, subId));
+-        } catch (Exception e) {
+-            FileLog.e(e);
+-        }
+-        return info;
+-    }
+-
+-    private static int getSubscriptionId(Context context, int slot) {
+-        try {
+-            if (Build.VERSION.SDK_INT >= 34) {
+-                return SubscriptionManager.getSubscriptionId(slot);
+-            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+-                return getSubscriptionIdQ(context, slot);
+-            } else if (hasPermission(context, Manifest.permission.READ_PHONE_STATE)) {
+-                final SubscriptionManager sm = (SubscriptionManager) context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE);
+-                final SubscriptionInfo subscriptionInfo = sm == null ? null : sm.getActiveSubscriptionInfoForSimSlotIndex(slot);
+-                if (subscriptionInfo != null) {
+-                    return subscriptionInfo.getSubscriptionId();
+-                }
+-            }
+-        } catch (Exception e) {
+-            FileLog.e(e);
+-        }
+-        return SubscriptionManager.INVALID_SUBSCRIPTION_ID;
+-    }
+-
+-    @RequiresApi(Build.VERSION_CODES.Q)
+-    private static int getSubscriptionIdQ(Context context, int slot) {
+-        final SubscriptionManager sm = context.getSystemService(SubscriptionManager.class);
+-        final int[] ids = sm == null ? null : sm.getSubscriptionIds(slot);
+-        return ids != null && ids.length > 0 ? ids[0] : SubscriptionManager.INVALID_SUBSCRIPTION_ID;
+-    }
+-
+-    // Only reads the number when the permission is already granted; never asks for it.
+-    private static String readPhoneNumber(Context context, TelephonyManager tm, int subId) {
+-        final boolean allowed = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+-            ? hasPermission(context, Manifest.permission.READ_PHONE_NUMBERS)
+-            : hasPermission(context, Manifest.permission.READ_PHONE_STATE);
+-        if (!allowed) {
+-            return null;
+-        }
+-        try {
+-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && subId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+-                final SubscriptionManager sm = context.getSystemService(SubscriptionManager.class);
+-                final String number = sm == null ? null : sm.getPhoneNumber(subId);
+-                if (!TextUtils.isEmpty(number)) {
+-                    return number;
+-                }
+-            }
+-            return tm.getLine1Number();
+-        } catch (SecurityException e) {
+-            return null;
+-        }
+-    }
+-
+-    private static boolean hasPermission(Context context, String permission) {
+-        return context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED;
+-    }
+-
+-    private static String emptyToNull(String value) {
+-        return TextUtils.isEmpty(value) ? null : value;
+-    }
+-
+-    public static void getVerificationSupportInfo(Utilities.Callback<List<VerificationSupportResult>> callback) {
+-        if (!BuildVars.SUPPORTS_FPNV) {
+-            callback.run(Collections.emptyList());
+-            return;
+-        }
+-
+-        getFpnvInstance().getVerificationSupportInfo()
+-            .addOnSuccessListener(AndroidUtilities::runOnUIThread, results -> {
+-                final ArrayList<VerificationSupportResult> supportedResults = new ArrayList<>();
+-                for (VerificationSupportResult result : results) {
+-                    if (result.isSupported()) {
+-                        supportedResults.add(result);
+-                    }
+-                }
+-                callback.run(supportedResults);
+-            })
+-            .addOnFailureListener(AndroidUtilities::runOnUIThread, error -> {
+-                FileLog.e(error);
+-                callback.run(Collections.emptyList());
+-            });
+-    }
+-
+-    @OptIn(markerClass = ExperimentalDigitalCredentialApi.class)
+-    public static Task<TLRPC.auth_Authorization> loginViaFirebasePhoneNumberVerification(
+-        Context context,
+-        int currentAccount,
+-        CancellationToken cancellationToken,
+-        @Nullable Runnable onVerifying
+-    ) {
+-        final TaskCompletionSource<TLRPC.auth_Authorization> taskSource = new TaskCompletionSource<>(cancellationToken);
+-        final CredentialManager credentialManager = CredentialManager.create(context);
+-        final Runnable[] cancel = new Runnable[1];
+-
+-        cancellationToken.onCanceledRequested(() -> {
+-            if (cancel[0] != null) {
+-                cancel[0].run();
+-            }
+-        });
+-
+-        final TLRPC.TL_auth_initFirebasePnvLogin req =
+-                new TLRPC.TL_auth_initFirebasePnvLogin();
+-        req.api_id = BuildVars.APP_ID;
+-        req.api_hash = BuildVars.APP_HASH;
+-        req.except_ids = UserConfig.getLoggedInAccountIds();
+-
+-        final int requestId = ConnectionsManager.getInstance(currentAccount).sendRequestTyped(
+-            req,
+-            AndroidUtilities::runOnUIThread,
+-            (res, err) -> {
+-                if (cancellationToken.isCancellationRequested()) {
+-                    return;
+-                }
+-
+-                if (res == null || err != null) {
+-                    taskSource.trySetException(new ConnectionsManager.RequestException(err));
+-                    return;
+-                }
+-
+-                final String requestJson = wrapFirebasePnvPayload(
+-                    res.nonce,
+-                    res.digital_credential_payload
+-                );
+-
+-                if (requestJson == null) {
+-                    taskSource.trySetException(
+-                        new Exception("Failed to create Firebase PNV payload")
+-                    );
+-                    return;
+-                }
+-
+-                final GetDigitalCredentialOption option =
+-                    new GetDigitalCredentialOption(requestJson);
+-
+-                final GetCredentialRequest credentialRequest =
+-                    new GetCredentialRequest.Builder()
+-                        .addCredentialOption(option)
+-                        .build();
+-
+-                final CancellationSignal cancellationSignal = new CancellationSignal();
+-
+-                cancel[0] = cancellationSignal::cancel;
+-
+-                if (cancellationToken.isCancellationRequested()) {
+-                    cancellationSignal.cancel();
+-                    return;
+-                }
+-
+-                credentialManager.getCredentialAsync(
+-                    context,
+-                    credentialRequest,
+-                    cancellationSignal,
+-                    AndroidUtilities::runOnUIThread,
+-                    new CredentialManagerCallback<GetCredentialResponse, GetCredentialException>() {
+-                        @Override
+-                        public void onResult(GetCredentialResponse response) {
+-                            if (cancellationToken.isCancellationRequested()) {
+-                                return;
+-                            }
+-
+-                            final String googleToken;
+-                            try {
+-                                final Credential credential = response.getCredential();
+-                                final String responseJson = credential.getData().getString(
+-                                        "androidx.credentials.BUNDLE_KEY_REQUEST_JSON"
+-                                );
+-
+-                                final JSONObject responseObject =
+-                                    new JSONObject(responseJson);
+-
+-                                googleToken = responseObject
+-                                    .getJSONObject("data")
+-                                    .getJSONObject("vp_token")
+-                                    .getJSONArray("firebase")
+-                                    .getString(0);
+-                            } catch (Exception e) {
+-                                taskSource.trySetException(e);
+-                                return;
+-                            }
+-
+-                            if (onVerifying != null) {
+-                                onVerifying.run();
+-                            }
+-
+-                            final TLRPC.TL_auth_finishFirebasePnvLogin finishRequest =
+-                                new TLRPC.TL_auth_finishFirebasePnvLogin();
+-                            finishRequest.google_token = googleToken;
+-
+-                            final int finishRequestId =
+-                                ConnectionsManager.getInstance(currentAccount)
+-                                    .sendRequestTyped(
+-                                        finishRequest,
+-                                        AndroidUtilities::runOnUIThread,
+-                                        (authorization, finishError) -> {
+-                                            if (cancellationToken.isCancellationRequested()) {
+-                                                return;
+-                                            }
+-
+-                                            if (authorization == null || finishError != null) {
+-                                                taskSource.trySetException(
+-                                                    new ConnectionsManager.RequestException(finishError)
+-                                                );
+-                                                return;
+-                                            }
+-
+-                                            taskSource.trySetResult(authorization);
+-                                        },
+-                                        ConnectionsManager.RequestFlagWithoutLogin
+-                                    );
+-
+-                            cancel[0] = () ->
+-                                ConnectionsManager.getInstance(currentAccount)
+-                                    .cancelRequest(finishRequestId, true);
+-
+-                            if (cancellationToken.isCancellationRequested()) {
+-                                cancel[0].run();
+-                            }
+-                        }
+-
+-                        @Override
+-                        public void onError(@NonNull GetCredentialException error) {
+-                            if (cancellationToken.isCancellationRequested()) {
+-                                return;
+-                            }
+-
+-                            if (error instanceof NoCredentialException) {
+-                                taskSource.trySetException(new Exception("EMPTY"));
+-                            } else if (error instanceof GetCredentialCancellationException ||
+-                                    error instanceof GetCredentialInterruptedException) {
+-                                taskSource.trySetException(new CancellationException());
+-                            } else {
+-                                taskSource.trySetException(error);
+-                            }
+-                        }
+-                    }
+-                );
+-            },
+-            ConnectionsManager.RequestFlagWithoutLogin
+-        );
+-
+-        cancel[0] = () ->
+-            ConnectionsManager.getInstance(currentAccount)
+-                .cancelRequest(requestId, true);
+-
+-        if (cancellationToken.isCancellationRequested()) {
+-            cancel[0].run();
+-        }
+-
+-        return taskSource.getTask();
+-    }
+-
+-    @Nullable
+-    private static String wrapFirebasePnvPayload(String nonce, String firebasePayload) {
+-        try {
+-            return BotWebViewContainer.obj(
+-                "requests",
+-                new JSONArray().put(
+-                    BotWebViewContainer.obj(
+-                        "protocol", "openid4vp-v1-unsigned",
+-                        "data", BotWebViewContainer.obj(
+-                            "response_type", "vp_token",
+-                            "response_mode", "dc_api",
+-                            "nonce", nonce,
+-                            "dcql_query", BotWebViewContainer.obj(
+-                                "credentials", new JSONArray().put(new JSONObject(firebasePayload))
+-                            )
+-                        )
+-                    )
+-                )
+-            ).toString();
+-        } catch (Exception e) {
+-            return null;
+-        }
+-    }
+-}
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -1826,7 +1826,6 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -1824,7 +1824,6 @@ public class MessagesController extends BaseController implements NotificationCe
              }
          }
          scheduleTranscriptionUpdate();
@@ -165,7 +548,7 @@ index 0000000..0000000 100644
          if (mainPreferences.contains("dcDomainName2")) {
              dcDomainName = mainPreferences.getString("dcDomainName2", "apv3.stel.com");
          } else {
-@@ -2791,17 +2790,6 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -2789,17 +2788,6 @@ public class MessagesController extends BaseController implements NotificationCe
                      }
                      break;
                  }
@@ -187,7 +570,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
 +++ b/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
-@@ -17,11 +17,6 @@ import androidx.annotation.Keep;
+@@ -18,11 +18,6 @@ import androidx.annotation.Nullable;
  import androidx.annotation.OptIn;
  import androidx.media3.common.util.UnstableApi;
  import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter;
@@ -199,7 +582,7 @@ index 0000000..0000000 100644
  
  import org.json.JSONArray;
  import org.json.JSONObject;
-@@ -30,7 +25,6 @@ import org.telegram.messenger.AndroidUtilities;
+@@ -31,7 +26,6 @@ import org.telegram.messenger.AndroidUtilities;
  import org.telegram.messenger.ApplicationLoader;
  import org.telegram.messenger.BaseController;
  import org.telegram.messenger.BuildVars;
@@ -207,7 +590,7 @@ index 0000000..0000000 100644
  import org.telegram.messenger.EmuDetector;
  import org.telegram.messenger.FileLoadOperation;
  import org.telegram.messenger.FileLoader;
-@@ -1521,45 +1515,14 @@ public class ConnectionsManager extends BaseController {
+@@ -1545,45 +1539,14 @@ public class ConnectionsManager extends BaseController {
      @Keep
      public static void onIntegrityCheckClassic(final int currentAccount, final int requestToken, final String project, final String nonce) {
          AndroidUtilities.runOnUIThread(() -> {
@@ -250,9 +633,9 @@ index 0000000..0000000 100644
      }
  
      @Keep
-     public static void onCaptchaCheck(final int currentAccount, final int requestToken, final String action, final String key_id) {
--        CaptchaController.request(currentAccount, requestToken, action, key_id);
-+        native_receivedCaptchaResult(currentAccount, new int[]{requestToken}, "RECAPTCHA_FAILED_TOKEN_NULL");
+     public static void onCaptchaCheck(final int currentAccount, final int requestToken, final int generation, final String action, final String key_id) {
+-        AndroidUtilities.runOnUIThread(() -> CaptchaController.request(currentAccount, requestToken, generation, action, key_id));
++        native_receivedCaptchaResult(currentAccount, requestToken, generation, "RECAPTCHA_FAILED_TOKEN_NULL");
      }
  
      public static native byte[] nativeTestGenerateClientHello(String domain);
@@ -260,7 +643,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java b/TM
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LoginActivity.java
-@@ -104,19 +104,7 @@ import com.android.billingclient.api.BillingFlowParams;
+@@ -104,21 +104,7 @@ import com.android.billingclient.api.BillingFlowParams;
  import com.android.billingclient.api.ProductDetails;
  import com.android.billingclient.api.Purchase;
  import com.android.billingclient.api.QueryProductDetailsParams;
@@ -270,27 +653,37 @@ index 0000000..0000000 100644
 -import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
 -import com.google.android.gms.common.api.ApiException;
 -import com.google.android.gms.safetynet.SafetyNet;
+-import com.google.android.gms.tasks.CancellationTokenSource;
 -import com.google.android.gms.tasks.Task;
 -import com.google.android.play.core.integrity.IntegrityManager;
 -import com.google.android.play.core.integrity.IntegrityManagerFactory;
 -import com.google.android.play.core.integrity.IntegrityTokenRequest;
 -import com.google.android.play.core.integrity.IntegrityTokenResponse;
+-import com.google.firebase.pnv.VerificationSupportResult;
 -
 -import org.json.JSONException;
 +
  import org.json.JSONObject;
  import org.telegram.PhoneFormat.PhoneFormat;
  import org.telegram.messenger.AccountInstance;
-@@ -394,8 +382,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -132,7 +118,6 @@ import org.telegram.messenger.CallReceiver;
+ import org.telegram.messenger.ContactsController;
+ import org.telegram.messenger.Emoji;
+ import org.telegram.messenger.FileLog;
+-import org.telegram.messenger.FirebasePhoneNumberVerificationHelper;
+ import org.telegram.messenger.ImageLocation;
+ import org.telegram.messenger.LocaleController;
+ import org.telegram.messenger.MediaDataController;
+@@ -403,8 +388,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
      private Runnable[] editDoneCallback = new Runnable[2];
      private boolean[] postedEditDoneCallback = new boolean[2];
  
 -    private boolean forceDisableSafetyNet;
 -
-     private static class ProgressView extends View {
+     private static class ProgressView extends View implements Theme.Colorable {
  
          private final Path path = new Path();
-@@ -1719,7 +1705,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -1747,7 +1730,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                              .setTitle(getString(R.string.RestorePasswordNoEmailTitle))
                              .setMessage(getString(R.string.SafetyNetErrorOccurred))
                              .setPositiveButton(getString(R.string.OK), (dialog, which) -> {
@@ -298,7 +691,7 @@ index 0000000..0000000 100644
                                  if (currentViewNum != VIEW_PHONE_INPUT) {
                                      setPage(VIEW_PHONE_INPUT, true, null, true);
                                  }
-@@ -1768,118 +1753,8 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -1803,118 +1785,8 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
              return;
          }
          if (res.type instanceof TLRPC.TL_auth_sentCodeTypeFirebaseSms && !res.type.verifiedFirebase && !isRequestingFirebaseSms) {
@@ -419,7 +812,7 @@ index 0000000..0000000 100644
              return;
          }
  
-@@ -3079,10 +2954,8 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -3115,10 +2987,8 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
              TLRPC.TL_codeSettings settings = new TLRPC.TL_codeSettings();
              settings.allow_flashcall = simcardAvailable && allowCall && allowCancelCall && allowReadCallLog;
              settings.allow_missed_call = simcardAvailable && allowCall;
@@ -432,7 +825,214 @@ index 0000000..0000000 100644
  
              ArrayList<TLRPC.TL_auth_authorization> loginTokens = AuthTokensHelper.getSavedLogInTokens();
              if (loginTokens != null) {
-@@ -5901,8 +5774,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -3429,7 +3299,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+                     }
+                 }
+                 if (activityMode == MODE_LOGIN) {
+-                    requestFpnv();
++                    requestPasskey(false);
+                 }
+             }, SHOW_DELAY);
+         }
+@@ -3441,182 +3311,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+                 cancelRequestingPasskey.run();
+                 cancelRequestingPasskey = null;
+             }
+-            fpnvDestroyed = true;
+-            if (waitingConfigForFpnv) {
+-                waitingConfigForFpnv = false;
+-                NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.configLoaded);
+-            }
+-            if (fpnvCancellationTokenSource != null) {
+-                fpnvCancellationTokenSource.cancel();
+-                fpnvCancellationTokenSource = null;
+-            }
+-            if (fpnvProgressDialog != null) {
+-                fpnvProgressDialog.dismiss();
+-                fpnvProgressDialog = null;
+-            }
+-            if (fpnvConsentDialog != null) {
+-                fpnvConsentDialog.dismiss();
+-                fpnvConsentDialog = null;
+-            }
+-        }
+-
+-        private boolean requestedFpnv;
+-        private boolean waitingConfigForFpnv;
+-        private boolean fpnvDestroyed;
+-        private CancellationTokenSource fpnvCancellationTokenSource;
+-        private AlertDialog fpnvProgressDialog;
+-        private AlertDialog fpnvConsentDialog;
+-
+-        // Automatic sign-in on the phone page: Firebase PNV when the server allows it,
+-        // the SIM supports it and the user agrees; otherwise (or when it fails) a passkey.
+-        private void requestFpnv() {
+-            if (activityMode != MODE_LOGIN || requestedFpnv || fpnvDestroyed) {
+-                return;
+-            }
+-            final MessagesController messagesController = MessagesController.getInstance(currentAccount);
+-            if (!messagesController.remoteConfigLoaded) {
+-                if (!waitingConfigForFpnv) {
+-                    waitingConfigForFpnv = true;
+-                    NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.configLoaded);
+-                    ConnectionsManager.getInstance(currentAccount).updateDcSettings();
+-                }
+-                return;
+-            }
+-
+-            requestedFpnv = true;
+-            if (!BuildVars.SUPPORTS_FPNV || !messagesController.fpnvAllowed) {
+-                requestPasskey(false);
+-                return;
+-            }
+-            FirebasePhoneNumberVerificationHelper.getVerificationSupportInfo(results -> {
+-                if (!canStartAutoLogin()) {
+-                    return;
+-                }
+-                if (results != null && !results.isEmpty()) {
+-                    showFpnvConsent(results.get(0));
+-                } else {
+-                    requestPasskey(false);
+-                }
+-            });
+-        }
+-
+-        // The system sheet opens only after the user agrees here; declining falls back to a passkey.
+-        private void showFpnvConsent(VerificationSupportResult verificationSupportResult) {
+-            final Context context = getContext();
+-            final FirebasePhoneNumberVerificationHelper.SimInfo sim = FirebasePhoneNumberVerificationHelper.getSimInfo(context, verificationSupportResult);
+-
+-            final TableView tableView = new TableView(context, resourceProvider);
+-            if (sim.carrierName != null) {
+-                tableView.addRow(getString(R.string.FpnvConsentCarrier), sim.carrierName);
+-            }
+-            if (sim.slot >= 0) {
+-                tableView.addRow(getString(R.string.FpnvConsentSimSlot), formatString(R.string.FpnvConsentSimSlotValue, sim.slot + 1));
+-            }
+-            if (sim.phoneNumber != null) {
+-                tableView.addRow(getString(R.string.FpnvConsentPhoneNumber), sim.phoneNumber.startsWith("+") ? PhoneFormat.getInstance().format(sim.phoneNumber) : sim.phoneNumber);
+-            }
+-            if (sim.countryName != null) {
+-                tableView.addRow(getString(R.string.FpnvConsentCountry), sim.countryName);
+-            }
+-            if (sim.mccMnc != null) {
+-                tableView.addRow(getString(R.string.FpnvConsentMccMnc), sim.mccMnc);
+-            }
+-            final FrameLayout tableContainer = new FrameLayout(context);
+-            tableContainer.addView(tableView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP | Gravity.FILL_HORIZONTAL, 24, 4, 24, 4));
+-
+-            final boolean[] confirmed = new boolean[1];
+-            final AlertDialog.Builder builder = new AlertDialog.Builder(context, resourceProvider);
+-            builder.setTitle(getString(R.string.FpnvConsentTitle));
+-            builder.setMessage(getString(R.string.FpnvConsentText));
+-            builder.setView(tableContainer);
+-            builder.setPositiveButton(getString(R.string.FpnvConsentContinue), (d, which) -> {
+-                confirmed[0] = true;
+-                if (canStartAutoLogin()) {
+-                    requestLoginViaFirebasePhoneNumberVerification();
+-                }
+-            });
+-            builder.setNegativeButton(getString(R.string.Cancel), null);
+-            final AlertDialog dialog = builder.create();
+-            dialog.setOnDismissListener(d -> {
+-                if (fpnvConsentDialog == dialog) {
+-                    fpnvConsentDialog = null;
+-                }
+-                if (!confirmed[0] && canStartAutoLogin()) {
+-                    requestPasskey(false);
+-                }
+-            });
+-            fpnvConsentDialog = dialog;
+-            dialog.show();
+-        }
+-
+-        private boolean canStartAutoLogin() {
+-            final Activity activity = getParentActivity();
+-            return !fpnvDestroyed && !nextPressed && currentViewNum == VIEW_PHONE_INPUT && activity != null && !activity.isFinishing();
+-        }
+-
+-        private void requestLoginViaFirebasePhoneNumberVerification() {
+-            final Executor executor = AndroidUtilities::runOnUIThread;
+-            final CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+-            fpnvCancellationTokenSource = cancellationTokenSource;
+-
+-            FirebasePhoneNumberVerificationHelper.loginViaFirebasePhoneNumberVerification(
+-                getContext(), currentAccount, cancellationTokenSource.getToken(), () -> {
+-                    if (!canStartAutoLogin()) {
+-                        return;
+-                    }
+-                    final AlertDialog progressDialog = new AlertDialog(getContext(), AlertDialog.ALERT_TYPE_SPINNER);
+-                    progressDialog.setOnCancelListener(d -> cancellationTokenSource.cancel());
+-                    progressDialog.show();
+-                    fpnvProgressDialog = progressDialog;
+-                })
+-                    .addOnCompleteListener(executor, r -> {
+-                        if (fpnvProgressDialog != null) {
+-                            fpnvProgressDialog.dismiss();
+-                            fpnvProgressDialog = null;
+-                        }
+-                        if (fpnvCancellationTokenSource == cancellationTokenSource) {
+-                            fpnvCancellationTokenSource = null;
+-                        }
+-                    })
+-                    .addOnSuccessListener(executor, authAuthorization -> {
+-                        if (fpnvDestroyed) {
+-                            return;
+-                        }
+-                        if (authAuthorization instanceof TLRPC.TL_auth_authorizationSignUpRequired) {
+-                            final TLRPC.TL_auth_authorizationSignUpRequired authorization =
+-                                (TLRPC.TL_auth_authorizationSignUpRequired) authAuthorization;
+-                            if (authorization.terms_of_service != null) {
+-                                currentTermsOfService = authorization.terms_of_service;
+-                            }
+-                            Bundle params = new Bundle();
+-                            params.putBoolean("fromFirebasePhoneNumberVerification", true);
+-                            setPage(VIEW_REGISTER, true, params, false);
+-                        } else if (authAuthorization instanceof TLRPC.TL_auth_authorization) {
+-                            onAuthSuccess((TLRPC.TL_auth_authorization) authAuthorization);
+-                        } else {
+-                            requestPasskey(false);
+-                        }
+-                    })
+-                    .addOnFailureListener(executor, exception -> {
+-                        if (fpnvDestroyed) {
+-                            return;
+-                        }
+-                        if (exception instanceof ConnectionsManager.RequestException) {
+-                            final String err = exception.getMessage();
+-                            if (err != null && err.contains("SESSION_PASSWORD_NEEDED")) {
+-                                requestPassword();
+-                                return;
+-                            }
+-                            if (err != null && BuildVars.DEBUG_VERSION) {
+-                                BulletinFactory.of(slideViewsContainer, null).showForError(err);
+-                            }
+-                        } else if (!(exception instanceof CancellationException)) {
+-                            FileLog.e(exception);
+-                        }
+-                        if (canStartAutoLogin()) {
+-                            requestPasskey(false);
+-                        }
+-                    });
+         }
+ 
+         private boolean requestedPasskey = false;
+@@ -3725,14 +3419,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+         public void didReceivedNotification(int id, int account, Object... args) {
+             if (id == NotificationCenter.emojiLoaded) {
+                 countryButton.getCurrentView().invalidate();
+-            } else if (id == NotificationCenter.configLoaded && account == currentAccount) {
+-                if (waitingConfigForFpnv) {
+-                    waitingConfigForFpnv = false;
+-                    NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.configLoaded);
+-                    if (canStartAutoLogin()) {
+-                        requestFpnv();
+-                    }
+-                }
+             }
+         }
+     }
+@@ -6169,8 +5855,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
  
          private TextView titleView;
          private TextView subtitleView;
@@ -441,7 +1041,7 @@ index 0000000..0000000 100644
          private RLottieImageView inboxImageView;
  
          private Bundle currentParams;
-@@ -5911,8 +5782,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -6179,8 +5863,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
          private String phone, emailPhone;
          private String requestPhone, phoneHash;
  
@@ -450,7 +1050,7 @@ index 0000000..0000000 100644
          public LoginActivitySetupEmail(Context context) {
              super(context);
  
-@@ -5968,72 +5837,8 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -6236,72 +5918,8 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
  
              addView(emailOutlineView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 58, 16, 24, 16, 0));
  
@@ -523,7 +1123,7 @@ index 0000000..0000000 100644
          }
  
          @Override
-@@ -6042,8 +5847,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -6310,8 +5928,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
              subtitleView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText6));
              subtitleView.setLinkTextColor(Theme.getColor(Theme.key_chat_messageLinkIn));
              emailField.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
@@ -532,7 +1132,7 @@ index 0000000..0000000 100644
  
              emailOutlineView.invalidate();
          }
-@@ -6070,10 +5873,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -6338,10 +5954,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
              requestPhone = currentParams.getString("phoneFormated");
              phoneHash = currentParams.getString("phoneHash");
  
@@ -543,7 +1143,7 @@ index 0000000..0000000 100644
              showKeyboard(emailField);
              emailField.requestFocus();
          }
-@@ -6100,7 +5899,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -6368,7 +5980,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                  return;
              }
  
@@ -552,7 +1152,7 @@ index 0000000..0000000 100644
              Bundle params = new Bundle();
              params.putString("phone", phone);
              params.putString("ephone", emailPhone);
-@@ -6109,44 +5908,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -6377,44 +5989,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
              params.putString("email", email);
              params.putBoolean("setup", true);
  
@@ -597,7 +1197,7 @@ index 0000000..0000000 100644
              if (TextUtils.isEmpty(email)) {
                  onPasscodeError(false);
                  return;
-@@ -6234,21 +5995,17 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -6502,21 +6076,17 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
          private CodeFieldContainer codeFieldContainer;
          private TextView titleView;
          private TextView confirmTextView;
@@ -619,7 +1219,7 @@ index 0000000..0000000 100644
          private int resetAvailablePeriod, resetPendingDate;
          private String phone, emailPhone, email;
          private String requestPhone, phoneHash;
-@@ -6314,61 +6071,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -6582,61 +6152,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
  
              addView(codeFieldContainer, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, 42, Gravity.CENTER_HORIZONTAL, 0, setup ? 48 : 32, 0, 0));
  
@@ -681,7 +1281,7 @@ index 0000000..0000000 100644
              cantAccessEmailFrameLayout = new FrameLayout(context);
              AndroidUtilities.updateViewVisibilityAnimated(cantAccessEmailFrameLayout, activityMode != MODE_CHANGE_LOGIN_EMAIL && !isSetup, 1f, false);
  
-@@ -6482,9 +6184,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -6750,9 +6265,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
              });
              AndroidUtilities.updateViewVisibilityAnimated(resendCodeView, false, 1f, false);
  
@@ -691,7 +1291,7 @@ index 0000000..0000000 100644
              errorViewSwitcher = new ViewSwitcher(context) {
                  @Override
                  protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-@@ -6517,8 +6216,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -6785,8 +6297,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
              } else {
                  bottomContainer.addView(errorViewSwitcher, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP));
                  bottomContainer.addView(cantAccessEmailFrameLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP));
@@ -700,7 +1300,7 @@ index 0000000..0000000 100644
              }
              addView(bottomContainer, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 0, 1f));
          }
-@@ -6568,8 +6265,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -6836,8 +6346,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
          public void updateColors() {
              titleView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
              confirmTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText6));
@@ -709,7 +1309,7 @@ index 0000000..0000000 100644
              resendCodeView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText4));
              cantAccessEmailView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText4));
              emailResetInView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText6));
-@@ -6588,11 +6283,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -6856,11 +6364,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
          private void showResendCodeView(boolean show) {
              AndroidUtilities.updateViewVisibilityAnimated(resendCodeView, show);
              AndroidUtilities.updateViewVisibilityAnimated(cantAccessEmailFrameLayout, !show && activityMode != MODE_CHANGE_LOGIN_EMAIL && !isSetup);
@@ -721,7 +1321,7 @@ index 0000000..0000000 100644
          }
  
          @Override
-@@ -6685,10 +6375,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -6953,10 +6456,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                  confirmTextView.setText(AndroidUtilities.formatSpannable(getString(R.string.CheckYourEmailSubtitle), confirmText));
              }
  
@@ -732,7 +1332,7 @@ index 0000000..0000000 100644
              showKeyboard(codeFieldContainer.codeField[0]);
              codeFieldContainer.requestFocus();
  
-@@ -6823,7 +6509,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -7091,7 +6590,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
              }
  
              code = codeFieldContainer.getCode();
@@ -741,7 +1341,7 @@ index 0000000..0000000 100644
                  onPasscodeError(false);
                  return;
              }
-@@ -6852,15 +6538,9 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -7120,15 +6619,9 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                  TLRPC.TL_auth_signIn request = new TLRPC.TL_auth_signIn();
                  request.phone_number = requestPhone;
                  request.phone_code_hash = phoneHash;
@@ -760,7 +1360,7 @@ index 0000000..0000000 100644
                  request.flags |= 2;
                  req = request;
              }
-@@ -6967,15 +6647,10 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -7235,15 +6728,10 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                          }
                      }
                  }

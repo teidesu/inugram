@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -497,6 +497,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -505,6 +505,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
      private boolean loadingUsers;
      private LongSparseArray<TLRPC.ChatParticipant> participantsMap = new LongSparseArray<>();
      private boolean usersEndReached;
@@ -19,7 +19,7 @@ index 0000000..0000000 100644
  
      private long banFromGroup;
      private float backwardTransitionFromExtraHeight;
-@@ -7822,10 +7823,56 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -7931,10 +7932,56 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              loadingUsers = false;
              saveScrollPosition();
              updateListAnimated(true);
@@ -76,7 +76,7 @@ index 0000000..0000000 100644
      private AnimatorSet headerAnimatorSet;
      private AnimatorSet headerShadowAnimatorSet;
      private float mediaHeaderAnimationProgress;
-@@ -9319,6 +9366,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -9525,6 +9572,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                  if (currentChat.megagroup && (loadChannelParticipants || !byChannelUsers)) {
                      getChannelParticipants(true);
                  }

@@ -13,7 +13,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarPopu
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarPopupWindow.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarPopupWindow.java
-@@ -380,6 +380,10 @@ public class ActionBarPopupWindow extends PopupWindow {
+@@ -382,6 +382,10 @@ public class ActionBarPopupWindow extends PopupWindow {
  
          private void startChildAnimation(View child) {
              if (animationEnabled) {
@@ -24,7 +24,7 @@ index 0000000..0000000 100644
                  AnimatorSet animatorSet = new AnimatorSet();
                  animatorSet.playTogether(
                          ObjectAnimator.ofFloat(child, View.ALPHA, 0f, child.isEnabled() ? 1f : 0.5f),
-@@ -682,6 +686,7 @@ public class ActionBarPopupWindow extends PopupWindow {
+@@ -684,6 +688,7 @@ public class ActionBarPopupWindow extends PopupWindow {
          }
  
          public void setReactionsTransitionProgress(float transitionEnterProgress) {
@@ -32,7 +32,7 @@ index 0000000..0000000 100644
              this.reactionsEnterProgress = transitionEnterProgress;
              invalidate();
          }
-@@ -895,12 +900,16 @@ public class ActionBarPopupWindow extends PopupWindow {
+@@ -897,12 +902,16 @@ public class ActionBarPopupWindow extends PopupWindow {
          });
          content.updateAnimation = false;
          content.clipChildren = true;
@@ -49,7 +49,7 @@ index 0000000..0000000 100644
          windowAnimatorSet.addListener(new AnimatorListenerAdapter() {
              @Override
              public void onAnimationEnd(Animator animation) {
-@@ -966,10 +975,14 @@ public class ActionBarPopupWindow extends PopupWindow {
+@@ -968,10 +977,14 @@ public class ActionBarPopupWindow extends PopupWindow {
                  finalScaleY = content.backScaleY;
              }
              windowAnimatorSet = new AnimatorSet();
@@ -68,7 +68,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -32604,6 +32604,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -33243,6 +33243,10 @@ public class ChatActivity extends BaseFragment implements
  
                              @Override
                              public void onSwipeBackProgress(PopupSwipeBackLayout layout, float toProgress, float progress) {
@@ -79,7 +79,7 @@ index 0000000..0000000 100644
                                  if (toProgress == 0 && !isEnter) {
                                      finalReactionsLayout.startEnterAnimation(false);
                                      isEnter = true;
-@@ -32788,7 +32792,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -33429,7 +33433,7 @@ public class ChatActivity extends BaseFragment implements
              scrimPopupWindow.setDismissAnimationDuration(220);
              scrimPopupWindow.setOutsideTouchable(true);
              scrimPopupWindow.setClippingEnabled(true);
@@ -92,7 +92,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ReactionsCon
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ReactionsContainerLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ReactionsContainerLayout.java
-@@ -811,7 +811,7 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
+@@ -813,7 +813,7 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
                  } else {
                      if (child == premiumLockContainer) {
                          if (child.getX() + child.getMeasuredWidth() / 2f > 0 && child.getX() + child.getMeasuredWidth() / 2f < recyclerListView.getWidth()) {
@@ -101,7 +101,7 @@ index 0000000..0000000 100644
                                  if (transitionProgress != 1f) {
                                      premiumLockIconView.resetAnimation();
                                  }
-@@ -825,7 +825,7 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
+@@ -827,7 +827,7 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
                      }
                      if (child == customReactionsContainer) {
                          if (child.getX() + child.getMeasuredWidth() / 2f > 0 && child.getX() + child.getMeasuredWidth() / 2f < recyclerListView.getWidth()) {
@@ -110,7 +110,7 @@ index 0000000..0000000 100644
                                  if (transitionProgress != 1f) {
                                      customEmojiReactionsIconView.resetAnimation();
                                  }
-@@ -1504,6 +1504,12 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
+@@ -1539,6 +1539,12 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
  
      public void startEnterAnimation(boolean animatePopup) {
          this.animatePopup = animatePopup;

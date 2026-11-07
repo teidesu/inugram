@@ -57,11 +57,11 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-@@ -7159,6 +7159,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -7271,6 +7271,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
      @Override
      protected void onResume() {
          super.onResume();
 +        getWindow().getDecorView().setVisibility(View.VISIBLE);
+         WidgetMedia.onAppPaused(false);
          isResumed = true;
-         pipActivityHandler.onResume();
-         if (onResumeStaticCallback != null) {
+         PipCoordinator.getInstance().onActivityResume(this);

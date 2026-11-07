@@ -26,7 +26,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/StickerSetNameCel
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/StickerSetNameCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/StickerSetNameCell.java
-@@ -201,6 +201,13 @@ public class StickerSetNameCell extends FrameLayout {
+@@ -207,6 +207,13 @@ public class StickerSetNameCell extends FrameLayout {
          editView.setOnClickListener(whenClickedEdit);
      }
  
@@ -44,15 +44,15 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.ja
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.java
-@@ -164,6 +164,7 @@ import java.util.List;
+@@ -165,6 +165,7 @@ import java.util.List;
  import java.util.Map;
  import java.util.Objects;
  
 +import desu.inugram.InuConfig;
  import me.vkryl.android.animator.BoolAnimator;
  import me.vkryl.android.animator.FactorAnimator;
- 
-@@ -6958,6 +6959,11 @@ public class EmojiView extends FrameLayout implements
+ import me.vkryl.core.BitwiseUtils;
+@@ -7067,6 +7068,11 @@ public class EmojiView extends FrameLayout implements
                              ((ChatActivity) fragment).openAttachMenuForCreatingSticker();
                          }
                      });
@@ -64,7 +64,7 @@ index 0000000..0000000 100644
  
                      final ImageView icon = new ImageView(context);
                      icon.setImageResource(R.drawable.menu_sticker_add);
-@@ -7052,6 +7058,17 @@ public class EmojiView extends FrameLayout implements
+@@ -7161,6 +7167,17 @@ public class EmojiView extends FrameLayout implements
                              }
                          } else if (object == recentStickers) {
                              cell.setText(getString(R.string.RecentStickers), R.drawable.msg_close, getString(R.string.ClearRecentStickersAlertTitle));

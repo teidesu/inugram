@@ -4,81 +4,28 @@ Date: Wed, 26 Aug 2026 01:41:27 +0400
 Subject: destroy story input views on release
 
 ---
- .../org/telegram/ui/Stories/PeerStoriesView.java   |  9 +++++++++
- .../org/telegram/ui/Stories/StoriesViewPager.java  | 14 ++++++++++++--
- .../java/org/telegram/ui/Stories/StoryViewer.java  |  3 +++
- 3 files changed, 24 insertions(+), 2 deletions(-)
+ .../main/java/org/telegram/ui/Stories/PeerStoriesView.java    | 4 ++++
+ 1 file changed, 4 insertions(+)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stories/PeerStoriesView.java b/TMessagesProj/src/main/java/org/telegram/ui/Stories/PeerStoriesView.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Stories/PeerStoriesView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Stories/PeerStoriesView.java
-@@ -4762,6 +4762,15 @@ public class PeerStoriesView extends SizeNotifierFrameLayout implements Notifica
-         NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.emojiLoaded);
+@@ -4761,6 +4761,7 @@ public class PeerStoriesView extends SizeNotifierFrameLayout implements Notifica
+         NotificationCenter.getGlobalInstance().addWeakObserver(this, NotificationCenter.emojiLoaded);
      }
  
-+    public void destroy() {
-+        if (chatActivityEnterView != null) {
-+            chatActivityEnterView.onDestroy();
-+        }
-+        if (mentionContainer != null && mentionContainer.getAdapter() != null) {
-+            mentionContainer.getAdapter().onDestroy();
-+        }
-+    }
 +
      @Override
      protected void onDetachedFromWindow() {
          super.onDetachedFromWindow();
-diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoriesViewPager.java b/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoriesViewPager.java
-index 0000000..0000000 100644
---- a/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoriesViewPager.java
-+++ b/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoriesViewPager.java
-@@ -58,6 +58,8 @@ public class StoriesViewPager extends ViewPager {
-     private int selectedPositionInPage;
-     private int updateVisibleItemPosition = -1;
- 
-+    private final ArrayList<PeerStoriesView> cachedViews = new ArrayList<>();
-+
-     public StoriesViewPager(int account, @NonNull Context context, StoryViewer storyViewer, Theme.ResourcesProvider resourcesProvider) {
-         super(context);
-         this.currentAccount = account;
-@@ -72,8 +74,6 @@ public class StoriesViewPager extends ViewPager {
-                 return dialogs.size();
-             }
- 
--            private final ArrayList<PeerStoriesView> cachedViews = new ArrayList<>();
--
-             @NonNull
-             @Override
-             public Object instantiateItem(@NonNull ViewGroup container, int position) {
-@@ -241,6 +241,16 @@ public class StoriesViewPager extends ViewPager {
-         return true;
+@@ -6348,6 +6349,9 @@ public class PeerStoriesView extends SizeNotifierFrameLayout implements Notifica
+             // it registers itself in NotificationCenter in its constructor, only onDestroy() unregisters it
+             chatActivityEnterView.onDestroy();
+         }
++        if (mentionContainer != null && mentionContainer.getAdapter() != null) {
++            mentionContainer.getAdapter().onDestroy();
++        }
      }
  
-+    public void destroy() {
-+        for (int i = 0; i < getChildCount(); i++) {
-+            ((PeerStoriesView) ((FrameLayout) getChildAt(i)).getChildAt(0)).destroy();
-+        }
-+        for (int i = 0; i < cachedViews.size(); i++) {
-+            cachedViews.get(i).destroy();
-+        }
-+        cachedViews.clear();
-+    }
-+
-     @Nullable
-     public PeerStoriesView getCurrentPeerView() {
-         for (int i = 0; i < getChildCount(); i++) {
-diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoryViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoryViewer.java
-index 0000000..0000000 100644
---- a/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoryViewer.java
-+++ b/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoryViewer.java
-@@ -2632,6 +2632,9 @@ public class StoryViewer implements NotificationCenter.NotificationCenterDelegat
-     @Override
-     public void release() {
-         lastUri = null;
-+        if (storiesViewPager != null) {
-+            storiesViewPager.destroy();
-+        }
-         setInTouchMode(false);
-         allowScreenshots(true);
-         if (playerHolder != null) {
+     public void reset() {

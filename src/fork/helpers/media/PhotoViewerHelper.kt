@@ -279,7 +279,7 @@ object PhotoViewerHelper {
             }
 
             MENU_COPY_FRAME -> {
-                val bitmap = viewer.pipCreatePrimaryWindowViewBitmap() ?: viewer.centerImage.bitmap
+                val bitmap = viewer.inu_createCurrentFrameBitmap() ?: viewer.centerImage.bitmap
                 if (bitmap != null) copyBitmapToClipboard(bitmap, viewer.containerView)
             }
 

@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/ContactsAdapte
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/ContactsAdapter.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/ContactsAdapter.java
-@@ -447,7 +447,7 @@ public class ContactsAdapter extends RecyclerListView.SectionsAdapter {
+@@ -474,7 +474,7 @@ public class ContactsAdapter extends RecyclerListView.SectionsAdapter {
                  break;
              }
              case USER_CELL: {
@@ -25,7 +25,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/UserCell.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/UserCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/UserCell.java
-@@ -77,6 +77,7 @@ public class UserCell extends FrameLayout implements NotificationCenter.Notifica
+@@ -80,6 +80,7 @@ public class UserCell extends FrameLayout implements NotificationCenter.Notifica
      private final AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable emojiStatus;
      private ImageView closeView;
      protected Theme.ResourcesProvider resourcesProvider;
@@ -33,7 +33,7 @@ index 0000000..0000000 100644
  
      protected AvatarDrawable avatarDrawable;
      private boolean storiable;
-@@ -134,6 +135,10 @@ public class UserCell extends FrameLayout implements NotificationCenter.Notifica
+@@ -137,6 +138,10 @@ public class UserCell extends FrameLayout implements NotificationCenter.Notifica
      private final int padding;
  
      public UserCell(Context context, int padding, int checkbox, boolean admin, boolean needAddButton, Theme.ResourcesProvider resourcesProvider) {
@@ -44,7 +44,7 @@ index 0000000..0000000 100644
          super(context);
          this.resourcesProvider = resourcesProvider;
  
-@@ -231,6 +236,18 @@ public class UserCell extends FrameLayout implements NotificationCenter.Notifica
+@@ -234,6 +239,18 @@ public class UserCell extends FrameLayout implements NotificationCenter.Notifica
              addView(adminTextView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, (LocaleController.isRTL ? Gravity.LEFT : Gravity.RIGHT) | Gravity.TOP, LocaleController.isRTL ? 23 : 0, 10, LocaleController.isRTL ? 0 : 23, 0));
          }
  
@@ -63,10 +63,10 @@ index 0000000..0000000 100644
          setFocusable(true);
      }
  
-@@ -741,6 +758,9 @@ public class UserCell extends FrameLayout implements NotificationCenter.Notifica
+@@ -756,6 +773,9 @@ public class UserCell extends FrameLayout implements NotificationCenter.Notifica
                  (currentChat != null && currentChat.forum ? dp(14) : dp(24)));
  
-         nameTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
+         ThemeBind.textColor(nameTextView, Theme.key_windowBackgroundWhiteBlackText, resourcesProvider);
 +        if (inu_mutualView != null) {
 +            inu_mutualView.setVisibility(currentUser != null && currentUser.mutual_contact ? VISIBLE : GONE);
 +        }

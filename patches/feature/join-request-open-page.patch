@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Delegates/ChatActivityM
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Delegates/ChatActivityMemberRequestsDelegate.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Delegates/ChatActivityMemberRequestsDelegate.java
-@@ -26,6 +26,7 @@ import org.telegram.ui.ChatActivity;
+@@ -28,6 +28,7 @@ import org.telegram.ui.ChatActivity;
  import org.telegram.ui.Components.AvatarsImageView;
  import org.telegram.ui.Components.LayoutHelper;
  import org.telegram.ui.Components.MemberRequestsBottomSheet;
@@ -19,7 +19,7 @@ index 0000000..0000000 100644
  
  import java.util.List;
  
-@@ -68,6 +69,10 @@ public class ChatActivityMemberRequestsDelegate {
+@@ -70,6 +71,10 @@ public class ChatActivityMemberRequestsDelegate {
              root = new FrameLayout(fragment.getParentActivity());
              root.setBackground(Theme.getSelectorDrawable(false));
              root.setOnClickListener((v) -> showBottomSheet());

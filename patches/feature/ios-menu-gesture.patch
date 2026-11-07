@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ItemOptions.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ItemOptions.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ItemOptions.java
-@@ -1837,7 +1837,6 @@ public class ItemOptions {
+@@ -1958,7 +1958,6 @@ public class ItemOptions {
  
      private View.OnTouchListener hoverReleaseListener;
      private View hoveredItem;
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
  
      private void installHoverReleaseListener() {
          if (scrimView == null) return;
-@@ -1882,17 +1881,13 @@ public class ItemOptions {
+@@ -2003,17 +2002,13 @@ public class ItemOptions {
          View hit = findItemAt(layout, rawX, rawY);
          if (hit != hoveredItem) {
              if (hoveredItem != null) {
@@ -40,7 +40,7 @@ index 0000000..0000000 100644
      }
  
      private void releaseHover(int rawX, int rawY) {
-@@ -1900,14 +1895,14 @@ public class ItemOptions {
+@@ -2021,14 +2016,14 @@ public class ItemOptions {
          if (hoveredItem != null) {
              View target = hoveredItem;
              hoveredItem = null;
@@ -61,7 +61,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
-@@ -344,7 +344,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -359,7 +359,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          tabs[INDEX_CHATS].setOnLongClickListener(this::openFoldersSelector);
          tabs[INDEX_CONTACTS].setOnLongClickListener(this::openContactsSelector);
          tabs[INDEX_CALLS].setOnLongClickListener(this::openCallsSelector);
@@ -70,7 +70,7 @@ index 0000000..0000000 100644
  
          tabsView.addTabToIgnoreClick(tabs[INDEX_CHATS]);
          tabsView.addTabToIgnoreClick(tabs[INDEX_CONTACTS]);
-@@ -636,7 +636,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -654,7 +654,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          }
      }
  
@@ -79,7 +79,7 @@ index 0000000..0000000 100644
          final ArrayList<Integer> accountNumbers = new ArrayList<>();
  
          accountNumbers.clear();
-@@ -705,11 +705,10 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -723,11 +723,10 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          final ShapeDrawable bg = Theme.createRoundRectDrawable(dp(28), getThemedColor(Theme.key_windowBackgroundWhite));
          bg.getPaint().setShadowLayer(dp(6), 0, dp(1), Theme.multAlpha(0xFF000000, 0.15f));
          o.setScrimViewBackground(bg);

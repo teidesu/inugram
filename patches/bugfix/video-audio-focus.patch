@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/VideoPlayer.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/VideoPlayer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/VideoPlayer.java
-@@ -1327,6 +1327,7 @@ public class VideoPlayer implements Player.Listener, VideoListener, AnalyticsLis
+@@ -1335,6 +1335,7 @@ public class VideoPlayer implements Player.Listener, VideoListener, AnalyticsLis
  
      public void releasePlayer(boolean async) {
          activePlayers.remove(playerId);
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
          if (player != null) {
              player.release();
              player = null;
-@@ -1612,6 +1613,12 @@ public class VideoPlayer implements Player.Listener, VideoListener, AnalyticsLis
+@@ -1620,6 +1621,12 @@ public class VideoPlayer implements Player.Listener, VideoListener, AnalyticsLis
      }
  
  
@@ -33,7 +33,7 @@ index 0000000..0000000 100644
      private boolean handleAudioFocus = false;
      public void handleAudioFocus(boolean handleAudioFocus) {
          this.handleAudioFocus = handleAudioFocus;
-@@ -1655,6 +1662,7 @@ public class VideoPlayer implements Player.Listener, VideoListener, AnalyticsLis
+@@ -1665,6 +1672,7 @@ public class VideoPlayer implements Player.Listener, VideoListener, AnalyticsLis
      @Override
      public void onPlayerStateChanged(boolean playWhenReady, int playbackState) {
          maybeReportPlayerState();
@@ -45,11 +45,11 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMes
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
-@@ -10585,6 +10585,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -10571,6 +10571,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                      }
                  };
                  videoPlayer.setOnQualityChangeListener(this::updateQualityItems);
 +                videoPlayer.inu_setTransientAudioFocus(SharedConfig.pauseMusicOnMedia && currentMessageObject != null && currentMessageObject.isVideo());
-                 if (PipUtils.checkPermissions(parentActivity) == PipPermissions.PIP_GRANTED_PIP) {
-                     pipSource = new PipSource.Builder(parentActivity, this)
-                         .setTagPrefix("photo-viewer-" + videoPlayer.playerId)
+                 newPlayerCreated = true;
+             }
+             if (videoTextureView != null) {

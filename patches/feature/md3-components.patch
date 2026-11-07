@@ -15,7 +15,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/AvailableReaction
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/AvailableReactionCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/AvailableReactionCell.java
-@@ -69,7 +69,7 @@ public class AvailableReactionCell extends FrameLayout {
+@@ -70,7 +70,7 @@ public class AvailableReactionCell extends FrameLayout {
          } else {
              switchView = new Switch(context);
              switchView.setColors(Theme.key_switchTrack, Theme.key_switchTrackChecked, Theme.key_switchTrackBlueThumb, Theme.key_switchTrackBlueThumbChecked);
@@ -28,7 +28,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/CheckBoxUserCell.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/CheckBoxUserCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/CheckBoxUserCell.java
-@@ -53,7 +53,7 @@ public class CheckBoxUserCell extends FrameLayout {
+@@ -54,7 +54,7 @@ public class CheckBoxUserCell extends FrameLayout {
  
          checkBox = new Switch(context, null);
          checkBox.setColors(Theme.key_switchTrack, Theme.key_switchTrackChecked, Theme.key_windowBackgroundWhite, Theme.key_windowBackgroundWhite);
@@ -41,7 +41,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/TextCell.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/TextCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/TextCell.java
-@@ -210,7 +210,7 @@ public class TextCell extends FrameLayout {
+@@ -212,7 +212,7 @@ public class TextCell extends FrameLayout implements Theme.Colorable {
              valueImageView.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(height, MeasureSpec.AT_MOST));
          }
          if (checkBox != null) {
@@ -54,7 +54,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/FragmentFloa
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/FragmentFloatingButton.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/FragmentFloatingButton.java
-@@ -70,7 +70,7 @@ public class FragmentFloatingButton extends FrameLayout implements FactorAnimato
+@@ -71,7 +71,7 @@ public class FragmentFloatingButton extends FrameLayout implements FactorAnimato
  
          ScaleStateListAnimator.apply(this);
          if (!isSubButton) {
@@ -63,20 +63,20 @@ index 0000000..0000000 100644
              setTranslationZ(dpf2(0.5f));
          }
  
-@@ -163,7 +163,7 @@ public class FragmentFloatingButton extends FrameLayout implements FactorAnimato
-         } else {
-             imageView.setColorFilter(Theme.getColor(Theme.key_chats_actionIcon, resourcesProvider), PorterDuff.Mode.SRC_IN);
-             progressView.setProgressColor(Theme.getColor(Theme.key_chats_actionIcon, resourcesProvider));
--            setBackground(Theme.createSimpleSelectorCircleDrawable(dp(48),
-+            setBackground(desu.inugram.helpers.theme.M3FabHelper.makeSelectorBackground(48,
-                 Theme.getColor(Theme.key_featuredStickers_addButton, resourcesProvider),
-                 Theme.getColor(Theme.key_featuredStickers_addButtonPressed, resourcesProvider)
-             ));
+@@ -210,7 +210,7 @@ public class FragmentFloatingButton extends FrameLayout implements FactorAnimato
+             } else {
+                 themedBackgroundColor = color;
+                 themedBackgroundPressedColor = pressedColor;
+-                setBackground(themedBackground = Theme.createSimpleSelectorCircleDrawable(dp(48), color, pressedColor));
++                setBackground(themedBackground = desu.inugram.helpers.theme.M3FabHelper.makeSelectorBackground(48, color, pressedColor));
+             }
+         }
+     }
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Switch.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/Switch.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Switch.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Switch.java
-@@ -236,6 +236,9 @@ public class Switch extends View {
+@@ -241,6 +241,9 @@ public class Switch extends View implements Theme.Colorable {
      private void animateToCheckedState(boolean newCheckedState) {
          checkAnimator = ObjectAnimator.ofFloat(this, "progress", newCheckedState ? 1 : 0);
          checkAnimator.setDuration(200);
@@ -86,7 +86,7 @@ index 0000000..0000000 100644
          checkAnimator.addListener(new AnimatorListenerAdapter() {
              @Override
              public void onAnimationEnd(Animator animation) {
-@@ -377,6 +380,11 @@ public class Switch extends View {
+@@ -382,6 +385,11 @@ public class Switch extends View implements Theme.Colorable {
              return;
          }
  

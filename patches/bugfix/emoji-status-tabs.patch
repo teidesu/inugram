@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SelectAnimatedEmojiDial
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SelectAnimatedEmojiDialog.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SelectAnimatedEmojiDialog.java
-@@ -681,7 +681,7 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
+@@ -684,7 +684,7 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
  //                        index--;
                      }
                      int position = 0;
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
                      if (isGiftsVisible() && index == 1) {
                          position = giftsSectionRow;
                      } else if (type == TYPE_AVATAR_CONSTRUCTOR && index == 0) {
-@@ -1282,7 +1282,7 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
+@@ -1285,7 +1285,7 @@ public class SelectAnimatedEmojiDialog extends FrameLayout implements Notificati
                      }
                      final int count = pack.expanded ? pack.documents.size() : Math.min(maxlen, pack.documents.size());
                      if (position > startPosition && position <= startPosition + 1 + count) {

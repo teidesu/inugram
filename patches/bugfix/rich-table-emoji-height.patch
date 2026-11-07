@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/TableLayout.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/TableLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/TableLayout.java
-@@ -516,6 +516,8 @@ public class TableLayout extends View {
+@@ -527,6 +527,8 @@ public class TableLayout extends View {
              return;
          }
  
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
          final int rowCount = naturalRowLocations.length - 1;
          final int[] rowHeights = new int[rowCount];
          for (int row = 0; row < rowCount; row++) {
-@@ -538,7 +540,8 @@ public class TableLayout extends View {
+@@ -549,7 +551,8 @@ public class TableLayout extends View {
              for (int row = start; row < end; row++) {
                  currentHeight += rowHeights[row];
              }
@@ -30,7 +30,7 @@ index 0000000..0000000 100644
              for (int row = start; row < end && deficit > 0; row++) {
                  final int rowsLeft = end - row;
                  final int extra = (deficit + rowsLeft - 1) / rowsLeft;
-@@ -1031,7 +1034,7 @@ public class TableLayout extends View {
+@@ -1110,7 +1113,7 @@ public class TableLayout extends View {
                      if (horizontal) {
                          final int emojiCount = c.textLayout != null ? c.textLayout.getEmojiOnlyCount() : 0;
                          if (emojiCount > 0) {

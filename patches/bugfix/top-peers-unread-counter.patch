@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/HintDialogCell.ja
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/HintDialogCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/HintDialogCell.java
-@@ -119,6 +119,14 @@ public class HintDialogCell extends FrameLayout {
+@@ -121,6 +121,14 @@ public class HintDialogCell extends FrameLayout implements Theme.Colorable {
              checkBox.setChecked(false, false);
              setWillNotDraw(false);
          }

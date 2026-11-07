@@ -33,7 +33,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.ja
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
-@@ -768,11 +768,30 @@ public class MessageObject {
+@@ -772,11 +772,30 @@ public class MessageObject {
          return null;
      }
  
@@ -68,7 +68,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -17791,6 +17791,32 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -17837,6 +17837,32 @@ public class MessagesController extends BaseController implements NotificationCe
          }
      }
  
@@ -101,7 +101,7 @@ index 0000000..0000000 100644
      public static long getUpdateChannelId(TLRPC.Update update) {
          if (update instanceof TL_update.TL_updateNewChannelMessage) {
              return ((TL_update.TL_updateNewChannelMessage) update).message.peer_id.channel_id;
-@@ -18131,6 +18157,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -18177,6 +18203,7 @@ public class MessagesController extends BaseController implements NotificationCe
              }
              if (!needGetDiff) {
                  getMessagesStorage().putUsersAndChats(updates.users, updates.chats, true, true);
@@ -109,7 +109,7 @@ index 0000000..0000000 100644
                  Collections.sort(updates.updates, updatesComparator);
                  for (int a = 0; a < updates.updates.size(); a++) {
                      TLRPC.Update update = updates.updates.get(a);
-@@ -18426,6 +18453,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -18472,6 +18499,7 @@ public class MessagesController extends BaseController implements NotificationCe
              }
              return true;
          }
@@ -121,7 +121,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelp
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
-@@ -3991,6 +3991,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -4007,6 +4007,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
          if (messageObject == null || parentFragment == null) {
              return;
          }
@@ -133,7 +133,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -33302,6 +33302,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -33943,6 +33943,7 @@ public class ChatActivity extends BaseFragment implements
          }
  
          ReactionsEffectOverlay.removeCurrent(false);

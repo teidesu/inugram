@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/voip/VoIPHel
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/voip/VoIPHelper.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/voip/VoIPHelper.java
-@@ -73,7 +73,11 @@ public class VoIPHelper {
+@@ -74,7 +74,11 @@ public class VoIPHelper {
  
  	private static final int VOIP_SUPPORT_ID = 4244000;
  
@@ -24,7 +24,7 @@ index 0000000..0000000 100644
  		if (accountInstance == null ? MessagesController.getInstance(UserConfig.selectedAccount).isFrozen() : accountInstance.getMessagesController().isFrozen()) {
  			AccountFrozenAlert.show(accountInstance == null ? UserConfig.selectedAccount : accountInstance.getCurrentAccount());
  			return;
-@@ -102,6 +106,16 @@ public class VoIPHelper {
+@@ -103,6 +107,16 @@ public class VoIPHelper {
  			return;
  		}
  

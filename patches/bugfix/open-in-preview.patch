@@ -13,7 +13,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -12728,7 +12728,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -13139,7 +13139,7 @@ public class ChatActivity extends BaseFragment implements
          }
      }
  
@@ -22,7 +22,7 @@ index 0000000..0000000 100644
          if (getParentActivity() == null || getContext() == null) {
              return;
          }
-@@ -20796,6 +20796,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -21327,6 +21327,7 @@ public class ChatActivity extends BaseFragment implements
                  ((ChatAttachAlertRichLayout) chatAttachAlert.getCurrentAttachLayout()).onExternalDocumentPicked(data);
                  return;
              } else if (requestCode == 1) {
@@ -34,7 +34,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
-@@ -1142,7 +1142,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -1146,7 +1146,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
  
      public boolean restrictEphemeralMessageTypes;
  
@@ -47,7 +47,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlertPhotoLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlertPhotoLayout.java
-@@ -184,8 +184,9 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -186,8 +186,9 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
      private TextView tooltipTextView;
      private ImageView switchCameraButton;
      private boolean takingPhoto;
@@ -59,7 +59,7 @@ index 0000000..0000000 100644
      public static HashMap<Object, Object> selectedPhotos = new HashMap<>();
      public static ArrayList<Object> selectedPhotosOrder = new ArrayList<>();
      public static int lastImageId = -1;
-@@ -2062,7 +2063,9 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -2067,7 +2068,9 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
          AndroidUtilities.unlockOrientation(AndroidUtilities.findActivity(getContext()));
      }
  
@@ -70,7 +70,7 @@ index 0000000..0000000 100644
          if (entry != null) {
              cameraPhotos.add(entry);
              selectedPhotos.put(entry.imageId, entry);
-@@ -2127,6 +2130,9 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -2132,6 +2135,9 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
              arrayList = getAllPhotosArray();
              index = cameraPhotos.size() - 1;
          }
@@ -80,7 +80,7 @@ index 0000000..0000000 100644
          if (parentAlert.getAvatarFor() != null && entry != null) {
              parentAlert.getAvatarFor().isVideo = entry.isVideo;
          }
-@@ -3380,6 +3386,9 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+@@ -3404,6 +3410,9 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
                  parentAlert.getPhotoPreviewLayout().invalidateGroupsView();
              }
          } else if (id == open_in) {

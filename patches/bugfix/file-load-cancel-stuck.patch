@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/FileLoadOperatio
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/FileLoadOperation.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/FileLoadOperation.java
-@@ -1451,6 +1451,7 @@ public class FileLoadOperation {
+@@ -1463,6 +1463,7 @@ public class FileLoadOperation {
  
      private void cancelRequests(Runnable fullyCancelled) {
          FileLog.d("cancelRequests" + (fullyCancelled != null ? " with callback" : ""));
@@ -19,7 +19,7 @@ index 0000000..0000000 100644
          if (requestInfos != null) {
              int[] waitingForCancelledCount = new int[1];
              int[] waitingDownloadSize = new int[ConnectionsManager.DownloadConnectionsCount];
-@@ -1472,6 +1473,7 @@ public class FileLoadOperation {
+@@ -1484,6 +1485,7 @@ public class FileLoadOperation {
                              }
                          };
                          waitingForCancelledCount[0]++;
@@ -27,7 +27,7 @@ index 0000000..0000000 100644
                          FileLog.d("cancelRequests cancel " + requestInfo.requestToken + " with callback");
                          ConnectionsManager.getInstance(currentAccount).cancelRequest(requestInfo.requestToken, true, () -> {
                              if (requestInfo.whenCancelled != null) {
-@@ -1491,6 +1493,9 @@ public class FileLoadOperation {
+@@ -1503,6 +1505,9 @@ public class FileLoadOperation {
                  }
              }
          }

@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/JoinGroupAle
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/JoinGroupAlert.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/JoinGroupAlert.java
-@@ -166,6 +166,8 @@ public class JoinGroupAlert extends BottomSheet {
+@@ -188,6 +188,8 @@ public class JoinGroupAlert extends BottomSheet {
  
          if (chatInvite != null && origination == ORIGINATION_SPONSORED_CHAT) {
              textView.setText(getString(R.string.ChannelPublic).toLowerCase());

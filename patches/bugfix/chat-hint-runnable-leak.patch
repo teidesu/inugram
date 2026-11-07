@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -3463,6 +3463,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -3395,6 +3395,9 @@ public class ChatActivity extends BaseFragment implements
              AndroidUtilities.cancelRunOnUIThread(chatInviteRunnable);
              chatInviteRunnable = null;
          }
@@ -21,7 +21,7 @@ index 0000000..0000000 100644
          getNotificationCenter().removePostponeNotificationsCallback(postponeNotificationsWhileLoadingCallback);
          getMessagesController().setLastCreatedDialogId(dialog_id, chatMode == MODE_SCHEDULED, false);
  
-@@ -7101,8 +7104,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -7093,8 +7096,8 @@ public class ChatActivity extends BaseFragment implements
                          savedMessagesTagHint.hide();
                      } else if (!savedMessagesTagHintShown) {
                          lastScrollTime = System.currentTimeMillis();
@@ -32,7 +32,7 @@ index 0000000..0000000 100644
                      }
                  }
                  if (videoConversionTimeHint != null && videoConversionTimeHint.shown()) {
-@@ -7111,8 +7114,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -7103,8 +7106,8 @@ public class ChatActivity extends BaseFragment implements
                  if (botMessageHint != null && botMessageHint.shown()) {
                      botMessageHint.hide();
                  } else {
@@ -43,7 +43,7 @@ index 0000000..0000000 100644
                  }
                  if (factCheckHint != null) {
                      factCheckHint.hide();
-@@ -27901,8 +27904,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -28461,8 +28464,8 @@ public class ChatActivity extends BaseFragment implements
              videoConversionTimeHint.setJointPx(0, -dp(16) + loc[0] + foundCell.timeX + foundCell.timeWidth / 2f);
              videoConversionTimeHint.show();
          } else {
@@ -54,7 +54,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -27932,6 +27935,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -28492,6 +28495,9 @@ public class ChatActivity extends BaseFragment implements
  
      private long lastScrollTime;
      private boolean savedMessagesTagHintShown;
@@ -64,7 +64,7 @@ index 0000000..0000000 100644
      private void checkSavedMessagesTagHint() {
          if (savedMessagesTagHint == null || savedMessagesTagHint.shown() || savedMessagesTagHintShown || !checkedSavedMessagesHint) {
              return;
-@@ -27965,8 +27971,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -28525,8 +28531,8 @@ public class ChatActivity extends BaseFragment implements
  
                  MessagesController.getGlobalMainSettings().edit().putInt("savedsearchtaghint", 1).apply();
              } else {

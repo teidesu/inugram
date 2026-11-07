@@ -153,7 +153,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMes
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
-@@ -7695,6 +7695,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -7694,6 +7694,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                  return;
              }
              Runnable onEnd = () -> {
@@ -161,7 +161,7 @@ index 0000000..0000000 100644
                  cropTransform.setViewTransform(previousHasTransform, previousCropPx, previousCropPy, previousCropRotation, previousCropOrientation, previousCropScale, scale1(), scale1(), previousCropPw, previousCropPh, 0, 0, previousCropMirrored);
  //                if (previousHasTransform) {
  //                    editState.cropState = new MediaController.CropState();
-@@ -9250,7 +9251,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -9240,7 +9241,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
      }
  
      private boolean cropRotate(float diff) {
@@ -170,7 +170,7 @@ index 0000000..0000000 100644
      }
  
      private float scale1() {
-@@ -9288,13 +9289,19 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -9278,13 +9279,19 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
      }
  
      private boolean cropRotate(final float diff, boolean restoreMirror, Runnable onEnd) {
@@ -191,7 +191,7 @@ index 0000000..0000000 100644
          rotate = 0;
          animateToRotate = rotate + diff;
          if (restoreMirror) {
-@@ -9312,9 +9319,14 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -9302,9 +9309,14 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                  bitmapWidth = bitmapHeight;
                  bitmapHeight = temp;
              }
@@ -209,13 +209,13 @@ index 0000000..0000000 100644
              }
              float oldScale = Math.min(getContainerViewWidth(EDIT_MODE_CROP) / (float) bitmapWidth, getContainerViewHeight(EDIT_MODE_CROP) / (float) bitmapHeight);
              float newScale = oldScale;
-@@ -9350,13 +9362,16 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -9340,13 +9352,16 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                  photoCropView.cropView.areaView.setRotationScaleTranslation(0, scale1(false), 0, 0);
                  photoCropView.wheelView.setRotated(false);
                  if (Math.abs(diff) > 0) {
 -                    if (photoCropView.rotate(diff)) {
 +                    if (keepCrop ? photoCropView.inu_rotateKeepingCrop(diff) : photoCropView.rotate(diff)) {
-                         rotateItem.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_chat_editMediaButton), PorterDuff.Mode.MULTIPLY));
+                         ThemeBind.colorFilter(rotateItem, Theme.key_chat_editMediaButton, PhotoViewer.this.resourcesProvider, PorterDuff.Mode.MULTIPLY);
                      } else {
                          rotateItem.setColorFilter(null);
                      }
@@ -228,7 +228,7 @@ index 0000000..0000000 100644
                      editState.cropState.cropPx = editState.cropState.cropPy = 0;
                      editState.cropState.cropPw = editState.cropState.cropPh = 1;
                  }
-@@ -18123,6 +18138,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -18094,6 +18109,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                  return;
              }
              if (currentEditMode == EDIT_MODE_CROP) {

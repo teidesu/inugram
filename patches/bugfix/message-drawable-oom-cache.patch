@@ -11,11 +11,12 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/MessageDrawab
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/MessageDrawable.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/MessageDrawable.java
-@@ -378,16 +378,12 @@ public class MessageDrawable extends Drawable {
-         boolean drawWithShadow = shadow && gradientShader == null && !isSelected && !isCrossfadeBackground;
+@@ -402,17 +402,13 @@ public class MessageDrawable extends Drawable {
+         boolean drawWithShadow = shadow && gradientShader == null && !isSelected && !isCrossfadeBackground && !isCompact();
          int shadowColor = getColor(isOut ? Theme.key_chat_outBubbleShadow : Theme.key_chat_inBubbleShadow);
          if (lastDrawWithShadow != drawWithShadow || currentBackgroundDrawableRadius[idx2][idx] != newRad || (drawWithShadow && shadowDrawableColor[idx] != shadowColor) || backgroundDrawableColor[idx2][idx] != color) {
 -            currentBackgroundDrawableRadius[idx2][idx] = newRad;
+             renderingBackgroundCache = true;
 +            backupRect.set(getBounds());
              try {
                  Bitmap bitmap = Bitmap.createBitmap(dp(50), dp(40), Bitmap.Config.ARGB_8888);
@@ -29,7 +30,7 @@ index 0000000..0000000 100644
                      Paint shadowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
  
                      LinearGradient gradientShader = new LinearGradient(0, 0, 0, dp(40), new int[]{0x155F6569, 0x295F6569}, null, Shader.TileMode.CLAMP);
-@@ -417,13 +413,18 @@ public class MessageDrawable extends Drawable {
+@@ -442,14 +438,19 @@ public class MessageDrawable extends Drawable {
                  draw(canvas, shadowPaint);
  
                  backgroundDrawable[idx2][idx] = new NinePatchDrawable(bitmap, getByteBuffer(bitmap.getWidth() / 2 - 1, bitmap.getWidth() / 2 + 1, bitmap.getHeight() / 2 - 1, bitmap.getHeight() / 2 + 1, color).array(), new Rect(), null);
@@ -44,13 +45,14 @@ index 0000000..0000000 100644
 +            } finally {
 +                setBounds(backupRect);
              }
+             renderingBackgroundCache = false;
          }
          lastDrawWithShadow = drawWithShadow;
 -        backgroundDrawableColor[idx2][idx] = color;
          return backgroundDrawable[idx2][idx];
      }
  
-@@ -484,10 +485,6 @@ public class MessageDrawable extends Drawable {
+@@ -510,10 +511,6 @@ public class MessageDrawable extends Drawable {
          }
          boolean forceSetColor = false;
          if (currentShadowDrawableRadius[idx] != newRad) {
@@ -61,7 +63,7 @@ index 0000000..0000000 100644
              try {
                  Bitmap bitmap = Bitmap.createBitmap(dp(50), dp(40), Bitmap.Config.ARGB_8888);
                  Canvas canvas = new Canvas(bitmap);
-@@ -515,9 +512,14 @@ public class MessageDrawable extends Drawable {
+@@ -541,9 +538,14 @@ public class MessageDrawable extends Drawable {
                      draw(canvas, shadowPaint);
                  }
  
