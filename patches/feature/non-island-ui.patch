@@ -24,6 +24,7 @@ Subject: non-island ui in various parts of the app
  .../Components/ScrollSlidingTextTabStrip.java | 117 ++++++++++++-
  .../ui/Components/SearchTagsList.java         |   3 +
  .../ui/Components/SharedMediaLayout.java      |  79 +++++++--
+ .../ui/Components/TopicsSidePanel.java        |   7 +-
  .../ui/Components/TopicsTabsView.java         |  78 ++++++---
  .../ui/Components/TranslateButton.java        |   4 +-
  .../ui/Components/ViewPagerFixed.java         |  12 +-
@@ -43,7 +44,7 @@ Subject: non-island ui in various parts of the app
  .../ui/bots/BotCommandsMenuContainer.java     |   4 +-
  .../bots/ChatAttachAlertBotWebViewLayout.java |   5 +-
  .../java/org/telegram/ui/iv/RichEditor.java   |   4 +-
- 39 files changed, 788 insertions(+), 284 deletions(-)
+ 40 files changed, 793 insertions(+), 286 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -1998,6 +1999,30 @@ index 0000000..0000000 100644
          setTopMargin(scrollSlidingTextTabStrip, tabsTop + shift);
          setTopMargin(actionModeLayout, tabsTop + shift);
          setTopMargin(floatingDateView, tabsTop + dp(48 + 4) + shift);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/TopicsSidePanel.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/TopicsSidePanel.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/TopicsSidePanel.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/TopicsSidePanel.java
+@@ -149,14 +149,17 @@ public class TopicsSidePanel extends FrameLayout implements NotificationCenter.N
+             @Override
+             protected void dispatchDraw(@NonNull Canvas canvas) {
+                 super.dispatchDraw(canvas);
++                if (desu.inugram.helpers.theme.NonIslandHelper.chatElements()) {
++                    canvas.drawRect(0, 0, 1, getHeight(), Theme.getThemePaint(Theme.key_paint_divider, resourcesProvider));
++                }
+             }
+         };
+-        panel.setElevation(dp(9));
++        panel.setElevation(desu.inugram.helpers.theme.NonIslandHelper.chatElements() ? 0 : dp(9));
+         // rounded on the side it slides in from
+         panel.setOutlineProvider(new android.view.ViewOutlineProvider() {
+             @Override
+             public void getOutline(View view, android.graphics.Outline outline) {
+-                outline.setRoundRect(0, 0, view.getWidth() + dp(PANEL_RADIUS), view.getHeight(), dp(PANEL_RADIUS));
++                outline.setRoundRect(0, 0, view.getWidth() + dp(PANEL_RADIUS), view.getHeight(), desu.inugram.helpers.theme.NonIslandHelper.chatElements() ? 0 : dp(PANEL_RADIUS));
+             }
+         });
+         panel.setClipToOutline(true);
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/TopicsTabsView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/TopicsTabsView.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/TopicsTabsView.java
