@@ -1,0 +1,102 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Sat, 7 Nov 2026 23:41:00 +0400
+Subject: respect lite mode blur setting in glass panels
+
+---
+ .../telegram/ui/Components/ProfileButtonsGlass.java |  7 ++++---
+ .../main/java/org/telegram/ui/ProfileActivity.java  |  4 ++--
+ .../utils/glass/source/GlassSourceRenderNode.java   | 13 +++++++++++++
+ 3 files changed, 19 insertions(+), 5 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ProfileButtonsGlass.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ProfileButtonsGlass.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ProfileButtonsGlass.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ProfileButtonsGlass.java
+@@ -266,10 +266,11 @@ public final class ProfileButtonsGlass {
+             final float photoProgress = this == actionsSource && desu.inugram.helpers.profile.ProfileHelper.useProfilePhotoGradientFade() ? 0f : ProfileButtonsGlass.this.photoProgress;
+             if (simple < 1f) {
+                 // the photo ignores the blur setting: the button color over the photo is a blot (white in the light theme)
+-                final boolean photo = photoSource != null && canvas.isHardwareAccelerated();
++                final boolean inu_transparentOverPhoto = this == headerSource && !GlassEngine.getCurrentGlassSettings().isBlurEnabled;
++                final boolean photo = photoSource != null && canvas.isHardwareAccelerated() && !inu_transparentOverPhoto;
+                 if (photo) {
+                     photoSource.draw(canvas, left, top, right, bottom);
+-                } else if (photoProgress > 0) {
++                } else if (photoProgress > 0 && !inu_transparentOverPhoto) {
+                     dimPaint.setColor(Theme.multAlpha(0xFF000000, (1f - PHOTO_BRIGHTNESS) * photoProgress));
+                     canvas.drawRect(left, top, right, bottom, dimPaint);
+                 }
+@@ -306,7 +307,7 @@ public final class ProfileButtonsGlass {
+         @Override
+         public boolean isDownsampledSourceSupported() {
+             final GlassFadeBlurredDrawable.GlassFadeDownsampledSource photo = photoDownsampled(), simple = simpleDownsampled();
+-            return photo != null && photo.isDownsampledSourceSupported() && photo.getDownsample() > 1
++            return !(this == headerSource && !GlassEngine.getCurrentGlassSettings().isBlurEnabled) && photo != null && photo.isDownsampledSourceSupported() && photo.getDownsample() > 1
+                 && (simpleSource == null || simple != null && simple.isDownsampledSourceSupported());
+         }
+ 
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+@@ -6096,12 +6096,12 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+ 
+         @Override
+         public int getStrokeColorTop() {
+-            return ColorUtils.blendARGB(0x20FFFFFF, headerMenuGlassColors.getStrokeColorTop(), getHeaderSimpleFactor());
++            return ColorUtils.blendARGB(Theme.multAlpha(0x20FFFFFF, org.telegram.utils.glass.GlassEngine.getCurrentGlassSettings().isBlurEnabled ? 1f : 1f - buttonsPhotoProgress), headerMenuGlassColors.getStrokeColorTop(), getHeaderSimpleFactor());
+         }
+ 
+         @Override
+         public int getStrokeColorBottom() {
+-            return ColorUtils.blendARGB(0x14FFFFFF, headerMenuGlassColors.getStrokeColorBottom(), getHeaderSimpleFactor());
++            return ColorUtils.blendARGB(Theme.multAlpha(0x14FFFFFF, org.telegram.utils.glass.GlassEngine.getCurrentGlassSettings().isBlurEnabled ? 1f : 1f - buttonsPhotoProgress), headerMenuGlassColors.getStrokeColorBottom(), getHeaderSimpleFactor());
+         }
+     };
+ 
+diff --git a/TMessagesProj/src/main/java/org/telegram/utils/glass/source/GlassSourceRenderNode.java b/TMessagesProj/src/main/java/org/telegram/utils/glass/source/GlassSourceRenderNode.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/utils/glass/source/GlassSourceRenderNode.java
++++ b/TMessagesProj/src/main/java/org/telegram/utils/glass/source/GlassSourceRenderNode.java
+@@ -17,6 +17,7 @@ import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory;
+ import org.telegram.ui.Components.blur3.RenderNodeWithHash;
+ import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
+ import org.telegram.utils.glass.GlassCaptureSourceCanvas;
++import org.telegram.utils.glass.GlassEngine;
+ import org.telegram.utils.glass.fade.GlassFadeBlurredDrawable;
+ 
+ import me.vkryl.core.reference.ReferenceList;
+@@ -139,6 +140,11 @@ public final class GlassSourceRenderNode implements GlassSource, BlurredBackgrou
+             throw new IllegalStateException();
+         }
+ 
++        if (inu_isBlurDisabled()) {
++            (underSource != null ? underSource : fallbackSource).draw(canvas, left, top, right, bottom);
++            return;
++        }
++
+         if (underSource != null) {
+             underSource.draw(canvas, left, top, right, bottom);
+         }
+@@ -173,6 +179,9 @@ public final class GlassSourceRenderNode implements GlassSource, BlurredBackgrou
+ 
+     @Override
+     public int getDownsample() {
++        if (inu_isBlurDisabled()) {
++            return 1;
++        }
+         final GlassFadeBlurredDrawable.GlassFadeDownsampledSource capture = getDownsampledCapture();
+         if (capture != null) {
+             return capture.getDownsample();
+@@ -217,6 +226,10 @@ public final class GlassSourceRenderNode implements GlassSource, BlurredBackgrou
+         }
+     }
+ 
++    private boolean inu_isBlurDisabled() {
++        return (underSource != null || fallbackSource != null) && !GlassEngine.getCurrentGlassSettings().isBlurEnabled;
++    }
++
+     public GlassSource getFallbackSource() {
+         return fallbackSource;
+     }

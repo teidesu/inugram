@@ -433,3 +433,4 @@ feature/bottom-tabs-hide-on-scroll.patch
 bugfix/video-auto-quality.patch
 bugfix/video-auto-quality-label.patch
 bugfix/video-quality-menu-check-color.patch
+bugfix/glass-lite-mode-blur.patch
