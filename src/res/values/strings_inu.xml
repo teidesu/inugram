@@ -454,6 +454,7 @@
     <string name="InuNonIslandSharedMediaTabs">Shared media tabs</string>
     <string name="InuNonIslandGlobalSearch">Global search</string>
     <string name="InuNonIslandChatElements">Chat elements</string>
+    <string name="InuNonIslandHeaders">Headers</string>
     <string name="InuNonIslandHint">Classic UI reverts some of the new (>12.6) "Liquid Glass" UI changes back towards the older flat design (best-effort).\nThere are probably a bunch of visual bugs, so be advised.</string>
 
     <string name="InuHideFadeView">Hide fade views</string>

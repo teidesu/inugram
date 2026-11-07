@@ -6,6 +6,9 @@ Subject: non-island ui in various parts of the app
 ---
  .../org/telegram/ui/ActionBar/ActionBar.java  |  53 +++---
  .../ui/ActionBar/ActionBarLayout.java         |   2 +-
+ .../telegram/ui/ActionBar/BaseFragment.java   |   6 +-
+ .../ui/ActionBar/SimpleActionBar.java         |  81 +++++++--
+ .../ui/ActionBar/SimpleActionBarMenu.java     |  14 +-
  .../telegram/ui/ChannelAdminLogActivity.java  |  21 ++-
  .../java/org/telegram/ui/ChatActivity.java    | 148 ++++++++++------
  .../ui/Components/ChatActivityEnterView.java  |  72 +++++---
@@ -35,16 +38,18 @@ Subject: non-island ui in various parts of the app
  .../ChatActivityChannelButtonsLayout.java     |  33 +++-
  .../ui/Components/glass/GlassTabView.java     |   5 +-
  .../java/org/telegram/ui/DialogsActivity.java | 163 ++++++++++++------
- .../java/org/telegram/ui/ProfileActivity.java |  22 +--
+ .../java/org/telegram/ui/ProfileActivity.java |  36 ++--
  .../java/org/telegram/ui/QrShare/QrGlass.java |   3 +
  .../org/telegram/ui/QrShare/QrShareView.java  |   1 +
  .../org/telegram/ui/QrShare/RimPainter.java   |   1 +
  .../ui/SearchTabsAndFiltersLayout.java        |   6 +
+ .../org/telegram/ui/SettingsActivity.java     |   4 +-
  .../java/org/telegram/ui/bots/BotAdView.java  |   2 +-
  .../ui/bots/BotCommandsMenuContainer.java     |   4 +-
  .../bots/ChatAttachAlertBotWebViewLayout.java |   5 +-
  .../java/org/telegram/ui/iv/RichEditor.java   |   4 +-
- 40 files changed, 793 insertions(+), 286 deletions(-)
+ .../utils/glass/BaseFragmentSimpleGlass.java  |   6 +-
+ 45 files changed, 892 insertions(+), 312 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -194,6 +199,274 @@ index 0000000..0000000 100644
                              final float rBottom = dp(12);
                              final float[] radii = new float[] {
                                  rTop, rTop, rTop, rTop,
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BaseFragment.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BaseFragment.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BaseFragment.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BaseFragment.java
+@@ -303,14 +303,16 @@ public abstract class BaseFragment {
+                 simpleGlass.setViews((FrameLayout) view, scrollViewForGlass, header, resourceProvider);
+             }
+ 
+-            if (useFadeDrawableForActionBar() && header != null) {
++            if (useFadeDrawableForActionBar() && header != null && !desu.inugram.helpers.theme.NonIslandHelper.applyClassicHeaderBackground(header, listViewForSimpleGlass, resourceProvider)) {
+                 header.setBackground(simpleGlass.createActionBarFadeDrawable(header));
+             }
+             BaseFragmentSimpleGlass.setListViewParams(listViewForSimpleGlass, mSystemInsets.top, mSystemInsets.bottom, ActionBar.getCurrentActionBarHeight(), 0);
+ 
+             if (drawEdgeNavigationBar()) {
+                 navigationBarFadeView = new View(context);
+-                navigationBarFadeView.setBackground(simpleGlass.createNavigationBarFadeDrawable(navigationBarFadeView));
++                if (!desu.inugram.helpers.theme.NonIslandHelper.headers()) {
++                    navigationBarFadeView.setBackground(simpleGlass.createNavigationBarFadeDrawable(navigationBarFadeView));
++                }
+                 FrameLayout.LayoutParams lp = LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 0, Gravity.BOTTOM);
+                 lp.height = mSystemInsets.bottom;
+                 ((FrameLayout) view).addView(navigationBarFadeView, lp);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/SimpleActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/SimpleActionBar.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/SimpleActionBar.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/SimpleActionBar.java
+@@ -5,6 +5,7 @@ import static org.telegram.messenger.AndroidUtilities.lerp;
+ 
+ import android.annotation.SuppressLint;
+ import android.content.Context;
++import android.content.res.Configuration;
+ import android.graphics.Canvas;
+ import android.graphics.Paint;
+ import android.graphics.PorterDuff;
+@@ -106,6 +107,7 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
+ 
+     private boolean occupyStatusBar = true;
+     private int extraHeight;
++    boolean inu_classic;
+     private boolean animationsAllowed;
+     private boolean attached;
+ 
+@@ -135,6 +137,22 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
+         addView(backButton, LayoutHelper.createFrame(46, 46, Gravity.TOP | Gravity.LEFT));
+     }
+ 
++    public void inu_setClassic(boolean classic) {
++        if (inu_classic == classic) {
++            return;
++        }
++        inu_classic = classic;
++        if (menu != null) {
++            menu.inu_updateIconItemMargins();
++        }
++        if (actionMode != null) {
++            actionMode.inu_updateIconItemMargins();
++        }
++        titleLayout.inu_updateStyle();
++        updateColors();
++        requestLayout();
++    }
++
+     /* Glass */
+ 
+     public void setupGlass(BlurredBackgroundDrawableViewFactory factory, BlurredBackgroundColorProvider colorProvider) {
+@@ -292,7 +310,7 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
+     }
+ 
+     private boolean isMenuPillInOverlay() {
+-        return openMenuItem != null && openMenuItem.getParent() == menu;
++        return !inu_classic && openMenuItem != null && openMenuItem.getParent() == menu;
+     }
+ 
+     /** The menu pill with its buttons, drawn by the overlay while a menu grows out of it. */
+@@ -318,7 +336,7 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
+      */
+     @Override
+     public boolean getMenuItemGlassRect(ActionBarMenuItem item, RectF out) {
+-        if (item.getParent() == menu && getSearchFactor() == 0 && getActionModeFactor() == 0) {
++        if (!inu_classic && item.getParent() == menu && getSearchFactor() == 0 && getActionModeFactor() == 0) {
+             computeMenuPill(out);
+             return true;
+         }
+@@ -336,7 +354,7 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
+ 
+         final int p = dp(6);
+ 
+-        if (glassBack != null && backButton.getVisibility() == VISIBLE && backButton.getAlpha() > 0) {
++        if (!inu_classic && glassBack != null && backButton.getVisibility() == VISIBLE && backButton.getAlpha() > 0) {
+             final float cx = backButton.getX() + backButton.getWidth() / 2f, cy = backButton.getY() + backButton.getHeight() / 2f;
+             final float hw = backButton.getWidth() / 2f * backButton.getScaleX(), hh = backButton.getHeight() / 2f * backButton.getScaleY();
+             glassBack.setBounds((int) (cx - hw) - p, (int) (cy - hh) - p, (int) (cx + hw) + p, (int) (cy + hh) + p);
+@@ -344,7 +362,7 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
+             glassBack.draw(canvas);
+         }
+ 
+-        if (glassDone != null && doneButton != null && doneButton.drawsGlass() && doneButton.getVisibility() == VISIBLE && doneButton.getAlpha() > 0) {
++        if (!inu_classic && glassDone != null && doneButton != null && doneButton.drawsGlass() && doneButton.getVisibility() == VISIBLE && doneButton.getAlpha() > 0) {
+             final float cx = doneButton.getX() + doneButton.getWidth() / 2f, cy = doneButton.getY() + doneButton.getHeight() / 2f;
+             final float hw = doneButton.getWidth() / 2f * doneButton.getScaleX(), hh = doneButton.getHeight() / 2f * doneButton.getScaleY();
+             glassDone.setBounds((int) (cx - hw) - p, (int) (cy - hh) - p, (int) (cx + hw) + p, (int) (cy + hh) + p);
+@@ -352,7 +370,7 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
+             glassDone.draw(canvas);
+         }
+ 
+-        if (glassMenu != null) {
++        if (!inu_classic && glassMenu != null) {
+             final float alpha = computeMenuPill(menuPillRect);
+             // a menu growing out of the pill takes over its glass
+             final boolean pillInOverlay = isMenuPillInOverlay();
+@@ -500,15 +518,17 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
+         final float doneSpace = getDoneButtonSpace(true);
+         final int titleSide = Math.max(hasBack ? dp(64) : dp(18), menuWidth > 0 || doneSpace > 0 ? (int) (menuWidth + doneSpace) + dp(6 + 12) : 0);
+         titleLayout.setSideInset(titleSide);
++        titleLayout.inu_leftInset = hasBack ? dp(AndroidUtilities.isTablet() ? 80 : 72) : dp(18);
++        titleLayout.inu_rightInset = menuWidth > 0 || doneSpace > 0 ? (int) (menuWidth + doneSpace) + dp(6 + 12) : dp(18);
+         setMargins(titleLayout, 0, rowTop, 0);
+         titleLayout.getLayoutParams().height = rowHeight;
+ 
+         if (menu != null) {
+-            setMargins(menu, 0, rowTop, dp(10));
++            setMargins(menu, 0, rowTop, inu_classic ? 0 : dp(10));
+             menu.getLayoutParams().height = rowHeight;
+         }
+         if (actionMode != null) {
+-            setMargins(actionMode, 0, rowTop, dp(10));
++            setMargins(actionMode, 0, rowTop, inu_classic ? 0 : dp(10));
+             actionMode.getLayoutParams().height = rowHeight;
+         }
+         if (actionModeTitle != null) {
+@@ -594,11 +614,11 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
+     }
+ 
+     private void resolveColors() {
+-        if (!hasCustomTitleColor) titleColor = getThemedColor(Theme.key_windowBackgroundWhiteBlackText);
+-        if (!hasCustomSubtitleColor) subtitleColor = getThemedColor(Theme.key_windowBackgroundWhiteGrayText);
+-        if (!hasCustomItemsColor) itemsColor = getThemedColor(Theme.key_windowBackgroundWhiteBlackText);
++        if (!hasCustomTitleColor) titleColor = getThemedColor(inu_classic ? Theme.key_actionBarDefaultTitle : Theme.key_windowBackgroundWhiteBlackText);
++        if (!hasCustomSubtitleColor) subtitleColor = getThemedColor(inu_classic ? Theme.key_actionBarDefaultSubtitle : Theme.key_windowBackgroundWhiteGrayText);
++        if (!hasCustomItemsColor) itemsColor = getThemedColor(inu_classic ? Theme.key_actionBarDefaultIcon : Theme.key_windowBackgroundWhiteBlackText);
+         if (!hasCustomItemsActionModeColor) itemsActionModeColor = getThemedColor(Theme.key_windowBackgroundWhiteBlackText);
+-        if (!hasCustomItemsBackgroundColor) itemsBackgroundColor = getThemedColor(Theme.key_listSelector);
++        if (!hasCustomItemsBackgroundColor) itemsBackgroundColor = getThemedColor(inu_classic ? Theme.key_actionBarDefaultSelector : Theme.key_listSelector);
+         if (!hasCustomItemsActionModeBackgroundColor) itemsActionModeBackgroundColor = getThemedColor(Theme.key_listSelector);
+     }
+ 
+@@ -1520,6 +1540,7 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
+         SimpleTextView subtitleOutView;
+         CharSequence subtitle;
+         private int sideInset;
++        int inu_leftInset, inu_rightInset;
+ 
+         TitleLayout(Context context) {
+             super(context);
+@@ -1538,9 +1559,9 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
+                 return;
+             }
+             final SimpleTextView view = new SimpleTextView(getContext());
+-            view.setGravity(Gravity.CENTER);
++            view.setGravity(inu_getGravity());
+             view.setTypeface(AndroidUtilities.bold());
+-            view.setTextSize(17);
++            view.setTextSize(inu_getTitleTextSize());
+             view.setTextColor(titleColor);
+             view.setEmojiColor(titleColor);
+             view.setDrawablePadding(dp(4));
+@@ -1550,6 +1571,32 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
+             addView(view, 0, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.TOP));
+         }
+ 
++        private int inu_getTitleTextSize() {
++            if (!inu_classic) {
++                return 17;
++            }
++            return !AndroidUtilities.isTablet() && getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE ? 18 : 20;
++        }
++
++        private int inu_getGravity() {
++            return inu_classic ? Gravity.LEFT | Gravity.CENTER_VERTICAL : Gravity.CENTER;
++        }
++
++        void inu_updateStyle() {
++            for (SimpleTextView view : titleViews) {
++                if (view != null) {
++                    view.setTextSize(inu_getTitleTextSize());
++                    view.setGravity(inu_getGravity());
++                }
++            }
++            for (SimpleTextView view : new SimpleTextView[] { subtitleView, subtitleOutView }) {
++                if (view != null) {
++                    view.setGravity(inu_getGravity());
++                }
++            }
++            requestLayout();
++        }
++
+         void setTitle(CharSequence value) {
+             createTitleView(0);
+             if (titleViews[1] != null) {
+@@ -1586,7 +1633,7 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
+ 
+         private SimpleTextView createSubtitleView() {
+             final SimpleTextView view = new SimpleTextView(getContext());
+-            view.setGravity(Gravity.CENTER);
++            view.setGravity(inu_getGravity());
+             view.setTextSize(14);
+             view.setTextColor(subtitleColor);
+             addView(view, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.TOP));
+@@ -1668,7 +1715,7 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
+         protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+             final int width = MeasureSpec.getSize(widthMeasureSpec);
+             final int height = MeasureSpec.getSize(heightMeasureSpec);
+-            final int available = Math.max(0, width - sideInset * 2);
++            final int available = Math.max(0, inu_classic ? width - inu_leftInset - inu_rightInset : width - sideInset * 2);
+             for (SimpleTextView view : titleViews) {
+                 if (view != null && view.getVisibility() != GONE) {
+                     view.measure(MeasureSpec.makeMeasureSpec(available, MeasureSpec.AT_MOST),
+@@ -1702,7 +1749,7 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
+                 final int textTop = hasSubtitle
+                     ? (rowHeight / 2 - view.getTextHeight()) / 2 + dp(5)
+                     : (rowHeight - view.getTextHeight()) / 2;
+-                final int l = (width - view.getMeasuredWidth()) / 2;
++                final int l = inu_classic ? inu_leftInset : (width - view.getMeasuredWidth()) / 2;
+                 final int t = textTop - view.getPaddingTop();
+                 view.layout(l, t, l + view.getMeasuredWidth(), t + view.getMeasuredHeight());
+             }
+@@ -1712,7 +1759,7 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
+                         continue;
+                     }
+                     final int textTop = rowHeight / 2 + (rowHeight / 2 - view.getTextHeight()) / 2 - dp(2);
+-                    final int l = (width - view.getMeasuredWidth()) / 2;
++                    final int l = inu_classic ? inu_leftInset : (width - view.getMeasuredWidth()) / 2;
+                     view.layout(l, textTop, l + view.getMeasuredWidth(), textTop + view.getTextHeight());
+                 }
+             }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/SimpleActionBarMenu.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/SimpleActionBarMenu.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/SimpleActionBarMenu.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/SimpleActionBarMenu.java
+@@ -64,6 +64,18 @@ public class SimpleActionBarMenu extends LinearLayout {
+         return addItemAt(-1, id, 0, null, drawable, width, title);
+     }
+ 
++    void inu_updateIconItemMargins() {
++        for (int a = 0, N = getChildCount(); a < N; a++) {
++            final View view = getChildAt(a);
++            if (view instanceof SimpleActionBarMenuItem && ((SimpleActionBarMenuItem) view).textView == null) {
++                final LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) view.getLayoutParams();
++                lp.leftMargin = lp.rightMargin = parentBar.inu_classic ? 0 : -dp(5);
++            }
++        }
++        skipNextAnimation = true;
++        requestLayout();
++    }
++
+     public SimpleActionBarMenuItem addItemAt(int index, int id, int icon, CharSequence text, Drawable drawable, int width, CharSequence title) {
+         final SimpleActionBarMenuItem item = new SimpleActionBarMenuItem(getContext(), this,
+             parentBar.getItemsBackgroundColor(isActionMode), parentBar.getItemsColor(isActionMode), text != null, parentBar.resourcesProvider);
+@@ -82,7 +94,7 @@ public class SimpleActionBarMenu extends LinearLayout {
+                 item.iconView.setImageResource(icon);
+             }
+             lp = new LinearLayout.LayoutParams(width, ViewGroup.LayoutParams.MATCH_PARENT);
+-            lp.leftMargin = lp.rightMargin = -dp(5);
++            lp.leftMargin = lp.rightMargin = parentBar.inu_classic ? 0 : -dp(5);
+         }
+         addView(item, index, lp);
+         item.setOnClickListener(v -> {
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChannelAdminLogActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChannelAdminLogActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChannelAdminLogActivity.java
@@ -3120,7 +3393,44 @@ index 0000000..0000000 100644
                  updateBottomButtonY();
              }
          });
-@@ -8345,7 +8345,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -8100,10 +8100,14 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+             return true;
+         });
+         sharedMediaLayout.addPagesOverlay(headerFadeView, 0);
+-        headerFadeView.setBackground(glass.createActionBarFadeDrawable(headerFadeView));
++        if (!desu.inugram.helpers.theme.NonIslandHelper.applyClassicHeaderBackground(headerFadeView, null, resourcesProvider, desu.inugram.helpers.theme.NonIslandHelper.profileHeaders())) {
++            headerFadeView.setBackground(glass.createActionBarFadeDrawable(headerFadeView));
++        }
+         // the progressive blur of the simple screens over the rows, under the name and the buttons
+         headerBlurView = new View(getContext());
+-        headerBlurView.setBackground(glass.createActionBarFadeDrawable(headerBlurView));
++        if (!desu.inugram.helpers.theme.NonIslandHelper.applyClassicHeaderBackground(headerBlurView, null, resourcesProvider, desu.inugram.helpers.theme.NonIslandHelper.profileHeaders())) {
++            headerBlurView.setBackground(glass.createActionBarFadeDrawable(headerBlurView));
++        }
+         contentView.addView(headerBlurView, contentView.indexOfChild(avatarContainer2), LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 0, Gravity.TOP));
+         glassEngine.addScrolledView(listView);
+         sharedMediaLayout.setPagesGlassEngine(glassEngine);
+@@ -8123,7 +8127,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+         final int statusBar = actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0;
+         final int headerHeight = statusBar + ActionBar.getCurrentActionBarHeight();
+         // the list starts under the header: the tabs go up into the glass header's extra height, 7dp under its buttons
+-        final int tabsTop = SharedMediaLayout.getPagesTabsTop(headerHeight) - headerHeight;
++        final int tabsTop = desu.inugram.helpers.theme.NonIslandHelper.profileHeaders()
++            ? (sharedMediaLayout.inu_tabsPillMode() ? 0 : -dp(6.666f))
++            : SharedMediaLayout.getPagesTabsTop(headerHeight) - headerHeight;
+         pagesOverscanTop = headerHeight + tabsTop + BaseFragmentSimpleGlass.getOverscan(statusBar);
+         sharedMediaLayout.setPagesInsets(tabsTop,
+             pagesOverscanTop,
+@@ -8152,7 +8158,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+             // by the scroll: the whole player at the top, nothing once the media are its height below it
+             extra = sharedMediaLayout.getParent() == listView ? Math.max(0, shift - Math.max(0, (int) sharedMediaLayout.getY())) : shift;
+         }
+-        final int height = headerBlurBaseHeight + extra;
++        final int height = desu.inugram.helpers.theme.NonIslandHelper.profileHeaders() ? headerBlurBaseHeight - dp(44) : headerBlurBaseHeight + extra;
+         setHeaderBlurHeight(headerBlurView, height);
+         setHeaderBlurHeight(headerFadeView, height);
+     }
+@@ -8345,7 +8351,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          boolean searchVisible = imageUpdater == null && actionBar.isSearchFieldVisible();
          if (sharedMediaRow != -1 && !searchVisible) {
              holder = (RecyclerListView.Holder) listView.findViewHolderForAdapterPosition(sharedMediaRow);
@@ -3129,7 +3439,7 @@ index 0000000..0000000 100644
          } else {
              mediaHeaderVisible = searchVisible;
          }
-@@ -8578,8 +8578,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -8578,8 +8584,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          nameY = AndroidUtilities.lerp(minNameY, backwardInitialValues[8], backwardDiff);
          onlineY = AndroidUtilities.lerp(minOnlineY, backwardInitialValues[9], backwardDiff);
  
@@ -3140,7 +3450,7 @@ index 0000000..0000000 100644
          nameTextView.setTranslationX(nameX);
          nameTextView.setTranslationY(nameY);
          onlineTextView.setTranslationX(onlineX + customPhotoOffset);
-@@ -9035,7 +9035,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -9035,7 +9041,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                  final float avatarBottom = (float) Math.floor(endNameY) + (avatarContainer.getHeight() * avatarContainer.getScaleY() + dpf2(8)) * (openAnimationInProgress ? avatarAnimationProgress : diff);
                  nameY = avatarBottom + dp(1.3f) + dp(7) * diff + titleAnimationsYDiff * (1f - avatarAnimationProgress);
                  onlineY = avatarBottom + dp(24) + (float) Math.floor(11 * AndroidUtilities.density) * diff;
@@ -3149,7 +3459,7 @@ index 0000000..0000000 100644
  
                  if (showStatusButton != null) {
                      showStatusButton.setAlpha((int) (0xFF * diff));
-@@ -15492,10 +15492,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -15492,10 +15498,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              if (animated) {
                  LinearSmoothScrollerCustom linearSmoothScroller = new LinearSmoothScrollerCustom(getContext(), LinearSmoothScrollerCustom.POSITION_TOP, .6f);
                  linearSmoothScroller.setTargetPosition(sharedMediaRow);
@@ -3238,6 +3548,21 @@ index 0000000..0000000 100644
          canvas.save();
          canvas.clipPath(clipPath);
          super.dispatchDraw(canvas);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
+@@ -349,7 +349,9 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+         contentView.addView(listView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.FILL));
+ 
+         actionBarFadeView = new View(context);
+-        actionBarFadeView.setBackground(getBaseSimpleGlass().createActionBarFadeDrawable(actionBarFadeView));
++        if (!desu.inugram.helpers.theme.NonIslandHelper.applyClassicHeaderBackground(actionBarFadeView, null, resourceProvider)) {
++            actionBarFadeView.setBackground(getBaseSimpleGlass().createActionBarFadeDrawable(actionBarFadeView));
++        }
+         contentView.addView(actionBarFadeView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 0, Gravity.TOP));
+         contentView.addView(simpleActionBar, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.FILL_HORIZONTAL | Gravity.TOP));
+ 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/bots/BotAdView.java b/TMessagesProj/src/main/java/org/telegram/ui/bots/BotAdView.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/bots/BotAdView.java
@@ -3318,3 +3643,25 @@ index 0000000..0000000 100644
                      lerp(animateFromRect, rect, animateOpenProgress, rect);
  
                      tempRect.set(animateInputBackground.getBounds());
+diff --git a/TMessagesProj/src/main/java/org/telegram/utils/glass/BaseFragmentSimpleGlass.java b/TMessagesProj/src/main/java/org/telegram/utils/glass/BaseFragmentSimpleGlass.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/utils/glass/BaseFragmentSimpleGlass.java
++++ b/TMessagesProj/src/main/java/org/telegram/utils/glass/BaseFragmentSimpleGlass.java
+@@ -261,12 +261,16 @@ public class BaseFragmentSimpleGlass {
+         contentView.addView(header, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP));
+         if (header instanceof SimpleActionBar) {
+             final SimpleActionBar simpleActionBar = (SimpleActionBar) header;
+-            simpleActionBar.setExtraHeight(dp(6));
++            simpleActionBar.inu_setClassic(desu.inugram.helpers.theme.NonIslandHelper.headers());
++            simpleActionBar.setExtraHeight(desu.inugram.helpers.theme.NonIslandHelper.headers() ? 0 : dp(6));
+             simpleActionBar.setupGlass(factory, BlurredBackgroundProviderImpl.simpleActionBar(resourceProvider));
+             simpleActionBar.setMenuGlass(menuFactory, menuGlassSource);
+         } else if (header instanceof ActionBar) {
+             final ActionBar actionBar = (ActionBar) header;
+             actionBar.setAddToContainer(false);
++            if (desu.inugram.helpers.theme.NonIslandHelper.headers()) {
++                return;
++            }
+             actionBar.setCenterTitleAndGlass(true);
+             actionBar.setExtraHeight(dp(6));
+             actionBar.doNotDrawCenterGlass = true;

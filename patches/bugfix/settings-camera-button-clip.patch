@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
-@@ -434,7 +434,6 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -436,7 +436,6 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
  
          cameraButton = new FrameLayout(context);
          ThemeBind.fillBackground(cameraButton, Theme.createCircleDrawable(dp(32), getThemedColor(Theme.key_windowBackgroundGray)), ThemeBind.of(Theme.key_windowBackgroundGray), getResourceProvider());
@@ -19,7 +19,7 @@ index 0000000..0000000 100644
          cameraBackground = new FrameLayout(context);
          ThemeBind.fillBackground(cameraBackground, Theme.createCircleDrawable(dp(30), getThemedColor(Theme.key_featuredStickers_addButton)), ThemeBind.of(Theme.key_featuredStickers_addButton), getResourceProvider());
          cameraImageView = new ImageView(context);
-@@ -442,7 +441,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -444,7 +443,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
          cameraImageView.setImageResource(R.drawable.filled_premium_camera);
          cameraImageView.setColorFilter(getThemedColor(Theme.key_featuredStickers_buttonText), android.graphics.PorterDuff.Mode.SRC_IN);
          cameraBackground.addView(cameraImageView, LayoutHelper.createFrame(22, 22, Gravity.CENTER));

@@ -177,7 +177,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
-@@ -439,6 +439,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -441,6 +441,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
          cameraImageView = new ImageView(context);
          cameraImageView.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
          cameraImageView.setImageResource(R.drawable.filled_premium_camera);

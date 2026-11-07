@@ -43,6 +43,7 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
             ExpandableBoolGroup.Option(R.string.InuNonIslandSharedMediaTabs, InuConfig.NON_ISLAND_SHARED_MEDIA_TABS, TOGGLE_NON_ISLAND_SHARED_MEDIA_TABS),
             ExpandableBoolGroup.Option(R.string.InuNonIslandGlobalSearch, InuConfig.NON_ISLAND_GLOBAL_SEARCH, TOGGLE_NON_ISLAND_GLOBAL_SEARCH),
             ExpandableBoolGroup.Option(R.string.InuNonIslandChatElements, InuConfig.NON_ISLAND_CHAT_ELEMENTS, TOGGLE_NON_ISLAND_CHAT_ELEMENTS),
+            ExpandableBoolGroup.Option(R.string.InuNonIslandHeaders, InuConfig.NON_ISLAND_HEADERS, TOGGLE_NON_ISLAND_HEADERS),
             ExpandableBoolGroup.Option(R.string.InuHideFadeView, InuConfig.HIDE_FADE_VIEW, TOGGLE_HIDE_FADE_VIEW),
             ExpandableBoolGroup.Option(R.string.InuDisableGlassGlare, InuConfig.DISABLE_GLASS_GLARE, TOGGLE_DISABLE_GLASS_GLARE),
         ),
@@ -319,6 +320,7 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
         private val TOGGLE_NON_ISLAND_SHARED_MEDIA_TABS = InuUtils.generateId()
         private val TOGGLE_NON_ISLAND_GLOBAL_SEARCH = InuUtils.generateId()
         private val TOGGLE_NON_ISLAND_CHAT_ELEMENTS = InuUtils.generateId()
+        private val TOGGLE_NON_ISLAND_HEADERS = InuUtils.generateId()
         private val BUTTON_FONTS = InuUtils.generateId()
         private val TOGGLE_DISABLE_SCRIM_BLUR = InuUtils.generateId()
         private val TOGGLE_DISABLE_GLASS_GLARE = InuUtils.generateId()
@@ -344,6 +346,7 @@ class AppearanceSettingsActivity : SettingsPageActivity() {
             InuConfig.MATERIAL_PROFILE_ACTIONS,
             InuConfig.NON_ISLAND_FOLDERS_BAR,
             InuConfig.NON_ISLAND_GLOBAL_SEARCH,
+            InuConfig.NON_ISLAND_HEADERS,
             InuConfig.HIDE_FADE_VIEW,
         )
 

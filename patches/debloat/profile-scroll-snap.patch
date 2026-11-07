@@ -40,7 +40,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
-@@ -686,7 +686,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -688,7 +688,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
  
      /** The list does not stop with the avatar half hidden: it scrolls on to the shown or the hidden avatar. */
      private void snapAvatarHide() {

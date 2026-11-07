@@ -19,7 +19,7 @@ index 0000000..0000000 100644
  import org.telegram.ui.Components.BulletinFactory;
  import org.telegram.ui.Components.CubicBezierInterpolator;
  import org.telegram.ui.Components.FloatingDebug.FloatingDebugController;
-@@ -497,6 +498,18 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -499,6 +500,18 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
          updateActionBarFadeHeight(mSystemInsets.top);
          updateActionBarVisible(true, false);
  

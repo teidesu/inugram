@@ -1,14 +1,22 @@
 package desu.inugram.helpers.theme
 
+import android.animation.ValueAnimator
 import android.graphics.Canvas
+import android.graphics.ColorFilter
+import android.graphics.Paint
+import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
+import android.view.ViewTreeObserver
 import android.widget.FrameLayout
 import android.widget.TextView
+import androidx.core.graphics.ColorUtils
 import androidx.core.view.isVisible
+import androidx.recyclerview.widget.RecyclerView
 import desu.inugram.InuConfig
 import desu.inugram.ui.BlurBehindHelper
 import org.telegram.messenger.AndroidUtilities
@@ -18,10 +26,12 @@ import org.telegram.ui.ActionBar.INavigationLayout
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Components.ChatActivityEnterView
 import org.telegram.ui.Components.ChatActivityTopPanelLayout
+import org.telegram.ui.Components.CubicBezierInterpolator
 import org.telegram.ui.Components.FilterTabsView
 import org.telegram.ui.Components.FragmentSearchField
 import org.telegram.ui.Components.MentionsContainerView
 import org.telegram.ui.Components.RecyclerListView
+import org.telegram.ui.Components.SectionsScrollView
 import org.telegram.ui.Components.SizeNotifierFrameLayout
 import org.telegram.ui.DialogsActivity
 import org.telegram.ui.SearchTabsAndFiltersLayout
@@ -39,6 +49,104 @@ object NonIslandHelper {
 
     @JvmStatic
     fun chatElements(): Boolean = InuConfig.NON_ISLAND_CHAT_ELEMENTS.value
+
+    @JvmStatic
+    fun headers(): Boolean = InuConfig.NON_ISLAND_HEADERS.value
+
+    @JvmStatic
+    fun profileHeaders(): Boolean = headers() || sharedMediaTabs()
+
+    @JvmStatic
+    @JvmOverloads
+    fun applyClassicHeaderBackground(header: View, list: View?, resourcesProvider: Theme.ResourcesProvider?, enabled: Boolean = headers()): Boolean {
+        if (!enabled) return false
+        val background = ClassicHeaderBackground(resourcesProvider, list != null)
+        header.background = background
+        when (list) {
+            is RecyclerView -> list.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+                override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                    background.setOnTop(!recyclerView.canScrollVertically(-1))
+                }
+            })
+            is SectionsScrollView -> list.onScroll { background.setOnTop(!list.canScrollVertically(-1)) }
+        }
+        // the parent may be dispatching attach to its children right now: adding a sibling then skips the last one
+        header.post {
+            val parent = header.parent as? ViewGroup ?: return@post
+            val shadow = ClassicHeaderShadow(header, background)
+            parent.addView(shadow, parent.indexOfChild(header) + 1, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, shadow.background.intrinsicHeight))
+        }
+        return true
+    }
+
+    private class ClassicHeaderBackground(
+        private val resourcesProvider: Theme.ResourcesProvider?,
+        private val adaptive: Boolean,
+    ) : Drawable() {
+        private var onTop = adaptive
+        private var onTopFactor = if (adaptive) 1f else 0f
+        private var animator: ValueAnimator? = null
+
+        private val factor get() = if (adaptive && AndroidUtilities.isTablet()) 1f else onTopFactor
+        val shadowAlpha get() = (1f - factor) * 0.5f
+
+        fun setOnTop(value: Boolean) {
+            if (onTop == value) return
+            onTop = value
+            animator?.cancel()
+            animator = ValueAnimator.ofFloat(onTopFactor, if (value) 1f else 0f).apply {
+                addUpdateListener {
+                    onTopFactor = it.animatedValue as Float
+                    invalidateSelf()
+                }
+                duration = 320
+                interpolator = CubicBezierInterpolator.EASE_OUT_QUINT
+                start()
+            }
+        }
+
+        private val paint = Paint()
+
+        override fun draw(canvas: Canvas) {
+            paint.color = ColorUtils.blendARGB(
+                Theme.getColor(Theme.key_actionBarDefault, resourcesProvider),
+                Theme.getColor(Theme.key_windowBackgroundGray, resourcesProvider),
+                factor,
+            )
+            canvas.drawRect(bounds, paint)
+        }
+
+        override fun setAlpha(alpha: Int) {}
+        override fun setColorFilter(colorFilter: ColorFilter?) {}
+        override fun getOpacity(): Int = PixelFormat.OPAQUE
+    }
+
+    private class ClassicHeaderShadow(
+        private val header: View,
+        private val headerBackground: ClassicHeaderBackground,
+    ) : View(header.context), ViewTreeObserver.OnPreDrawListener {
+        init {
+            setBackgroundResource(R.drawable.header_shadow)
+            importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+
+        override fun onAttachedToWindow() {
+            super.onAttachedToWindow()
+            viewTreeObserver.addOnPreDrawListener(this)
+        }
+
+        override fun onDetachedFromWindow() {
+            viewTreeObserver.removeOnPreDrawListener(this)
+            super.onDetachedFromWindow()
+        }
+
+        override fun onPreDraw(): Boolean {
+            visibility = header.visibility
+            translationY = header.y + header.height - top
+            alpha = header.alpha * headerBackground.shadowAlpha
+            return true
+        }
+    }
 
     @JvmStatic
     fun chatInputRowHeight(): Int = if (chatElements()) 48 else 44

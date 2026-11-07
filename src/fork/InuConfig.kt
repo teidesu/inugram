@@ -678,6 +678,9 @@ object InuConfig {
     val NON_ISLAND_CHAT_ELEMENTS = BoolItem("non_island_chat_elements", false)
 
     @JvmField
+    val NON_ISLAND_HEADERS = BoolItem("non_island_headers", false)
+
+    @JvmField
     val HIDE_FADE_VIEW = BoolItem("hide_fade_view", false)
 
     @JvmField

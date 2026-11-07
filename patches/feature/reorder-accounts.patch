@@ -71,7 +71,7 @@ index 0000000..0000000 100644
          otherItem.addSubItem(2, R.drawable.msg_leave, getString(R.string.LogOut));
  
          search = new ProfileActivity.SearchAdapter(this, context) {
-@@ -732,16 +737,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -734,16 +739,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                  accountNumbers.add(a);
              }
          }

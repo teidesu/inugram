@@ -13,7 +13,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
   - 🐶 an option to (ab)use predictive back to open the drawer
   - customizable drawer items
 - monet (material you) theme support - *based on [NagramX](https://github.com/risin42/NagramX)*, 🐶 improved. plus a quick switcher in appearance settings (light/dark/amoled/auto)
-- 🐶 classic ui mode for folders bar, shared media tabs, global search and chat elements (reverts the >12.6 "liquid glass" look)
+- 🐶 classic ui mode for folders bar, shared media tabs, global search, chat elements and screen headers (reverts the >12.6 "liquid glass" look)
 - icon packs: stackable `.icons` packs (svg/png/webp icons and `lottie:` animations + metadata.json), installed from a file or by opening them in a chat; bundled solar pack by [@r4in80w](https://t.me/r4in80w) - *ported from [NagramX](https://github.com/risin42/NagramX)*
 - notification icon: Telegram (default) or Inugram
 - 🐶 animated splash screen follows the selected app icon and Monet theme (Android 12+)

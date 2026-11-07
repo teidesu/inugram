@@ -35,7 +35,7 @@ index 0000000..0000000 100644
              if (!AndroidUtilities.isTablet() && removeFragment) {
                  getNotificationCenter().removeObserver(ProfileActivity.this, NotificationCenter.closeChats);
                  getNotificationCenter().postNotificationName(NotificationCenter.closeChats);
-@@ -9431,7 +9431,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -9437,7 +9437,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                      TLRPC.EncryptedChat encryptedChat = (TLRPC.EncryptedChat) args[0];
                      Bundle args2 = new Bundle();
                      args2.putInt("enc_id", encryptedChat.id);
@@ -44,7 +44,7 @@ index 0000000..0000000 100644
                  });
              }
          } else if (id == NotificationCenter.encryptedChatUpdated) {
-@@ -9540,7 +9540,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -9546,7 +9546,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                      sharedMediaLayout.setChatInfo(chatInfo);
                  }
              }
