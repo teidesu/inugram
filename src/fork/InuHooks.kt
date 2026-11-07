@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import desu.inugram.helpers.CrashReporter
+import desu.inugram.helpers.PersistentConnectionHelper
 import desu.inugram.helpers.LoginHelper
 import desu.inugram.helpers.ProxyVpnHelper
 import desu.inugram.helpers.ShortcutHelper
@@ -71,6 +72,7 @@ object InuHooks {
             MonetHelper.registerThemeReloadReceiver(context)
         }
         UpdateHelper.clearPendingIfInstalled()
+        PersistentConnectionHelper.onProcessStart(context)
         ApkInstaller.dismissInstalledNotification()
         CloudSettingsHelper.attachAutoSyncListener()
         ProxyVpnHelper.init(context)
@@ -83,6 +85,7 @@ object InuHooks {
 
     @JvmStatic
     fun onAppBoot() {
+        PersistentConnectionHelper.onAppBoot()
         // #if PLUGINS
         PluginManager.onAppBoot()
         // #endif
@@ -167,6 +170,7 @@ object InuHooks {
         }
         CrashReporter.maybeShowReportSheet(launchActivity)
         UpdateHelper.maybeShowWhatsNew(launchActivity)
+        PersistentConnectionHelper.onResume(launchActivity)
         ProxyVpnHelper.reconcile()
         DrawerHelper.refreshUpdateState()
         MediaSendDebugHelper.startWatchingCache()

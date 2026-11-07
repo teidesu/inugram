@@ -244,6 +244,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - open bottom-tab menus early by swiping up; open header menus by dragging down from the button and release on an item; flat highlight (not ripple) on menu hover
 - faster downloads/uploads
 - auto-disable the configured proxy while a VPN is active
+- persistent connection for notifications without Google Play Services: keeps stock's Keep-Alive Service running in the foreground with a silent notification, so the process isn't frozen in background. on automatically when no push provider is found - *inspired by [Telegram-FOSS](https://github.com/Telegram-FOSS-Team/Telegram-FOSS)*
 - batch import proxy links from clipboard (one per line)
 - send MP4 files attached through Files as playable videos without conversion
 - enable muting, quality changes, and cropping for AV1 and other video formats when Android provides a compatible decoder; conversion selects a decoder matching the video format, including software decoders

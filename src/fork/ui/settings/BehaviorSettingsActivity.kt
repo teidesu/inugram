@@ -5,17 +5,22 @@ import android.view.View
 import desu.inugram.InuConfig
 import desu.inugram.SearchRegistry
 import desu.inugram.helpers.InuUtils
+import desu.inugram.helpers.PersistentConnectionHelper
 import desu.inugram.helpers.ProxyVpnHelper
 import desu.inugram.helpers.ShortcutHelper
 import desu.inugram.helpers.chat.WebPreviewHelper
 import desu.inugram.helpers.maps.MapsHelper
 import org.telegram.messenger.AndroidUtilities
+import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
 import org.telegram.messenger.SharedConfig
 import org.telegram.messenger.UserConfig
+import org.telegram.messenger.browser.Browser
+import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Cells.NotificationsCheckCell
 import org.telegram.ui.Cells.TextCheckCell
+import org.telegram.ui.Cells.TextDetailSettingsCell
 import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.UItem
 import org.telegram.ui.Components.UniversalAdapter
@@ -138,6 +143,37 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
             )
         )
         items.add(UItem.asShadow(null))
+
+        val context = ApplicationLoader.applicationContext
+        val persistentEnabled = PersistentConnectionHelper.enabled
+        val batteryLimited = persistentEnabled && PersistentConnectionHelper.needsBatteryExemption(context)
+        items.add(UItem.asHeader(LocaleController.getString(R.string.Notifications)))
+        items.add(
+            UItem.asButton(
+                BUTTON_PERSISTENT_CONNECTION_MODE,
+                LocaleController.getString(R.string.InuPersistentConnection),
+                persistentConnectionModeLabel(InuConfig.PERSISTENT_CONNECTION_MODE.value),
+            )
+        )
+        if (persistentEnabled) {
+            val battery = UItem.asButton(
+                BUTTON_PERSISTENT_CONNECTION_BATTERY,
+                LocaleController.getString(R.string.InuPersistentConnectionBattery),
+                PersistentConnectionHelper.batteryStatus(context),
+            )
+            items.add(if (batteryLimited) battery.red() else battery)
+            items.add(UItem.asCustom(BUTTON_PERSISTENT_CONNECTION_NOTIFICATION, notificationRow))
+        }
+        var persistentInfo: CharSequence = LocaleController.getString(R.string.InuPersistentConnectionInfo)
+        if (batteryLimited) persistentInfo = LocaleController.getString(R.string.InuPersistentConnectionBatteryInfo) + "\n\n" + persistentInfo
+        if (persistentEnabled && PersistentConnectionHelper.isIgnoringBatteryOptimizations(context)) {
+            // once the system side is done, what is left is the manufacturer's own app killer
+            val text = persistentInfo.toString() + "\n\n" + LocaleController.getString(R.string.InuPersistentConnectionDontKillMyAppInfo)
+            persistentInfo = AndroidUtilities.replaceSingleTag(text) {
+                Browser.openUrl(parentActivity ?: return@replaceSingleTag, "https://dontkillmyapp.com/")
+            }
+        }
+        items.add(UItem.asShadow(persistentInfo))
 
         items.add(
             UItem.asHeader(LocaleController.getString(R.string.InuNetwork))
@@ -293,6 +329,13 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
                 ProxyVpnHelper.reconcile()
             }
 
+            BUTTON_PERSISTENT_CONNECTION_MODE -> showPersistentConnectionModeSelector()
+
+            BUTTON_PERSISTENT_CONNECTION_BATTERY -> {
+                val context = context ?: return
+                PersistentConnectionHelper.requestBatteryExemption(context)
+            }
+
             TOGGLE_FASTER_DOWNLOADS -> {
                 val new = InuConfig.FASTER_DOWNLOADS.toggle()
                 (view as? TextCheckCell)?.isChecked = new
@@ -389,6 +432,46 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
         )
     }
 
+    // stock VIEW_TYPE_TEXT has no subtitle slot: a title-and-subtitle cell of our own, as the privacy page does
+    private val notificationRow by lazy {
+        TextDetailSettingsCell(context!!).apply {
+            background = Theme.createSelectorWithBackgroundDrawable(Theme.getColor(Theme.key_windowBackgroundWhite), Theme.getColor(Theme.key_listSelector))
+            setTextAndValue(LocaleController.getString(R.string.InuPersistentConnectionNotificationSettings), LocaleController.getString(R.string.InuPersistentConnectionNotificationSettingsInfo), false)
+            setOnClickListener { PersistentConnectionHelper.openNotificationChannelSettings(it.context) }
+        }
+    }
+
+    private fun persistentConnectionModeLabel(mode: Int): String = LocaleController.getString(
+        when (mode) {
+            InuConfig.PersistentConnectionModeItem.ON -> R.string.InuPersistentConnectionOn
+            InuConfig.PersistentConnectionModeItem.OFF -> R.string.InuPersistentConnectionOff
+            else -> if (PersistentConnectionHelper.autoEnabled) R.string.InuPersistentConnectionAutoOn else R.string.InuPersistentConnectionAutoOff
+        }
+    )
+
+    private fun showPersistentConnectionModeSelector() {
+        val context = context ?: return
+        val values = intArrayOf(
+            InuConfig.PersistentConnectionModeItem.AUTO,
+            InuConfig.PersistentConnectionModeItem.ON,
+            InuConfig.PersistentConnectionModeItem.OFF,
+        )
+        val items = values.map { RadioDialogBuilder.Item(persistentConnectionModeLabel(it)) }
+        showDialog(
+            RadioDialogBuilder(context, getResourceProvider())
+                .setTitle(LocaleController.getString(R.string.InuPersistentConnection))
+                .setSubtitle(LocaleController.getString(R.string.InuPersistentConnectionInfo))
+                .setItems(items, values.indexOf(InuConfig.PERSISTENT_CONNECTION_MODE.value).coerceAtLeast(0)) { _, which ->
+                    val newValue = values[which]
+                    if (InuConfig.PERSISTENT_CONNECTION_MODE.value == newValue) return@setItems
+                    InuConfig.PERSISTENT_CONNECTION_MODE.value = newValue
+                    PersistentConnectionHelper.onConfigChanged()
+                    listView.adapter.update(true)
+                    if (PersistentConnectionHelper.enabled) PersistentConnectionHelper.requestBatteryExemptionOnce(context)
+                }.create()
+        )
+    }
+
     private fun showTextClassifierModeSelector() {
         val context = context ?: return
         val values = intArrayOf(
@@ -438,6 +521,9 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
         private val TOGGLE_SEND_MP4_DOCUMENT_AS_VIDEO = InuUtils.generateId()
         private val BUTTON_WEB_PREVIEW_REPLACEMENTS = InuUtils.generateId()
         private val TOGGLE_AUTO_DISABLE_PROXY_ON_VPN = InuUtils.generateId()
+        private val BUTTON_PERSISTENT_CONNECTION_MODE = InuUtils.generateId()
+        private val BUTTON_PERSISTENT_CONNECTION_BATTERY = InuUtils.generateId()
+        private val BUTTON_PERSISTENT_CONNECTION_NOTIFICATION = InuUtils.generateId()
         private val TOGGLE_FASTER_DOWNLOADS = InuUtils.generateId()
         private val TOGGLE_FASTER_UPLOADS = InuUtils.generateId()
         private val SECTION_DELETE_FOR_BOTH = InuUtils.generateId()
@@ -479,6 +565,9 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("download-directory", R.string.InuDownloadDirectory, BUTTON_DOWNLOAD_DIRECTORY),
                 SearchRegistry.Entry("web-preview-replacements", R.string.InuWebPreviewReplacements, BUTTON_WEB_PREVIEW_REPLACEMENTS),
                 SearchRegistry.Entry("auto-disable-proxy-on-vpn", R.string.InuAutoDisableProxyOnVpn, TOGGLE_AUTO_DISABLE_PROXY_ON_VPN),
+                SearchRegistry.Entry("persistent-connection", R.string.InuPersistentConnection, BUTTON_PERSISTENT_CONNECTION_MODE),
+                SearchRegistry.Entry("persistent-connection-battery", R.string.InuPersistentConnectionBattery, BUTTON_PERSISTENT_CONNECTION_BATTERY),
+                SearchRegistry.Entry("persistent-connection-notification", R.string.InuPersistentConnectionNotificationSettings, BUTTON_PERSISTENT_CONNECTION_NOTIFICATION),
                 SearchRegistry.Entry("faster-downloads", R.string.InuFasterDownloads, TOGGLE_FASTER_DOWNLOADS),
                 SearchRegistry.Entry("faster-uploads", R.string.InuFasterUploads, TOGGLE_FASTER_UPLOADS),
                 SearchRegistry.Entry("delete-for-both", R.string.InuDeleteForBoth, SECTION_DELETE_FOR_BOTH),
