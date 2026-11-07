@@ -490,7 +490,7 @@ index 0000000..0000000 100644
  
          ContentView contentView = new ContentView(context);
          fragmentView = contentView;
-+        fragmentView.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundWhite));
++        ThemeBind.backgroundColor(fragmentView, Theme.key_windowBackgroundWhite, getResourceProvider());
  
          final PointF tmpPoint = new PointF();
          iBlur3Capture = (canvas, position) -> {
