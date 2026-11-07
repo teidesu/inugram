@@ -8,7 +8,7 @@ Subject: non-island ui in various parts of the app
  .../ui/ActionBar/ActionBarLayout.java         |   2 +-
  .../telegram/ui/ChannelAdminLogActivity.java  |  21 ++-
  .../java/org/telegram/ui/ChatActivity.java    | 148 ++++++++++------
- .../ui/Components/ChatActivityEnterView.java  |  70 +++++---
+ .../ui/Components/ChatActivityEnterView.java  |  72 +++++---
  ...ChatActivityEnterViewAnimatedIconView.java |  17 +-
  .../ChatActivityTopPanelLayout.java           |  27 ++-
  .../ui/Components/ChatAttachAlert.java        |  20 +++
@@ -43,7 +43,7 @@ Subject: non-island ui in various parts of the app
  .../ui/bots/BotCommandsMenuContainer.java     |   4 +-
  .../bots/ChatAttachAlertBotWebViewLayout.java |   5 +-
  .../java/org/telegram/ui/iv/RichEditor.java   |   4 +-
- 39 files changed, 787 insertions(+), 283 deletions(-)
+ 39 files changed, 788 insertions(+), 284 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -999,6 +999,15 @@ index 0000000..0000000 100644
                      sizeNotifierLayout.addView(recordedAudioPanel, newLayoutParams);
                      videoTimelineView.setVisibility(GONE);
                  } else {
+@@ -10530,7 +10541,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+             botKeyboardView.updateColors();
+         }
+         // emojiButton / deleteRichDraftButton / sendOutlineView icon colors are ThemeBind bindings
+-        final int audioVideoColor = audioVideoButtonContainerForbidden ? getThemedColor(Theme.key_glass_defaultIcon) : Color.WHITE;
++        final int audioVideoColor = audioVideoButtonContainerForbidden || desu.inugram.helpers.theme.NonIslandHelper.chatElements() ? getThemedColor(Theme.key_glass_defaultIcon) : Color.WHITE;
+         if (audioVideoSendButton != null && (!audioVideoColorApplied || audioVideoColor != lastAudioVideoColor)) {
+             audioVideoColorApplied = true;
+             lastAudioVideoColor = audioVideoColor;
 @@ -10544,7 +10555,10 @@ public class ChatActivityEnterView extends FrameLayout implements
                  emojiButton.setBackground(Theme.createSelectorDrawable(selectorColor));
              }
