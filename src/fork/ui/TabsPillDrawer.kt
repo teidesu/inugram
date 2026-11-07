@@ -37,15 +37,25 @@ class TabsPillDrawer(
         val t = dockedT.set(docked)
         val w = strip.measuredWidth.toFloat()
         val h = strip.measuredHeight.toFloat()
-        val cw = strip.tabsContainer.measuredWidth.toFloat()
-        val margin = dp(12f).toFloat()
-        var cx = (w - cw) / 2f
-        if (cx < margin) cx = 0f
-        strip.tabsContainer.translationX = lerp(cx, 0f, t)
+        val margin = dp(MARGIN_DP).toFloat()
+        val container = strip.tabsContainer
+        val first = container.getChildAt(0)
+        val last = container.getChildAt(container.childCount - 1)
+        val span = if (first != null && last != null) (last.right - first.left).toFloat() else w
+        var left = lerp(margin, 0f, t)
+        var right = lerp(w - margin, w, t)
+        if (first != null && span + 2 * margin <= w) {
+            val centered = (w - span) / 2f
+            container.translationX = lerp(centered - container.left - first.left + strip.scrollX, 0f, t)
+            left = lerp(centered, 0f, t)
+            right = lerp(centered + span, w, t)
+        } else {
+            container.translationX = 0f
+        }
         bgRect.set(
-            lerp(maxOf(margin, cx), 0f, t),
+            left,
             strip.paddingTop.toFloat(),
-            lerp(minOf(w - margin, cx + cw), w, t),
+            right,
             h - strip.paddingBottom + t * dp(4f),
         )
         val r = lerp(bgRect.height() / 2f, 0f, t)
@@ -63,12 +73,15 @@ class TabsPillDrawer(
     }
 
     companion object {
+        private const val MARGIN_DP = 12f
+
         @JvmStatic
         fun attach(strip: ScrollSlidingTextTabStrip, contentView: SizeNotifierFrameLayout) {
             strip.layoutParams = LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 50, Gravity.LEFT or Gravity.TOP)
             strip.setPadding(0, dp(7f), 0, dp(7f))
             strip.clipToPadding = false
             strip.tabsContainer.setPadding(dp(12f), 0, dp(12f), 0)
+            strip.setUseMinimalWidth(true)
             strip.inu_pill = TabsPillDrawer(strip, BlurBehindHelper.create(strip, contentView, Theme.key_windowBackgroundWhite))
         }
     }
