@@ -28,6 +28,18 @@ class MessagesSettingsActivity : SettingsPageActivity() {
 
     override fun getTitle(): CharSequence = LocaleController.getString(R.string.InuMessages)
 
+    private val compactModeGroup = ExpandableBoolGroup(
+        LocaleController.getString(R.string.CompactMode),
+        listOf(
+            ExpandableBoolGroup.Option(R.string.InuCompactModeChannels, InuConfig.COMPACT_MODE_CHANNELS),
+            ExpandableBoolGroup.Option(R.string.InuCompactModeGroups, InuConfig.COMPACT_MODE_GROUPS),
+            ExpandableBoolGroup.Option(R.string.InuCompactModeDms, InuConfig.COMPACT_MODE_DMS),
+        ),
+        sectionId = SECTION_COMPACT_MODE,
+    )
+
+    override val expandableGroups = listOf(compactModeGroup)
+
     override fun onResume() {
         super.onResume()
         listView?.adapter?.update(true)
@@ -206,6 +218,7 @@ class MessagesSettingsActivity : SettingsPageActivity() {
                 LocaleController.getString(R.string.InuBubbleTails),
             ).setChecked(InuConfig.BUBBLE_TAILS.value)
         )
+        compactModeGroup.addTo(items) { listView.adapter.update(true) }
         items.add(UItem.asShadow(null))
         items.add(
             UItem.asButton(
@@ -274,6 +287,7 @@ class MessagesSettingsActivity : SettingsPageActivity() {
     }
 
     override fun onClick(item: UItem, view: View, position: Int, x: Float, y: Float) {
+        if (compactModeGroup.handleClick(item, view) { listView.adapter.update(true) }) return
         when (item.id) {
             BUTTON_STICKER_TIME_MODE -> RadioItemOptions.show(
                 this, view,
@@ -515,6 +529,7 @@ class MessagesSettingsActivity : SettingsPageActivity() {
         private val TOGGLE_COMPACT_EDITED = InuUtils.generateId()
         private val BUTTON_EDITED_MESSAGE_DATE_MODE = InuUtils.generateId()
         private val TOGGLE_BUBBLE_TAILS = InuUtils.generateId()
+        private val SECTION_COMPACT_MODE = InuUtils.generateId()
         private val BUTTON_DOUBLE_TAP_INCOMING = InuUtils.generateId()
         private val BUTTON_DOUBLE_TAP_OUTGOING = InuUtils.generateId()
         private val BUTTON_DOUBLE_TAP_CHANNEL = InuUtils.generateId()
@@ -577,6 +592,7 @@ class MessagesSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("compact-edited", R.string.InuCompactEdited, TOGGLE_COMPACT_EDITED),
                 SearchRegistry.Entry("edited-message-date", R.string.InuEditedMessageDateMode, BUTTON_EDITED_MESSAGE_DATE_MODE),
                 SearchRegistry.Entry("bubble-tails", R.string.InuBubbleTails, TOGGLE_BUBBLE_TAILS),
+                SearchRegistry.Entry("compact-mode", R.string.CompactMode, SECTION_COMPACT_MODE),
                 SearchRegistry.Entry("double-tap-incoming", R.string.InuIncomingMessages, BUTTON_DOUBLE_TAP_INCOMING),
                 SearchRegistry.Entry("double-tap-outgoing", R.string.InuOutgoingMessages, BUTTON_DOUBLE_TAP_OUTGOING),
                 SearchRegistry.Entry("double-tap-channel", R.string.InuChannelMessages, BUTTON_DOUBLE_TAP_CHANNEL),

@@ -238,6 +238,9 @@
     <string name="InuFrameCopied">Frame copied to clipboard</string>
     <string name="InuDisableDraftUpload">Disable uploading drafts</string>
     <string name="InuDisableDraftUploadInfo">Drafts will only be saved locally and not synced across devices</string>
+    <string name="InuCompactModeChannels">Channels</string>
+    <string name="InuCompactModeGroups">Groups</string>
+    <string name="InuCompactModeDms">Private chats</string>
     <string name="InuDontAutoplayWidgets">Don\'t autoplay widgets</string>
     <string name="InuDontAutoplayWidgetsInfo">Interactive widgets in messages only start after you tap them</string>
     <string name="InuWidgetPlaceholderTitle">Interactive widget</string>

@@ -640,6 +640,15 @@ object InuConfig {
     val DISABLE_DRAFT_UPLOAD = BoolItem("disable_draft_upload", false)
 
     @JvmField
+    val COMPACT_MODE_CHANNELS = BoolItem("compact_mode_channels", false)
+
+    @JvmField
+    val COMPACT_MODE_GROUPS = BoolItem("compact_mode_groups", false)
+
+    @JvmField
+    val COMPACT_MODE_DMS = BoolItem("compact_mode_dms", false)
+
+    @JvmField
     val DONT_AUTOPLAY_WIDGETS = BoolItem("dont_autoplay_widgets", true)
 
     @JvmField

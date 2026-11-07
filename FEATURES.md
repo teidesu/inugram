@@ -84,6 +84,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - "Refresh" in the sticker/emoji pack menu
 - edited-message display: compact pencil indicator and configurable primary timestamp
 - toggleable message bubble tails
+- 🐶 compact mode per chat type (channels, groups, private chats)
 - 🐶 jump-to-discussion button from comments
 - jump-to-beginning button in calendar popup - *ported from [Nekogram](https://github.com/Nekogram/Nekogram)*
 - remember all clicked replies when jumping back via the down-button

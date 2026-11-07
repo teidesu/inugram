@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Sun, 8 Nov 2026 03:19:50 +0400
+Subject: add per chat type compact mode
+
+---
+ .../src/main/java/org/telegram/messenger/SharedConfig.java     | 3 ++-
+ TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java  | 2 +-
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SharedConfig.java b/TMessagesProj/src/main/java/org/telegram/messenger/SharedConfig.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/SharedConfig.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/SharedConfig.java
+@@ -1392,7 +1392,8 @@ public class SharedConfig {
+ 
+     /** Compact mode of a dialog: the app's setting, and agent bot chats are always compact. */
+     public static boolean isCompactMode(int currentAccount, long dialogId) {
+-        return compactMode || dialogId > 0 && AppGlobalConfig.getInstance(currentAccount).agentBotIds.contains(dialogId);
++        return compactMode || dialogId > 0 && AppGlobalConfig.getInstance(currentAccount).agentBotIds.contains(dialogId)
++            || desu.inugram.helpers.chat.CompactModeHelper.isEnabledFor(currentAccount, dialogId);
+     }
+ 
+     public static void toggleCompactMode() {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -3146,7 +3146,7 @@ public class ChatActivity extends BaseFragment implements
+         }
+ 
+ 
+-        agentBotChat = dialog_id > 0 && getMessagesController().config.agentBotIds.contains(dialog_id);
++        agentBotChat = dialog_id > 0 && getMessagesController().config.agentBotIds.contains(dialog_id) || desu.inugram.helpers.chat.CompactModeHelper.isEnabledFor(currentAccount, dialog_id);
+         themeDelegate = parentThemeDelegate != null ? parentThemeDelegate : new ThemeDelegate();
+         if (themeDelegate.isThemeChangeAvailable(false)) {
+             observersGroup.addGlobal(NotificationCenter.needSetDayNightTheme);

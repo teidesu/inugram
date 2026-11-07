@@ -435,3 +435,4 @@ bugfix/video-auto-quality-label.patch
 bugfix/video-quality-menu-check-color.patch
 bugfix/glass-lite-mode-blur.patch
 feature/dont-autoplay-widgets.patch
+feature/compact-mode-per-chat-type.patch
