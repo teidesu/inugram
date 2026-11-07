@@ -154,11 +154,11 @@ object NonIslandHelper {
     }
 
     @JvmStatic
-    fun applyFilterTabBar(tabsView: FilterTabsView, contentView: SizeNotifierFrameLayout) {
+    fun applyFilterTabBar(tabsView: FilterTabsView, contentView: SizeNotifierFrameLayout, resourcesProvider: Theme.ResourcesProvider?) {
         if (!foldersBar()) return
         tabsView.setBlurredBackground(null)
         tabsView.background = null
-        tabsView.inu_blurHelper = BlurBehindHelper(tabsView, contentView, Theme.key_windowBackgroundWhite, drawBottomDivider = true)
+        tabsView.inu_blurHelper = BlurBehindHelper(tabsView, contentView, Theme.key_windowBackgroundWhite, drawBottomDivider = true, resourcesProvider = resourcesProvider)
         tabsView.setPadding(0, 0, 0, 0)
         val lp = tabsView.layoutParams as? FrameLayout.LayoutParams ?: return
         lp.height = dp(FOLDERS_BAR_HEIGHT_DP.toFloat())
@@ -179,10 +179,10 @@ object NonIslandHelper {
     }
 
     @JvmStatic
-    fun applyGlobalSearchBar(field: FragmentSearchField, contentView: SizeNotifierFrameLayout) {
+    fun applyGlobalSearchBar(field: FragmentSearchField, contentView: SizeNotifierFrameLayout, resourcesProvider: Theme.ResourcesProvider?) {
         if (!globalSearch()) return
         field.setupBlurredBackground(null)
-        field.inu_blurHelper = BlurBehindHelper(field, contentView, Theme.key_windowBackgroundWhite)
+        field.inu_blurHelper = BlurBehindHelper(field, contentView, Theme.key_windowBackgroundWhite, resourcesProvider = resourcesProvider)
         val lp = field.layoutParams as? FrameLayout.LayoutParams
         if (lp != null) {
             lp.leftMargin = 0
@@ -211,11 +211,11 @@ object NonIslandHelper {
     }
 
     @JvmStatic
-    fun applyGlobalSearchTabs(layout: SearchTabsAndFiltersLayout, contentView: SizeNotifierFrameLayout) {
+    fun applyGlobalSearchTabs(layout: SearchTabsAndFiltersLayout, contentView: SizeNotifierFrameLayout, resourcesProvider: Theme.ResourcesProvider?) {
         if (!globalSearch()) return
         layout.setBlurredBackground(null)
         layout.background = null
-        layout.inu_blurHelper = BlurBehindHelper(layout, contentView, Theme.key_windowBackgroundWhite, drawBottomDivider = true)
+        layout.inu_blurHelper = BlurBehindHelper(layout, contentView, Theme.key_windowBackgroundWhite, drawBottomDivider = true, resourcesProvider = resourcesProvider)
         layout.setPadding(0, 0, 0, 0)
         layout.translationY = -dp(FOLDERS_BAR_OVERLAP_DP.toFloat()).toFloat()
         val lp = layout.layoutParams as? FrameLayout.LayoutParams ?: return

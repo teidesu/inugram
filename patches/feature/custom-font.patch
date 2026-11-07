@@ -133,7 +133,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java
-@@ -7858,8 +7858,10 @@ public class Theme {
+@@ -7859,8 +7859,10 @@ public class Theme {
          if (dialogs_countTextPaint == null) {
              dialogs_countTextPaint = new TextPaint(TextPaint.ANTI_ALIAS_FLAG);
              dialogs_countTextPaint.setTypeface(AndroidUtilities.bold());
@@ -144,7 +144,7 @@ index 0000000..0000000 100644
              dialogs_countPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
              dialogs_onlineCirclePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
              dialogs_tagPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-@@ -7978,6 +7980,7 @@ public class Theme {
+@@ -7979,6 +7981,7 @@ public class Theme {
          dialogs_tagTextPaint.setTextSize(dp(10));
          dialogs_searchNamePaint.setTextSize(dp(16));
          dialogs_searchNameEncryptedPaint.setTextSize(dp(16));
@@ -152,7 +152,7 @@ index 0000000..0000000 100644
      }
  
      public static void applyDialogsTheme() {
-@@ -8230,6 +8233,7 @@ public class Theme {
+@@ -8231,6 +8234,7 @@ public class Theme {
              addChatPaint(key_paint_chatComposeBackground, chat_composeBackgroundPaint, key_chat_messagePanelBackground);
              addChatPaint(key_paint_chatTimeBackground, chat_timeBackgroundPaint, key_chat_mediaTimeBackground);
          }
@@ -160,7 +160,7 @@ index 0000000..0000000 100644
      }
  
      public static void createChatResources(Context context, boolean fontsOnly) {
-@@ -8937,6 +8941,7 @@ public class Theme {
+@@ -8938,6 +8942,7 @@ public class Theme {
          }
  
          profile_aboutTextPaint.setTextSize(dp(16));

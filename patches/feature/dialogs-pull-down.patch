@@ -59,7 +59,7 @@ index 0000000..0000000 100644
                          } else {
                              if (parentPage.archivePullViewState != ARCHIVE_ITEM_STATE_SHOWED) {
                                  if (getViewOffset() == 0) {
-@@ -4234,7 +4254,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -4236,7 +4256,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      if (hasStories && !rightSlidingDialogContainer.hasFragment() && !fixScrollYAfterArchiveOpened) {
                          pTop -= dp(DialogStoriesCell.HEIGHT_IN_DP);
                      }
@@ -68,7 +68,7 @@ index 0000000..0000000 100644
                      if ((hasHiddenArchive || (hasStories && !rightSlidingDialogContainer.hasFragment())) && dy < 0) {
                          viewPage.listView.setOverScrollMode(View.OVER_SCROLL_ALWAYS);
                          int currentPosition = viewPage.layoutManager.findFirstVisibleItemPosition();
-@@ -4379,6 +4399,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -4381,6 +4401,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                          return usedDy;
                      }
  
@@ -81,7 +81,7 @@ index 0000000..0000000 100644
                      int scrolled = super.scrollVerticallyBy(measuredDy, recycler, state);
                      if (scrolled == 0 && dy < 0 && isDragging && !rightSlidingDialogContainer.hasFragment() && hasStories && progressToActionMode == 0) {
                          float newOverScroll = storiesOverscroll - dy * dialogStoriesCell.getOverScrollCoef();
-@@ -4658,6 +4684,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -4660,6 +4686,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              });
  
              viewPage.archivePullViewState = SharedConfig.archiveHidden ? ARCHIVE_ITEM_STATE_HIDDEN : ARCHIVE_ITEM_STATE_PINNED;
@@ -91,7 +91,7 @@ index 0000000..0000000 100644
              if (viewPage.pullForegroundDrawable == null && folderId == 0 && communityId == 0) {
                  viewPage.pullForegroundDrawable = new PullForegroundDrawable(LocaleController.getString(R.string.AccSwipeForArchive), LocaleController.getString(R.string.AccReleaseForArchive)) {
                      @Override
-@@ -9000,9 +9029,16 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9003,9 +9032,16 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
      }
  
      public boolean hasHiddenArchive() {
@@ -108,7 +108,7 @@ index 0000000..0000000 100644
      private boolean waitingForDialogsAnimationEnd(ViewPage viewPage) {
          return viewPage.dialogsItemAnimator.isRunning();
      }
-@@ -11116,6 +11152,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -11119,6 +11155,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          }
          MessagesController messagesController = AccountInstance.getInstance(currentAccount).getMessagesController();
          if (dialogsType == DIALOGS_TYPE_DEFAULT) {
@@ -118,7 +118,7 @@ index 0000000..0000000 100644
              return messagesController.getDialogs(folderId);
          } else if (dialogsType == DIALOGS_TYPE_WIDGET || dialogsType == DIALOGS_TYPE_IMPORT_HISTORY) {
              return messagesController.dialogsServerOnly;
-@@ -13906,6 +13945,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13912,6 +13951,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              args.putLong("user_id", UserConfig.getInstance(currentAccount).getClientUserId());
              presentFragment(new ChatActivity(args));
          });

@@ -7,15 +7,18 @@ Subject: monet theme, almost directly ported from NagramX
  .../org/telegram/messenger/MessageObject.java | 10 +--
  .../messenger/MessagesController.java         | 24 +++---
  .../telegram/messenger/RichMessageLayout.java |  2 +-
- .../java/org/telegram/ui/ActionBar/Theme.java | 76 ++++++++++++++++++-
- .../telegram/ui/ActionBar/ThemeColors.java    | 14 ++++
+ .../java/org/telegram/ui/ActionBar/Theme.java | 77 ++++++++++++++++++-
+ .../telegram/ui/ActionBar/ThemeColors.java    | 16 ++++
+ .../telegram/ui/Adapters/DialogsAdapter.java  |  8 +-
  .../telegram/ui/Cells/ChatMessageCell.java    |  4 +-
+ .../org/telegram/ui/Cells/DialogCell.java     |  6 +-
  .../telegram/ui/Cells/SharedDocumentCell.java | 10 ++-
  .../ui/Components/AvatarDrawable.java         |  2 +-
  .../poll/attached/PollAttachedMediaFile.java  |  4 +-
- .../java/org/telegram/ui/DialogsActivity.java |  4 +
+ .../java/org/telegram/ui/DialogsActivity.java | 13 +++-
+ .../org/telegram/ui/MainTabsActivity.java     |  2 +-
  .../code/highlight/CodeHighlighting.java      | 48 +++++++++---
- 11 files changed, 158 insertions(+), 40 deletions(-)
+ 14 files changed, 176 insertions(+), 50 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
 index 0000000..0000000 100644
@@ -187,7 +190,7 @@ index 0000000..0000000 100644
                  isDark = LIGHT;
              }
              if (isDark == UNKNOWN) {
-@@ -3424,6 +3445,13 @@ public class Theme {
+@@ -3424,6 +3445,14 @@ public class Theme {
      public static final int key_wallet_comment = colorsCount++;
      public static final int key_wallet_out_commentBorder = colorsCount++;
      public static final int key_wallet_inputCurrency = colorsCount++;
@@ -198,10 +201,11 @@ index 0000000..0000000 100644
 +    public static final int key_inu_code_out_number = colorsCount++;
 +    public static final int key_inu_code_out_comment = colorsCount++;
 +    public static final int key_inu_code_out_function = colorsCount++;
++    public static final int key_inu_dialogsBackground = colorsCount++;
  
      public static final String key_drawable_botInline = "drawableBotInline";
      public static final String key_drawable_botLink = "drawableBotLink";
-@@ -4016,6 +4044,38 @@ public class Theme {
+@@ -4016,6 +4045,38 @@ public class Theme {
          themes.add(themeInfo);
          themesDict.put("Night", themeInfo);
  
@@ -240,7 +244,7 @@ index 0000000..0000000 100644
          String themesString = themeConfig.getString("themes2", null);
  
          int remoteVersion = themeConfig.getInt("remote_version", 0);
-@@ -4248,6 +4308,8 @@ public class Theme {
+@@ -4248,6 +4309,8 @@ public class Theme {
                      if (accent != null) {
                          info.overrideWallpaper = accent.overrideWallpaper;
                      }
@@ -249,7 +253,7 @@ index 0000000..0000000 100644
                  }
              }
              if (oldEditor != null) {
-@@ -7565,6 +7627,12 @@ public class Theme {
+@@ -7565,6 +7628,12 @@ public class Theme {
              int currentPosition = 0;
              if (assetName != null) {
                  file = getAssetFile(assetName);
@@ -262,7 +266,7 @@ index 0000000..0000000 100644
              }
              stream = new FileInputStream(file);
              int idx;
-@@ -7597,6 +7665,10 @@ public class Theme {
+@@ -7597,6 +7666,10 @@ public class Theme {
                                      } catch (Exception ignore) {
                                          value = Utilities.parseInt(param);
                                      }
@@ -277,7 +281,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ThemeColors.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ThemeColors.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ThemeColors.java
-@@ -861,6 +861,13 @@ public class ThemeColors {
+@@ -861,6 +861,14 @@ public class ThemeColors {
          defaultColors[key_code_number] = 0xFF327FE5;
          defaultColors[key_code_comment] = 0x80000000;
          defaultColors[key_code_function] = 0xFFF28C39;
@@ -288,10 +292,11 @@ index 0000000..0000000 100644
 +        defaultColors[key_inu_code_out_number] = defaultColors[key_code_number];
 +        defaultColors[key_inu_code_out_comment] = defaultColors[key_code_comment];
 +        defaultColors[key_inu_code_out_function] = defaultColors[key_code_function];
++        defaultColors[key_inu_dialogsBackground] = defaultColors[key_windowBackgroundWhite];
  
          defaultColors[key_iv_background] = 0xFFFFFFFF;
          defaultColors[key_iv_backgroundGray] = 0xfff0f0f0;
-@@ -1691,6 +1698,13 @@ public class ThemeColors {
+@@ -1691,6 +1699,14 @@ public class ThemeColors {
          colorKeysMap.put(key_code_number, "code_number");
          colorKeysMap.put(key_code_comment, "code_comment");
          colorKeysMap.put(key_code_function, "code_function");
@@ -302,9 +307,50 @@ index 0000000..0000000 100644
 +        colorKeysMap.put(key_inu_code_out_number, "inu_code_out_number");
 +        colorKeysMap.put(key_inu_code_out_comment, "inu_code_out_comment");
 +        colorKeysMap.put(key_inu_code_out_function, "inu_code_out_function");
++        colorKeysMap.put(key_inu_dialogsBackground, "inu_dialogsBackground");
          colorKeysMap.put(key_iv_background, "iv_background");
          colorKeysMap.put(key_iv_backgroundGray, "iv_backgroundGray");
          colorKeysMap.put(key_iv_navigationBackground, "iv_navigationBackground");
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsAdapter.java b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsAdapter.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsAdapter.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsAdapter.java
+@@ -647,7 +647,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
+         View view;
+         switch (viewType) {
+             case VIEW_TYPE_DIALOG_COMMUNITY:
+-                DialogCell dialogCell2 = new DialogCell(parentFragment, mContext, true, false, currentAccount, null);
++                DialogCell dialogCell2 = new DialogCell(parentFragment, mContext, true, false, currentAccount, parentFragment.getResourceProvider());
+                 if (communityId != 0) {
+                     dialogCell2.insideCommunityList = true;
+                     dialogCell2.insideCommunityListNoDialog = true;
+@@ -660,7 +660,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
+                     dialogsType == DialogsActivity.DIALOGS_TYPE_BOT_REQUEST_PEER) {
+                     view = new ProfileSearchCell(mContext);
+                 } else {
+-                    DialogCell dialogCell = new DialogCell(parentFragment, mContext, true, false, currentAccount, null);
++                    DialogCell dialogCell = new DialogCell(parentFragment, mContext, true, false, currentAccount, parentFragment.getResourceProvider());
+                     if (showOpenBotButton()) {
+                         dialogCell.allowBotOpenButton(true, this::onOpenBot);
+                     }
+@@ -677,7 +677,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
+                     view = dialogCell;
+                 }
+                 if (dialogsType == DialogsActivity.DIALOGS_TYPE_BOT_REQUEST_PEER) {
+-                    view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
++                    view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite, parentFragment.getResourceProvider()));
+                 }
+                 break;
+             case VIEW_TYPE_REQUIREMENTS:
+@@ -857,7 +857,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
+             default: {
+                 view = new TextCell(mContext);
+                 if (dialogsType == DialogsActivity.DIALOGS_TYPE_BOT_REQUEST_PEER) {
+-                    view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
++                    view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite, parentFragment.getResourceProvider()));
+                 }
+                 break;
+             }
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
@@ -327,6 +373,37 @@ index 0000000..0000000 100644
                      canvas.drawRoundRect(rect, r, r, dimPaint);
                      dimPaint.setAlpha(oldAlpha2);
                  } else {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
+@@ -4857,7 +4857,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
+ 
+         if (clipArchive) {
+             final int cy = (int) (getMeasuredHeight() * (1f - archivePullProgress));
+-            final int color = Theme.getColor(Theme.key_windowBackgroundWhite);
++            final int color = Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider);
+             if (archiveFadeGradientDrawable == null) {
+                 archiveFadeGradientDrawable = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, null);
+             }
+@@ -5012,7 +5012,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
+             if (starBg == null) {
+                 starBg = getContext().getResources().getDrawable(R.drawable.star_small_outline).mutate();
+             }
+-            final int bg = Theme.getColor(Theme.key_windowBackgroundWhite);
++            final int bg = Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider);
+             if (starBgColor != bg) {
+                 starBg.setColorFilter(new PorterDuffColorFilter(starBgColor = bg, PorterDuff.Mode.SRC_IN));
+             }
+@@ -5285,7 +5285,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
+                 }
+                 int color = Theme.getColor(Theme.key_chats_pinnedOverlay);
+                 counterPaintOutline.setColor(ColorUtils.blendARGB(
+-                        Theme.getColor(Theme.key_windowBackgroundWhite),
++                        Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider),
+                         ColorUtils.setAlphaComponent(color, 255),
+                         Color.alpha(color) / 255f
+                 ));
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedDocumentCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedDocumentCell.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedDocumentCell.java
@@ -401,7 +478,51 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -13709,6 +13709,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -2709,6 +2709,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+     public DialogsActivity(Bundle args) {
+         super(args);
+ 
++        resourceProvider = desu.inugram.helpers.theme.MonetHelper.DIALOGS_RESOURCES_PROVIDER;
+         iBlur3SourceColor = new BlurredBackgroundSourceColor();
+         iBlur3SourceColor.setColor(getThemedColor(Theme.key_windowBackgroundWhite));
+         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+@@ -4033,6 +4034,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+ 
+         ContentView contentView = new ContentView(context);
+         fragmentView = contentView;
++        fragmentView.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundWhite));
+ 
+         viewPositionWatcher = new ViewPositionWatcher(contentView);
+         iBlur3FactoryFrostedLiquidGlass.setSourceRootView(viewPositionWatcher, contentView);
+@@ -4726,7 +4728,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+         }
+ 
+         topBubblesFadeView = new DialogsActivityTopBubblesFadeView(context);
+-        topBubblesFadeView.setColor(Theme.getColor(Theme.key_windowBackgroundWhite));
++        topBubblesFadeView.setColor(getThemedColor(Theme.key_windowBackgroundWhite));
+         contentView.addView(topBubblesFadeView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 100, Gravity.TOP));
+ 
+         searchViewPagerIndex = contentView.getChildCount();
+@@ -12174,7 +12176,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+                 topPanelLayout.updateColors();
+             }
+             if (topBubblesFadeView != null) {
+-                topBubblesFadeView.setColor(Theme.getColor(Theme.key_windowBackgroundWhite));
++                topBubblesFadeView.setColor(getThemedColor(Theme.key_windowBackgroundWhite));
+             }
+             if (fragmentContextView != null) {
+                 fragmentContextView.updateColors();
+@@ -12603,6 +12605,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+             SimpleThemeDescription.add(arrayList, activeGiftAuctionsHintCell::updateColors, Theme.key_windowBackgroundWhite, Theme.key_windowBackgroundWhiteBlackText, Theme.key_windowBackgroundWhiteGrayText, Theme.key_windowBackgroundWhiteValueText, Theme.key_text_RedBold);
+         }
+ 
++        for (int i = 0; i < arrayList.size(); i++) {
++            arrayList.get(i).resourcesProvider = resourceProvider;
++        }
+         return arrayList;
+     }
+ 
+@@ -13709,6 +13714,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
      private void showItemOptions() {
          ItemOptions io = ItemOptions.makeOptions(this, optionsItem);
          io.setColors(getThemedColor(Theme.key_actionBarDefaultTitle), getThemedColor(Theme.key_actionBarDefaultTitle));
@@ -412,6 +533,19 @@ index 0000000..0000000 100644
          io.setDimAlpha(0x08);
  
          final Activity activity = getParentActivity();
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
+@@ -241,7 +241,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+     private int getEstBackgroundColor() {
+         return ColorUtils.blendARGB(
+                 getThemedColor(Theme.key_windowBackgroundGray),
+-                getThemedColor(Theme.key_windowBackgroundWhite),
++                (dialogsActivity != null ? dialogsActivity : this).getThemedColor(Theme.key_windowBackgroundWhite),
+                 viewPager != null ? viewPager.getPositionVisibility(0) : 1);
+     }
+ 
 diff --git a/TMessagesProj/src/main/java/org/telegram/utils/code/highlight/CodeHighlighting.java b/TMessagesProj/src/main/java/org/telegram/utils/code/highlight/CodeHighlighting.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/utils/code/highlight/CodeHighlighting.java

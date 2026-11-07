@@ -58,6 +58,7 @@ code_constant=monetCodeConstant(s=90)
 inu_code_out_constant=monetCodeConstant(l=70)
 inu_code_out_function=monetCodeFunction(l=70)
 inu_code_out_keyword=monetCodeKeyword(l=70)
+inu_dialogsBackground=n1_1000
 inu_code_out_number=monetCodeNumber(l=70)
 inu_code_out_operator=monetCodeOperator(l=70)
 inu_code_out_string=monetCodeString(l=70)

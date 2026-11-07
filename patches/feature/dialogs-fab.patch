@@ -19,7 +19,7 @@ index 0000000..0000000 100644
  import desu.inugram.helpers.dialogs.FolderHelper;
  import desu.inugram.helpers.dialogs.MainTabsHelper;
  import me.vkryl.android.animator.BoolAnimator;
-@@ -4559,7 +4560,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -4561,7 +4562,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                                  } else {
                                      goingDown = firstVisiblePosition > prevPosition;
                                  }
@@ -28,7 +28,7 @@ index 0000000..0000000 100644
                                      hideFloatingButton(goingDown);
                                  }
                                  prevPosition = firstVisiblePosition;
-@@ -4751,13 +4752,18 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -4753,13 +4754,18 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          searchTabsAndFiltersLayout.addView(filtersView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.TOP));
  
          floatingButtonStories = new FragmentFloatingButton(context, resourceProvider, true);
@@ -52,7 +52,7 @@ index 0000000..0000000 100644
          floatingButton3.setOnClickListener(v -> {
              if (parentLayout != null && parentLayout.isInPreviewMode()) {
                  finishPreviewFragment();
-@@ -4777,7 +4783,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -4779,7 +4785,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      AccountFrozenAlert.show(currentAccount);
                      return;
                  }
@@ -61,7 +61,7 @@ index 0000000..0000000 100644
              }
          });
  
-@@ -8873,12 +8879,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8875,12 +8881,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
  
      private void updateFloatingButtonVisibility(boolean animated) {
          final boolean isVisible = !(onlySelect && initialDialogsType != 10 || folderId != 0 || communityId != 0 || inPreviewMode || (searching && !onlySelect) || floatingButtonHidden);
@@ -79,7 +79,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -8917,8 +8926,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8919,8 +8928,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              floatingButton3.setImageResource(R.drawable.floating_check);
              floatingButton3.setContentDescription(LocaleController.getString(R.string.Done));
          } else {
@@ -91,7 +91,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -13577,13 +13587,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13582,13 +13592,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          }, 0);
      }
  
@@ -107,7 +107,7 @@ index 0000000..0000000 100644
          if (!storiesEnabled) {
              if (storyPremiumHint != null) {
                  if (storyPremiumHint.shown()) {
-@@ -13804,10 +13814,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13809,10 +13819,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              });
          });
          io.addGap();

@@ -25,6 +25,7 @@ class BlurBehindHelper(
     private val bottomShadowDp: Float = 0f,
     var drawBottomDivider: Boolean = false,
     var drawTopDivider: Boolean = false,
+    var resourcesProvider: Theme.ResourcesProvider? = null,
 ) {
     private val rect = Rect()
     private val paint = Paint()
@@ -65,7 +66,7 @@ class BlurBehindHelper(
 
         if (h <= topShadowPx + bottomShadowPx) return
         rect.set(0, topShadowPx, w, h - bottomShadowPx)
-        paint.color = Theme.getColor(colorKey)
+        paint.color = Theme.getColor(colorKey, resourcesProvider)
         paint.alpha = if (alphaOverride >= 0) alphaOverride else 255
         val y = computeY()
         if (y != null) {

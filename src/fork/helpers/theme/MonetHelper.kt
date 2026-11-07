@@ -29,6 +29,20 @@ import kotlin.math.max
 
 @RequiresApi(api = Build.VERSION_CODES.S)
 object MonetHelper {
+    @JvmField
+    val DIALOGS_RESOURCES_PROVIDER = object : Theme.ResourcesProvider {
+        private fun remapKey(key: Int): Int =
+            if ((key == Theme.key_windowBackgroundWhite || key == Theme.key_glass_targetMainTopPanel) &&
+                Theme.getActiveTheme()?.inu_isMonet() == true
+            ) Theme.key_inu_dialogsBackground else key
+
+        override fun getColor(key: Int): Int = Theme.getColor(remapKey(key))
+
+        override fun setAnimatedColor(key: Int, color: Int) = Theme.setAnimatedColor(remapKey(key), color)
+
+        override fun hasGradientService(): Boolean = Theme.hasGradientService()
+    }
+
     private const val DARK_NAME_SOFTEN_RATIO = 0.22f
     private val MODIFIER_REGEX = Regex("^([^(]+)\\(([^)]+)\\)?$")
     private val ids: HashMap<String?, Int?> = object : HashMap<String?, Int?>() {
