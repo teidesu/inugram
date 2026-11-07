@@ -33,7 +33,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - 🐶 old (pre-12.6) mention/reaction indicator
 - 🐶 toggleable scrim blur
 - toggle to disable glass glare
-- 🐶 reduce menu motion: skip context menu stagger and reaction bar slide-in/scale animations
+- 🐶 reduce menu motion: skip context menu stagger and reaction bar slide-in/scale animations, plain popups instead of glass header menus
 - material 3:
   - switches
   - sliders

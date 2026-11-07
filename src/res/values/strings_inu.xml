@@ -430,7 +430,7 @@
     <string name="InuDisableGlassGlare">Disable glass glare</string>
 
     <string name="InuReduceMenuMotion">Reduce menu motion</string>
-    <string name="InuReduceMenuMotionInfo">Skip context menu stagger and simplify message menu animations</string>
+    <string name="InuReduceMenuMotionInfo">Skip context menu stagger, simplify message menu animations and use plain popups for header menus</string>
 
     <string name="InuProfilePhotoGradientFade">Disable profile photo blur</string>
     <string name="InuNonIslandUI">Classic UI</string>

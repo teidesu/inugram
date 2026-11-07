@@ -4,11 +4,25 @@ Date: Tue, 19 May 2026 19:38:54 +0400
 Subject: reduce menu motion (disable stagger in some menus, simplify chat context menu animation)
 
 ---
+ .../telegram/ui/ActionBar/ActionBarMenuItem.java    |  2 +-
  .../telegram/ui/ActionBar/ActionBarPopupWindow.java | 13 +++++++++++++
  .../src/main/java/org/telegram/ui/ChatActivity.java |  6 +++++-
  .../ui/Components/ReactionsContainerLayout.java     | 10 ++++++++--
- 3 files changed, 26 insertions(+), 3 deletions(-)
+ 4 files changed, 27 insertions(+), 4 deletions(-)
 
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java
+@@ -888,7 +888,7 @@ public class ActionBarMenuItem extends FrameLayout {
+     private boolean toggleSubMenuInOverlay() {
+         final MenuOverlayHost host = getSubMenuOverlayHost();
+         final SimpleActionBarMenuOverlay overlay = host != null ? getSubMenuOverlay() : null;
+-        if (overlay == null || popupWindow != null && popupWindow.isShowing()) {
++        if (overlay == null || desu.inugram.helpers.theme.MenuMotionHelper.getEnabled() || popupWindow != null && popupWindow.isShowing()) {
+             return false;
+         }
+         layoutLazyItems();
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarPopupWindow.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarPopupWindow.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarPopupWindow.java
