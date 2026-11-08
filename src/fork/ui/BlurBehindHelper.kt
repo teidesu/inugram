@@ -18,7 +18,7 @@ import org.telegram.ui.Components.SizeNotifierFrameLayout
  */
 class BlurBehindHelper(
     private val view: View,
-    private val contentView: SizeNotifierFrameLayout,
+    private val contentView: SizeNotifierFrameLayout?,
     var colorKey: Int = Theme.key_windowBackgroundWhite,
     private val isTop: Boolean = true,
     private val topShadowDp: Float = 0f,
@@ -33,7 +33,7 @@ class BlurBehindHelper(
     private var bottomShadow: GradientDrawable? = null
 
     init {
-        contentView.blurBehindViews.add(view)
+        contentView?.blurBehindViews?.add(view)
         if (topShadowDp > 0f) {
             topShadow = GradientDrawable(
                 GradientDrawable.Orientation.BOTTOM_TOP,
@@ -68,9 +68,10 @@ class BlurBehindHelper(
         rect.set(0, topShadowPx, w, h - bottomShadowPx)
         paint.color = Theme.getColor(colorKey, resourcesProvider)
         paint.alpha = if (alphaOverride >= 0) alphaOverride else 255
-        val y = computeY()
-        if (y != null) {
-            contentView.drawBlurRect(canvas, y, rect, paint, isTop)
+        if (contentView == null) {
+            canvas.drawRect(rect, paint)
+        } else {
+            computeY()?.let { contentView.drawBlurRect(canvas, it, rect, paint, isTop) }
         }
         if (drawTopDivider) {
             canvas.drawRect(0f, 0f, w.toFloat(), 1f, Theme.dividerPaint)
@@ -100,7 +101,7 @@ class BlurBehindHelper(
         @JvmOverloads
         fun create(
             view: View,
-            contentView: SizeNotifierFrameLayout,
+            contentView: SizeNotifierFrameLayout?,
             colorKey: Int = Theme.key_actionBarDefault,
             isTop: Boolean = true,
             topShadowDp: Float = 0f,
