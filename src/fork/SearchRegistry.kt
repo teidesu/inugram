@@ -19,6 +19,7 @@ import desu.inugram.ui.settings.fonts.FontsSettingsActivity
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
 import org.telegram.ui.ActionBar.BaseFragment
+import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.LaunchActivity
 import org.telegram.ui.ProfileActivity
 
@@ -66,6 +67,10 @@ object SearchRegistry {
                 for (entry in page.entries) add(entry.slug, Target(page, entry))
             }
         }
+    }
+
+    fun verifySlugs() {
+        targetBySlug
     }
 
     private val slugByItemId: Map<Int, String> by lazy {
@@ -129,7 +134,11 @@ object SearchRegistry {
             else -> return false
         }
         if (segs.size < 2 || segs[0] != "inu") return false
-        val target = targetBySlug[segs[1]] ?: return false
+        val target = targetBySlug[segs[1]]
+        if (target == null) {
+            BulletinFactory.global().createSimpleBulletin(R.raw.info, LocaleController.getString(R.string.InuSettingNotFound)).show()
+            return true
+        }
         val fragment = target.page.factory()
         target.entry?.let { fragment.withHighlight(it.itemId) }
         activity.actionBarLayout.presentFragment(fragment)

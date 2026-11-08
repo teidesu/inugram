@@ -9,6 +9,7 @@
     <string name="InuDrawerBackGesture">Open drawer with back gesture</string>
     <string name="InuDrawerBackGestureInfo">Swiping back from the left edge of the chat list opens the drawer instead of leaving the app.</string>
     <string name="InuSettings">Inugram Settings</string>
+    <string name="InuSettingNotFound">This setting is not available in this version of Inugram</string>
     <string name="InuSettingsInfo">what the dog doin?</string>
     <string name="InuExperimental">Experimental</string>
     <string name="InuGeneral">General</string>
