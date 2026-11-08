@@ -1,0 +1,32 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Mon, 9 Nov 2026 00:08:20 +0400
+Subject: fix profile rows hidden while media undock
+
+---
+ .../src/main/java/org/telegram/ui/ProfileActivity.java       | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+@@ -8222,6 +8222,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+         headerFadeView.setAlpha(0);
+         // follows the media every frame: it stays at the top of the screen
+         contentView.getViewTreeObserver().addOnPreDrawListener(() -> {
++            checkPagesVisibleOverscan();
+             updateHeaderBlurHeight();
+             updateHeaderBlurViews();
+             return true;
+@@ -8309,7 +8310,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+     private void checkPagesVisibleOverscan() {
+         if (sharedMediaLayout != null) {
+             // until the header has grown back over them: the header draws its color only above (1 - progress) of its height
+-            sharedMediaLayout.setPagesVisibleOverscanTop(mediaHeaderVisible || mediaHeaderAnimationProgress > 0 ? Integer.MAX_VALUE : 0);
++            final int inu_headerHeight = ActionBar.getCurrentActionBarHeight() + (actionBar != null && actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0);
++            final boolean inu_rowsAboveMedia = sharedMediaLayout.getParent() == listView && listView.getY() + sharedMediaLayout.getY() > inu_headerHeight;
++            sharedMediaLayout.setPagesVisibleOverscanTop(mediaHeaderVisible || mediaHeaderAnimationProgress > 0 && !inu_rowsAboveMedia ? Integer.MAX_VALUE : 0);
+         }
+     }
+ 
