@@ -5,7 +5,7 @@ Subject: build support stuff for fork-specific code: - added kotlin - bumped min
 
 ---
  .gitmodules                                   |   3 +
- TMessagesProj/build.gradle                    | 190 +++++++++------
+ TMessagesProj/build.gradle                    | 196 +++++++++------
  TMessagesProj/google-services.json            |  76 +-----
  TMessagesProj/jni/CMakeLists.txt              |   3 +
  TMessagesProj/jni/exports.map                 |   1 +
@@ -23,7 +23,7 @@ Subject: build support stuff for fork-specific code: - added kotlin - bumped min
  build.gradle                                  |  27 ++-
  gradle.properties                             |   3 +-
  settings.gradle                               |   5 +-
- 19 files changed, 378 insertions(+), 335 deletions(-)
+ 19 files changed, 384 insertions(+), 335 deletions(-)
  create mode 100644 TMessagesProj_App/jni/CMakeLists.txt
  create mode 160000 TMessagesProj_App/jni/lsplant
 
@@ -215,9 +215,13 @@ index 0000000..0000000 100644
              ndk.debugSymbolLevel = 'FULL'
 -            buildConfigField "String", "BUILD_VERSION_STRING", "\"" + APP_VERSION_NAME + "\""
 -            buildConfigField "String", "BETA_URL", "\"" + getProps("BETA_PRIVATE_URL") + "\""
--            buildConfigField "boolean", "DEBUG_VERSION", "true"
--            buildConfigField "boolean", "DEBUG_PRIVATE_VERSION", "true"
--            buildConfigField "boolean", "BUNDLE", "false"
++            buildConfigField "String", "BUILD_VERSION_STRING", "\"" + rootProject.ext.verName + "\""
++            buildConfigField "String", "BUILD_DATE", "\"" + rootProject.ext.buildDate + "\""
++            buildConfigField "String", "INU_BUILD_TYPE", "\"" + (System.getenv('INU_BUILD_TYPE') ?: 'debug') + "\""
++            buildConfigField "int", "STOCK_VERSION_CODE", String.valueOf(rootProject.ext.stockVerCode)
+             buildConfigField "boolean", "DEBUG_VERSION", "true"
+             buildConfigField "boolean", "DEBUG_PRIVATE_VERSION", "true"
+             buildConfigField "boolean", "BUNDLE", "false"
 -            buildConfigField "int", "VERSION_NUM", "0"
 -        }
 -
@@ -228,13 +232,9 @@ index 0000000..0000000 100644
 -            ndk.debugSymbolLevel = 'FULL'
 -            buildConfigField "String", "BUILD_VERSION_STRING", "\"" + APP_VERSION_NAME + "\""
 -            buildConfigField "String", "BETA_URL", "\"" + getProps("BETA_PRIVATE_URL") + "\""
-+            buildConfigField "String", "BUILD_VERSION_STRING", "\"" + rootProject.ext.verName + "\""
-+            buildConfigField "String", "BUILD_DATE", "\"" + rootProject.ext.buildDate + "\""
-+            buildConfigField "String", "INU_BUILD_TYPE", "\"" + (System.getenv('INU_BUILD_TYPE') ?: 'debug') + "\""
-+            buildConfigField "int", "STOCK_VERSION_CODE", String.valueOf(rootProject.ext.stockVerCode)
-             buildConfigField "boolean", "DEBUG_VERSION", "true"
-             buildConfigField "boolean", "DEBUG_PRIVATE_VERSION", "true"
-             buildConfigField "boolean", "BUNDLE", "false"
+-            buildConfigField "boolean", "DEBUG_VERSION", "true"
+-            buildConfigField "boolean", "DEBUG_PRIVATE_VERSION", "true"
+-            buildConfigField "boolean", "BUNDLE", "false"
 -            buildConfigField "int", "VERSION_NUM", "1"
 -        }
 -
@@ -322,12 +322,18 @@ index 0000000..0000000 100644
              if (privateBuild.exists()) {
                  privateBuild.delete()
              }
-@@ -272,4 +312,10 @@ task checkVisibility {
+@@ -272,4 +312,16 @@ task checkVisibility {
      }
  }
  
 -preBuild.dependsOn checkVisibility
 +preBuild.dependsOn checkVisibility, preprocessInuSources
++
++// the SMAP attribute encodes source line counts, so any kotlin edit changes the class ABI as gradle
++// fingerprints it and javac recompiles every java dependent
++tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
++    if (name.contains('Debug')) compilerOptions.freeCompilerArgs.add('-Xno-source-debug-extension')
++}
 +
 +if (!rootProject.ext.inuPluginless) {
 +    tasks.matching { it.name ==~ /merge.*AndroidTestJniLibFolders/ }.configureEach {
