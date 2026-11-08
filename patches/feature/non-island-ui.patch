@@ -39,7 +39,7 @@ Subject: non-island ui in various parts of the app
  .../ChatActivityChannelButtonsLayout.java     |  33 +++-
  .../ui/Components/glass/GlassTabView.java     |   5 +-
  .../java/org/telegram/ui/DialogsActivity.java | 173 ++++++++++++------
- .../java/org/telegram/ui/ProfileActivity.java |  40 ++--
+ .../java/org/telegram/ui/ProfileActivity.java |  44 +++--
  .../java/org/telegram/ui/QrShare/QrGlass.java |   3 +
  .../org/telegram/ui/QrShare/QrShareView.java  |   1 +
  .../org/telegram/ui/QrShare/RimPainter.java   |   1 +
@@ -51,7 +51,7 @@ Subject: non-island ui in various parts of the app
  .../java/org/telegram/ui/iv/RichEditor.java   |   4 +-
  .../utils/glass/BaseFragmentSimpleGlass.java  |   6 +-
  .../utils/glass/GlassCaptureSourceCanvas.java |  52 ++++--
- 47 files changed, 983 insertions(+), 338 deletions(-)
+ 47 files changed, 986 insertions(+), 339 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -3568,7 +3568,12 @@ index 0000000..0000000 100644
                  updateBottomButtonY();
              }
          });
-@@ -6126,6 +6126,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -6122,10 +6122,12 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+             return;
+         }
+         final boolean media = sharedMediaLayout != null && sharedMediaLayout.getParent() == listView && sharedMediaLayout.isAttachedToWindow();
+-        final float alpha = Math.max(Math.min(headerBlurFactor, headerRowsProgress), mediaHeaderAnimationProgress);
++        final float alpha = Math.max(Math.min(headerBlurFactor, desu.inugram.helpers.theme.NonIslandHelper.profileHeaders() ? 1f : headerRowsProgress), mediaHeaderAnimationProgress);
          headerBlurView.setAlpha(media ? 0 : alpha);
          headerBlurView.setVisibility(!media && alpha > 0 ? View.VISIBLE : View.GONE);
          headerFadeView.setAlpha(media ? alpha : 0);
@@ -3605,16 +3610,18 @@ index 0000000..0000000 100644
          pagesOverscanTop = headerHeight + tabsTop + BaseFragmentSimpleGlass.getOverscan(statusBar);
          sharedMediaLayout.setPagesInsets(tabsTop,
              pagesOverscanTop,
-@@ -8152,7 +8160,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -8152,7 +8160,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              // by the scroll: the whole player at the top, nothing once the media are its height below it
              extra = sharedMediaLayout.getParent() == listView ? Math.max(0, shift - Math.max(0, (int) sharedMediaLayout.getY())) : shift;
          }
 -        final int height = headerBlurBaseHeight + extra;
-+        final int height = desu.inugram.helpers.theme.NonIslandHelper.profileHeaders() ? headerBlurBaseHeight - dp(44) : headerBlurBaseHeight + extra;
++        final int height = desu.inugram.helpers.theme.NonIslandHelper.profileHeaders()
++            ? Math.max(headerBlurBaseHeight - dp(44), (int) ((headerBlurBaseHeight - dp(44) + extraHeight + searchTransitionOffset) * (1f - mediaHeaderAnimationProgress)))
++            : headerBlurBaseHeight + extra;
          setHeaderBlurHeight(headerBlurView, height);
          setHeaderBlurHeight(headerFadeView, height);
      }
-@@ -8345,7 +8353,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -8345,7 +8355,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          boolean searchVisible = imageUpdater == null && actionBar.isSearchFieldVisible();
          if (sharedMediaRow != -1 && !searchVisible) {
              holder = (RecyclerListView.Holder) listView.findViewHolderForAdapterPosition(sharedMediaRow);
@@ -3623,7 +3630,7 @@ index 0000000..0000000 100644
          } else {
              mediaHeaderVisible = searchVisible;
          }
-@@ -8578,8 +8586,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -8578,8 +8588,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          nameY = AndroidUtilities.lerp(minNameY, backwardInitialValues[8], backwardDiff);
          onlineY = AndroidUtilities.lerp(minOnlineY, backwardInitialValues[9], backwardDiff);
  
@@ -3634,7 +3641,7 @@ index 0000000..0000000 100644
          nameTextView.setTranslationX(nameX);
          nameTextView.setTranslationY(nameY);
          onlineTextView.setTranslationX(onlineX + customPhotoOffset);
-@@ -9035,7 +9043,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -9035,7 +9045,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                  final float avatarBottom = (float) Math.floor(endNameY) + (avatarContainer.getHeight() * avatarContainer.getScaleY() + dpf2(8)) * (openAnimationInProgress ? avatarAnimationProgress : diff);
                  nameY = avatarBottom + dp(1.3f) + dp(7) * diff + titleAnimationsYDiff * (1f - avatarAnimationProgress);
                  onlineY = avatarBottom + dp(24) + (float) Math.floor(11 * AndroidUtilities.density) * diff;
@@ -3643,7 +3650,7 @@ index 0000000..0000000 100644
  
                  if (showStatusButton != null) {
                      showStatusButton.setAlpha((int) (0xFF * diff));
-@@ -15492,10 +15500,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -15492,10 +15502,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              if (animated) {
                  LinearSmoothScrollerCustom linearSmoothScroller = new LinearSmoothScrollerCustom(getContext(), LinearSmoothScrollerCustom.POSITION_TOP, .6f);
                  linearSmoothScroller.setTargetPosition(sharedMediaRow);
