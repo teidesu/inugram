@@ -50,7 +50,8 @@ Subject: non-island ui in various parts of the app
  .../bots/ChatAttachAlertBotWebViewLayout.java |   5 +-
  .../java/org/telegram/ui/iv/RichEditor.java   |   4 +-
  .../utils/glass/BaseFragmentSimpleGlass.java  |   6 +-
- 46 files changed, 946 insertions(+), 323 deletions(-)
+ .../utils/glass/GlassCaptureSourceCanvas.java |  52 ++++--
+ 47 files changed, 983 insertions(+), 338 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -3849,3 +3850,99 @@ index 0000000..0000000 100644
              actionBar.setCenterTitleAndGlass(true);
              actionBar.setExtraHeight(dp(6));
              actionBar.doNotDrawCenterGlass = true;
+diff --git a/TMessagesProj/src/main/java/org/telegram/utils/glass/GlassCaptureSourceCanvas.java b/TMessagesProj/src/main/java/org/telegram/utils/glass/GlassCaptureSourceCanvas.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/utils/glass/GlassCaptureSourceCanvas.java
++++ b/TMessagesProj/src/main/java/org/telegram/utils/glass/GlassCaptureSourceCanvas.java
+@@ -345,9 +345,13 @@ public class GlassCaptureSourceCanvas {
+         public final Rect normalizedPosition = new Rect();
+ 
+         public final RectF normalizedPositionGlassWithOffset = new RectF();
+-        /** Within the root: nothing is captured past it, and the heavy blur would pull that transparency in. */
+         public final RectF normalizedPositionFrostedGlassWithOffset = new RectF();
+ 
++        private final RenderNode inu_contentNode;
++        private final RectF inu_contentRect = new RectF();
++        private final float[] inu_bandsX = new float[4];
++        private final float[] inu_bandsY = new float[4];
++
+         public final RenderNode renderNode;
+         public final RenderNode renderNodeGlass;
+         public final RenderNode renderNodeGlassFrosted;
+@@ -370,6 +374,7 @@ public class GlassCaptureSourceCanvas {
+ 
+         public Position(int index) {
+             renderNode = new RenderNode("cap-" + index);
++            inu_contentNode = new RenderNode("content-" + index);
+             renderNode.setUseCompositingLayer(true, null);
+             renderNodeGlass = new RenderNode("glass-" + index);
+             renderNodeGlass.setRenderEffect(RenderNodeEffects.getSaturationX3RenderEffect());
+@@ -477,7 +482,6 @@ public class GlassCaptureSourceCanvas {
+             normalizedPositionFrostedGlassWithOffset.set(normalizedPosition);
+             normalizedPositionFrostedGlassWithOffset.offset(
+                     frostedGlassOffsetX, frostedGlassOffsetY);
+-            clipToRoot(normalizedPositionFrostedGlassWithOffset, frostedGlassDownsample, rootWidth, rootHeight);
+ 
+             glassWidth = normalizedPosition.width() / glassDownsample;
+             glassHeight = normalizedPosition.height() / glassDownsample;
+@@ -492,7 +496,7 @@ public class GlassCaptureSourceCanvas {
+             recordingCanvas.translate(
+                     -normalizedPositionGlassWithOffset.left,
+                     -normalizedPositionGlassWithOffset.top);
+-            capture.capture(recordingCanvas, normalizedPositionGlassWithOffset);
++            inu_captureMirroredToRoot(capture, recordingCanvas, rootWidth, rootHeight);
+             recordingCanvas.restore();
+             renderNode.endRecording();
+ 
+@@ -543,21 +547,39 @@ public class GlassCaptureSourceCanvas {
+             }
+         }
+ 
+-        /** Shrinks the rect into the root by whole downsampled pixels, so it stays on the downsample grid. */
+-        private static void clipToRoot(RectF rect, int downsample, int rootWidth, int rootHeight) {
+-            if (rect.left < 0) {
+-                rect.left += (float) Math.ceil(-rect.left / downsample) * downsample;
+-            }
+-            if (rect.top < 0) {
+-                rect.top += (float) Math.ceil(-rect.top / downsample) * downsample;
+-            }
+-            if (rootWidth > 0 && rect.right > rootWidth) {
+-                rect.right -= (float) Math.ceil((rect.right - rootWidth) / downsample) * downsample;
++        // nothing is captured past the root: it is mirrored over the padding instead, so the heavy blur does not pull
++        // transparency in and the frosted rect may cover the root on any downsample grid
++        private void inu_captureMirroredToRoot(IBlur3Capture capture, Canvas canvas, int rootWidth, int rootHeight) {
++            final RectF r = normalizedPositionGlassWithOffset;
++            inu_setBands(inu_bandsX, r.left, r.right, rootWidth);
++            inu_setBands(inu_bandsY, r.top, r.bottom, rootHeight);
++            if (inu_bandsX[1] >= inu_bandsX[2] || inu_bandsY[1] >= inu_bandsY[2]) {
++                return;
+             }
+-            if (rootHeight > 0 && rect.bottom > rootHeight) {
+-                rect.bottom -= (float) Math.ceil((rect.bottom - rootHeight) / downsample) * downsample;
++            inu_contentRect.set(inu_bandsX[1], inu_bandsY[1], inu_bandsX[2], inu_bandsY[2]);
++            inu_contentNode.setPosition(0, 0, rootWidth, rootHeight);
++            capture.capture(inu_contentNode.beginRecording(), inu_contentRect);
++            inu_contentNode.endRecording();
++            for (int y = 0; y < 3; y++) {
++                if (inu_bandsY[y] >= inu_bandsY[y + 1]) continue;
++                for (int x = 0; x < 3; x++) {
++                    if (inu_bandsX[x] >= inu_bandsX[x + 1]) continue;
++                    canvas.save();
++                    canvas.clipRect(inu_bandsX[x], inu_bandsY[y], inu_bandsX[x + 1], inu_bandsY[y + 1]);
++                    canvas.translate(x == 1 ? 0 : 2 * inu_bandsX[x == 0 ? 1 : 2], y == 1 ? 0 : 2 * inu_bandsY[y == 0 ? 1 : 2]);
++                    canvas.scale(x == 1 ? 1 : -1, y == 1 ? 1 : -1);
++                    canvas.drawRenderNode(inu_contentNode);
++                    canvas.restore();
++                }
+             }
+         }
++
++        private static void inu_setBands(float[] bands, float start, float end, int size) {
++            bands[0] = start;
++            bands[1] = Math.max(start, 0);
++            bands[2] = Math.min(end, size);
++            bands[3] = end;
++        }
+     }
+ 
+     private static int blurPadding(float effectRadius, int downsample) {
