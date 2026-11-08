@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Sun, 8 Nov 2026 17:04:28 +0400
+Subject: fix crash compressing recycled bitmap after cancelled sticker cache generation
+
+---
+ .../main/java/org/telegram/messenger/utils/BitmapsCache.java  | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/utils/BitmapsCache.java b/TMessagesProj/src/main/java/org/telegram/messenger/utils/BitmapsCache.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/utils/BitmapsCache.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/utils/BitmapsCache.java
+@@ -278,6 +278,7 @@ public class BitmapsCache {
+ 
+                             }
+                         }
++                        bitmap[i] = null;
+                     }
+                     randomAccessFile.close();
+                     source.releaseForGenerateCache();
+@@ -301,6 +302,7 @@ public class BitmapsCache {
+                 RandomAccessFile finalRandomAccessFile1 = randomAccessFile;
+                 bitmapCompressExecutor.execute(() -> {
+                     if (cancelled.get() || closed.get()) {
++                        countDownLatch[finalIndex].countDown();
+                         return;
+                     }
+ 
+@@ -674,7 +676,7 @@ public class BitmapsCache {
+                 bitmap[i] = null;
+                 byteArrayOutputStream[i] = null;
+             }
+-            if (!bitmapsToRecycle.isEmpty()) {
++            if (bitmapsToRecycle != null) {
+                 ArrayList<Bitmap> finalBitmapsToRecycle = bitmapsToRecycle;
+                 Utilities.globalQueue.postRunnable(() -> {
+                     for (Bitmap bitmap : finalBitmapsToRecycle) {

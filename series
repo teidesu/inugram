@@ -437,3 +437,4 @@ bugfix/glass-lite-mode-blur.patch
 feature/dont-autoplay-widgets.patch
 feature/compact-mode-per-chat-type.patch
 bugfix/ipv6-proxy.patch
+bugfix/bitmaps-cache-recycled-shared-bitmaps.patch
