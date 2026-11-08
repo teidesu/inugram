@@ -3,6 +3,7 @@ package desu.inugram.helpers.theme
 import android.animation.ValueAnimator
 import android.graphics.Canvas
 import android.graphics.Rect
+import android.graphics.RectF
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
@@ -36,6 +37,7 @@ import org.telegram.utils.glass.source.GlassSource
 import org.telegram.ui.Components.DialogsActivityTopPanelLayout
 import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory
 import org.telegram.ui.Components.blur3.DownscaleScrollableNoiseSuppressor
+import org.telegram.ui.Components.chat.ViewPositionWatcher
 import org.telegram.ui.Components.blur3.drawable.color.impl.BlurredBackgroundProviderImpl
 import kotlin.math.ceil
 import kotlin.math.max
@@ -330,6 +332,34 @@ object NonIslandHelper {
         }
         for (segment in segments) {
             segment.background.drawTint(canvas, 0f, segment.top, width.toFloat(), segment.bottom, (segment.alpha * 255).toInt())
+        }
+    }
+
+    private val listRect = RectF()
+
+    // the blur samples past a bar's edge, so at a list's end the edge item leaks into the bar with nothing under it yet.
+    // near an end, only as much content past the item's resting edge is captured as has scrolled under the bar.
+    // rows above the top item (hidden archive) sit under the header by design and are never captured
+    @JvmStatic
+    fun clipBlurCaptureToScrolledContent(canvas: Canvas, captureRect: RectF, list: RecyclerView, root: View, filterTabsAtBottom: Boolean, topIndex: Int, topRestOffset: Float) {
+        val atBottom = captureRect.centerY() > root.height / 2f
+        if (if (atBottom) !filterTabsAtBottom || !foldersBar() else !globalSearch() && !foldersBar()) return
+        val itemCount = list.adapter?.itemCount ?: return
+        val edgeItem = list.layoutManager?.findViewByPosition(if (atBottom) itemCount - 1 else topIndex) ?: return
+        if (!ViewPositionWatcher.computeRectInParent(list, root, listRect)) return
+        val reach = getFrostedBlurReach()
+        if (atBottom) {
+            val restBottom = list.height - list.paddingBottom
+            val scrolled = edgeItem.bottom + edgeItem.translationY - restBottom
+            if (scrolled < reach) canvas.clipRect(listRect.left, listRect.top + restBottom - max(0f, scrolled), listRect.right, listRect.bottom)
+        } else {
+            val edgeTop = edgeItem.top + edgeItem.translationY
+            val restTop = list.paddingTop + topRestOffset
+            val scrolled = restTop - edgeTop
+            canvas.clipRect(
+                listRect.left, listRect.top + if (topIndex > 0) edgeTop else 0f,
+                listRect.right, if (scrolled < reach) listRect.top + restTop + max(0f, scrolled) else listRect.bottom,
+            )
         }
     }
 
