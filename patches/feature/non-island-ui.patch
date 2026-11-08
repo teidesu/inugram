@@ -22,6 +22,7 @@ Subject: non-island ui in various parts of the app
  .../ui/Components/FragmentContextView.java    |  11 +-
  .../FragmentContextViewWavesDrawable.java     |  29 +++-
  .../ui/Components/FragmentSearchField.java    |  10 +-
+ .../telegram/ui/Components/MediaActivity.java |  10 +-
  .../ui/Components/MentionsContainerView.java  |  19 +-
  .../ui/Components/RecyclerListView.java       |   7 +
  .../Components/ScrollSlidingTextTabStrip.java | 117 ++++++++++++-
@@ -49,7 +50,7 @@ Subject: non-island ui in various parts of the app
  .../bots/ChatAttachAlertBotWebViewLayout.java |   5 +-
  .../java/org/telegram/ui/iv/RichEditor.java   |   4 +-
  .../utils/glass/BaseFragmentSimpleGlass.java  |   6 +-
- 45 files changed, 900 insertions(+), 315 deletions(-)
+ 46 files changed, 908 insertions(+), 317 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -1785,6 +1786,34 @@ index 0000000..0000000 100644
          blurredBackgroundDrawable = drawable;
      }
  
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/MediaActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/MediaActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/MediaActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/MediaActivity.java
+@@ -214,7 +214,11 @@ public class MediaActivity extends BaseFragment implements SharedMediaLayout.Sha
+ 
+         listTopOverlay = new View(context);
+         sharedMediaLayout.addPagesOverlay(listTopOverlay, 0);
+-        listTopOverlay.setBackground(glass.createActionBarFadeDrawable(listTopOverlay));
++        if (desu.inugram.helpers.theme.NonIslandHelper.sharedMediaTabs()) {
++            org.telegram.ui.ActionBar.ThemeBind.backgroundColor(listTopOverlay, Theme.key_windowBackgroundWhite, getResourceProvider());
++        } else {
++            listTopOverlay.setBackground(glass.createActionBarFadeDrawable(listTopOverlay));
++        }
+ 
+         navigationBarFadeView = new View(context);
+         navigationBarFadeView.setBackground(glass.createNavigationBarFadeDrawable(navigationBarFadeView));
+@@ -428,7 +432,9 @@ public class MediaActivity extends BaseFragment implements SharedMediaLayout.Sha
+         );
+         if (listTopOverlay != null) {
+             // the tabs and the player above them are on the blur
+-            final int height = mSystemInsets.top + ActionBar.getCurrentActionBarHeight() + dp(44) + sharedMediaLayout.getTopPanelShift();
++            final int height = desu.inugram.helpers.theme.NonIslandHelper.sharedMediaTabs()
++                ? SharedMediaLayout.getPagesTabsTop(mSystemInsets.top + ActionBar.getCurrentActionBarHeight()) + dp(44) + sharedMediaLayout.getTopPanelShift()
++                : mSystemInsets.top + ActionBar.getCurrentActionBarHeight() + dp(44) + sharedMediaLayout.getTopPanelShift();
+             if (listTopOverlay.getLayoutParams().height != height) {
+                 listTopOverlay.getLayoutParams().height = height;
+                 listTopOverlay.requestLayout();
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/MentionsContainerView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/MentionsContainerView.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/MentionsContainerView.java
