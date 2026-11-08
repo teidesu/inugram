@@ -8,13 +8,13 @@ Subject: bottom tabs tweaks: compact mode, hiding contacts, hiding it completely
  .../ui/Components/BulletinFactory.java        |  9 ++
  .../ui/Components/glass/GlassTabView.java     | 35 +++++++-
  .../org/telegram/ui/ContactsActivity.java     |  5 +-
- .../java/org/telegram/ui/DialogsActivity.java | 19 +++--
- .../org/telegram/ui/MainTabsActivity.java     | 82 ++++++++++++++-----
+ .../java/org/telegram/ui/DialogsActivity.java | 19 ++--
+ .../org/telegram/ui/MainTabsActivity.java     | 86 ++++++++++++++-----
  .../java/org/telegram/ui/ProfileActivity.java |  5 +-
  .../org/telegram/ui/SettingsActivity.java     |  4 +-
  .../java/org/telegram/ui/TopicsFragment.java  |  9 +-
  .../org/telegram/ui/ViewPagerActivity.java    |  2 +-
- 10 files changed, 139 insertions(+), 42 deletions(-)
+ 10 files changed, 141 insertions(+), 44 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/CallLogActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/CallLogActivity.java
 index 0000000..0000000 100644
@@ -480,6 +480,17 @@ index 0000000..0000000 100644
  
          if (accountSwitchHint == null && HintsController.Hint.AccountSwitchHint.show()) {
              AndroidUtilities.runOnUIThread(() -> {
+@@ -1242,8 +1282,8 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+         }
+ 
+         final int updateLayoutHeight = updateLayoutWrapper != null && updateLayoutWrapper.isUpdateLayoutVisible() ? dp(UpdateLayoutWrapper.HEIGHT) : 0;
+-        final int bottom = contentView.getHeight() - navigationBarHeight - updateLayoutHeight - dp(DialogsActivity.MAIN_TABS_MARGIN);
+-        final int top = bottom - dp(DialogsActivity.MAIN_TABS_HEIGHT);
++        final int bottom = contentView.getHeight() - updateLayoutHeight - MainTabsHelper.getMainTabsBottomOffset(navigationBarHeight);
++        final int top = bottom - MainTabsHelper.getMainTabsBlurHeight(navigationBarHeight);
+ 
+         for (int a = 0, N = fragmentsArr.size(); a < N; a++) {
+             final BaseFragment fragment = fragmentsArr.valueAt(a).fragment;
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
