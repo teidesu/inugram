@@ -447,3 +447,4 @@ hooks/fragment-lifecycle.patch
 feature/cross-account-chats.patch
 bugfix/bottom-bar-ripple-origin.patch
 feature/persistent-connection.patch
+bugfix/tgnet-push-reconnect-backoff.patch

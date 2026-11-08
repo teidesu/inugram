@@ -287,6 +287,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - channel update queue no longer replays the same update indefinitely after an earlier queued update advances PTS
 - flaky networks: server time offset no longer reset to the epoch by a `bad_msg_notification` inside a container (messages sent meanwhile were dated 1 Jan 1970); session resets on old retransmitted server messages re-send pending requests with fresh msg_id/seqno instead of stale ones (which made the server reject them and cascaded into more resets)
 - network stays awake in background for up to 2 minutes while generic requests (sends, getDifference) are pending, instead of pausing after 10 seconds regardless
+- 🐶 persistent connection: fix non-stop reconnects under censorship or with the server unreachable, retries now slow down (stock retried every 4 seconds, or every 400 ms after a connection reset)
 - text messages no longer show the "sent" tick on transport quick ack (server received the packet, not the send); the clock stays until the server confirms the message, which on bad links could be minutes later
 - sticker cutout/eraser edits no longer progressively fade and/or darken transparent PNGs
 - connection status title no longer gets stuck on "Updating..." when its transition animation is cancelled
