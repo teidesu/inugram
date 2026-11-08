@@ -20,7 +20,7 @@ type SymbolResolver = extern "C" fn(*const c_char, usize) -> *mut c_void;
 
 #[repr(C)]
 struct LSPlantInitInfoC {
-  inline_hooker: extern "C" fn(*mut c_void, *mut c_void) -> *mut c_void,
+  inline_hooker: extern "C" fn(*mut c_void, *mut c_void, *mut *mut c_void) -> *mut c_void,
   inline_unhooker: extern "C" fn(*mut c_void) -> bool,
   art_symbol_resolver: SymbolResolver,
   art_symbol_prefix_resolver: SymbolResolver,
@@ -147,17 +147,20 @@ extern "C" fn resolve_prefix(prefix: *const c_char, length: usize) -> *mut c_voi
   }
 }
 
-extern "C" fn inline_hooker(target: *mut c_void, hooker: *mut c_void) -> *mut c_void {
+// shadowhook stores the original into `backup` before the hook goes live, so a thread entering the
+// replacement right away finds its backup set
+extern "C" fn inline_hooker(target: *mut c_void, hooker: *mut c_void, backup: *mut *mut c_void) -> *mut c_void {
   let Some(native) = native() else {
     return ptr::null_mut();
   };
-  let mut original: *mut c_void = ptr::null_mut();
-  // SAFETY: lsplant hands over a function entry in libart and its replacement
-  let stub = unsafe { (native.shadowhook.hook_addr)(target, hooker, &mut original) };
+  // SAFETY: lsplant hands over a function entry in libart, its replacement and the replacement's
+  // static backup slot
+  let stub = unsafe { (native.shadowhook.hook_addr)(target, hooker, backup) };
   if stub.is_null() {
     return ptr::null_mut();
   }
-  original
+  // SAFETY: shadowhook wrote the slot above
+  unsafe { *backup }
 }
 
 extern "C" fn inline_unhooker(func: *mut c_void) -> bool {

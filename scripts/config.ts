@@ -36,6 +36,10 @@ export const submodulePatches: SubmodulePatch[] = [
     patch: join(rootDir, 'patches-native/lsplant-unhook-backup-id.patch'),
   },
   {
+    submodule: 'TMessagesProj_App/jni/lsplant',
+    patch: join(rootDir, 'patches-native/lsplant-hook-backup-race.patch'),
+  },
+  {
     submodule: 'TMessagesProj/jni/wallet-engine',
     patch: join(rootDir, 'patches-native/wallet-engine-private-key.patch'),
   },

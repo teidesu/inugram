@@ -1,0 +1,71 @@
+diff --git a/lsplant/src/main/jni/include/utils/hook_helper.hpp b/lsplant/src/main/jni/include/utils/hook_helper.hpp
+index 01832f7..3cdd8f7 100644
+--- a/lsplant/src/main/jni/include/utils/hook_helper.hpp
++++ b/lsplant/src/main/jni/include/utils/hook_helper.hpp
+@@ -35,6 +35,7 @@ struct Function<Sym, Ret(Args...)> {
+         inner_.raw_function_ = function;
+         return *this;
+     }
++    [[gnu::always_inline]] void **backup_slot() const { return &inner_.raw_function_; }
+ 
+ private:
+     inline static union {
+@@ -57,6 +58,7 @@ struct BaseMemberFunction {
+     [[gnu::always_inline]] auto operator&() const {
+         return reinterpret_cast<Ret (*)(This *, Args...)>(Derived::inner_.raw_function_);
+     }
++    [[gnu::always_inline]] void **backup_slot() const { return &Derived::inner_.raw_function_; }
+ 
+ protected:
+     [[gnu::always_inline]] auto &operator=(void *function) const {
+@@ -208,7 +210,7 @@ private:
+         requires(requires { T<Sym, Us...>::replace_; })
+     [[gnu::always_inline]] bool handle(const T<Sym, Us...> &hooker, bool match_prefix) const {
+         return hooker = hook(hooker.address_ = dlsym<Sym>(match_prefix),
+-                             reinterpret_cast<void *>(hooker.replace_));
++                             reinterpret_cast<void *>(hooker.replace_), hooker.backup_slot());
+     }
+ 
+     template <FixedString Sym>
+@@ -222,9 +224,9 @@ private:
+         return nullptr;
+     }
+ 
+-    [[gnu::always_inline, nodiscard]] void *hook(void *original, void *replace) const {
++    [[gnu::always_inline, nodiscard]] void *hook(void *original, void *replace, void **backup) const {
+         if (original) [[likely]] {
+-            return info_.inline_hooker(original, replace);
++            return info_.inline_hooker(original, replace, backup);
+         }
+         return nullptr;
+     }
+diff --git a/lsplant/src/main/jni/include/lsplant.hpp b/lsplant/src/main/jni/include/lsplant.hpp
+index 04edf1d..7c98969 100644
+--- a/lsplant/src/main/jni/include/lsplant.hpp
++++ b/lsplant/src/main/jni/include/lsplant.hpp
+@@ -20,7 +20,9 @@ struct InitInfo {
+     /// \p hooker is the hooker function to replace the \p target function.<br>
+     /// \p return is the backup function that points to the previous target function.
+     /// it should return null if hook fails and nonnull if successes.
+-    using InlineHookFunType = std::function<void *(void *target, void *hooker)>;
++    /// \p backup is where the backup is kept: the replacement may run on another thread as soon as
++    /// the hook is live, so the hooker must store the backup there before that.
++    using InlineHookFunType = std::function<void *(void *target, void *hooker, void **backup)>;
+     /// \brief Type of inline unhook function.
+     /// In \ref std::function form so that user can use lambda expression with capture list.<br>
+     /// \p func is the target function that is previously hooked.<br>
+diff --git a/lsplant/src/main/jni/include/lsplant_c.h b/lsplant/src/main/jni/include/lsplant_c.h
+index ee06445..ce8fae2 100644
+--- a/lsplant/src/main/jni/include/lsplant_c.h
++++ b/lsplant/src/main/jni/include/lsplant_c.h
+@@ -24,7 +24,9 @@ extern "C" {
+ #define LSPLANT_C_EXPORT __attribute__((visibility("default")))
+ 
+ /// Returns the backup function pointing at the previous target, or null if the hook failed.
+-typedef void *(*LSPlantInlineHooker)(void *target, void *hooker);
++/// The backup must be stored in `backup` before the hook goes live: other threads may call the
++/// replacement right away, and it reads the backup from there.
++typedef void *(*LSPlantInlineHooker)(void *target, void *hooker, void **backup);
+ 
+ typedef bool (*LSPlantInlineUnhooker)(void *func);
+ 
