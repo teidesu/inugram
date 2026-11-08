@@ -29,7 +29,7 @@ index 0000000..0000000 100644
                                          int backgroundHeight = contentView.getBackgroundSizeY();
                                          if (themeDelegate != null) {
                                              themeDelegate.applyServiceShaderMatrix(getMeasuredWidth(), backgroundHeight, cell.getX(), viewTop);
-@@ -16879,7 +16879,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -16882,7 +16882,7 @@ public class ChatActivity extends BaseFragment implements
                      viewBottom - viewTop,
                      recyclerChatViewHeight,
                      0,

@@ -377,7 +377,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -11805,7 +11805,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -11808,7 +11808,7 @@ public class ChatActivity extends BaseFragment implements
          String from = LocaleController.getString(R.string.SearchFrom);
          Spannable spannable = new SpannableString(from + " " + name);
          spannable.setSpan(new ForegroundColorSpanThemable(Theme.key_actionBarDefaultSubtitle, getResourceProvider()), from.length() + 1, spannable.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
@@ -386,7 +386,7 @@ index 0000000..0000000 100644
          mentionContainer.getAdapter().searchUsernameOrHashtag(null, 0, null, false, true);
          searchItem.setSearchFieldHint(null);
          searchItem.clearSearchText();
-@@ -16100,11 +16100,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -16103,11 +16103,11 @@ public class ChatActivity extends BaseFragment implements
                              }
                          }
                          if (userNamesCount == 1) {
@@ -400,7 +400,7 @@ index 0000000..0000000 100644
                      }
                  }
                  replyObjectHintTextView.setText(LocaleController.getString(R.string.TapForForwardingOptions));
-@@ -16136,20 +16136,20 @@ public class ChatActivity extends BaseFragment implements
+@@ -16139,20 +16139,20 @@ public class ChatActivity extends BaseFragment implements
                      replyObjectTextView.setText(pendingLinkSearchString);
                  } else {
                      if (webPage.site_name != null) {
@@ -427,7 +427,7 @@ index 0000000..0000000 100644
                      }
                      chatActivityEnterView.setWebPage(webPage, true);
                  }
-@@ -22832,6 +22832,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -22835,6 +22835,10 @@ public class ChatActivity extends BaseFragment implements
              if (chatListView != null) {
                  chatListView.invalidateViews();
              }
@@ -438,7 +438,7 @@ index 0000000..0000000 100644
              if (alertTextView != null) {
                  alertTextView.invalidate();
              }
-@@ -29635,6 +29639,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -29638,6 +29642,7 @@ public class ChatActivity extends BaseFragment implements
                  pinnedMessageObject.updateTranslation(false);
                  if (pinnedMessageObject.type == MessageObject.TYPE_MUSIC) {
                      pinnedText = String.format("%s - %s", pinnedMessageObject.getMusicAuthor(), pinnedMessageObject.getMusicTitle());
@@ -446,7 +446,7 @@ index 0000000..0000000 100644
                  } else if (pinnedMessageObject.type == MessageObject.TYPE_POLL) {
                      if (pinnedMessageObject.messageOwner.media instanceof TLRPC.TL_messageMediaPoll) {
                          TLRPC.TL_messageMediaPoll poll = (TLRPC.TL_messageMediaPoll) pinnedMessageObject.messageOwner.media;
-@@ -41548,15 +41553,16 @@ public class ChatActivity extends BaseFragment implements
+@@ -41551,15 +41556,16 @@ public class ChatActivity extends BaseFragment implements
                  userButton.addView(imageView, LayoutHelper.createFrame(34, 34, Gravity.LEFT | Gravity.CENTER_VERTICAL, 13, 0, 0, 0));
  
                  final TextView titleText = new TextView(getContext());

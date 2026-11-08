@@ -32,7 +32,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -18358,8 +18358,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -18361,8 +18361,9 @@ public class ChatActivity extends BaseFragment implements
                  return true;
              }
  
@@ -43,7 +43,7 @@ index 0000000..0000000 100644
                      boolean pressedOnPageDownButtons = false, pressedOnAction = false;
                      int[] off = new int[2];
                      getLocationInWindow(off);
-@@ -18389,7 +18390,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -18392,7 +18393,7 @@ public class ChatActivity extends BaseFragment implements
                              pressedOnAction = true;
                          }
                      }
@@ -52,7 +52,7 @@ index 0000000..0000000 100644
                          x = ev.getX();
                          y = ev.getY();
                          pressTime = SystemClock.elapsedRealtime();
-@@ -18415,8 +18416,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -18418,8 +18419,10 @@ public class ChatActivity extends BaseFragment implements
                          }
                          ev.setAction(MotionEvent.ACTION_CANCEL);
                      }
@@ -63,7 +63,7 @@ index 0000000..0000000 100644
                      pressTime = -1;
                  }
              }
-@@ -41895,12 +41898,12 @@ public class ChatActivity extends BaseFragment implements
+@@ -41898,12 +41901,12 @@ public class ChatActivity extends BaseFragment implements
  
          @Override
          public boolean canPerformActions() {
@@ -82,7 +82,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -8654,6 +8654,18 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8656,6 +8656,18 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              });
          }
  
@@ -101,7 +101,7 @@ index 0000000..0000000 100644
          if (!isCommunityCell) {
              ActionBarMenuSubItem markAsUnreadItem = new ActionBarMenuSubItem(getParentActivity(), !hasFolders, false);
              if (cell.getHasUnread()) {
-@@ -8856,7 +8868,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8858,7 +8870,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              } else {
                  presentFragmentAsPreviewWithMenu(previewActivity[0] = chatActivity1, previewMenu[0]);
                  if (chatActivity1 != null) {

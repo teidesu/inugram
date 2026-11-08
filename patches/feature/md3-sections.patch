@@ -665,7 +665,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -3317,13 +3337,13 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -3319,13 +3339,13 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
          return sectionsItemDecoration != null || bitmapSectionsItemDecoration != null;
      }
  
@@ -682,7 +682,7 @@ index 0000000..0000000 100644
      private int sectionPadding;
      private boolean sectionTopPadding;
      public boolean applyPaddingToSections = false;
-@@ -3502,7 +3522,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -3504,7 +3524,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
          final Utilities.CallbackReturn<View, Boolean> isSectionView =
                  view -> !(view instanceof TextInfoPrivacyCell || view instanceof ShadowSectionCell ||
                          view instanceof FiltersSetupActivity.HintInnerCell || view instanceof GraySectionCell ||
@@ -691,7 +691,7 @@ index 0000000..0000000 100644
          final Pair<Utilities.CallbackReturn<View, Boolean>, Utilities.CallbackReturn<Integer, Boolean>> callbacks =
                  cachedIsViewTypeShadow(this, isSectionView);
          setSections(callbacks.first, callbacks.second, padding, roundRadius, topPadding);
-@@ -3634,6 +3654,9 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -3636,6 +3656,9 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
                          if (last) outRect.bottom = padding;
                      }
                  }
@@ -701,7 +701,7 @@ index 0000000..0000000 100644
              }
          }
  
-@@ -3713,6 +3736,11 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -3715,6 +3738,11 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
  
      private void drawSectionsBackgroundsInternal(Canvas canvas) {
  
@@ -713,7 +713,7 @@ index 0000000..0000000 100644
          if (isAnimating()) {
              if (sections == null) {
                  sections = new ArrayList<>();
-@@ -3852,6 +3880,13 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -3854,6 +3882,13 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
      }
  
      private void clipChild(Canvas canvas, View child) {
@@ -727,7 +727,7 @@ index 0000000..0000000 100644
          if (bitmapSectionsItemDecoration != null || child == null || !shouldClipChildToSection(child) || !sectionsItemDecoration.isSectionItem.run(child) || !isVisualSectionItem(child))
              return;
  
-@@ -3915,6 +3950,11 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -3917,6 +3952,11 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
      public Drawable getClipBackground(View child, boolean forceRound) {
          if (child.getParent() != this || !hasSections() || !isVisualSectionItem(child)) return null;
  
@@ -739,7 +739,7 @@ index 0000000..0000000 100644
          boolean prev, next;
          int position = getChildAdapterPosition(child);
          if (position == RecyclerView.NO_POSITION) {
-@@ -3973,7 +4013,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -3975,7 +4015,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
          };
      }
  

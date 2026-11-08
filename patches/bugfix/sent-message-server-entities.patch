@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -23587,7 +23587,18 @@ public class ChatActivity extends BaseFragment implements
+@@ -23590,7 +23590,18 @@ public class ChatActivity extends BaseFragment implements
                  messagesDict[0].put(newMsgId, obj);
                  obj.messageOwner.id = newMsgId;
                  obj.messageOwner.send_state = MessageObject.MESSAGE_SEND_STATE_SENT;

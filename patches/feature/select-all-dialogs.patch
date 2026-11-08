@@ -35,7 +35,7 @@ index 0000000..0000000 100644
                  } else if (id == pin || id == read || id == delete || id == clear || id == mute || id == archive || id == block || id == archive2 || id == pin2) {
                      performSelectedDialogsAction(selectedDialogs, id, true, false);
                  }
-@@ -6803,6 +6813,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -6805,6 +6815,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          readItem = otherItem.addSubItem(read, R.drawable.msg_markread, LocaleController.getString(R.string.MarkAsRead));
          clearItem = otherItem.addSubItem(clear, R.drawable.msg_clear, LocaleController.getString(R.string.ClearHistory));
          blockItem = otherItem.addSubItem(block, R.drawable.msg_block, LocaleController.getString(R.string.BlockUser));
