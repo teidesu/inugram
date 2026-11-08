@@ -4,16 +4,36 @@ Date: Fri, 6 Nov 2026 00:04:40 +0400
 Subject: add option to move folder tabs to the bottom
 
 ---
- .../java/org/telegram/ui/DialogsActivity.java | 134 +++++++++++++++---
- .../org/telegram/ui/MainTabsActivity.java     |  20 ++-
+ .../java/org/telegram/ui/DialogsActivity.java | 144 +++++++++++++++---
+ .../org/telegram/ui/MainTabsActivity.java     |  36 ++++-
  .../ui/MainTabsActivityController.java        |   1 +
- 3 files changed, 132 insertions(+), 23 deletions(-)
+ 3 files changed, 156 insertions(+), 25 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -1081,7 +1081,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -915,7 +915,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+             }
+             if (!inu_topBarsBlurDrawn && (child == filterTabsView || child == actionBar || child == fragmentSearchField || child == topPanelLayout)) {
+                 inu_topBarsBlurDrawn = true;
+-                NonIslandHelper.drawTopBarsBlur(canvas, iBlur3SourceGlassFrosted, Math.max(0, getActionBarTop()), getMeasuredWidth(), fragmentSearchField, filterTabsView, topPanelLayout);
++                NonIslandHelper.drawTopBarsBlur(canvas, iBlur3SourceGlassFrosted, Math.max(0, getActionBarTop()), getMeasuredWidth(), fragmentSearchField, inu_filterTabsAtBottom ? null : filterTabsView, topPanelLayout);
+             }
+             boolean result;
+             if (child == viewPages[0] || (viewPages.length > 1 && child == viewPages[1]) || child == topPanelLayout || child == filterTabsView) {
+@@ -934,6 +934,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+                         canvas.scale(s, s, 0, -getY() + scrollYOffset + getActionBarFullHeight());
+                     }
+                 }
++                if (child == filterTabsView && inu_filterTabsAtBottom) {
++                    NonIslandHelper.drawBottomBarsBlur(canvas, iBlur3SourceGlassFrosted, getMeasuredWidth(), getMeasuredHeight(), filterTabsView,
++                        inu_drawsMainTabsBackground() ? 1f : inu_filterTabsBottomFill != null ? filterTabsView.getAlpha() : 0f);
++                }
+                 result = super.drawChild(canvas, child, drawingTime);
+                 canvas.restore();
+             } else if (child == actionBar && slideFragmentProgress != 1f) {
+@@ -1081,7 +1085,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                  if (dialogStoriesCellVisible) {
                      storiesAlpha = 1f - Utilities.clamp(rightSlidingProgress / 0.5f, 1f, 0f);
                  }
@@ -22,7 +42,7 @@ index 0000000..0000000 100644
                      tabsYOffset -= (1f - animatorFilterTabsVisible.getFloatValue()) * filterTabsView.getMeasuredHeight();
                  }
                  if (fragmentSearchField != null && !NonIslandHelper.globalSearch()) {
-@@ -1119,7 +1119,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -1119,7 +1123,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              updateContextViewPosition();
              updateStoriesViewAlpha(storiesAlpha);
              super.dispatchDraw(canvas);
@@ -31,7 +51,7 @@ index 0000000..0000000 100644
                  drawHeaderShadow(canvas, top + actionBarHeight
                      + (NonIslandHelper.foldersBar() && topPanelLayout != null ? (int) topPanelLayout.getAnimatedHeightWithPadding(0) : 0));
              }
-@@ -1342,7 +1342,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -1342,7 +1346,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      childTop = actionBar.getMeasuredHeight();
                  } else if (child instanceof ViewPage) {
                      childTop = 0;
@@ -40,7 +60,7 @@ index 0000000..0000000 100644
                      childTop += actionBar.getMeasuredHeight();
                      childTop += NonIslandHelper.globalSearch() ? 0 : dp(SEARCH_FIELD_HEIGHT);
                  } else if (dialogStoriesCell != null && dialogStoriesCell.getPremiumHint() == child) {
-@@ -2097,7 +2097,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -2097,7 +2101,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              }
  
              ignoreLayout = true;
@@ -49,7 +69,7 @@ index 0000000..0000000 100644
  
              final int b = calculateListViewPaddingBottom();
              if (t != topPadding || b != getPaddingBottom()) {
-@@ -3569,6 +3569,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -3569,6 +3573,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      }
                  }
              };
@@ -58,7 +78,7 @@ index 0000000..0000000 100644
              filterTabsView.setVisibility(View.GONE);
              canShowFilterTabsView = false;
              animatorFilterTabsVisible.setValue(false, false);
-@@ -4938,6 +4940,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -4938,6 +4944,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                  @Override
                  protected void onChangedIslandTotalHeight(float h) {
                      chatInputViewsContainer.setInputBubbleHeight(h);
@@ -68,7 +88,7 @@ index 0000000..0000000 100644
                      checkUi_chatListViewPaddingsBottom();
                      checkUi_fadeView();
                  }
-@@ -5191,13 +5196,24 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -5191,13 +5200,23 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          }
  
          if (filterTabsView != null) {
@@ -87,14 +107,13 @@ index 0000000..0000000 100644
 +            if (inu_filterTabsAtBottom && !hasMainTabs && NonIslandHelper.foldersBar()) {
 +                inu_filterTabsBottomFill = new View(context);
 +                inu_filterTabsBottomFill.setClickable(true);
-+                inu_filterTabsBottomFill.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundWhite));
 +                inu_filterTabsBottomFill.setVisibility(View.GONE);
 +                contentView.addView(inu_filterTabsBottomFill, contentView.indexOfChild(chatInputViewsContainer != null ? chatInputViewsContainer.getFadeView() : filterTabsView), LayoutHelper.createFrameMatchParent());
 +            }
          }
  
          if (fragmentSearchField != null) {
-@@ -6656,7 +6672,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -6656,7 +6675,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          float topPanelsVisibility = 0;
          float fadeViewT = totalOffset;
  
@@ -109,7 +128,7 @@ index 0000000..0000000 100644
              filterTabsView.setTranslationY(totalOffset - (NonIslandHelper.globalSearch() ? 0 : searchOffset) - (NonIslandHelper.foldersBar() ? NonIslandHelper.getFoldersBarOverlap() * getFilterTabsVisibilityFactor(false) : 0));
              filtersTabVisibility = filterTabsView.getAlpha();
              filtersTabHeight = (NonIslandHelper.foldersBar() ? NonIslandHelper.getFoldersBarVisibleHeight() : dp(36 + 7)) * filtersTabVisibility;
-@@ -6667,7 +6689,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -6667,7 +6692,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              if (NonIslandHelper.globalSearch()) {
                  topPanelLayout.setTranslationY(
                      scrollYOffset + storiesHeight + tabsYOffset + storiesOverscroll
@@ -118,7 +137,7 @@ index 0000000..0000000 100644
                  );
              } else {
                  topPanelLayout.setTranslationY(lerp(
-@@ -7302,7 +7324,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -7302,7 +7327,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                  if (undoView[0] != null && undoView[0].getVisibility() == View.VISIBLE) {
                      return;
                  }
@@ -127,7 +146,7 @@ index 0000000..0000000 100644
                  updateFloatingButtonOffset();
              }
  
-@@ -7317,7 +7339,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -7317,7 +7342,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              public int getTopOffset(int tag) {
                  return (
                      (actionBar != null ? actionBar.getMeasuredHeight() : 0) +
@@ -136,7 +155,7 @@ index 0000000..0000000 100644
                      (topPanelLayout != null ? topPanelLayout.getHeight() : 0) +
                      (dialogStoriesCell != null && dialogStoriesCellVisible ? (int) ((1f - dialogStoriesCell.getCollapsedProgress()) * dp(DialogStoriesCell.HEIGHT_IN_DP)) : 0) +
                      (NonIslandHelper.globalSearch() ? 0 : dp(SEARCH_FIELD_HEIGHT) - (int) MathUtils.clamp(-scrollYOffset - getMaxScrollYOffsetWithoutSearch(), 0, dp(SEARCH_FIELD_HEIGHT)))
-@@ -9025,7 +9047,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9025,7 +9050,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
      }
  
      private void updateFloatingButtonOffset() {
@@ -145,7 +164,7 @@ index 0000000..0000000 100644
          final float baseTranslationY = top
              - floatingButtonPanOffset;
  
-@@ -10421,7 +10443,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -10421,7 +10446,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              };
  
              FrameLayout.LayoutParams lp = LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM | Gravity.LEFT, 8, 0, 8, 8);
@@ -154,7 +173,7 @@ index 0000000..0000000 100644
              ((ContentView) fragmentView).addView(undoView[a], ++undoViewIndex, lp);
          }
      }
-@@ -13491,7 +13513,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13491,7 +13516,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                  .setText(text)
                  .setJoint(1, -40)
                  .setBgColor(getThemedColor(Theme.key_undo_background));
@@ -163,7 +182,7 @@ index 0000000..0000000 100644
              ((ViewGroup) fragmentView).addView(storyPremiumHint, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 240, Gravity.BOTTOM | Gravity.FILL_HORIZONTAL, 12, 0, 68, 40));
              storyPremiumHint.show();
              return;
-@@ -13809,10 +13831,23 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13809,10 +13834,23 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
  
          updateFloatingButtonOffset();
  
@@ -188,7 +207,7 @@ index 0000000..0000000 100644
                  lp = (ViewGroup.MarginLayoutParams) undoView.getLayoutParams();
                  if (lp != null && lp.bottomMargin != bottomMargin) {
                      lp.bottomMargin = bottomMargin;
-@@ -13820,12 +13855,39 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13820,12 +13858,44 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                  }
              }
          }
@@ -219,6 +238,11 @@ index 0000000..0000000 100644
 +        return (int) lerp(inputPadding, inu_getBottomFilterTabsOffset(), getFilterTabsVisibilityFactor(false)) + inu_getBottomFilterTabsHeight();
 +    }
 +
++    public boolean inu_drawsMainTabsBackground() {
++        return inu_filterTabsAtBottom && hasMainTabs && MainTabsHelper.isMaterial() && NonIslandHelper.foldersBar()
++            && filterTabsView != null && filterTabsView.getVisibility() == View.VISIBLE;
++    }
++
 +    public float inu_getClassicBottomFilterTabsVisibility() {
 +        return inu_filterTabsAtBottom && NonIslandHelper.foldersBar() ? getFilterTabsVisibilityFactor(true) : 0f;
 +    }
@@ -231,7 +255,7 @@ index 0000000..0000000 100644
      }
  
  
-@@ -13957,6 +14019,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13957,6 +14027,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              chatInputViewsContainer.getFadeView().setAlpha(factor);
              chatInputViewsContainer.getFadeView().setVisibility(factor > 0 ? View.VISIBLE : View.GONE);
          }
@@ -242,7 +266,7 @@ index 0000000..0000000 100644
      }
  
      private void checkUi_topPanelVisible() {
-@@ -13990,7 +14056,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13990,7 +14064,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          final float factor1 = includeSearch ? (1f - animatorSearchVisible.getFloatValue()) : 1f;
          final float factor2 = 1f - getRightSlidingProgress();
          final float factor3 = animatorFilterTabsVisible.getFloatValue();
@@ -251,7 +275,7 @@ index 0000000..0000000 100644
      }
  
      private void checkUi_filterTabsVisible() {
-@@ -14003,10 +14069,21 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -14003,10 +14077,21 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              filterTabsView.setScaleX(s);
              filterTabsView.setScaleY(s);
              filterTabsView.setVisibility(factor > 0 ? View.VISIBLE : View.GONE);
@@ -273,7 +297,7 @@ index 0000000..0000000 100644
          }
          updateContextViewPosition();
      }
-@@ -14158,12 +14235,14 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -14158,12 +14243,14 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          if (BitwiseUtils.hasFlag(flags, GlassEngine.FLAG_INVALIDATED_POSITIONS)) {
              final int additionalList = dp(48);
              final int mainTabBottom = fragmentView.getMeasuredHeight() - MainTabsHelper.getMainTabsBottomOffset(navigationBarHeight);
@@ -290,7 +314,7 @@ index 0000000..0000000 100644
                  + (topPanelLayout != null && topPanelLayout.getVisibility() == View.VISIBLE ? topPanelLayout.getSumHeightOfAllVisibleChild() : 0)
                  + ((int) scrollYOffset);
  
-@@ -14185,6 +14264,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -14185,9 +14272,19 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      fragmentView.getMeasuredWidth(), fragmentView.getMeasuredHeight());
                  iBlur3PositionMainTabs.inset(0, LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0 : -dp(48));
  
@@ -303,7 +327,14 @@ index 0000000..0000000 100644
                  hasBottomBlur = true;
              }
  
-@@ -14195,11 +14280,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
++            if (hasBottomBlur && inu_filterTabsAtBottom && NonIslandHelper.foldersBar() && filterTabsView != null) {
++                final float inu_barTop = fragmentView.getMeasuredHeight() - inu_getBottomFilterTabsOffset() - filterTabsView.getLayoutParams().height;
++                iBlur3PositionMainTabs.top = Math.min(iBlur3PositionMainTabs.top, inu_barTop - NonIslandHelper.getFrostedBlurReach());
++            }
+             scrollableViewNoiseSuppressor.setupRenderNodes(iBlur3Positions, hasBottomBlur ? 2 : 1);
+         }
+         scrollableViewNoiseSuppressor.invalidateResultRenderNodes(iBlur3Capture, fragmentView.getMeasuredWidth(), fragmentView.getMeasuredHeight());
+@@ -14195,11 +14292,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
  
      private int calculateListViewPaddingBottom() {
          if (commentView != null) {
@@ -317,7 +348,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -14243,6 +14328,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -14243,6 +14340,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          if (chatInputViewsContainer != null) {
              chatInputViewsContainer.checkInsets();
          }
@@ -327,17 +358,6 @@ index 0000000..0000000 100644
          checkUi_chatListViewPaddingsBottom();
          checkUi_fadeView();
  
-@@ -14544,6 +14632,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
-                         commentView.updateColors();
-                     }
- 
-+                    if (inu_filterTabsBottomFill != null) {
-+                        inu_filterTabsBottomFill.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundWhite));
-+                    }
-+
-                     if (filterTabsView != null) {
-                         filterTabsView.updateColors();
-                     }
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
@@ -355,14 +375,37 @@ index 0000000..0000000 100644
              }
          };
  
-@@ -1121,7 +1123,16 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -420,7 +422,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+         tabsViewBackground.setRadius(dp(MainTabsHelper.getMainTabsHeight() / 2f));
+         tabsViewBackground.setPadding(dp(mainTabsMargin - 0.334f));
+         M3MainTabsHelper.applyTabsBackground(tabsViewBackground);
+-        tabsView.setBackground(tabsViewBackground);
++        tabsView.setBackground(M3MainTabsHelper.wrapTabsBackground(tabsViewBackground, this::inu_getChatsOwnTabsSpan));
+ 
+         BlurredBackgroundDrawableViewFactory iBlur3FactoryFade = new BlurredBackgroundDrawableViewFactory(iBlur3SourceColor);
+         iBlur3FactoryFade.setSourceRootView(viewPositionWatcher, contentView);
+@@ -1121,7 +1123,30 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          }
      }
  
++    private final RectF inu_tabsRect = new RectF();
++
++    private boolean inu_getChatsOwnTabsSpan(RectF out) {
++        if (dialogsActivity == null || dialogsActivity.fragmentView == null || !dialogsActivity.inu_drawsMainTabsBackground()) {
++            return false;
++        }
++        if (!ViewPositionWatcher.computeRectInParent(dialogsActivity.fragmentView, contentView, out) || !ViewPositionWatcher.computeRectInParent(tabsView, contentView, inu_tabsRect)) {
++            return false;
++        }
++        out.offset(-inu_tabsRect.left, -inu_tabsRect.top);
++        return true;
++    }
++
 +    private void inu_checkUi_tabsDivider() {
 +        if (viewPager == null || tabsViewWrapper == null) {
 +            return;
 +        }
++        tabsView.invalidate();
 +        final float strip = dialogsActivity != null ? dialogsActivity.inu_getClassicBottomFilterTabsVisibility() : 0f;
 +        M3MainTabsHelper.setTabsDividerAlpha(tabsViewWrapper, 1f - strip * viewPager.getPositionVisibility(POSITION_CHATS));
 +    }
@@ -372,7 +415,7 @@ index 0000000..0000000 100644
          if (viewPager == null || fadeView == null || MainTabsHelper.isHidden()) {
              return;
          }
-@@ -1188,6 +1199,11 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -1188,6 +1213,11 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          public void setTabsVisible(boolean visible) {
              animatorTabsVisible.setValue(visible, true);
          }

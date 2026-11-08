@@ -18,7 +18,7 @@ import org.telegram.utils.glass.GlassEngine
 open class ClassicBarDrawable @JvmOverloads constructor(
     factory: BlurredBackgroundDrawableViewFactory,
     view: android.view.View,
-    protected val resourcesProvider: Theme.ResourcesProvider?,
+    val resourcesProvider: Theme.ResourcesProvider?,
     var colorKey: Int = Theme.key_windowBackgroundWhite,
     var drawTopDivider: Boolean = false,
     var drawBottomDivider: Boolean = false,
@@ -32,6 +32,7 @@ open class ClassicBarDrawable @JvmOverloads constructor(
     }
 
     var externalBlur = false
+    var blurredColorProvider: BlurredBackgroundColorProvider? = null
 
     val isBlurred
         get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
@@ -67,7 +68,8 @@ open class ClassicBarDrawable @JvmOverloads constructor(
         var color = getColor()
         if (isBlurred) {
             val isDark = resourcesProvider?.isDark ?: Theme.isCurrentThemeDark()
-            color = ColorUtils.setAlphaComponent(color, if (isDark) ChatActivity.ACTION_BAR_BLUR_ALPHA else LIGHT_BLUR_ALPHA)
+            color = blurredColorProvider?.backgroundColor
+                ?: ColorUtils.setAlphaComponent(color, if (isDark) ChatActivity.ACTION_BAR_BLUR_ALPHA else LIGHT_BLUR_ALPHA)
         }
         paint.color = Theme.multAlpha(color, alpha / 255f)
         canvas.drawRect(left, top, right, bottom, paint)

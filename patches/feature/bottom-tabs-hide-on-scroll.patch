@@ -4,10 +4,10 @@ Date: Fri, 6 Nov 2026 00:42:04 +0400
 Subject: add option to hide bottom tabs on scroll
 
 ---
- .../java/org/telegram/ui/DialogsActivity.java | 49 ++++++++++++++++---
- .../org/telegram/ui/MainTabsActivity.java     | 26 ++++++++--
+ .../java/org/telegram/ui/DialogsActivity.java | 45 ++++++++++++++++---
+ .../org/telegram/ui/MainTabsActivity.java     | 26 +++++++++--
  .../ui/MainTabsActivityController.java        |  1 +
- 3 files changed, 65 insertions(+), 11 deletions(-)
+ 3 files changed, 63 insertions(+), 9 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 index 0000000..0000000 100644
@@ -24,7 +24,7 @@ index 0000000..0000000 100644
      private final BoolAnimator animatorSearchVisible = new BoolAnimator(ANIMATOR_ID_SEARCH_VISIBLE,
              this, CubicBezierInterpolator.EASE_OUT_QUINT, 350);
      private final BoolAnimator animatorDoneButtonVisible = new BoolAnimator(ANIMATOR_ID_DONE_BUTTON_VISIBLE,
-@@ -1153,7 +1156,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -1157,7 +1160,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      blurredView.draw(canvas);
                  }
              }
@@ -33,7 +33,7 @@ index 0000000..0000000 100644
                  AndroidUtilities.drawNavigationBarProtection(canvas, this, getThemedColor(Theme.key_windowBackgroundWhite), navigationBarHeight);
              }
              wasDrawn = true;
-@@ -3193,6 +3196,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -3197,6 +3200,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          selectedDialogs.clear();
  
          maximumVelocity = ViewConfiguration.get(context).getScaledMaximumFlingVelocity();
@@ -41,7 +41,7 @@ index 0000000..0000000 100644
  
          AndroidUtilities.runOnUIThread(() -> Theme.createChatResources(context, false));
  
-@@ -4553,6 +4557,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -4557,6 +4561,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                          }
                      }
                      checkListLoad(viewPage);
@@ -51,7 +51,7 @@ index 0000000..0000000 100644
                      invalidateScrollY = true;
                      if (fragmentView != null) {
                          fragmentView.invalidate();
-@@ -4577,6 +4584,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -4581,6 +4588,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                                  if (changed && scrollUpdated && (goingDown || scrollingManually) && DialogsFabHelper.hideOnScroll() && !disableActionBarScrolling) {
                                      hideFloatingButton(goingDown);
                                  }
@@ -61,7 +61,7 @@ index 0000000..0000000 100644
                                  prevPosition = firstVisiblePosition;
                                  prevTop = firstViewTop;
                                  scrollUpdated = true;
-@@ -5207,10 +5217,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -5211,7 +5221,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              if (inu_filterTabsAtBottom) {
                  NonIslandHelper.moveFilterTabBarToBottom(filterTabsView, inu_aboveMaterialTabs);
              }
@@ -69,12 +69,8 @@ index 0000000..0000000 100644
 +            if (inu_filterTabsAtBottom && (!hasMainTabs || MainTabsHelper.isHideOnScroll()) && NonIslandHelper.foldersBar()) {
                  inu_filterTabsBottomFill = new View(context);
                  inu_filterTabsBottomFill.setClickable(true);
--                inu_filterTabsBottomFill.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundWhite));
-+                inu_filterTabsBottomFill.setBackgroundColor(getThemedColor(filterTabsView.inu_classicBackground.getColorKey()));
                  inu_filterTabsBottomFill.setVisibility(View.GONE);
-                 contentView.addView(inu_filterTabsBottomFill, contentView.indexOfChild(chatInputViewsContainer != null ? chatInputViewsContainer.getFadeView() : filterTabsView), LayoutHelper.createFrameMatchParent());
-             }
-@@ -6927,6 +6937,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -6930,6 +6940,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
      }
  
      public void switchToCurrentSelectedMode(boolean animated) {
@@ -82,7 +78,7 @@ index 0000000..0000000 100644
          for (int a = 0; a < viewPages.length; a++) {
              viewPages[a].listView.stopScroll();
          }
-@@ -9047,7 +9058,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9050,7 +9061,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
      }
  
      private void updateFloatingButtonOffset() {
@@ -92,7 +88,7 @@ index 0000000..0000000 100644
          final float baseTranslationY = top
              - floatingButtonPanOffset;
  
-@@ -13859,7 +13871,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13862,7 +13874,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
  
      private float inu_getBottomFilterTabsOffset() {
          if (commentView == null) {
@@ -102,8 +98,8 @@ index 0000000..0000000 100644
          }
          final float aboveInput = windowInsetsStateHolder.getAnimatedMaxBottomInset() + chatInputViewsContainer.getInputBubbleHeight() + (NonIslandHelper.chatElements() ? 0 : dp(9 + 4));
          return lerp((float) navigationBarHeight, aboveInput, animatorForwardButtonVisible.getFloatValue());
-@@ -13879,6 +13892,14 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
-         return (int) lerp(inputPadding, inu_getBottomFilterTabsOffset(), getFilterTabsVisibilityFactor(false)) + inu_getBottomFilterTabsHeight();
+@@ -13887,6 +13900,14 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+             && filterTabsView != null && filterTabsView.getVisibility() == View.VISIBLE;
      }
  
 +    public void inu_setMainTabsScrollHidden(boolean hidden) {
@@ -117,7 +113,7 @@ index 0000000..0000000 100644
      public float inu_getClassicBottomFilterTabsVisibility() {
          return inu_filterTabsAtBottom && NonIslandHelper.foldersBar() ? getFilterTabsVisibilityFactor(true) : 0f;
      }
-@@ -13895,7 +13916,16 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13903,7 +13924,16 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
  
      @Override
      public void onFactorChanged(int id, float factor, float fraction, FactorAnimator callee) {
@@ -135,7 +131,7 @@ index 0000000..0000000 100644
              checkUi_menuItems();
              checkUi_searchFieldVisibility();
              checkUi_topPanelVisible();
-@@ -14089,6 +14119,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -14097,6 +14127,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
      }
  
      private void checkUi_mainTabsVisible() {
@@ -145,7 +141,7 @@ index 0000000..0000000 100644
          final boolean mainTabsVisible = !searching && (blurredView == null || blurredView.getBackground() == null || blurredView.getAlpha() < 0.01f || blurredView.getVisibility() == View.GONE);
          if (mainTabsActivityController != null) {
              mainTabsActivityController.setTabsVisible(mainTabsVisible);
-@@ -14254,7 +14287,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -14262,7 +14295,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
  
              boolean hasBottomBlur = false;
              if (hasMainTabs) {
@@ -154,15 +150,6 @@ index 0000000..0000000 100644
                  iBlur3PositionMainTabs.inset(0, LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0 : -dp(48));
  
                  hasBottomBlur = true;
-@@ -14633,7 +14666,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
-                     }
- 
-                     if (inu_filterTabsBottomFill != null) {
--                        inu_filterTabsBottomFill.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundWhite));
-+                        inu_filterTabsBottomFill.setBackgroundColor(getThemedColor(filterTabsView.inu_classicBackground.getColorKey()));
-                     }
- 
-                     if (filterTabsView != null) {
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
@@ -187,8 +174,8 @@ index 0000000..0000000 100644
          checkUi_fadeView();
          blur3_invalidateBlur();
          contentView.invalidate();
-@@ -1123,12 +1129,20 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
-         }
+@@ -1136,13 +1142,21 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+         return true;
      }
  
 +    private float inu_getTabsVisibleFactor() {
@@ -203,13 +190,14 @@ index 0000000..0000000 100644
          if (viewPager == null || tabsViewWrapper == null) {
              return;
          }
+         tabsView.invalidate();
          final float strip = dialogsActivity != null ? dialogsActivity.inu_getClassicBottomFilterTabsVisibility() : 0f;
 -        M3MainTabsHelper.setTabsDividerAlpha(tabsViewWrapper, 1f - strip * viewPager.getPositionVisibility(POSITION_CHATS));
 +        M3MainTabsHelper.setTabsDividerAlpha(tabsViewWrapper, (1f - strip * viewPager.getPositionVisibility(POSITION_CHATS)) * inu_getTabsVisibleFactor());
      }
  
      private void checkUi_fadeView() {
-@@ -1144,7 +1158,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -1158,7 +1172,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          final float animatedPosition = viewPager.getPositionAnimated();
          final float isProfile = 1f - MathUtils.clamp(Math.abs(MainTabsHelper.positionOffset(POSITION_PROFILE) - animatedPosition), 0, 1);
          final float hide = 1f - AndroidUtilities.getNavigationBarThirdButtonsFactor(0, 1f, navigationBarHeight);
@@ -218,7 +206,7 @@ index 0000000..0000000 100644
          if (tabletLayout) {
              alpha = 0.0f;
          }
-@@ -1166,7 +1180,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -1180,7 +1194,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          final int normalY = -(updateLayoutHeight);
          final int hiddenY = normalY + dp(MainTabsHelper.isCompact() ? 30 : 40);
  
@@ -227,7 +215,7 @@ index 0000000..0000000 100644
          final float scale = lerp(0.85f, 1f, factor);
  
          tabsViewWrapper.setTranslationY(lerp(hiddenY, normalY, factor));
-@@ -1204,6 +1218,12 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
+@@ -1218,6 +1232,12 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
          public void inu_onBottomFilterTabsChanged() {
              inu_checkUi_tabsDivider();
          }

@@ -7,6 +7,7 @@ import android.graphics.Paint
 import android.graphics.PixelFormat
 import android.graphics.RectF
 import android.graphics.drawable.Drawable
+import android.graphics.drawable.DrawableWrapper
 import android.graphics.drawable.RippleDrawable
 import android.graphics.drawable.ShapeDrawable
 import android.view.View
@@ -165,6 +166,26 @@ object M3MainTabsHelper {
         if (!isEnabled) return
         background.setRadius(0f)
         background.setPadding(0)
+    }
+
+    // a page may draw the tabs' background over its own span, as one surface with its bars
+    @JvmStatic
+    fun wrapTabsBackground(background: Drawable, getOwnSpan: (RectF) -> Boolean): Drawable {
+        if (!isEnabled) return background
+        return object : DrawableWrapper(background) {
+            private val span = RectF()
+
+            override fun draw(canvas: Canvas) {
+                if (!getOwnSpan(span)) {
+                    super.draw(canvas)
+                    return
+                }
+                canvas.save()
+                canvas.clipOutRect(span.left, -Float.MAX_VALUE / 2, span.right, Float.MAX_VALUE / 2)
+                super.draw(canvas)
+                canvas.restore()
+            }
+        }
     }
 
     @JvmStatic

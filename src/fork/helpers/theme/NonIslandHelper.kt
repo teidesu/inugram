@@ -35,6 +35,9 @@ import desu.inugram.ui.ClassicBarDrawable
 import org.telegram.utils.glass.source.GlassSource
 import org.telegram.ui.Components.DialogsActivityTopPanelLayout
 import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory
+import org.telegram.ui.Components.blur3.DownscaleScrollableNoiseSuppressor
+import org.telegram.ui.Components.blur3.drawable.color.impl.BlurredBackgroundProviderImpl
+import kotlin.math.ceil
 import kotlin.math.max
 
 object NonIslandHelper {
@@ -277,10 +280,12 @@ object NonIslandHelper {
     fun moveFilterTabBarToBottom(tabsView: FilterTabsView, aboveMaterialTabs: Boolean) {
         (tabsView.layoutParams as FrameLayout.LayoutParams).gravity = Gravity.BOTTOM
         val background = tabsView.inu_classicBackground ?: return
-        background.externalBlur = false
         background.drawBottomDivider = false
         background.drawTopDivider = true
-        if (aboveMaterialTabs) background.colorKey = Theme.key_glass_targetMainTabs
+        if (aboveMaterialTabs) {
+            background.colorKey = Theme.key_glass_targetMainTabs
+            background.blurredColorProvider = BlurredBackgroundProviderImpl.mainTabs(background.resourcesProvider)
+        }
         tabsView.inu_indicatorAtTop = true
         val rad = AndroidUtilities.dpf2(3f)
         (tabsView.selectorDrawable as GradientDrawable).cornerRadii = floatArrayOf(0f, 0f, 0f, 0f, rad, rad, rad, rad)
@@ -299,7 +304,36 @@ object NonIslandHelper {
         ).filter { it.bottom > it.top && it.alpha > 0f }.sortedBy { it.top }.toMutableList()
         val first = segments.firstOrNull() ?: return
         if (headerTop < first.top) segments.add(0, BlurSegment(first.background, headerTop.toFloat(), first.top, 1f))
-        val right = width.toFloat()
+        drawBlurSegments(canvas, source, width.toFloat(), segments)
+    }
+
+    // how far the stock frosted blur (40dp radius) samples: content nearer to a bar than this must be captured, or the
+    // blur clamps the capture's edge row and anything entering it pops in
+    @JvmStatic
+    fun getFrostedBlurReach(): Int = ceil(3 * DownscaleScrollableNoiseSuppressor.convertRadiusToSigma(AndroidUtilities.dpf2(40f))).toInt()
+
+    // the bottom bar and the screen under it are one surface, the main tabs' background included
+    @JvmStatic
+    fun drawBottomBarsBlur(canvas: Canvas, source: GlassSource?, width: Int, height: Int, filterTabs: FilterTabsView, belowAlpha: Float) {
+        val background = filterTabs.inu_classicBackground ?: return
+        val blurSource = source?.takeIf { background.isBlurred }
+        val barTop = filterTabs.y
+        val barBottom = barTop + filterTabs.height
+        val segments = listOfNotNull(
+            BlurSegment(background, barTop, barBottom, filterTabs.alpha).takeIf { blurSource != null && filterTabs.isVisible },
+            BlurSegment(background, barBottom, height.toFloat(), belowAlpha),
+        ).filter { it.bottom > it.top && it.alpha > 0f }
+        if (segments.isEmpty()) return
+        if (blurSource != null) {
+            drawBlurSegments(canvas, blurSource, width.toFloat(), segments)
+            return
+        }
+        for (segment in segments) {
+            segment.background.drawTint(canvas, 0f, segment.top, width.toFloat(), segment.bottom, (segment.alpha * 255).toInt())
+        }
+    }
+
+    private fun drawBlurSegments(canvas: Canvas, source: GlassSource, right: Float, segments: List<BlurSegment>) {
         if (segments.all { it.alpha >= 1f } && segments.zipWithNext().all { (a, b) -> b.top <= a.bottom }) {
             val top = segments.first().top
             val bottom = segments.maxOf { it.bottom }
