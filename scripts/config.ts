@@ -72,7 +72,7 @@ export const forkSyncFiles: ForkSyncFile[] = [
     directory: true,
   },
   // the plugin bridge's own suite, against the real stock classes.
-  // `./gradlew :TMessagesProj:connectedDebugAndroidTest`
+  // `pnpm run gradle :TMessagesProj:connectedDebugAndroidTest`
   {
     source: 'src/test/kotlin',
     pluginsOnly: true,

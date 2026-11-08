@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/build.gradle b/TMessagesProj/build.gradle
 index 0000000..0000000 100644
 --- a/TMessagesProj/build.gradle
 +++ b/TMessagesProj/build.gradle
-@@ -180,6 +180,29 @@ def preprocessInuSources = tasks.register('preprocessInuSources') {
+@@ -181,6 +181,29 @@ def preprocessInuSources = tasks.register('preprocessInuSources') {
      }
  }
  
@@ -42,7 +42,7 @@ index 0000000..0000000 100644
  android {
      compileSdkVersion 36
      buildToolsVersion '36.0.0'
-@@ -231,6 +254,7 @@ android {
+@@ -232,6 +255,7 @@ android {
              cmake {
                  version '3.22.1'
                  arguments '-DANDROID_STL=c++_static', '-DANDROID_PLATFORM=android-26' //, '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'

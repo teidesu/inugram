@@ -5,7 +5,7 @@ Subject: build support stuff for fork-specific code: - added kotlin - bumped min
 
 ---
  .gitmodules                                   |   3 +
- TMessagesProj/build.gradle                    | 180 ++++++++------
+ TMessagesProj/build.gradle                    | 190 +++++++++------
  TMessagesProj/google-services.json            |  76 +-----
  TMessagesProj/jni/CMakeLists.txt              |   3 +
  TMessagesProj/jni/exports.map                 |   1 +
@@ -20,10 +20,10 @@ Subject: build support stuff for fork-specific code: - added kotlin - bumped min
  TMessagesProj_App/jni/CMakeLists.txt          |  10 +
  TMessagesProj_App/jni/lsplant                 |   1 +
  TMessagesProj_AppTests/build.gradle           |   5 +-
- build.gradle                                  |  19 +-
- gradle.properties                             |   2 +-
- settings.gradle                               |  40 +++-
- 19 files changed, 398 insertions(+), 331 deletions(-)
+ build.gradle                                  |  27 ++-
+ gradle.properties                             |   3 +-
+ settings.gradle                               |   5 +-
+ 19 files changed, 378 insertions(+), 335 deletions(-)
  create mode 100644 TMessagesProj_App/jni/CMakeLists.txt
  create mode 160000 TMessagesProj_App/jni/lsplant
 
@@ -67,7 +67,7 @@ index 0000000..0000000 100644
      implementation 'com.google.mlkit:language-id:17.0.6'
      implementation 'com.android.billingclient:billing:8.0.0'
      implementation 'com.google.code.gson:gson:2.11.0'
-@@ -107,11 +109,78 @@ dependencies {
+@@ -107,11 +109,79 @@ dependencies {
      api project(":TMessagesProj_Modules:media3:media-lib-session")
      api project(':jlatexmath')
  
@@ -96,9 +96,10 @@ index 0000000..0000000 100644
 +            '**/ui/settings/WarningBanner.kt'
 +    }
 +}
++def inuPluginless = rootProject.ext.inuPluginless
 +def preprocessInuSources = tasks.register('preprocessInuSources') {
 +    inputs.files(inuSources).withPathSensitivity(PathSensitivity.RELATIVE)
-+    inputs.property('plugins', !rootProject.ext.inuPluginless)
++    inputs.property('plugins', !inuPluginless)
 +    outputs.dir(inuGeneratedSources)
 +    doLast {
 +        def processed = inuSources.files.collectEntries { source ->
@@ -117,12 +118,12 @@ index 0000000..0000000 100644
 +                    case 'if':
 +                        if (argument != 'PLUGINS') throw new GradleException("${source}:${index + 1}: expected #if PLUGINS")
 +                        stack.add([parent: active, alternate: false, line: index + 1])
-+                        active = active && !rootProject.ext.inuPluginless
++                        active = active && !inuPluginless
 +                        break
 +                    case 'else':
 +                        if (argument || stack.empty || stack.last().alternate) throw new GradleException("${source}:${index + 1}: unexpected #else")
 +                        stack.last().alternate = true
-+                        active = stack.last().parent && rootProject.ext.inuPluginless
++                        active = stack.last().parent && inuPluginless
 +                        break
 +                    case 'endif':
 +                        if (argument || stack.empty) throw new GradleException("${source}:${index + 1}: unexpected #endif")
@@ -137,7 +138,7 @@ index 0000000..0000000 100644
 +            [(inuSourceDir.toPath().relativize(source.toPath()).toString()): output.toString()]
 +        }
 +        def targetDir = inuGeneratedSources.get().asFile
-+        delete targetDir
++        targetDir.deleteDir()
 +        processed.each { path, contents ->
 +            def target = new File(targetDir, path)
 +            target.parentFile.mkdirs()
@@ -147,7 +148,7 @@ index 0000000..0000000 100644
  }
  
  android {
-@@ -119,10 +188,19 @@ android {
+@@ -119,10 +189,19 @@ android {
      buildToolsVersion '36.0.0'
      ndkVersion "27.2.12479018"
  
@@ -167,7 +168,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -135,23 +213,34 @@ android {
+@@ -135,23 +214,34 @@ android {
      compileOptions {
          sourceCompatibility JavaVersion.VERSION_1_8
          targetCompatibility JavaVersion.VERSION_1_8
@@ -208,7 +209,7 @@ index 0000000..0000000 100644
              }
          }
      }
-@@ -162,64 +251,13 @@ android {
+@@ -162,64 +252,13 @@ android {
              shrinkResources false
              multiDexEnabled true
              ndk.debugSymbolLevel = 'FULL'
@@ -277,7 +278,7 @@ index 0000000..0000000 100644
          }
  
          release {
-@@ -227,12 +265,13 @@ android {
+@@ -227,12 +266,13 @@ android {
              shrinkResources false
              multiDexEnabled true
              ndk.debugSymbolLevel = 'FULL'
@@ -294,15 +295,34 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -250,7 +289,6 @@ def getProps(String propName) {
+@@ -250,21 +290,21 @@ def getProps(String propName) {
          return "";
      }
  }
 -apply plugin: 'com.google.gms.google-services'
  
  task checkVisibility {
++    def taskNames = gradle.startParameter.taskNames
++    def isPublicAllowed = !project.hasProperty("IS_PRIVATE") || !project.property("IS_PRIVATE").toBoolean()
++    def privateBuild = file("${projectDir}_AppHockeyApp/afat/HA_private/Telegram-Beta.apk")
      doFirst {
-@@ -272,4 +310,10 @@ task checkVisibility {
+-        def isPrivateBuild = project.gradle.startParameter.taskNames.find {
++        def isPrivateBuild = taskNames.find {
+             it.contains("HA_private") || it.contains("HA_hardcore") || it.contains("Debug") || it.contains("Release")
+         }
+-        def isPublicAllowed = !project.hasProperty("IS_PRIVATE") || !project.property("IS_PRIVATE").toBoolean()
+         if (!isPrivateBuild && !isPublicAllowed) {
+             throw new GradleException("Building public version of private code!")
+         }
+     }
+     doLast {
+-        if (project.gradle.startParameter.taskNames.find { it.contains("HA_public") }) {
+-            def privateBuild = file("${projectDir}_AppHockeyApp/afat/HA_private/Telegram-Beta.apk")
++        if (taskNames.find { it.contains("HA_public") }) {
+             if (privateBuild.exists()) {
+                 privateBuild.delete()
+             }
+@@ -272,4 +312,10 @@ task checkVisibility {
      }
  }
  
@@ -1152,7 +1172,7 @@ index 0000000..0000000 100644
      }
  }
  repositories {
-@@ -52,4 +52,19 @@ subprojects {
+@@ -52,4 +52,27 @@ subprojects {
              }
          }
      }
@@ -1166,19 +1186,27 @@ index 0000000..0000000 100644
 +
 +def commitId = System.getenv('COMMIT_ID')
 +
++abstract class InuBuildDateSource implements ValueSource<String, org.gradle.api.provider.ValueSourceParameters.None> {
++    @Override
++    String obtain() { java.time.LocalDate.now().toString() }
++}
++
 +ext {
 +  inuPluginless = (findProperty('inu.pluginless') ?: inuBuildProperties.getProperty('inu.pluginless', 'false')).toBoolean()
 +  verName = "${APP_VERSION_NAME}${commitId != null ? "-${commitId.take(7)}" : ''}"
 +  verCode = Integer.parseInt(System.getenv('INU_BUILD') ?: "${1000000 + Integer.parseInt(APP_VERSION_CODE)}")
 +  stockVerCode = Integer.parseInt(APP_VERSION_CODE)
-+  buildDate = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ISO_DATE)
-+  ccachePath = ['sh', '-c', 'command -v ccache'].execute().text.trim() ?: null
++  buildDate = providers.of(InuBuildDateSource) {}.get()
++  ccachePath = providers.exec {
++    commandLine 'sh', '-c', 'command -v ccache'
++    ignoreExitValue = true
++  }.standardOutput.asText.get().trim() ?: null
 +}
 diff --git a/gradle.properties b/gradle.properties
 index 0000000..0000000 100644
 --- a/gradle.properties
 +++ b/gradle.properties
-@@ -25,7 +25,7 @@ org.gradle.daemon=true
+@@ -25,9 +25,10 @@ org.gradle.daemon=true
  org.gradle.parallel=true
  org.gradle.configureondemand=false
  android.useAndroidX=true
@@ -1187,46 +1215,14 @@ index 0000000..0000000 100644
  android.defaults.buildfeatures.buildconfig=true
  android.enableR8.fullMode=true
  android.r8.optimizedResourceShrinking=true
+ android.enableResourceOptimizations=true
+ org.gradle.tooling.parallel=true
++org.gradle.configuration-cache=true
 diff --git a/settings.gradle b/settings.gradle
 index 0000000..0000000 100644
 --- a/settings.gradle
 +++ b/settings.gradle
-@@ -1,9 +1,41 @@
-+import java.nio.channels.FileChannel
-+import java.nio.channels.FileLock
-+import java.nio.file.StandardOpenOption
-+
-+abstract class InuBuildLock implements BuildService<Params>, AutoCloseable {
-+    interface Params extends BuildServiceParameters {
-+        Property<String> getLockPath()
-+    }
-+
-+    private final FileChannel channel
-+    private final FileLock lock
-+
-+    InuBuildLock() {
-+        def file = new File(parameters.lockPath.get())
-+        file.parentFile.mkdirs()
-+        channel = FileChannel.open(file.toPath(), StandardOpenOption.CREATE, StandardOpenOption.WRITE)
-+        def acquired = channel.tryLock()
-+        if (acquired == null) {
-+            println "> Waiting for another build to release ${file}"
-+            acquired = channel.lock()
-+        }
-+        lock = acquired
-+    }
-+
-+    @Override
-+    void close() {
-+        lock.release()
-+        channel.close()
-+    }
-+}
-+
-+gradle.sharedServices.registerIfAbsent('inuBuildLock', InuBuildLock) {
-+    parameters.lockPath = new File(settingsDir, '.gradle/inu-build.lock').absolutePath
-+}.get()
-+
+@@ -1,9 +1,6 @@
  include ':TMessagesProj'
  include ':TMessagesProj_App'
 -include ':TMessagesProj_AppHuawei'

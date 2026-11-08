@@ -13,10 +13,11 @@
     "find-patches": "tsx scripts/find-patches.ts",
     "lint-patches": "tsx scripts/lint-patches.ts",
     "push-theme": "tsx scripts/push-theme.ts",
-    "build-debug": "tsx scripts/generate-grants.ts && cd worktree && ./gradlew TMessagesProj_App:assembleDebug",
-    "build-debug-pluginless": "cd worktree-pluginless && ./gradlew TMessagesProj_App:assembleDebug",
-    "run-debug": "cd worktree && ./gradlew TMessagesProj_App:installDebug && adb shell am start desu.inugram.beta/org.telegram.ui.LaunchActivity",
-    "run-debug-pluginless": "cd worktree-pluginless && ./gradlew TMessagesProj_App:installDebug && adb shell am start desu.inugram.beta/org.telegram.ui.LaunchActivity",
+    "gradle": "tsx scripts/gradle.ts",
+    "build-debug": "tsx scripts/generate-grants.ts && tsx scripts/gradle.ts TMessagesProj_App:assembleDebug",
+    "build-debug-pluginless": "tsx scripts/gradle.ts --pluginless TMessagesProj_App:assembleDebug",
+    "run-debug": "tsx scripts/gradle.ts TMessagesProj_App:installDebug && adb shell am start desu.inugram.beta/org.telegram.ui.LaunchActivity",
+    "run-debug-pluginless": "tsx scripts/gradle.ts --pluginless TMessagesProj_App:installDebug && adb shell am start desu.inugram.beta/org.telegram.ui.LaunchActivity",
     "check-plugin-syntax": "for f in src/test/plugins/*.js $(find src/native/src -name '*.js'); do node --check \"$f\" || exit 1; done",
     "typecheck-plugins": "pnpm run check-plugin-syntax && tsx scripts/generate-tl.ts && tsx scripts/generate-grants.ts && tsc -p sdk/types/tsconfig.self.json --noEmit && tsc -p src/test/plugins --noEmit",
     "prepare": "husky",
@@ -37,7 +38,9 @@
   "devDependencies": {
     "@inugram/plugin-types": "workspace:*",
     "@types/node": "^24.6.1",
+    "@types/proper-lockfile": "^4.1.4",
     "husky": "^9.1.7",
+    "proper-lockfile": "^4.1.2",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3"
   }
