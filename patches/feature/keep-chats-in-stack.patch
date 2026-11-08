@@ -26,7 +26,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -7230,7 +7230,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -7232,7 +7232,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              if (!getMessagesController().checkCanOpenChat(args, ProfileActivity.this)) {
                  return;
              }
@@ -35,7 +35,7 @@ index 0000000..0000000 100644
              if (!AndroidUtilities.isTablet() && removeFragment) {
                  getNotificationCenter().removeObserver(ProfileActivity.this, NotificationCenter.closeChats);
                  getNotificationCenter().postNotificationName(NotificationCenter.closeChats);
-@@ -9437,7 +9437,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -9439,7 +9439,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                      TLRPC.EncryptedChat encryptedChat = (TLRPC.EncryptedChat) args[0];
                      Bundle args2 = new Bundle();
                      args2.putInt("enc_id", encryptedChat.id);
@@ -44,7 +44,7 @@ index 0000000..0000000 100644
                  });
              }
          } else if (id == NotificationCenter.encryptedChatUpdated) {
-@@ -9546,7 +9546,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -9548,7 +9548,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                      sharedMediaLayout.setChatInfo(chatInfo);
                  }
              }

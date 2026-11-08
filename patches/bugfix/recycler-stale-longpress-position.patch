@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerList
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java
-@@ -1121,6 +1121,10 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -1122,6 +1122,10 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
  
      }
  
@@ -22,7 +22,7 @@ index 0000000..0000000 100644
      private class RecyclerListViewItemClickListener implements OnItemTouchListener {
  
          public RecyclerListViewItemClickListener(Context context) {
-@@ -1220,6 +1224,11 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -1221,6 +1225,11 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
                      if (currentChildView == null || currentChildPosition == -1 || onItemLongClickListener == null && onItemLongClickListenerExtended == null) {
                          return;
                      }
@@ -34,7 +34,7 @@ index 0000000..0000000 100644
                      View child = currentChildView;
                      if (onItemLongClickListener != null) {
                          if (onItemLongClickListener.onItemClick(currentChildView, currentChildPosition)) {
-@@ -1290,11 +1299,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -1291,11 +1300,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
                  }
                  currentChildPosition = -1;
                  if (currentChildView != null) {

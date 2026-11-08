@@ -19,7 +19,7 @@ index 0000000..0000000 100644
  
              bottomButtonContainer = new FrameLayout[2];
              bottomButton = new ButtonWithCounterView[2];
-@@ -6292,7 +6293,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -6294,7 +6295,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          } else {
              buttonsTranslationY = dp(72);
          }

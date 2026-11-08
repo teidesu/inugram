@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -13680,8 +13680,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -13682,8 +13682,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                      } else if (position == inu_idRow) {
                          detailCell.setTextAndValue(ProfileHelper.formatId(userId, chatId != 0 ? getMessagesController().getChat(chatId) : null), LocaleController.getString(R.string.InuProfileId), false);
                      } else if (position == noteRow) {
@@ -21,7 +21,7 @@ index 0000000..0000000 100644
                          TLRPC.TL_textWithEntities note = userInfo.note;
                          CharSequence text;
                          if (!UserConfig.getInstance(currentAccount).isPremium()) {
-@@ -16370,8 +16369,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -16372,8 +16371,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          final ItemOptions o = ItemOptions.makeOptions(this, view);
          o.setScrimViewBackground(listView.getClipBackground(view));
          o.setLongPressSelectionEnabled(false);
@@ -32,7 +32,7 @@ index 0000000..0000000 100644
              final CharSequence text = MessageObject.formatTextWithEntities(userInfo.note, false);
              AndroidUtilities.addToClipboard(text);
              BulletinFactory.of(ProfileActivity.this)
-@@ -16389,11 +16388,15 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -16391,11 +16390,15 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                  .setTitle(getString(R.string.ProfileNotesRemoveTitle))
                  .setMessage(getString(R.string.ProfileNotesRemoveText))
                  .setPositiveButton(getString(R.string.Delete), (di, w) -> {

@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerList
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java
-@@ -1309,10 +1309,13 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -1310,10 +1310,13 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
                  if (!interceptedByChild && currentChildView != null) {
                      float x = event.getX();
                      float y = event.getY();
@@ -26,7 +26,7 @@ index 0000000..0000000 100644
                          }
                      };
                      AndroidUtilities.runOnUIThread(selectChildRunnable, ViewConfiguration.getTapTimeout());
-@@ -1331,18 +1334,23 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -1332,18 +1335,23 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
                          }
                          updateSelectorState();
                      } else {
@@ -52,7 +52,7 @@ index 0000000..0000000 100644
                      onChildPressed(currentChildView, 0, 0, false);
                      currentChildView = null;
                      interceptedByChild = false;
-@@ -1431,7 +1439,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -1432,7 +1440,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
                  }
              }
          } else {
@@ -61,7 +61,7 @@ index 0000000..0000000 100644
          }
          updateSelectorState();
      }
-@@ -1449,7 +1457,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -1450,7 +1458,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
              currentChildView = null;
              removeSelection(child, null);
          }
@@ -70,7 +70,7 @@ index 0000000..0000000 100644
          if (clickRunnable != null) {
              AndroidUtilities.cancelRunOnUIThread(clickRunnable);
              clickRunnable = null;
-@@ -1469,7 +1477,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -1470,7 +1478,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
              if (resetSelectorOnChanged) {
                  currentFirst = -1;
                  if (removeHighlighSelectionRunnable == null) {
@@ -79,7 +79,7 @@ index 0000000..0000000 100644
                  }
              }
              invalidate();
-@@ -1578,6 +1586,11 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -1579,6 +1587,11 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
                  } else {
                      selectorRect.setEmpty();
                  }
@@ -91,7 +91,7 @@ index 0000000..0000000 100644
                  checkSection(false);
                  if (dy != 0 && fastScroll != null) {
                      fastScroll.showFloatingDate();
-@@ -2405,6 +2418,51 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -2406,6 +2419,51 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
          invalidate();
      }
  
@@ -143,7 +143,7 @@ index 0000000..0000000 100644
      private void positionSelector(int position, View sel) {
          positionSelector(position, sel, false, -1, -1, false);
      }
-@@ -2426,6 +2484,12 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -2427,6 +2485,12 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
              return;
          }
          final boolean positionChanged = position != selectorPosition;
@@ -156,7 +156,7 @@ index 0000000..0000000 100644
          int bottomPadding;
          if (getAdapter() instanceof SelectionAdapter) {
              bottomPadding = ((SelectionAdapter) getAdapter()).getSelectionBottomPadding(sel);
-@@ -2436,6 +2500,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -2437,6 +2501,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
              selectorPosition = position;
          }
          selectorView = sel;
@@ -164,7 +164,7 @@ index 0000000..0000000 100644
          if (selectorType == 8) {
              Theme.setMaskDrawableRad(selectorDrawable, selectorRadius, 0);
          } else if (selectorType == 42) {
-@@ -2489,9 +2554,12 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -2490,9 +2555,12 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
          }
      }
  
@@ -178,7 +178,7 @@ index 0000000..0000000 100644
                  if (selectorDrawable.setState(getDrawableStateForSelector())) {
                      invalidateDrawable(selectorDrawable);
                  }
-@@ -2532,7 +2600,15 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -2533,7 +2601,15 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
  
      @Override
      public boolean verifyDrawable(Drawable drawable) {
@@ -195,7 +195,7 @@ index 0000000..0000000 100644
      }
  
      @Override
-@@ -2681,9 +2757,33 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -2682,9 +2758,33 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
      }
  
      private void drawSelectors2(Canvas canvas) {

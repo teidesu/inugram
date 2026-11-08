@@ -24,7 +24,7 @@ Subject: non-island ui in various parts of the app
  .../ui/Components/FragmentSearchField.java    |  10 +-
  .../telegram/ui/Components/MediaActivity.java |  10 +-
  .../ui/Components/MentionsContainerView.java  |  19 +-
- .../ui/Components/RecyclerListView.java       |   7 +
+ .../ui/Components/RecyclerListView.java       |  11 ++
  .../Components/ScrollSlidingTextTabStrip.java | 117 ++++++++++++-
  .../ui/Components/SearchTagsList.java         |   3 +
  .../ui/Components/SharedMediaLayout.java      |  90 ++++++++--
@@ -39,7 +39,7 @@ Subject: non-island ui in various parts of the app
  .../ChatActivityChannelButtonsLayout.java     |  33 +++-
  .../ui/Components/glass/GlassTabView.java     |   5 +-
  .../java/org/telegram/ui/DialogsActivity.java | 163 ++++++++++++------
- .../java/org/telegram/ui/ProfileActivity.java |  36 ++--
+ .../java/org/telegram/ui/ProfileActivity.java |  38 ++--
  .../java/org/telegram/ui/QrShare/QrGlass.java |   3 +
  .../org/telegram/ui/QrShare/QrShareView.java  |   1 +
  .../org/telegram/ui/QrShare/RimPainter.java   |   1 +
@@ -50,7 +50,7 @@ Subject: non-island ui in various parts of the app
  .../bots/ChatAttachAlertBotWebViewLayout.java |   5 +-
  .../java/org/telegram/ui/iv/RichEditor.java   |   4 +-
  .../utils/glass/BaseFragmentSimpleGlass.java  |   6 +-
- 46 files changed, 908 insertions(+), 317 deletions(-)
+ 46 files changed, 914 insertions(+), 317 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -1881,7 +1881,15 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerList
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java
-@@ -1744,6 +1744,8 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -158,6 +158,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+     private boolean hideIfEmpty = true;
+ 
+     private boolean drawSelectorBehind;
++    public int inu_selectorClipTop = Integer.MIN_VALUE;
+     private int selectorType = 2;
+     @Nullable
+     protected Drawable selectorDrawable;
+@@ -1744,6 +1745,8 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
              selectorDrawable = Theme.createRadSelectorDrawable(color, selectorRadius, 0);
          } else if (selectorType == 9) {
              selectorDrawable = null;
@@ -1890,7 +1898,7 @@ index 0000000..0000000 100644
          } else if (topBottomSelectorRadius > 0) {
              selectorDrawable = Theme.createRadSelectorDrawable(color, topBottomSelectorRadius, topBottomSelectorRadius);
          } else if (selectorRadius > 0 && selectorType != Theme.RIPPLE_MASK_CIRCLE_20DP) {
-@@ -2436,10 +2438,15 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -2436,10 +2439,15 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
          selectorView = sel;
          if (selectorType == 8) {
              Theme.setMaskDrawableRad(selectorDrawable, selectorRadius, 0);
@@ -1906,6 +1914,17 @@ index 0000000..0000000 100644
  //        selectorRect.offset((int) sel.getTranslationX(), (int) sel.getTranslationY());
  
          final boolean enabled = sel.isEnabled();
+@@ -2739,7 +2747,10 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+         }
+         super.dispatchDraw(canvas);
+         if (drawSelection && !drawSelectorBehind) {
++            canvas.save();
++            if (inu_selectorClipTop != Integer.MIN_VALUE) canvas.clipRect(0, inu_selectorClipTop, getWidth(), getHeight());
+             drawSelectors2(canvas);
++            canvas.restore();
+         }
+         if (overlayContainer != null) {
+             overlayContainer.draw(canvas);
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ScrollSlidingTextTabStrip.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ScrollSlidingTextTabStrip.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ScrollSlidingTextTabStrip.java
@@ -3435,7 +3454,16 @@ index 0000000..0000000 100644
                  updateBottomButtonY();
              }
          });
-@@ -8100,10 +8100,14 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -6126,6 +6126,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+         headerBlurView.setAlpha(media ? 0 : alpha);
+         headerBlurView.setVisibility(!media && alpha > 0 ? View.VISIBLE : View.GONE);
+         headerFadeView.setAlpha(media ? alpha : 0);
++        listView.inu_selectorClipTop = media && alpha > 0 && desu.inugram.helpers.theme.NonIslandHelper.profileHeaders()
++            ? headerFadeView.getLayoutParams().height - (int) listView.getY() : Integer.MIN_VALUE;
+         if (media) {
+             // at the top of the screen wherever the media are
+             headerFadeView.setTranslationY(-(listView.getY() + sharedMediaLayout.getY()));
+@@ -8100,10 +8102,14 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              return true;
          });
          sharedMediaLayout.addPagesOverlay(headerFadeView, 0);
@@ -3452,7 +3480,7 @@ index 0000000..0000000 100644
          contentView.addView(headerBlurView, contentView.indexOfChild(avatarContainer2), LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 0, Gravity.TOP));
          glassEngine.addScrolledView(listView);
          sharedMediaLayout.setPagesGlassEngine(glassEngine);
-@@ -8123,7 +8127,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -8123,7 +8129,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          final int statusBar = actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0;
          final int headerHeight = statusBar + ActionBar.getCurrentActionBarHeight();
          // the list starts under the header: the tabs go up into the glass header's extra height, 7dp under its buttons
@@ -3463,7 +3491,7 @@ index 0000000..0000000 100644
          pagesOverscanTop = headerHeight + tabsTop + BaseFragmentSimpleGlass.getOverscan(statusBar);
          sharedMediaLayout.setPagesInsets(tabsTop,
              pagesOverscanTop,
-@@ -8152,7 +8158,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -8152,7 +8160,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              // by the scroll: the whole player at the top, nothing once the media are its height below it
              extra = sharedMediaLayout.getParent() == listView ? Math.max(0, shift - Math.max(0, (int) sharedMediaLayout.getY())) : shift;
          }
@@ -3472,7 +3500,7 @@ index 0000000..0000000 100644
          setHeaderBlurHeight(headerBlurView, height);
          setHeaderBlurHeight(headerFadeView, height);
      }
-@@ -8345,7 +8351,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -8345,7 +8353,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          boolean searchVisible = imageUpdater == null && actionBar.isSearchFieldVisible();
          if (sharedMediaRow != -1 && !searchVisible) {
              holder = (RecyclerListView.Holder) listView.findViewHolderForAdapterPosition(sharedMediaRow);
@@ -3481,7 +3509,7 @@ index 0000000..0000000 100644
          } else {
              mediaHeaderVisible = searchVisible;
          }
-@@ -8578,8 +8584,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -8578,8 +8586,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          nameY = AndroidUtilities.lerp(minNameY, backwardInitialValues[8], backwardDiff);
          onlineY = AndroidUtilities.lerp(minOnlineY, backwardInitialValues[9], backwardDiff);
  
@@ -3492,7 +3520,7 @@ index 0000000..0000000 100644
          nameTextView.setTranslationX(nameX);
          nameTextView.setTranslationY(nameY);
          onlineTextView.setTranslationX(onlineX + customPhotoOffset);
-@@ -9035,7 +9041,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -9035,7 +9043,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                  final float avatarBottom = (float) Math.floor(endNameY) + (avatarContainer.getHeight() * avatarContainer.getScaleY() + dpf2(8)) * (openAnimationInProgress ? avatarAnimationProgress : diff);
                  nameY = avatarBottom + dp(1.3f) + dp(7) * diff + titleAnimationsYDiff * (1f - avatarAnimationProgress);
                  onlineY = avatarBottom + dp(24) + (float) Math.floor(11 * AndroidUtilities.density) * diff;
@@ -3501,7 +3529,7 @@ index 0000000..0000000 100644
  
                  if (showStatusButton != null) {
                      showStatusButton.setAlpha((int) (0xFF * diff));
-@@ -15492,10 +15498,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -15492,10 +15500,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              if (animated) {
                  LinearSmoothScrollerCustom linearSmoothScroller = new LinearSmoothScrollerCustom(getContext(), LinearSmoothScrollerCustom.POSITION_TOP, .6f);
                  linearSmoothScroller.setTargetPosition(sharedMediaRow);
