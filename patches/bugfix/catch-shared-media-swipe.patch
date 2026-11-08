@@ -19,7 +19,7 @@ index 0000000..0000000 100644
      private VelocityTracker velocityTracker;
  
      protected boolean isActionModeShowed;
-@@ -5462,7 +5463,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -5469,7 +5470,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
          maybeStartTracking = false;
          startedTracking = true;
          onTabScroll(true);
@@ -28,7 +28,7 @@ index 0000000..0000000 100644
          setHeaderEnabled(false);
          scrollSlidingTextTabStrip.setEnabled(false);
          mediaPages[1].selectedType = id;
-@@ -5589,11 +5590,57 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -5596,11 +5597,57 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
  
      private boolean disableScrolling;
  
@@ -87,7 +87,7 @@ index 0000000..0000000 100644
          if (profileActivity.getParentLayout() != null && !profileActivity.getParentLayout().checkTransitionAnimation() && !checkTabsAnimationInProgress() && !isInPinchToZoomTouchMode) {
              if (ev != null) {
                  if (velocityTracker == null) {
-@@ -5606,13 +5653,14 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -5613,13 +5660,14 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
                  }
              }
              if (ev != null && ev.getAction() == MotionEvent.ACTION_DOWN && !startedTracking && !maybeStartTracking && ev.getY() >= pagesTabsTop + dp(48 + 42)) {
@@ -103,7 +103,7 @@ index 0000000..0000000 100644
                  int dy = Math.abs((int) ev.getY() - startedTrackingY);
                  if (startedTracking && (animatingForward && dx > 0 || !animatingForward && dx < 0)) {
                      if (!prepareForMoving(ev, dx < 0)) {
-@@ -5623,6 +5671,10 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -5630,6 +5678,10 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
                          mediaPages[1].setTranslationX(animatingForward ? mediaPages[0].getMeasuredWidth() : -mediaPages[0].getMeasuredWidth());
                          selectTabWithId(mediaPages[1].selectedType, 0);
                          onTabProgress(getTabProgress());
@@ -114,7 +114,7 @@ index 0000000..0000000 100644
                      }
                  }
                  if (maybeStartTracking && !startedTracking) {
-@@ -5688,7 +5740,17 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -5695,7 +5747,17 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
          if (startedTracking) {
              float x = mediaPages[0].getX();
              tabsAnimation = new AnimatorSet();

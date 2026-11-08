@@ -2,13 +2,9 @@ package desu.inugram.helpers.theme
 
 import android.animation.ValueAnimator
 import android.graphics.Canvas
-import android.graphics.ColorFilter
-import android.graphics.Paint
-import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
-import android.os.Build
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -19,7 +15,6 @@ import androidx.core.graphics.ColorUtils
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
 import desu.inugram.InuConfig
-import desu.inugram.ui.BlurBehindHelper
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.AndroidUtilities.dp
 import org.telegram.messenger.R
@@ -33,18 +28,16 @@ import org.telegram.ui.Components.FragmentSearchField
 import org.telegram.ui.Components.MentionsContainerView
 import org.telegram.ui.Components.RecyclerListView
 import org.telegram.ui.Components.SectionsScrollView
-import org.telegram.ui.Components.SizeNotifierFrameLayout
-import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable
-import org.telegram.ui.Components.blur3.drawable.color.BlurredBackgroundColorProvider
 import org.telegram.ui.DialogsActivity
 import org.telegram.ui.SearchTabsAndFiltersLayout
 import org.telegram.utils.glass.BaseFragmentSimpleGlass
-import org.telegram.utils.glass.GlassEngine
+import desu.inugram.ui.ClassicBarDrawable
+import org.telegram.utils.glass.source.GlassSource
+import org.telegram.ui.Components.DialogsActivityTopPanelLayout
+import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory
 import kotlin.math.max
 
 object NonIslandHelper {
-    private const val BLUR_TINT_ALPHA = 0.8f
-
     @JvmStatic
     fun foldersBar(): Boolean = InuConfig.NON_ISLAND_FOLDERS_BAR.value
 
@@ -73,8 +66,7 @@ object NonIslandHelper {
         enabled: Boolean = headers(),
     ): Boolean {
         if (!enabled) return false
-        val blur = glass.frostedFactory.create(header, ClassicHeaderBlurColors)
-        val background = ClassicHeaderBackground(resourcesProvider, list != null, blur)
+        val background = ClassicHeaderBackground(glass.frostedFactory, header, resourcesProvider, list != null)
         header.background = background
         when (list) {
             is RecyclerView -> list.addOnScrollListener(object : RecyclerView.OnScrollListener() {
@@ -93,25 +85,12 @@ object NonIslandHelper {
         return true
     }
 
-    private object ClassicHeaderBlurColors : BlurredBackgroundColorProvider {
-        override fun getShadowColor(): Int = 0
-        override fun getBackgroundColor(): Int = 0
-        override fun getStrokeColorTop(): Int = 0
-        override fun getStrokeColorBottom(): Int = 0
-    }
-
     private class ClassicHeaderBackground(
-        private val resourcesProvider: Theme.ResourcesProvider?,
+        factory: BlurredBackgroundDrawableViewFactory,
+        header: View,
+        resourcesProvider: Theme.ResourcesProvider?,
         private val adaptive: Boolean,
-        private val blur: BlurredBackgroundDrawable,
-    ) : Drawable(), Drawable.Callback {
-        init {
-            blur.callback = this
-        }
-
-        private val isBlurred
-            get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && GlassEngine.getCurrentGlassSettings().isBlurEnabled
-
+    ) : ClassicBarDrawable(factory, header, resourcesProvider) {
         private var onTop = adaptive
         private var onTopFactor = if (adaptive) 1f else 0f
         private var animator: ValueAnimator? = null
@@ -134,31 +113,11 @@ object NonIslandHelper {
             }
         }
 
-        private val paint = Paint()
-
-        override fun draw(canvas: Canvas) {
-            val color = ColorUtils.blendARGB(
-                Theme.getColor(Theme.key_actionBarDefault, resourcesProvider),
-                Theme.getColor(Theme.key_windowBackgroundGray, resourcesProvider),
-                factor,
-            )
-            if (isBlurred) {
-                blur.bounds = bounds
-                blur.draw(canvas)
-                paint.color = Theme.multAlpha(color, BLUR_TINT_ALPHA)
-            } else {
-                paint.color = color
-            }
-            canvas.drawRect(bounds, paint)
-        }
-
-        override fun invalidateDrawable(who: Drawable) = invalidateSelf()
-        override fun scheduleDrawable(who: Drawable, what: Runnable, `when`: Long) = scheduleSelf(what, `when`)
-        override fun unscheduleDrawable(who: Drawable, what: Runnable) = unscheduleSelf(what)
-
-        override fun setAlpha(alpha: Int) {}
-        override fun setColorFilter(colorFilter: ColorFilter?) {}
-        override fun getOpacity(): Int = if (isBlurred) PixelFormat.TRANSLUCENT else PixelFormat.OPAQUE
+        override fun getColor(): Int = ColorUtils.blendARGB(
+            Theme.getColor(Theme.key_actionBarDefault, resourcesProvider),
+            Theme.getColor(Theme.key_windowBackgroundGray, resourcesProvider),
+            factor,
+        )
     }
 
     private class ClassicHeaderShadow(
@@ -302,11 +261,11 @@ object NonIslandHelper {
     }
 
     @JvmStatic
-    fun applyFilterTabBar(tabsView: FilterTabsView, contentView: SizeNotifierFrameLayout, resourcesProvider: Theme.ResourcesProvider?) {
+    fun applyFilterTabBar(tabsView: FilterTabsView, factory: BlurredBackgroundDrawableViewFactory, resourcesProvider: Theme.ResourcesProvider?) {
         if (!foldersBar()) return
         tabsView.setBlurredBackground(null)
-        tabsView.background = null
-        tabsView.inu_blurHelper = BlurBehindHelper(tabsView, contentView, Theme.key_windowBackgroundWhite, drawBottomDivider = true, resourcesProvider = resourcesProvider)
+        tabsView.inu_classicBackground = ClassicBarDrawable(factory, tabsView, resourcesProvider, drawBottomDivider = true)
+            .apply { externalBlur = true }
         tabsView.setPadding(0, 0, 0, 0)
         val lp = tabsView.layoutParams as? FrameLayout.LayoutParams ?: return
         lp.height = dp(FOLDERS_BAR_HEIGHT_DP.toFloat())
@@ -317,20 +276,61 @@ object NonIslandHelper {
     @JvmStatic
     fun moveFilterTabBarToBottom(tabsView: FilterTabsView, aboveMaterialTabs: Boolean) {
         (tabsView.layoutParams as FrameLayout.LayoutParams).gravity = Gravity.BOTTOM
-        val blurHelper = tabsView.inu_blurHelper ?: return
-        blurHelper.drawBottomDivider = false
-        blurHelper.drawTopDivider = true
-        if (aboveMaterialTabs) blurHelper.colorKey = Theme.key_glass_targetMainTabs
+        val background = tabsView.inu_classicBackground ?: return
+        background.externalBlur = false
+        background.drawBottomDivider = false
+        background.drawTopDivider = true
+        if (aboveMaterialTabs) background.colorKey = Theme.key_glass_targetMainTabs
         tabsView.inu_indicatorAtTop = true
         val rad = AndroidUtilities.dpf2(3f)
         (tabsView.selectorDrawable as GradientDrawable).cornerRadii = floatArrayOf(0f, 0f, 0f, 0f, rad, rad, rad, rad)
     }
 
+    // the header and the bars under it get one blur and their tints in one canvas. separate blurs (own drawables, or
+    // even the same source drawn once per bar with its own clip) come out slightly different and the seams shimmer
     @JvmStatic
-    fun applyGlobalSearchBar(field: FragmentSearchField, contentView: SizeNotifierFrameLayout, resourcesProvider: Theme.ResourcesProvider?) {
+    fun drawTopBarsBlur(canvas: Canvas, source: GlassSource?, headerTop: Int, width: Int, searchField: FragmentSearchField?, filterTabs: FilterTabsView?, topPanel: DialogsActivityTopPanelLayout?) {
+        if (source == null) return
+        fun hasExternalBlur(view: View, background: ClassicBarDrawable?) = view.isVisible && background != null && background.externalBlur && background.isBlurred
+        val segments = listOfNotNull(
+            searchField?.takeIf { hasExternalBlur(it, it.inu_classicBackground) }?.let { BlurSegment(it.inu_classicBackground, it.y, it.y + it.height, it.alpha) },
+            filterTabs?.takeIf { hasExternalBlur(it, it.inu_classicBackground) }?.let { BlurSegment(it.inu_classicBackground, it.y, it.y + it.height, it.alpha) },
+            topPanel?.takeIf { hasExternalBlur(it, it.inu_classicBackground) }?.let { BlurSegment(it.inu_classicBackground, it.y, it.y + it.getAnimatedHeightWithPadding(0f), it.alpha * it.metadata.totalVisibility) },
+        ).filter { it.bottom > it.top && it.alpha > 0f }.sortedBy { it.top }.toMutableList()
+        val first = segments.firstOrNull() ?: return
+        if (headerTop < first.top) segments.add(0, BlurSegment(first.background, headerTop.toFloat(), first.top, 1f))
+        val right = width.toFloat()
+        if (segments.all { it.alpha >= 1f } && segments.zipWithNext().all { (a, b) -> b.top <= a.bottom }) {
+            val top = segments.first().top
+            val bottom = segments.maxOf { it.bottom }
+            val count = canvas.save()
+            canvas.clipRect(0f, top, right, bottom)
+            source.draw(canvas, 0f, top, right, bottom)
+            canvas.restoreToCount(count)
+            var tinted = top
+            for (segment in segments) {
+                if (segment.bottom <= tinted) continue
+                segment.background.drawTint(canvas, 0f, maxOf(segment.top, tinted), right, segment.bottom, 255)
+                tinted = segment.bottom
+            }
+            return
+        }
+        for (segment in segments) {
+            val count = if (segment.alpha < 1f) canvas.saveLayerAlpha(0f, segment.top, right, segment.bottom, (segment.alpha * 255).toInt()) else canvas.save()
+            canvas.clipRect(0f, segment.top, right, segment.bottom)
+            source.draw(canvas, 0f, segment.top, right, segment.bottom)
+            segment.background.drawTint(canvas, 0f, segment.top, right, segment.bottom, 255)
+            canvas.restoreToCount(count)
+        }
+    }
+
+    private class BlurSegment(val background: ClassicBarDrawable, val top: Float, val bottom: Float, val alpha: Float)
+
+    @JvmStatic
+    fun applyGlobalSearchBar(field: FragmentSearchField, factory: BlurredBackgroundDrawableViewFactory, resourcesProvider: Theme.ResourcesProvider?) {
         if (!globalSearch()) return
         field.setupBlurredBackground(null)
-        field.inu_blurHelper = BlurBehindHelper(field, contentView, Theme.key_windowBackgroundWhite, resourcesProvider = resourcesProvider)
+        field.inu_classicBackground = ClassicBarDrawable(factory, field, resourcesProvider).apply { externalBlur = true }
         val lp = field.layoutParams as? FrameLayout.LayoutParams
         if (lp != null) {
             lp.leftMargin = 0
@@ -359,11 +359,10 @@ object NonIslandHelper {
     }
 
     @JvmStatic
-    fun applyGlobalSearchTabs(layout: SearchTabsAndFiltersLayout, contentView: SizeNotifierFrameLayout, resourcesProvider: Theme.ResourcesProvider?) {
+    fun applyGlobalSearchTabs(layout: SearchTabsAndFiltersLayout, factory: BlurredBackgroundDrawableViewFactory, resourcesProvider: Theme.ResourcesProvider?) {
         if (!globalSearch()) return
         layout.setBlurredBackground(null)
-        layout.background = null
-        layout.inu_blurHelper = BlurBehindHelper(layout, contentView, Theme.key_windowBackgroundWhite, drawBottomDivider = true, resourcesProvider = resourcesProvider)
+        layout.inu_classicBackground = ClassicBarDrawable(factory, layout, resourcesProvider, drawBottomDivider = true)
         layout.setPadding(0, 0, 0, 0)
         layout.translationY = -dp(FOLDERS_BAR_OVERLAP_DP.toFloat()).toFloat()
         val lp = layout.layoutParams as? FrameLayout.LayoutParams ?: return

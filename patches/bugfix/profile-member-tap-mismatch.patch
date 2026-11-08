@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaL
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
-@@ -10861,6 +10861,15 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -10868,6 +10868,15 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
  
          public ChatUsersAdapter(Context context) {
              mContext = context;

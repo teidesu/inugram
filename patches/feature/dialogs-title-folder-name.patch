@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -1570,6 +1570,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -1577,6 +1577,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                                      viewPages[1] = tempPage;
                                      filterTabsView.selectTabWithId(viewPages[0].selectedType, 1.0f);
                                      updateCounters(false);
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
                                      viewPages[0].dialogsAdapter.resume();
                                      viewPages[1].dialogsAdapter.pause();
                                  }
-@@ -3512,7 +3513,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -3519,7 +3520,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                  ssb.setSpan(new ImageSpan(logoDrawable), 0, ssb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                  actionBar.setTitle(ssb, statusDrawable);
                  } else {
@@ -29,7 +29,7 @@ index 0000000..0000000 100644
                  }
                  updateStatus(UserConfig.getInstance(currentAccount).getCurrentUser(), false);
              }
-@@ -3654,6 +3655,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -3661,6 +3662,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                          viewPages[1].setVisibility(View.GONE);
                          showScrollbars(true);
                          updateCounters(false);
@@ -37,7 +37,7 @@ index 0000000..0000000 100644
                          filterTabsView.stopAnimatingIndicator();
                          checkListLoad(viewPages[0]);
                          viewPages[0].dialogsAdapter.resume();
-@@ -6862,6 +6864,30 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -6870,6 +6872,30 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          }
      }
  
@@ -68,7 +68,7 @@ index 0000000..0000000 100644
      public void inu_setActiveFilter(int filterIndex) {
          if (filterTabsView == null || viewPages == null) return;
          if (filterIndex < 0 || filterIndex >= getMessagesController().getDialogFilters().size()) return;
-@@ -6898,6 +6924,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -6906,6 +6932,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          }
  
          viewPages[a].dialogsAdapter.setDialogsType(viewPages[a].dialogsType);
@@ -78,7 +78,7 @@ index 0000000..0000000 100644
          viewPages[a].layoutManager.scrollToPositionWithOffset(viewPages[a].dialogsType == DIALOGS_TYPE_DEFAULT && hasHiddenArchive() && viewPages[a].archivePullViewState == ARCHIVE_ITEM_STATE_HIDDEN ? 1 : 0, (int) scrollYOffset);
          checkListLoad(viewPages[a]);
      }
-@@ -7033,6 +7062,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -7041,6 +7070,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              }
          }
          updateCounters(false);

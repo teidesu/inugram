@@ -24,7 +24,7 @@ index 0000000..0000000 100644
      private final BoolAnimator animatorSearchVisible = new BoolAnimator(ANIMATOR_ID_SEARCH_VISIBLE,
              this, CubicBezierInterpolator.EASE_OUT_QUINT, 350);
      private final BoolAnimator animatorDoneButtonVisible = new BoolAnimator(ANIMATOR_ID_DONE_BUTTON_VISIBLE,
-@@ -1146,7 +1149,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -1153,7 +1156,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      blurredView.draw(canvas);
                  }
              }
@@ -33,7 +33,7 @@ index 0000000..0000000 100644
                  AndroidUtilities.drawNavigationBarProtection(canvas, this, getThemedColor(Theme.key_windowBackgroundWhite), navigationBarHeight);
              }
              wasDrawn = true;
-@@ -3186,6 +3189,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -3193,6 +3196,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          selectedDialogs.clear();
  
          maximumVelocity = ViewConfiguration.get(context).getScaledMaximumFlingVelocity();
@@ -41,7 +41,7 @@ index 0000000..0000000 100644
  
          AndroidUtilities.runOnUIThread(() -> Theme.createChatResources(context, false));
  
-@@ -4546,6 +4550,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -4553,6 +4557,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                          }
                      }
                      checkListLoad(viewPage);
@@ -51,7 +51,7 @@ index 0000000..0000000 100644
                      invalidateScrollY = true;
                      if (fragmentView != null) {
                          fragmentView.invalidate();
-@@ -4570,6 +4577,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -4577,6 +4584,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                                  if (changed && scrollUpdated && (goingDown || scrollingManually) && DialogsFabHelper.hideOnScroll() && !disableActionBarScrolling) {
                                      hideFloatingButton(goingDown);
                                  }
@@ -61,7 +61,7 @@ index 0000000..0000000 100644
                                  prevPosition = firstVisiblePosition;
                                  prevTop = firstViewTop;
                                  scrollUpdated = true;
-@@ -5199,10 +5209,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -5207,10 +5217,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              if (inu_filterTabsAtBottom) {
                  NonIslandHelper.moveFilterTabBarToBottom(filterTabsView, inu_aboveMaterialTabs);
              }
@@ -70,11 +70,11 @@ index 0000000..0000000 100644
                  inu_filterTabsBottomFill = new View(context);
                  inu_filterTabsBottomFill.setClickable(true);
 -                inu_filterTabsBottomFill.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundWhite));
-+                inu_filterTabsBottomFill.setBackgroundColor(getThemedColor(filterTabsView.inu_blurHelper.getColorKey()));
++                inu_filterTabsBottomFill.setBackgroundColor(getThemedColor(filterTabsView.inu_classicBackground.getColorKey()));
                  inu_filterTabsBottomFill.setVisibility(View.GONE);
                  contentView.addView(inu_filterTabsBottomFill, contentView.indexOfChild(chatInputViewsContainer != null ? chatInputViewsContainer.getFadeView() : filterTabsView), LayoutHelper.createFrameMatchParent());
              }
-@@ -6919,6 +6929,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -6927,6 +6937,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
      }
  
      public void switchToCurrentSelectedMode(boolean animated) {
@@ -82,7 +82,7 @@ index 0000000..0000000 100644
          for (int a = 0; a < viewPages.length; a++) {
              viewPages[a].listView.stopScroll();
          }
-@@ -9039,7 +9050,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9047,7 +9058,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
      }
  
      private void updateFloatingButtonOffset() {
@@ -92,7 +92,7 @@ index 0000000..0000000 100644
          final float baseTranslationY = top
              - floatingButtonPanOffset;
  
-@@ -13851,7 +13863,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13859,7 +13871,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
  
      private float inu_getBottomFilterTabsOffset() {
          if (commentView == null) {
@@ -102,7 +102,7 @@ index 0000000..0000000 100644
          }
          final float aboveInput = windowInsetsStateHolder.getAnimatedMaxBottomInset() + chatInputViewsContainer.getInputBubbleHeight() + (NonIslandHelper.chatElements() ? 0 : dp(9 + 4));
          return lerp((float) navigationBarHeight, aboveInput, animatorForwardButtonVisible.getFloatValue());
-@@ -13871,6 +13884,14 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13879,6 +13892,14 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          return (int) lerp(inputPadding, inu_getBottomFilterTabsOffset(), getFilterTabsVisibilityFactor(false)) + inu_getBottomFilterTabsHeight();
      }
  
@@ -117,7 +117,7 @@ index 0000000..0000000 100644
      public float inu_getClassicBottomFilterTabsVisibility() {
          return inu_filterTabsAtBottom && NonIslandHelper.foldersBar() ? getFilterTabsVisibilityFactor(true) : 0f;
      }
-@@ -13887,7 +13908,16 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13895,7 +13916,16 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
  
      @Override
      public void onFactorChanged(int id, float factor, float fraction, FactorAnimator callee) {
@@ -135,7 +135,7 @@ index 0000000..0000000 100644
              checkUi_menuItems();
              checkUi_searchFieldVisibility();
              checkUi_topPanelVisible();
-@@ -14081,6 +14111,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -14089,6 +14119,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
      }
  
      private void checkUi_mainTabsVisible() {
@@ -145,7 +145,7 @@ index 0000000..0000000 100644
          final boolean mainTabsVisible = !searching && (blurredView == null || blurredView.getBackground() == null || blurredView.getAlpha() < 0.01f || blurredView.getVisibility() == View.GONE);
          if (mainTabsActivityController != null) {
              mainTabsActivityController.setTabsVisible(mainTabsVisible);
-@@ -14246,7 +14279,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -14254,7 +14287,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
  
              boolean hasBottomBlur = false;
              if (hasMainTabs) {
@@ -154,12 +154,12 @@ index 0000000..0000000 100644
                  iBlur3PositionMainTabs.inset(0, LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0 : -dp(48));
  
                  hasBottomBlur = true;
-@@ -14625,7 +14658,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -14633,7 +14666,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      }
  
                      if (inu_filterTabsBottomFill != null) {
 -                        inu_filterTabsBottomFill.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundWhite));
-+                        inu_filterTabsBottomFill.setBackgroundColor(getThemedColor(filterTabsView.inu_blurHelper.getColorKey()));
++                        inu_filterTabsBottomFill.setBackgroundColor(getThemedColor(filterTabsView.inu_classicBackground.getColorKey()));
                      }
  
                      if (filterTabsView != null) {

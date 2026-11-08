@@ -161,7 +161,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaL
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
-@@ -12908,7 +12908,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -12915,7 +12915,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
              });
              o.add(R.drawable.msg_delete, getString(R.string.DeleteAll), false, true, () -> {
                  TLRPC.User currentUser = profileActivity.getUserConfig().getCurrentUser();
@@ -170,7 +170,7 @@ index 0000000..0000000 100644
                      profileActivity.finishFragment();
                      if (profileActivity instanceof NotificationCenter.NotificationCenterDelegate) {
                          profileActivity.getNotificationCenter().removeObserver((NotificationCenter.NotificationCenterDelegate) profileActivity, NotificationCenter.closeChats);
-@@ -12916,7 +12916,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -12923,7 +12923,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
                      profileActivity.getNotificationCenter().postNotificationName(NotificationCenter.closeChats);
                      profileActivity.getNotificationCenter().postNotificationName(NotificationCenter.needDeleteDialog, dialog_id, currentUser, null, param);
                      profileActivity.getMessagesController().setSavedViewAs(false);
@@ -201,7 +201,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -9424,7 +9424,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9432,7 +9432,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                  }
              }
  
@@ -210,7 +210,7 @@ index 0000000..0000000 100644
                      if (selectedDialogs.isEmpty()) {
                          return;
                      }
-@@ -9448,7 +9448,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9456,7 +9456,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                          }, null);
                      }
                      hideActionMode(action == clear);
@@ -219,7 +219,7 @@ index 0000000..0000000 100644
              return;
          } else if (action == block && alert) {
              TLRPC.User user;
-@@ -9458,7 +9458,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9466,7 +9466,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              } else {
                  user = null;
              }
@@ -228,7 +228,7 @@ index 0000000..0000000 100644
                  for (int a = 0, N = selectedDialogs.size(); a < N; a++) {
                      long did = selectedDialogs.get(a);
                      if (report) {
-@@ -9471,7 +9471,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9479,7 +9479,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      getMessagesController().blockPeer(did);
                  }
                  hideActionMode(false);
@@ -237,7 +237,7 @@ index 0000000..0000000 100644
              return;
          }
          int minPinnedNum = Integer.MAX_VALUE;
-@@ -9555,7 +9555,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9563,7 +9563,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                          builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
                          showDialog(builder.create());
                      } else {
@@ -246,7 +246,7 @@ index 0000000..0000000 100644
                              hideActionMode(false);
                              if (action == clear && ChatObject.isChannel(chat) && (!chat.megagroup || ChatObject.isPublic(chat))) {
                                  getMessagesController().deleteDialog(selectedDialog, 2, param);
-@@ -9603,7 +9603,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9611,7 +9611,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                                      }
                                  }
                              }

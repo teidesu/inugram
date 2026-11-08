@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -3158,6 +3158,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -3165,6 +3165,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
  
      @Override
      public void setTitleOverlayText(String title, int titleId, Runnable action) {
@@ -21,7 +21,7 @@ index 0000000..0000000 100644
          super.setTitleOverlayText(title, titleId, action);
          if (actionBar != null && selectAnimatedEmojiDialog != null && selectAnimatedEmojiDialog.getContentView() instanceof SelectAnimatedEmojiDialog) {
              SimpleTextView textView = actionBar.getTitleTextView();
-@@ -5577,6 +5580,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -5585,6 +5588,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                  updateFilterTabs(false, true);
                  checkUi_searchFieldHint();
                  updateDialogsHint();
