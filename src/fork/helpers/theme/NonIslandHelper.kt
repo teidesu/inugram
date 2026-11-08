@@ -8,6 +8,7 @@ import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -33,11 +34,17 @@ import org.telegram.ui.Components.MentionsContainerView
 import org.telegram.ui.Components.RecyclerListView
 import org.telegram.ui.Components.SectionsScrollView
 import org.telegram.ui.Components.SizeNotifierFrameLayout
+import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable
+import org.telegram.ui.Components.blur3.drawable.color.BlurredBackgroundColorProvider
 import org.telegram.ui.DialogsActivity
 import org.telegram.ui.SearchTabsAndFiltersLayout
+import org.telegram.utils.glass.BaseFragmentSimpleGlass
+import org.telegram.utils.glass.GlassEngine
 import kotlin.math.max
 
 object NonIslandHelper {
+    private const val BLUR_TINT_ALPHA = 0.8f
+
     @JvmStatic
     fun foldersBar(): Boolean = InuConfig.NON_ISLAND_FOLDERS_BAR.value
 
@@ -58,9 +65,16 @@ object NonIslandHelper {
 
     @JvmStatic
     @JvmOverloads
-    fun applyClassicHeaderBackground(header: View, list: View?, resourcesProvider: Theme.ResourcesProvider?, enabled: Boolean = headers()): Boolean {
+    fun applyClassicHeaderBackground(
+        header: View,
+        list: View?,
+        resourcesProvider: Theme.ResourcesProvider?,
+        glass: BaseFragmentSimpleGlass,
+        enabled: Boolean = headers(),
+    ): Boolean {
         if (!enabled) return false
-        val background = ClassicHeaderBackground(resourcesProvider, list != null)
+        val blur = glass.frostedFactory.create(header, ClassicHeaderBlurColors)
+        val background = ClassicHeaderBackground(resourcesProvider, list != null, blur)
         header.background = background
         when (list) {
             is RecyclerView -> list.addOnScrollListener(object : RecyclerView.OnScrollListener() {
@@ -79,10 +93,25 @@ object NonIslandHelper {
         return true
     }
 
+    private object ClassicHeaderBlurColors : BlurredBackgroundColorProvider {
+        override fun getShadowColor(): Int = 0
+        override fun getBackgroundColor(): Int = 0
+        override fun getStrokeColorTop(): Int = 0
+        override fun getStrokeColorBottom(): Int = 0
+    }
+
     private class ClassicHeaderBackground(
         private val resourcesProvider: Theme.ResourcesProvider?,
         private val adaptive: Boolean,
-    ) : Drawable() {
+        private val blur: BlurredBackgroundDrawable,
+    ) : Drawable(), Drawable.Callback {
+        init {
+            blur.callback = this
+        }
+
+        private val isBlurred
+            get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && GlassEngine.getCurrentGlassSettings().isBlurEnabled
+
         private var onTop = adaptive
         private var onTopFactor = if (adaptive) 1f else 0f
         private var animator: ValueAnimator? = null
@@ -108,17 +137,28 @@ object NonIslandHelper {
         private val paint = Paint()
 
         override fun draw(canvas: Canvas) {
-            paint.color = ColorUtils.blendARGB(
+            val color = ColorUtils.blendARGB(
                 Theme.getColor(Theme.key_actionBarDefault, resourcesProvider),
                 Theme.getColor(Theme.key_windowBackgroundGray, resourcesProvider),
                 factor,
             )
+            if (isBlurred) {
+                blur.bounds = bounds
+                blur.draw(canvas)
+                paint.color = Theme.multAlpha(color, BLUR_TINT_ALPHA)
+            } else {
+                paint.color = color
+            }
             canvas.drawRect(bounds, paint)
         }
 
+        override fun invalidateDrawable(who: Drawable) = invalidateSelf()
+        override fun scheduleDrawable(who: Drawable, what: Runnable, `when`: Long) = scheduleSelf(what, `when`)
+        override fun unscheduleDrawable(who: Drawable, what: Runnable) = unscheduleSelf(what)
+
         override fun setAlpha(alpha: Int) {}
         override fun setColorFilter(colorFilter: ColorFilter?) {}
-        override fun getOpacity(): Int = PixelFormat.OPAQUE
+        override fun getOpacity(): Int = if (isBlurred) PixelFormat.TRANSLUCENT else PixelFormat.OPAQUE
     }
 
     private class ClassicHeaderShadow(

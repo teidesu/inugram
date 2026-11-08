@@ -209,7 +209,7 @@ index 0000000..0000000 100644
              }
  
 -            if (useFadeDrawableForActionBar() && header != null) {
-+            if (useFadeDrawableForActionBar() && header != null && !desu.inugram.helpers.theme.NonIslandHelper.applyClassicHeaderBackground(header, listViewForSimpleGlass, resourceProvider)) {
++            if (useFadeDrawableForActionBar() && header != null && !desu.inugram.helpers.theme.NonIslandHelper.applyClassicHeaderBackground(header, listViewForSimpleGlass, resourceProvider, simpleGlass)) {
                  header.setBackground(simpleGlass.createActionBarFadeDrawable(header));
              }
              BaseFragmentSimpleGlass.setListViewParams(listViewForSimpleGlass, mSystemInsets.top, mSystemInsets.bottom, ActionBar.getCurrentActionBarHeight(), 0);
@@ -3468,13 +3468,13 @@ index 0000000..0000000 100644
          });
          sharedMediaLayout.addPagesOverlay(headerFadeView, 0);
 -        headerFadeView.setBackground(glass.createActionBarFadeDrawable(headerFadeView));
-+        if (!desu.inugram.helpers.theme.NonIslandHelper.applyClassicHeaderBackground(headerFadeView, null, resourcesProvider, desu.inugram.helpers.theme.NonIslandHelper.profileHeaders())) {
++        if (!desu.inugram.helpers.theme.NonIslandHelper.applyClassicHeaderBackground(headerFadeView, null, resourcesProvider, glass, desu.inugram.helpers.theme.NonIslandHelper.profileHeaders())) {
 +            headerFadeView.setBackground(glass.createActionBarFadeDrawable(headerFadeView));
 +        }
          // the progressive blur of the simple screens over the rows, under the name and the buttons
          headerBlurView = new View(getContext());
 -        headerBlurView.setBackground(glass.createActionBarFadeDrawable(headerBlurView));
-+        if (!desu.inugram.helpers.theme.NonIslandHelper.applyClassicHeaderBackground(headerBlurView, null, resourcesProvider, desu.inugram.helpers.theme.NonIslandHelper.profileHeaders())) {
++        if (!desu.inugram.helpers.theme.NonIslandHelper.applyClassicHeaderBackground(headerBlurView, null, resourcesProvider, glass, desu.inugram.helpers.theme.NonIslandHelper.profileHeaders())) {
 +            headerBlurView.setBackground(glass.createActionBarFadeDrawable(headerBlurView));
 +        }
          contentView.addView(headerBlurView, contentView.indexOfChild(avatarContainer2), LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 0, Gravity.TOP));
@@ -3627,7 +3627,7 @@ index 0000000..0000000 100644
  
          actionBarFadeView = new View(context);
 -        actionBarFadeView.setBackground(getBaseSimpleGlass().createActionBarFadeDrawable(actionBarFadeView));
-+        if (!desu.inugram.helpers.theme.NonIslandHelper.applyClassicHeaderBackground(actionBarFadeView, null, resourceProvider)) {
++        if (!desu.inugram.helpers.theme.NonIslandHelper.applyClassicHeaderBackground(actionBarFadeView, null, resourceProvider, getBaseSimpleGlass())) {
 +            actionBarFadeView.setBackground(getBaseSimpleGlass().createActionBarFadeDrawable(actionBarFadeView));
 +        }
          contentView.addView(actionBarFadeView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 0, Gravity.TOP));
