@@ -22,10 +22,10 @@ Subject: non-island ui in various parts of the app
  .../ui/Components/FragmentContextView.java    |  11 +-
  .../FragmentContextViewWavesDrawable.java     |  29 ++-
  .../ui/Components/FragmentSearchField.java    |  13 +-
- .../telegram/ui/Components/MediaActivity.java |  10 +-
+ .../telegram/ui/Components/MediaActivity.java |  21 ++-
  .../ui/Components/MentionsContainerView.java  |  19 +-
  .../ui/Components/RecyclerListView.java       |  11 ++
- .../Components/ScrollSlidingTextTabStrip.java | 117 +++++++++++-
+ .../Components/ScrollSlidingTextTabStrip.java | 118 +++++++++++-
  .../ui/Components/SearchTagsList.java         |   3 +
  .../ui/Components/SharedMediaLayout.java      |  97 ++++++++--
  .../ui/Components/TopicsSidePanel.java        |   7 +-
@@ -50,7 +50,7 @@ Subject: non-island ui in various parts of the app
  .../bots/ChatAttachAlertBotWebViewLayout.java |   5 +-
  .../java/org/telegram/ui/iv/RichEditor.java   |   4 +-
  .../utils/glass/BaseFragmentSimpleGlass.java  |   6 +-
- 46 files changed, 938 insertions(+), 319 deletions(-)
+ 46 files changed, 946 insertions(+), 323 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -1796,30 +1796,75 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/MediaActivit
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/MediaActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/MediaActivity.java
-@@ -214,7 +214,11 @@ public class MediaActivity extends BaseFragment implements SharedMediaLayout.Sha
+@@ -199,7 +199,7 @@ public class MediaActivity extends BaseFragment implements SharedMediaLayout.Sha
+             initialTab = SharedMediaLayout.TAB_SAVED_DIALOGS;
+         }
+         final BaseFragmentSimpleGlass glass = getBaseSimpleGlass();
+-        sharedMediaLayout = createSharedMediaLayout(context, glass.factory);
++        sharedMediaLayout = createSharedMediaLayout(context, glass.factory, glass.frostedFactory);
+         sharedMediaLayout.setOnTopPanelShiftChanged(this::applyInsets);
+         sharedMediaLayout.scrollSlidingTextTabStrip.setOpen(true);
+         sharedMediaLayout.setPinnedToTop(true);
+@@ -214,13 +214,19 @@ public class MediaActivity extends BaseFragment implements SharedMediaLayout.Sha
  
          listTopOverlay = new View(context);
          sharedMediaLayout.addPagesOverlay(listTopOverlay, 0);
 -        listTopOverlay.setBackground(glass.createActionBarFadeDrawable(listTopOverlay));
-+        if (desu.inugram.helpers.theme.NonIslandHelper.sharedMediaTabs()) {
-+            org.telegram.ui.ActionBar.ThemeBind.backgroundColor(listTopOverlay, Theme.key_windowBackgroundWhite, getResourceProvider());
-+        } else {
++        if (!desu.inugram.helpers.theme.NonIslandHelper.applyClassicHeaderBackground(listTopOverlay, null, getResourceProvider(), glass, desu.inugram.helpers.theme.NonIslandHelper.profileHeaders())) {
 +            listTopOverlay.setBackground(glass.createActionBarFadeDrawable(listTopOverlay));
 +        }
  
          navigationBarFadeView = new View(context);
          navigationBarFadeView.setBackground(glass.createNavigationBarFadeDrawable(navigationBarFadeView));
-@@ -428,7 +432,9 @@ public class MediaActivity extends BaseFragment implements SharedMediaLayout.Sha
+         frameLayout.addView(navigationBarFadeView, storiesTabsView != null ? frameLayout.indexOfChild(storiesTabsView) : frameLayout.getChildCount(), LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 0, Gravity.BOTTOM));
+ 
+         glass.setViews(frameLayout, simpleActionBar, getResourceProvider());
++        if (desu.inugram.helpers.theme.NonIslandHelper.profileHeaders()) {
++            simpleActionBar.inu_setClassic(true);
++            simpleActionBar.setExtraHeight(0);
++        }
+         glass.setCapture((canvas, position) -> sharedMediaLayout.capturePages(canvas, position, frameLayout));
+         sharedMediaLayout.setPagesGlassEngine(glassEngine);
+         simpleActionBar.setBackground(null);
+@@ -420,15 +426,18 @@ public class MediaActivity extends BaseFragment implements SharedMediaLayout.Sha
+         }
+         // the tabs pill right under the glass header, the same overscan as the lists of other simple screens
+         final int bottomTabsHeight = storiesTabsView != null ? dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS) : 0;
++        final int inu_headerHeight = mSystemInsets.top + ActionBar.getCurrentActionBarHeight();
+         sharedMediaLayout.setPagesInsets(
+-            SharedMediaLayout.getPagesTabsTop(mSystemInsets.top + ActionBar.getCurrentActionBarHeight()),
++            desu.inugram.helpers.theme.NonIslandHelper.profileHeaders() ? inu_headerHeight : SharedMediaLayout.getPagesTabsTop(inu_headerHeight),
+             BaseFragmentSimpleGlass.getOverscan(mSystemInsets.top),
+             BaseFragmentSimpleGlass.getOverscan(mSystemInsets.bottom + bottomTabsHeight),
+             mSystemInsets.bottom + bottomTabsHeight
          );
          if (listTopOverlay != null) {
              // the tabs and the player above them are on the blur
 -            final int height = mSystemInsets.top + ActionBar.getCurrentActionBarHeight() + dp(44) + sharedMediaLayout.getTopPanelShift();
-+            final int height = desu.inugram.helpers.theme.NonIslandHelper.sharedMediaTabs()
-+                ? SharedMediaLayout.getPagesTabsTop(mSystemInsets.top + ActionBar.getCurrentActionBarHeight()) + dp(44) + sharedMediaLayout.getTopPanelShift()
++            final int height = desu.inugram.helpers.theme.NonIslandHelper.profileHeaders()
++                ? inu_headerHeight
 +                : mSystemInsets.top + ActionBar.getCurrentActionBarHeight() + dp(44) + sharedMediaLayout.getTopPanelShift();
              if (listTopOverlay.getLayoutParams().height != height) {
                  listTopOverlay.getLayoutParams().height = height;
                  listTopOverlay.requestLayout();
+@@ -495,7 +504,7 @@ public class MediaActivity extends BaseFragment implements SharedMediaLayout.Sha
+         }
+     }
+ 
+-    private SharedMediaLayout createSharedMediaLayout(Context context, @Nullable BlurredBackgroundDrawableViewFactory glassFactory) {
++    private SharedMediaLayout createSharedMediaLayout(Context context, @Nullable BlurredBackgroundDrawableViewFactory glassFactory, BlurredBackgroundDrawableViewFactory inu_frostedFactory) {
+         return new SharedMediaLayout(context, dialogId, sharedMediaPreloader, 0, null, currentChatInfo, currentUserInfo, initialTab, 0, this, new SharedMediaLayout.Delegate() {
+             @Override
+             public void scrollToSharedMedia() {
+@@ -532,7 +541,7 @@ public class MediaActivity extends BaseFragment implements SharedMediaLayout.Sha
+                 updateMediaCount();
+             }
+ 
+-        }, SharedMediaLayout.VIEW_TYPE_MEDIA_ACTIVITY, getResourceProvider(), glassFactory) {
++        }, SharedMediaLayout.VIEW_TYPE_MEDIA_ACTIVITY, getResourceProvider(), glassFactory, inu_frostedFactory) {
+             @Override
+             protected void onSelectedTabChanged() {
+                 super.onSelectedTabChanged();
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/MentionsContainerView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/MentionsContainerView.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/MentionsContainerView.java
@@ -1940,10 +1985,10 @@ index 0000000..0000000 100644
      }
  
 +    public boolean inu_nonIsland;
-+    public desu.inugram.ui.BlurBehindHelper inu_blurBehindHelper;
-+    public void inu_makeNonIsland(desu.inugram.ui.BlurBehindHelper blurBehindHelper) {
++    public desu.inugram.ui.ClassicBarDrawable inu_classicBackground;
++    public void inu_makeNonIsland(desu.inugram.ui.ClassicBarDrawable classicBackground) {
 +        inu_nonIsland = true;
-+        inu_blurBehindHelper = blurBehindHelper;
++        inu_classicBackground = classicBackground;
 +        setPadding(0, 0, 0, 0);
 +        setClipToPadding(false);
 +        tabsContainer.setPadding(0, 0, 0, 0);
@@ -2013,7 +2058,7 @@ index 0000000..0000000 100644
      }
  
      public int getCurrentTabId() {
-@@ -705,6 +739,20 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
+@@ -705,6 +739,21 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
  
      @Override
      protected void dispatchDraw(@NonNull Canvas canvas) {
@@ -2026,7 +2071,8 @@ index 0000000..0000000 100644
 +        if (inu_nonIsland) {
 +            canvas.save();
 +            canvas.translate(getScrollX(), 0);
-+            inu_blurBehindHelper.draw(canvas);
++            inu_classicBackground.setBounds(0, 0, getMeasuredWidth(), getMeasuredHeight());
++            inu_classicBackground.draw(canvas);
 +            canvas.restore();
 +            super.dispatchDraw(canvas);
 +            return;
@@ -2034,7 +2080,7 @@ index 0000000..0000000 100644
          canvas.save();
          if (backgroundDrawable != null) {
              if (rectT.set(1f) < 1) {
-@@ -723,6 +771,7 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
+@@ -723,6 +772,7 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
  
      private boolean isOpen = true;
      public void setOpen(boolean open) {
@@ -2042,7 +2088,7 @@ index 0000000..0000000 100644
          if (open == isOpen) return;
  
          isOpen = open;
-@@ -748,7 +797,7 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
+@@ -748,7 +798,7 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
              final boolean result = super.drawChild(canvas, child, drawingTime);
  
              final int height = getMeasuredHeight();
@@ -2051,7 +2097,7 @@ index 0000000..0000000 100644
              float r = l + indicatorWidth + indicatorWidthAnimationDx;
  
              final View current = tabsContainer.getChildAt(currentPosition);
-@@ -764,12 +813,34 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
+@@ -764,12 +814,34 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
  //                (int) r,
  //                height
  //            );
@@ -2086,7 +2132,7 @@ index 0000000..0000000 100644
              selectorDrawable.draw(canvas);
              selectorDrawable.setAlpha(wasAlpha);
  
-@@ -945,8 +1016,38 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
+@@ -945,8 +1017,38 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
          }
      }
  
@@ -2264,7 +2310,7 @@ index 0000000..0000000 100644
              };
              fragmentContextViewWrapper.addView(fragmentContextView);
 +            if (inu_flatTabBar()) {
-+                topPanelLayout.inu_classicBackground = new desu.inugram.ui.ClassicBarDrawable(inu_frostedFactory, topPanelLayout, resourcesProvider);
++                topPanelLayout.inu_classicBackground = new desu.inugram.ui.ClassicBarDrawable(this.inu_frostedFactory, topPanelLayout, resourcesProvider);
 +                topPanelLayout.setPadding(0, 0, 0, 0);
 +            }
              topPanelLayout.setCallFragmentContextView(fragmentContextView);
@@ -2281,9 +2327,9 @@ index 0000000..0000000 100644
              addView(scrollSlidingTextTabStrip, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, 50, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 6 - TABS_GLASS_INSET_DP, 0, 6 - TABS_GLASS_INSET_DP, 0));
 +            if (inu_flatTabBar()) {
 +                scrollSlidingTextTabStrip.setLayoutParams(LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 44, Gravity.LEFT | Gravity.TOP, 0, 0, 0, 0));
-+                scrollSlidingTextTabStrip.inu_makeNonIsland(desu.inugram.ui.BlurBehindHelper.create(scrollSlidingTextTabStrip, sizeNotifierFrameLayout, Theme.key_windowBackgroundWhite));
++                scrollSlidingTextTabStrip.inu_makeNonIsland(new desu.inugram.ui.ClassicBarDrawable(this.inu_frostedFactory, scrollSlidingTextTabStrip, resourcesProvider));
 +            } else if (inu_tabsPillMode()) {
-+                desu.inugram.ui.TabsPillDrawer.attach(scrollSlidingTextTabStrip, sizeNotifierFrameLayout);
++                desu.inugram.ui.TabsPillDrawer.attach(scrollSlidingTextTabStrip, this.inu_frostedFactory, resourcesProvider);
 +            }
              searchTagsList = new SearchTagsList(getContext(), profileActivity, profileActivity.getCurrentAccount(), includeSavedDialogs() ? 0 : dialog_id, resourcesProvider) {
                  @Override

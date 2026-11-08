@@ -3,6 +3,7 @@ package desu.inugram.ui
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.Rect
 import android.graphics.RectF
 import android.view.Gravity
 import org.telegram.messenger.AndroidUtilities.dp
@@ -12,15 +13,16 @@ import org.telegram.ui.Components.AnimatedFloat
 import org.telegram.ui.Components.CubicBezierInterpolator
 import org.telegram.ui.Components.LayoutHelper
 import org.telegram.ui.Components.ScrollSlidingTextTabStrip
-import org.telegram.ui.Components.SizeNotifierFrameLayout
+import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory
 
 class TabsPillDrawer(
     private val strip: ScrollSlidingTextTabStrip,
-    private val blurBehindHelper: BlurBehindHelper,
+    private val background: ClassicBarDrawable,
 ) {
     private var docked = false
     private val dockedT = AnimatedFloat(strip, 320L, CubicBezierInterpolator.EASE_OUT_QUINT)
     private val bgRect = RectF()
+    private val bgBounds = Rect()
     private val bgPath = Path()
     private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
@@ -67,7 +69,10 @@ class TabsPillDrawer(
         canvas.drawPath(bgPath, bgPaint)
         canvas.clipPath(bgPath)
         if (t > 0f) {
-            blurBehindHelper.draw(canvas, bgRect.bottom.toInt(), (0xFF * t).toInt())
+            bgRect.roundOut(bgBounds)
+            background.bounds = bgBounds
+            background.alpha = (0xFF * t).toInt()
+            background.draw(canvas)
         }
         canvas.translate(-strip.scrollX.toFloat(), 0f)
     }
@@ -76,13 +81,13 @@ class TabsPillDrawer(
         private const val MARGIN_DP = 12f
 
         @JvmStatic
-        fun attach(strip: ScrollSlidingTextTabStrip, contentView: SizeNotifierFrameLayout) {
+        fun attach(strip: ScrollSlidingTextTabStrip, factory: BlurredBackgroundDrawableViewFactory, resourcesProvider: Theme.ResourcesProvider?) {
             strip.layoutParams = LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 50, Gravity.LEFT or Gravity.TOP)
             strip.setPadding(0, dp(7f), 0, dp(7f))
             strip.clipToPadding = false
             strip.tabsContainer.setPadding(dp(12f), 0, dp(12f), 0)
             strip.setUseMinimalWidth(true)
-            strip.inu_pill = TabsPillDrawer(strip, BlurBehindHelper.create(strip, contentView, Theme.key_windowBackgroundWhite))
+            strip.inu_pill = TabsPillDrawer(strip, ClassicBarDrawable(factory, strip, resourcesProvider))
         }
     }
 }
