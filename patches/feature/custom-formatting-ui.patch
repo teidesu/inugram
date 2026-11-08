@@ -4,11 +4,25 @@ Date: Mon, 20 Apr 2026 09:36:16 +0300
 Subject: custom formatting ui for rich text fields with better ux
 
 ---
+ .../ui/Components/ChatActivityEnterView.java       |  2 +-
  .../telegram/ui/Components/EditTextBoldCursor.java |  6 ++++--
  .../telegram/ui/Components/EditTextCaption.java    |  5 +++--
  .../telegram/ui/Components/EditTextEffects.java    | 14 +++++++++++++-
- 3 files changed, 20 insertions(+), 5 deletions(-)
+ 4 files changed, 21 insertions(+), 6 deletions(-)
 
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
+@@ -13140,7 +13140,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+         if (emojiButton == null) {
+             return;
+         }
+-        final boolean show = parentFragment != null && messageEditText != null && messageEditText.getSelectionEnd() != messageEditText.getSelectionStart();
++        final boolean show = !desu.inugram.ui.FormattingPopup.isEnabled() && parentFragment != null && messageEditText != null && messageEditText.getSelectionEnd() != messageEditText.getSelectionStart();
+         emojiButton.setFormatMode(show, animated);
+         if (!show && formatOptions != null) {
+             formatOptions.dismiss();
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextBoldCursor.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextBoldCursor.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EditTextBoldCursor.java
