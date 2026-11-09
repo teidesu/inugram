@@ -3,10 +3,10 @@
 // @description  asserts timers fire, clear, are paced in the foreground and do not outlive an unload
 // ==/InuPlugin==
 
-// both timed halves report from a callback, so "done" is the latch
-let halvesLeft = 2
-function halfDone() {
-  if (--halvesLeft === 0) console.log('timers test done')
+// every timed part reports from a callback, so "done" is the latch
+let partsLeft = 3
+function partDone() {
+  if (--partsLeft === 0) console.log('timers test done')
 }
 
 // the previous run wrote `pending` from onUnload iff it still held a live timer, which would
@@ -43,18 +43,21 @@ setTimeout(() => fired.push('kept'), 40)
 const doomed = setTimeout(() => fired.push('cleared'), 60)
 clearTimeout(doomed)
 
-let ticks = 0
-const interval = setInterval(() => {
-  ticks++
-  if (ticks === 3) clearInterval(interval)
-}, 30)
-
 setTimeout(() => {
   check('a timeout fires', fired.includes('kept'), JSON.stringify(fired))
   check('clearTimeout stops one that had not fired yet', !fired.includes('cleared'), JSON.stringify(fired))
-  check('an interval repeats and clearInterval stops it', ticks === 3, `${ticks} tick(s)`)
-  halfDone()
+  partDone()
 }, 800)
+
+let ticks = 0
+const interval = setInterval(() => {
+  if (++ticks !== 3) return
+  clearInterval(interval)
+  setTimeout(() => {
+    check('an interval repeats and clearInterval stops it', ticks === 3, `${ticks} tick(s)`)
+    partDone()
+  }, 100)
+}, 30)
 
 // every hop re-arms, so no callback inside the engine overruns. unpaced this walks the chain in ~1ms
 const HOPS = 25
@@ -71,5 +74,5 @@ const startedAt = performance.now()
     elapsed >= HOPS * 3,
     `${HOPS} hops in ${Math.round(elapsed)}ms`,
   )
-  halfDone()
+  partDone()
 })()
