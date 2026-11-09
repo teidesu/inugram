@@ -3,6 +3,7 @@
     <string name="InuOpenInDiscussion">Открыть в обсуждении</string>
     <string name="InuBanUserConfirm">Заблокировать %1$s в этой группе?</string>
     <string name="InuSettings">Настройки Inugram</string>
+    <string name="InuSettingNotFound">Эта настройка недоступна в этой версии Inugram</string>
     <string name="InuSettingsInfo">Что делает эта собачонка?</string>
     <string name="InuExperimental">Экспериментальное</string>
     <string name="InuGeneral">Основные</string>
@@ -180,6 +181,7 @@
     <string name="InuWidgetPlaceholderTitle">Интерактивный виджет</string>
     <string name="InuWidgetPlaceholderTap">Нажмите, чтобы загрузить</string>
     <string name="InuWidgetPlaceholderLoading">Загрузка…</string>
+    <string name="InuWidgetPlaceholderPreview">Предпросмотр отключён</string>
     <string name="InuCallConfirmation">Спрашивать перед звонком</string>
     <string name="InuCallConfirmationTitle">Подтверждение звонка</string>
     <string name="InuCallConfirmationText">Позвонить **%1$s**?</string>

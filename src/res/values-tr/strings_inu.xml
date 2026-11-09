@@ -9,6 +9,7 @@
     <string name="InuDrawerBackGesture">Geri hareketiyle yan menüyü aç</string>
     <string name="InuDrawerBackGestureInfo">Sohbet listesinin sol kenarından sağa kaydırmak, uygulamadan çıkmak yerine yan menüyü açar.</string>
     <string name="InuSettings">Inugram Ayarları</string>
+    <string name="InuSettingNotFound">Bu ayar Inugram\'ın bu sürümünde mevcut değil</string>
     <string name="InuSettingsInfo">ne yapıyor bu köpek?</string>
     <string name="InuExperimental">Deneysel</string>
     <string name="InuGeneral">Genel</string>
@@ -246,6 +247,7 @@
     <string name="InuWidgetPlaceholderTitle">Etkileşimli widget</string>
     <string name="InuWidgetPlaceholderTap">Yüklemek için dokunun</string>
     <string name="InuWidgetPlaceholderLoading">Yükleniyor…</string>
+    <string name="InuWidgetPlaceholderPreview">Önizleme devre dışı</string>
     <string name="InuHideCallActionButton">Başlıktaki arama düğmesini gizle</string>
     <string name="InuCallConfirmation">Aramadan önce sor</string>
     <string name="InuCallConfirmationTitle">Aramayı onayla</string>

@@ -3,6 +3,7 @@
     <string name="InuOpenInDiscussion">在讨论中打开</string>
     <string name="InuBanUserConfirm">将 %1$s 从本群封禁？</string>
     <string name="InuSettings">Inugram 设置</string>
+    <string name="InuSettingNotFound">此版本的 Inugram 不支持该设置</string>
     <string name="InuSettingsInfo">汪汪在干啥？</string>
     <string name="InuExperimental">实验性</string>
     <string name="InuGeneral">通用</string>
@@ -180,6 +181,7 @@
     <string name="InuWidgetPlaceholderTitle">交互式小组件</string>
     <string name="InuWidgetPlaceholderTap">点击加载</string>
     <string name="InuWidgetPlaceholderLoading">加载中…</string>
+    <string name="InuWidgetPlaceholderPreview">预览已禁用</string>
     <string name="InuCallConfirmation">通话前询问</string>
     <string name="InuCallConfirmationTitle">确认通话</string>
     <string name="InuCallConfirmationText">呼叫 **%1$s**？</string>

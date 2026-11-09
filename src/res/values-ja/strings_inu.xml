@@ -3,6 +3,7 @@
     <string name="InuOpenInDiscussion">ディスカッションで開く</string>
     <string name="InuBanUserConfirm">%1$s をこのグループから BAN しますか？</string>
     <string name="InuSettings">Inugram 設定</string>
+    <string name="InuSettingNotFound">このバージョンの Inugram ではこの設定は利用できません</string>
     <string name="InuSettingsInfo">犬は何してるの？</string>
     <string name="InuExperimental">実験的機能</string>
     <string name="InuGeneral">一般</string>
@@ -180,6 +181,7 @@
     <string name="InuWidgetPlaceholderTitle">インタラクティブウィジェット</string>
     <string name="InuWidgetPlaceholderTap">タップして読み込む</string>
     <string name="InuWidgetPlaceholderLoading">読み込み中…</string>
+    <string name="InuWidgetPlaceholderPreview">プレビュー無効</string>
     <string name="InuCallConfirmation">通話前に確認</string>
     <string name="InuCallConfirmationTitle">通話の確認</string>
     <string name="InuCallConfirmationText">**%1$s** に発信しますか？</string>

@@ -9,6 +9,7 @@
     <string name="InuDrawerBackGesture">Відкривати панель жестом «Назад»</string>
     <string name="InuDrawerBackGestureInfo">Свайп назад від лівого краю списку чатів відкриває бічну панель замість виходу з додатка.</string>
     <string name="InuSettings">Налаштування Inugram</string>
+    <string name="InuSettingNotFound">Це налаштування недоступне в цій версії Inugram</string>
     <string name="InuSettingsInfo">що робить цей песик?</string>
     <string name="InuExperimental">Експериментальне</string>
     <string name="InuGeneral">Загальні</string>
@@ -246,6 +247,7 @@
     <string name="InuWidgetPlaceholderTitle">Інтерактивний віджет</string>
     <string name="InuWidgetPlaceholderTap">Натисніть, щоб завантажити</string>
     <string name="InuWidgetPlaceholderLoading">Завантаження…</string>
+    <string name="InuWidgetPlaceholderPreview">Попередній перегляд вимкнено</string>
     <string name="InuHideCallActionButton">Приховати кнопку виклику у шапці</string>
     <string name="InuCallConfirmation">Запитувати перед дзвінком</string>
     <string name="InuCallConfirmationTitle">Підтвердження виклику</string>
