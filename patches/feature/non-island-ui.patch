@@ -102,13 +102,13 @@ index 0000000..0000000 100644
          if (menu != null) {
 -            menu.setTranslationX(-dp(10));
 -            menu.setGlassMode(true);
-+            menu.setTranslationX(inu_nonIsland ? 0 : -dp(10));
++            menu.setTranslationX(inu_nonIsland ? -dp(4) : -dp(10));
 +            menu.setGlassMode(!inu_nonIsland);
          }
          if (actionMode != null) {
 -            actionMode.setTranslationX(-dp(10));
 -            actionMode.setGlassMode(true);
-+            actionMode.setTranslationX(inu_nonIsland ? 0 : -dp(10));
++            actionMode.setTranslationX(inu_nonIsland ? -dp(4) : -dp(10));
 +            actionMode.setGlassMode(!inu_nonIsland);
          }
          if (backButtonImageView != null) {
@@ -119,7 +119,7 @@ index 0000000..0000000 100644
          };
 -        actionMode.setTranslationX(glassMode ? -dp(10) : 0);
 -        actionMode.setGlassMode(glassMode);
-+        actionMode.setTranslationX(glassMode && !inu_nonIsland ? -dp(10) : 0);
++        actionMode.setTranslationX(glassMode ? (inu_nonIsland ? -dp(4) : -dp(10)) : 0);
 +        actionMode.setGlassMode(glassMode && !inu_nonIsland);
          actionMode.isActionMode = true;
          actionMode.setClickable(true);
@@ -316,19 +316,19 @@ index 0000000..0000000 100644
          final float doneSpace = getDoneButtonSpace(true);
          final int titleSide = Math.max(hasBack ? dp(64) : dp(18), menuWidth > 0 || doneSpace > 0 ? (int) (menuWidth + doneSpace) + dp(6 + 12) : 0);
          titleLayout.setSideInset(titleSide);
-+        titleLayout.inu_leftInset = hasBack ? dp(AndroidUtilities.isTablet() ? 80 : 72) : dp(18);
++        titleLayout.inu_leftInset = hasBack ? dp(AndroidUtilities.isTablet() ? 80 : 72) : dp(16);
 +        titleLayout.inu_rightInset = menuWidth > 0 || doneSpace > 0 ? (int) (menuWidth + doneSpace) + dp(6 + 12) : dp(18);
          setMargins(titleLayout, 0, rowTop, 0);
          titleLayout.getLayoutParams().height = rowHeight;
  
          if (menu != null) {
 -            setMargins(menu, 0, rowTop, dp(10));
-+            setMargins(menu, 0, rowTop, inu_classic ? 0 : dp(10));
++            setMargins(menu, 0, rowTop, inu_classic ? dp(4) : dp(10));
              menu.getLayoutParams().height = rowHeight;
          }
          if (actionMode != null) {
 -            setMargins(actionMode, 0, rowTop, dp(10));
-+            setMargins(actionMode, 0, rowTop, inu_classic ? 0 : dp(10));
++            setMargins(actionMode, 0, rowTop, inu_classic ? dp(4) : dp(10));
              actionMode.getLayoutParams().height = rowHeight;
          }
          if (actionModeTitle != null) {
