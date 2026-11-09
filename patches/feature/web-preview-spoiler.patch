@@ -274,7 +274,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -16305,7 +16305,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -16314,7 +16314,7 @@ public class ChatActivity extends BaseFragment implements
                  replyImageLocation = photoSize;
                  replyImageThumbLocation = thumbPhotoSize;
                  replyImageLocationObject = photoSizeObject;
@@ -283,7 +283,7 @@ index 0000000..0000000 100644
                  replyLayout.current().hasSpoiler = hasSpoiler;
                  replyImageView.setImage(ImageLocation.getForObject(replyImageLocation, photoSizeObject), hasSpoiler ? "5_5_b" : "50_50", ImageLocation.getForObject(thumbPhotoSize, photoSizeObject), hasSpoiler ? "5_5_b" : "50_50_b", null, size, cacheType, thumbMediaMessageObject);
                  replyImageView.setVisibility(View.VISIBLE);
-@@ -29604,7 +29604,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -29613,7 +29613,7 @@ public class ChatActivity extends BaseFragment implements
                      } else {
                          pinnedMessageImageView[1].setRoundRadius(AndroidUtilities.dp(2));
                      }

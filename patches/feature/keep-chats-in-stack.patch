@@ -13,7 +13,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -23158,7 +23158,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -23167,7 +23167,7 @@ public class ChatActivity extends BaseFragment implements
              } else {
                  if (AndroidUtilities.isTablet() && parentLayout != null && parentLayout.getFragmentStack().size() > 1) {
                      finishFragment();

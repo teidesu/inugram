@@ -35,7 +35,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -23480,6 +23480,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -23489,6 +23489,7 @@ public class ChatActivity extends BaseFragment implements
                  }
                  boolean mediaUpdated = false;
                  boolean updatedForward = false;
@@ -43,7 +43,7 @@ index 0000000..0000000 100644
                  if (newMsgObj != null) {
                      try {
                          updatedForward = obj.isForwarded() && (obj.messageOwner.reply_markup == null && newMsgObj.reply_markup != null || !obj.messageOwner.message.equals(newMsgObj.message));
-@@ -23500,8 +23501,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -23509,8 +23510,8 @@ public class ChatActivity extends BaseFragment implements
                      TLRPC.MessageFwdHeader fwdHeader = obj.messageOwner.fwd_from;
                      obj.messageOwner = newMsgObj;
                      if (fwdHeader != null && newMsgObj.fwd_from != null && !TextUtils.isEmpty(newMsgObj.fwd_from.from_name)) {
@@ -53,7 +53,7 @@ index 0000000..0000000 100644
                      }
                      obj.generateThumbs(true);
                      obj.setType();
-@@ -23517,7 +23518,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -23526,7 +23527,7 @@ public class ChatActivity extends BaseFragment implements
                  messagesDict[0].put(newMsgId, obj);
                  obj.messageOwner.id = newMsgId;
                  obj.messageOwner.send_state = MessageObject.MESSAGE_SEND_STATE_SENT;

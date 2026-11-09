@@ -98,7 +98,7 @@ index 0000000..0000000 100644
                  } else if (id == share_contact) {
                      if (currentUser == null || getParentActivity() == null) {
                          return;
-@@ -8733,12 +8735,12 @@ public class ChatActivity extends BaseFragment implements
+@@ -8739,12 +8741,12 @@ public class ChatActivity extends BaseFragment implements
                      }
                  } else {
                      boolean canDeleteHistory = chatInfo != null && chatInfo.can_delete_channel;

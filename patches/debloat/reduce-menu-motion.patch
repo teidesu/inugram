@@ -82,7 +82,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -33249,6 +33249,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -33258,6 +33258,10 @@ public class ChatActivity extends BaseFragment implements
  
                              @Override
                              public void onSwipeBackProgress(PopupSwipeBackLayout layout, float toProgress, float progress) {
@@ -93,7 +93,7 @@ index 0000000..0000000 100644
                                  if (toProgress == 0 && !isEnter) {
                                      finalReactionsLayout.startEnterAnimation(false);
                                      isEnter = true;
-@@ -33435,7 +33439,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -33444,7 +33448,7 @@ public class ChatActivity extends BaseFragment implements
              scrimPopupWindow.setDismissAnimationDuration(220);
              scrimPopupWindow.setOutsideTouchable(true);
              scrimPopupWindow.setClippingEnabled(true);

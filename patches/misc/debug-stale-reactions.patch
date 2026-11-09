@@ -301,7 +301,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -8983,6 +8983,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -8989,6 +8989,9 @@ public class ChatActivity extends BaseFragment implements
                  updatePollVotesMentionButton(false);
              }
          }
@@ -311,7 +311,7 @@ index 0000000..0000000 100644
  
          if (getDialogId() == getUserConfig().getClientUserId() && chatMode != MODE_SAVED) {
              savedMessagesHint = new HintView2(context, HintView2.DIRECTION_TOP);
-@@ -11249,6 +11252,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -11255,6 +11258,9 @@ public class ChatActivity extends BaseFragment implements
              return;
          }
          BaseCell cell = findMessageCell(messageId, false);
@@ -321,7 +321,7 @@ index 0000000..0000000 100644
          if (cell instanceof ChatMessageCell) {
              final ChatMessageCell messageCell = (ChatMessageCell) cell;
              final TLRPC.MessagePeerReaction reaction = messageCell.getMessageObject().getRandomUnreadReaction();
-@@ -16944,6 +16950,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -16953,6 +16959,7 @@ public class ChatActivity extends BaseFragment implements
                      updatePollVotesMentionButton(true);
                  }
                  if (messageObject != null && fragmentOpened && openAnimationEnded && !inPreviewMode && (chatListItemAnimator == null || !chatListItemAnimator.isRunning()) && messageCell.checkUnreadReactions(clipTop, chatListView.getMeasuredHeight() - blurredViewBottomOffset)) {
@@ -329,7 +329,7 @@ index 0000000..0000000 100644
                      reactionsMentionCount--;
                      getMessagesStorage().markMessageReactionsAsRead(getDialogId(), getTopicId(), messageObject.getId());
                      if (reactionsMentionCount <= 0) {
-@@ -16963,6 +16970,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -16972,6 +16979,7 @@ public class ChatActivity extends BaseFragment implements
                      }
                      updateReactionsMentionButton(true);
                  }
@@ -337,7 +337,7 @@ index 0000000..0000000 100644
                  getDownloadController().checkUnviewedDownloads(messageCell.getId(), dialog_id);
                  boolean allowPlayEffect = messageObject.getEffect() != null || ((messageObject.messageOwner.media != null && !messageObject.messageOwner.media.nopremium) || (messageObject.isAnimatedEmojiStickerSingle() && dialog_id > 0));
                  if ((chatListItemAnimator == null || !chatListItemAnimator.isRunning()) && (!messageObject.isOutOwner() || messageObject.forcePlayEffect) && allowPlayEffect && !messageObject.messageOwner.premiumEffectWasPlayed && (messageObject.isPremiumSticker() || messageCell.getEffect() != null || messageObject.isAnimatedEmojiStickerSingle()) && !walletReceiveAnimationPlaying && emojiAnimationsOverlay.isIdle() && emojiAnimationsOverlay.checkPosition(messageCell, chatListViewPaddingTop, chatListView.getMeasuredHeight() - blurredViewBottomOffset)) {
-@@ -16978,6 +16986,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -16987,6 +16995,7 @@ public class ChatActivity extends BaseFragment implements
                  }
                  hasTopicSeparator = cell.topicSeparator != null;
                  if (messageObject != null && fragmentOpened && openAnimationEnded && !inPreviewMode && (chatListItemAnimator == null || !chatListItemAnimator.isRunning()) && cell.checkUnreadReactions(clipTop, chatListView.getMeasuredHeight() - blurredViewBottomOffset)) {
@@ -345,7 +345,7 @@ index 0000000..0000000 100644
                      reactionsMentionCount--;
                      getMessagesStorage().markMessageReactionsAsRead(getDialogId(), getTopicId(), messageObject.getId());
                      if (reactionsMentionCount <= 0) {
-@@ -24219,6 +24228,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -24228,6 +24237,9 @@ public class ChatActivity extends BaseFragment implements
                      }
                  }
                  MessageObject messageObject = messagesDict[did == dialog_id ? 0 : 1].get(msgId);
@@ -355,7 +355,7 @@ index 0000000..0000000 100644
                  if (messageObject != null) {
                      MessageObject.updateReactions(messageObject.messageOwner, (TLRPC.TL_messageReactions) args[2]);
                      messageObject.forceUpdate = true;
-@@ -25279,6 +25291,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -25288,6 +25300,9 @@ public class ChatActivity extends BaseFragment implements
              long topicId = (long) args[1];
              if (dialogId == dialog_id && ((!isTopic && (!ChatObject.isMonoForum(currentChat) || getTopicId() == 0)) || topicId == getTopicId())) {
                  reactionsMentionCount = (int) args[2];
@@ -365,7 +365,7 @@ index 0000000..0000000 100644
                  ArrayList<Integer> messages = null;
                  if (args[2] != null) {
                      messages = (ArrayList<Integer>) args[3];
-@@ -25287,6 +25302,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -25296,6 +25311,9 @@ public class ChatActivity extends BaseFragment implements
                      for (int i = 0; i < messages.size(); i++) {
                          int messageId = messages.get(i);
                          BaseCell cell = findMessageCell(messageId, true);
@@ -375,7 +375,7 @@ index 0000000..0000000 100644
                          if (cell != null && reactionsMentionCount > 0) {
                              reactionsMentionCount--;
                              getMessagesStorage().markMessageReactionsAsRead(getDialogId(), getTopicId(), messageId);
-@@ -27913,6 +27931,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -27922,6 +27940,7 @@ public class ChatActivity extends BaseFragment implements
                  }
                  if (messageObject.type >= 0) {
                      messageObject.reactionsChanged |= old.isBotPendingDraft && !messageObject.isBotPendingDraft;
@@ -383,7 +383,7 @@ index 0000000..0000000 100644
                      messageObject.copyStableParams(old);
                      messages.set(index, messageObject);
                      if (chatAdapter != null && !chatAdapter.isFiltered) {
-@@ -34045,6 +34064,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -34054,6 +34073,9 @@ public class ChatActivity extends BaseFragment implements
          chatMessagesMetadataController.cancelReactionsRequests();
          final int currentChosenReactions = primaryMessage.getChoosenReactions().size();
          final boolean added = primaryMessage.selectReaction(visibleReaction, bigEmoji, fromDoubleTap);
@@ -393,7 +393,7 @@ index 0000000..0000000 100644
          int messageIdForCell = primaryMessage.getId();
          if (groupedMessagesMap.get(primaryMessage.getGroupId()) != null) {
              int flags = primaryMessage.shouldDrawReactionsInLayout() ? MessageObject.POSITION_FLAG_BOTTOM | MessageObject.POSITION_FLAG_LEFT : MessageObject.POSITION_FLAG_BOTTOM | MessageObject.POSITION_FLAG_RIGHT;
-@@ -47728,8 +47750,14 @@ public class ChatActivity extends BaseFragment implements
+@@ -47737,8 +47759,14 @@ public class ChatActivity extends BaseFragment implements
          } else if (buttonId == ChatActivitySideControlsButtonsLayout.BUTTON_MENTION) {
              loadLastUnreadMention();
          } else if (buttonId == ChatActivitySideControlsButtonsLayout.BUTTON_REACTIONS) {
