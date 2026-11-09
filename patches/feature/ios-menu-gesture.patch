@@ -4,10 +4,91 @@ Date: Mon, 20 Apr 2026 12:50:31 +0300
 Subject: improved ios-style release-to-activate gestures: plain backgrounds, gesture detection
 
 ---
- .../org/telegram/ui/Components/ItemOptions.java     | 13 ++++---------
- .../main/java/org/telegram/ui/MainTabsActivity.java |  7 +++----
- 2 files changed, 7 insertions(+), 13 deletions(-)
+ .../ui/ActionBar/ActionBarMenuItem.java       | 37 +++++++++----------
+ .../telegram/ui/Components/ItemOptions.java   | 13 ++-----
+ .../org/telegram/ui/MainTabsActivity.java     |  7 ++--
+ 3 files changed, 24 insertions(+), 33 deletions(-)
 
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java
+@@ -331,11 +331,13 @@ public class ActionBarMenuItem extends FrameLayout {
+             if (showMenuRunnable != null && !isInside(event, ViewConfiguration.get(getContext()).getScaledTouchSlop())) {
+                 cancelShowMenuByLongPress();
+             }
+-            if (showSubmenuByMove && !overlayMenu && hasSubMenu() && !popupShown) {
++            if (showSubmenuByMove && hasSubMenu() && !popupShown && !overlayShown) {
+                 if (event.getY() > getHeight()) {
++                    cancelShowMenuByLongPress();
+                     if (getParent() != null) {
+                         getParent().requestDisallowInterceptTouchEvent(true);
+                     }
++                    performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                     toggleSubMenu();
+                     subMenuOpenedByGesture = true;
+                     return true;
+@@ -346,8 +348,7 @@ public class ActionBarMenuItem extends FrameLayout {
+         } else if (event.getActionMasked() == MotionEvent.ACTION_UP && (popupShown || overlayShown)) {
+             cancelShowMenuByLongPress();
+             if (selectedMenuView != null) {
+-                selectedMenuView.setSelected(false);
+-                selectedMenuView.setPressed(false);
++                desu.inugram.helpers.LongPressDragMenuHelper.setHover(selectedMenuView, false);
+                 final View selected = selectedMenuView;
+                 final Object tag = selected.getTag();
+                 selectedMenuView = null;
+@@ -384,8 +385,7 @@ public class ActionBarMenuItem extends FrameLayout {
+                 cancelShowMenuByLongPress();
+             }
+             if (selectedMenuView != null) {
+-                selectedMenuView.setSelected(false);
+-                selectedMenuView.setPressed(false);
++                desu.inugram.helpers.LongPressDragMenuHelper.setHover(selectedMenuView, false);
+                 selectedMenuView = null;
+             }
+         }
+@@ -411,7 +411,7 @@ public class ActionBarMenuItem extends FrameLayout {
+         getLocationOnScreen(location);
+         final float screenX = event.getX() + location[0];
+         final float screenY = event.getY() + location[1];
+-        selectedMenuView = null;
++        View hit = null;
+         for (int a = 0; a < popupLayout.getItemsCount(); a++) {
+             View child = popupLayout.getItemAt(a);
+             Object tag = child.getTag();
+@@ -425,20 +425,17 @@ public class ActionBarMenuItem extends FrameLayout {
+             final float x = screenX - location[0];
+             final float y = screenY - location[1];
+             child.getHitRect(rect);
+-            if (child.getVisibility() != VISIBLE || !rect.contains((int) x, (int) y)) {
+-                child.setPressed(false);
+-                child.setSelected(false);
+-                if (Build.VERSION.SDK_INT == 21 && child.getBackground() != null) {
+-                    child.getBackground().setVisible(false, false);
+-                }
+-            } else {
+-                child.setPressed(true);
+-                child.setSelected(true);
+-                if (Build.VERSION.SDK_INT == 21 && child.getBackground() != null) {
+-                    child.getBackground().setVisible(true, false);
+-                }
+-                child.drawableHotspotChanged(x - child.getLeft(), y - child.getTop());
+-                selectedMenuView = child;
++            if (child.getVisibility() == VISIBLE && rect.contains((int) x, (int) y)) {
++                hit = child;
++            }
++        }
++        if (hit != selectedMenuView) {
++            if (selectedMenuView != null) {
++                desu.inugram.helpers.LongPressDragMenuHelper.setHover(selectedMenuView, false);
++            }
++            selectedMenuView = hit;
++            if (hit != null) {
++                desu.inugram.helpers.LongPressDragMenuHelper.setHover(hit, true, getShownSubMenuOverlay() == null);
+             }
+         }
+     }
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ItemOptions.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ItemOptions.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ItemOptions.java

@@ -52,7 +52,7 @@ index 0000000..0000000 100644
  import org.telegram.messenger.LocaleController;
  import org.telegram.messenger.R;
  import org.telegram.messenger.UserConfig;
-@@ -1742,6 +1744,8 @@ public class ActionBarMenuItem extends FrameLayout {
+@@ -1739,6 +1741,8 @@ public class ActionBarMenuItem extends FrameLayout {
                  return false;
              });
              searchField.addTextChangedListener(new TextWatcher() {
@@ -61,7 +61,7 @@ index 0000000..0000000 100644
                  @Override
                  public void beforeTextChanged(CharSequence s, int start, int count, int after) {
  
-@@ -1763,11 +1767,21 @@ public class ActionBarMenuItem extends FrameLayout {
+@@ -1760,11 +1764,21 @@ public class ActionBarMenuItem extends FrameLayout {
                              onFiltersChanged();
                          }
                      }

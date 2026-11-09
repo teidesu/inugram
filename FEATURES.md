@@ -239,7 +239,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - 🐶 prefer "Media" tab in profile over Gifts/Posts
 - "Send a gift" in profile menu (stock hides it without billing), optional "Gift" header action button
 - 🐶 recyclerlistview instant-tap
-- open bottom-tab menus early by swiping up; flat highlight (not ripple) on menu hover
+- open bottom-tab menus early by swiping up; open header menus by dragging down from the button and release on an item; flat highlight (not ripple) on menu hover
 - faster downloads/uploads
 - auto-disable the configured proxy while a VPN is active
 - batch import proxy links from clipboard (one per line)

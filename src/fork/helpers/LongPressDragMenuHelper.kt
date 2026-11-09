@@ -67,7 +67,8 @@ object LongPressDragMenuHelper {
     private var hoverSaved: Drawable? = null
 
     @JvmStatic
-    fun setHover(item: View, hovered: Boolean) {
+    @JvmOverloads
+    fun setHover(item: View, hovered: Boolean, rounded: Boolean = true) {
         if (!hovered) {
             if (hoverItem === item) {
                 item.background = hoverSaved
@@ -78,11 +79,12 @@ object LongPressDragMenuHelper {
         }
         hoverItem = item
         hoverSaved = item.background
-        item.background = makeHighlightBg(item)
+        item.background = makeHighlightBg(item, rounded)
         item.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
     }
 
-    private fun makeHighlightBg(item: View): GradientDrawable {
+    private fun makeHighlightBg(item: View, rounded: Boolean): GradientDrawable {
+        if (!rounded) return GradientDrawable().apply { setColor(Theme.getColor(Theme.key_listSelector)) }
         val parent = item.parent as? ViewGroup
         val first = parent != null && parent.getChildAt(0) === item
         val last = parent != null && parent.getChildAt(parent.childCount - 1) === item
