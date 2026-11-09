@@ -4,12 +4,44 @@ Date: Tue, 28 Apr 2026 15:27:42 +0300
 Subject: add custom resource loader for icon replacement
 
 ---
+ .../telegram/ui/ActionBar/BackDrawable.java    |  6 ++++++
  .../ChatActivityEnterViewAnimatedIconView.java |  6 ++++++
  .../ui/Components/ProfileActionsView.java      | 11 +++++++++--
  .../ui/Components/RLottieDrawable.java         | 18 +++++++++++++++---
  .../java/org/telegram/ui/LaunchActivity.java   | 16 ++++++++++++++++
- 4 files changed, 46 insertions(+), 5 deletions(-)
+ 5 files changed, 52 insertions(+), 5 deletions(-)
 
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BackDrawable.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BackDrawable.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BackDrawable.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BackDrawable.java
+@@ -39,6 +39,7 @@ public class BackDrawable extends Drawable {
+     private float animationTime = 300.0f;
+     private boolean rotated = true;
+     private int arrowRotation;
++    private final desu.inugram.helpers.icons.BackIcon inu_packIcon;
+ 
+     public float getRotation() {
+         return finalRotation;
+@@ -51,6 +52,7 @@ public class BackDrawable extends Drawable {
+         prevPaint.setStrokeWidth(AndroidUtilities.dp(2));
+         prevPaint.setColor(Color.RED);
+         alwaysClose = close;
++        inu_packIcon = desu.inugram.helpers.icons.BackIcon.create(close);
+     }
+ 
+     public void setColor(int value) {
+@@ -120,6 +122,10 @@ public class BackDrawable extends Drawable {
+         }
+ 
+         paint.setColor(ColorUtils.blendARGB(color, rotatedColor, currentRotation));
++        if (inu_packIcon != null) {
++            inu_packIcon.draw(canvas, getIntrinsicWidth(), currentRotation, arrowRotation, paint.getColor(), paint.getColorFilter());
++            return;
++        }
+ 
+         canvas.save();
+         canvas.translate(getIntrinsicWidth() / 2f, getIntrinsicHeight() / 2f);
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterViewAnimatedIconView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterViewAnimatedIconView.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterViewAnimatedIconView.java
