@@ -9,6 +9,7 @@ Subject: non-island ui in various parts of the app
  .../telegram/ui/ActionBar/BaseFragment.java   |   6 +-
  .../ui/ActionBar/SimpleActionBar.java         |  81 ++++++--
  .../ui/ActionBar/SimpleActionBarMenu.java     |  14 +-
+ .../java/org/telegram/ui/CallLogActivity.java |  20 +-
  .../telegram/ui/ChannelAdminLogActivity.java  |  21 ++-
  .../java/org/telegram/ui/ChatActivity.java    | 177 ++++++++++++------
  .../BitmapSectionsItemDecoration.java         |   3 +
@@ -52,7 +53,7 @@ Subject: non-island ui in various parts of the app
  .../java/org/telegram/ui/iv/RichEditor.java   |   4 +-
  .../utils/glass/BaseFragmentSimpleGlass.java  |   6 +-
  .../utils/glass/GlassCaptureSourceCanvas.java |  52 +++--
- 48 files changed, 1008 insertions(+), 345 deletions(-)
+ 49 files changed, 1023 insertions(+), 350 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -470,6 +471,68 @@ index 0000000..0000000 100644
          }
          addView(item, index, lp);
          item.setOnClickListener(v -> {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/CallLogActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/CallLogActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/CallLogActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/CallLogActivity.java
+@@ -791,7 +791,9 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
+ 		contentView.addView(emptyView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+ 
+ 		actionBarBackground = new View(context);
+-		actionBarBackground.setBackground(getBaseSimpleGlass().createActionBarFadeDrawable(actionBarBackground));
++		if (!desu.inugram.helpers.theme.NonIslandHelper.applyClassicHeaderBackground(actionBarBackground, listView, resourceProvider, getBaseSimpleGlass())) {
++			actionBarBackground.setBackground(getBaseSimpleGlass().createActionBarFadeDrawable(actionBarBackground));
++		}
+ 		contentView.addView(actionBarBackground, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 0, Gravity.TOP));
+ 
+ 		listView.setOnScrollListener(new RecyclerView.OnScrollListener() {
+@@ -833,10 +835,15 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
+ 		topPanelLayout.setPadding(dp(11), dp(14) + dp(7), dp(11), dp(14) + dp(7));
+ 		topPanelLayout.setOnAnimatedHeightChangedListener(this::checkUi_listViewPadding);
+ 
++		if (desu.inugram.helpers.theme.NonIslandHelper.headers()) {
++			topPanelLayout.inu_classicBackground = new desu.inugram.ui.ClassicBarDrawable(getBaseSimpleGlass().frostedFactory, topPanelLayout, resourceProvider);
++			topPanelLayout.setPadding(0, 0, 0, 0);
++		} else {
+ 		topPanelLayout.setBlurredBackground(getBaseSimpleGlass().factory.create(topPanelLayout)
+ 			.setColorProvider(BlurredBackgroundProviderImpl.topPanel(resourceProvider))
+ 			.setRadius(dp(24))
+ 			.setPadding(dp(7)));
++		}
+ 
+ 		fragmentContextViewWrapper = new FrameLayout(context);
+ 		topPanelLayout.addView(fragmentContextViewWrapper);
+@@ -850,7 +857,7 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
+ 		fragmentContextViewWrapper.addView(fragmentContextView);
+ 		topPanelLayout.setCallFragmentContextView(fragmentContextView);
+ 		// its glass 6dp from the sides of the screen (the layout's background is 4dp from its sides, inset by 7dp)
+-		contentView.addView(topPanelLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP, -5, -14, -5, 0));
++		contentView.addView(topPanelLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP, topPanelLayout.inu_classicBackground != null ? 0 : -5, -14, topPanelLayout.inu_classicBackground != null ? 0 : -5, 0));
+ 		contentView.addView(simpleActionBar);
+ 
+ 		Bulletin.addDelegate(this, new Bulletin.Delegate() {
+@@ -1414,15 +1421,18 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
+ 	}
+ 
+ 	private void checkUi_listViewPadding() {
++		final boolean inu_classicPanel = topPanelLayout.inu_classicBackground != null;
+ 		BaseFragmentSimpleGlass.setListViewParams(listView, mSystemInsets.top, mSystemInsets.bottom,
+-			ActionBar.getCurrentActionBarHeight() + (int) topPanelLayout.getAnimatedHeightWithPadding(dp(7)), additionNavigationBarHeight);
++			ActionBar.getCurrentActionBarHeight() + (int) topPanelLayout.getAnimatedHeightWithPadding(inu_classicPanel ? 0 : dp(7)), additionNavigationBarHeight);
+ 
+ 		actionBarBackground.getLayoutParams().height = mSystemInsets.top
+ 			+ ActionBar.getCurrentActionBarHeight() + simpleActionBar.getExtraHeight()
+-			+ (int) topPanelLayout.getAnimatedHeightWithPadding(dp(7));
++			+ (int) topPanelLayout.getAnimatedHeightWithPadding(inu_classicPanel ? 0 : dp(7));
+ 
+ 		// its glass 7dp under the header's buttons
+-		((ViewGroup.MarginLayoutParams) topPanelLayout.getLayoutParams()).topMargin = BaseFragmentSimpleGlass.getPillGlassTop(mSystemInsets.top) - dp(14) - dp(7);
++		((ViewGroup.MarginLayoutParams) topPanelLayout.getLayoutParams()).topMargin = inu_classicPanel
++			? mSystemInsets.top + ActionBar.getCurrentActionBarHeight() + simpleActionBar.getExtraHeight()
++			: BaseFragmentSimpleGlass.getPillGlassTop(mSystemInsets.top) - dp(14) - dp(7);
+ 		((ViewGroup.MarginLayoutParams) emptyView.getLayoutParams()).topMargin = mSystemInsets.top + ActionBar.getCurrentActionBarHeight();
+ 
+ 		emptyView.setPadding(0, 0, 0, navigationBarHeight + additionNavigationBarHeight);
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChannelAdminLogActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChannelAdminLogActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChannelAdminLogActivity.java

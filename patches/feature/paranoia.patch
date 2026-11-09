@@ -417,7 +417,7 @@ index 0000000..0000000 100644
  					int callType = fromId == getUserConfig().getClientUserId() ? TYPE_OUT : TYPE_IN;
  					if (callType == TYPE_IN && action.missed) {
  						callType = TYPE_MISSED_IN;
-@@ -1231,6 +1233,7 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
+@@ -1238,6 +1240,7 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
  						final TLRPC.TL_messageActionConferenceCall action = (TLRPC.TL_messageActionConferenceCall) msg.action;
  						userIds.add(userID);
  						userIds.addAll(action.other_participants.stream().map(DialogObject::getPeerDialogId).collect(Collectors.toSet()));
@@ -425,7 +425,7 @@ index 0000000..0000000 100644
  						if (callType == TYPE_IN && action.missed) {
  							callType = TYPE_MISSED_IN;
  						}
-@@ -1288,6 +1291,7 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
+@@ -1295,6 +1298,7 @@ public class CallLogActivity extends BaseFragment implements NotificationCenter.
  
  					} else {
  						userIds.add(userID);
