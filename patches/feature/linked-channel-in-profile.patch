@@ -70,7 +70,7 @@ index 0000000..0000000 100644
                  presentFragment(new ChatActivity(args));
              } else if (position == birthdayRow) {
                  if (birthdayEffect != null && birthdayEffect.start()) {
-@@ -9495,6 +9498,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -9498,6 +9501,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                      getMediaDataController().getMediaCount(mergeDialogId, topicId, MediaDataController.MEDIA_PHOTOVIDEO, classGuid, true);
                  }
                  fetchUsersFromChannelInfo();
@@ -78,7 +78,7 @@ index 0000000..0000000 100644
                  if (avatarsViewPager != null && !isTopic) {
                      avatarsViewPager.setChatInfo(chatInfo);
                  }
-@@ -10670,6 +10674,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -10673,6 +10677,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              avatarImage.setHasStories(needInsetForStories());
          }
          fetchUsersFromChannelInfo();
@@ -86,7 +86,7 @@ index 0000000..0000000 100644
          if (chatId != 0) {
              boolean gift = !BuildVars.IS_BILLING_UNAVAILABLE && !getMessagesController().premiumPurchaseBlocked() && chatInfo != null && chatInfo.stargifts_available;
              otherItem.setSubItemShown(gift_premium, gift);
-@@ -10679,6 +10684,15 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -10682,6 +10687,15 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          }
      }
  
@@ -102,7 +102,7 @@ index 0000000..0000000 100644
      private boolean needInsetForStories() {
          return getMessagesController().getStoriesController().hasStories(getDialogId()) && !isTopic;
      }
-@@ -11186,6 +11200,26 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -11189,6 +11203,26 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                  sharedMediaRow = rowCount++;
              }
          } else if (chatId != 0) {
@@ -129,7 +129,7 @@ index 0000000..0000000 100644
              if (chatInfo != null && (!TextUtils.isEmpty(chatInfo.about) || chatInfo.location instanceof TLRPC.TL_channelLocation) || ChatObject.isPublic(currentChat)) {
                  if (emptyRow < 0 && emptyRow2 < 0) {
                      if (hasMusic || hasBalance || peerColor != null || actionsView == null) {
-@@ -14325,8 +14359,15 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -14328,8 +14362,15 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                      hoursCell.set(userInfo != null ? userInfo.business_work_hours : null, hoursExpanded, hoursShownMine, notificationsDividerRow < 0 && !myProfile || bizLocationRow >= 0);
                      break;
                  case VIEW_TYPE_CHANNEL:

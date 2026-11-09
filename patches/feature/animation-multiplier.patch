@@ -43,7 +43,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -8830,7 +8830,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -8833,7 +8833,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                          if (!ignoreScrollOnFullExpand && view != null /*&& hasActions*/) {
                              justFullyExpanded = true;
                              final int actionBarHeight = ActionBar.getCurrentActionBarHeight() + (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0);
