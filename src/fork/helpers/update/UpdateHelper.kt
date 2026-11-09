@@ -86,6 +86,10 @@ object UpdateHelper {
     var isPendingStart: Boolean = false
         private set
 
+    @Volatile
+    var downloadAccount: Int = UserConfig.selectedAccount
+        private set
+
     // applyUpdate doesn't post appUpdateAvailable itself — the caller does it, via
     // revealPendingUpdate, once the changelog dialog is on screen (so the bar slides in behind
     // the dialog instead of visibly popping into the page underneath).
@@ -137,6 +141,7 @@ object UpdateHelper {
         val update = SharedConfig.pendingAppUpdate ?: return
         val doc = update.document ?: return
 
+        downloadAccount = account
         isPendingStart = true
         NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.appUpdateLoading)
 
@@ -174,12 +179,12 @@ object UpdateHelper {
         }
     }
 
-    fun cancelDownload(account: Int) {
+    fun cancelDownload() {
         if (isPendingStart) {
             isPendingStart = false
         } else {
             SharedConfig.pendingAppUpdate?.document?.let {
-                FileLoader.getInstance(account).cancelLoadFile(it)
+                FileLoader.getInstance(downloadAccount).cancelLoadFile(it)
             }
         }
         NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.appUpdateLoading)

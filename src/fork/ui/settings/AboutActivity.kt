@@ -282,7 +282,7 @@ class AboutActivity : SettingsPageActivity(), NotificationCenter.NotificationCen
 
     private fun startVariantSwitchDownload(value: UpdateHelper.VariantSwitch) {
         val account = UserConfig.selectedAccount
-        UpdateHelper.cancelDownload(account)
+        UpdateHelper.cancelDownload()
         UpdateHelper.clearPending()
         val file = FileLoader.getInstance(account).getPathToAttach(value.document, true)
         if (file?.exists() == true) {
@@ -324,10 +324,12 @@ class AboutActivity : SettingsPageActivity(), NotificationCenter.NotificationCen
         val global = NotificationCenter.getGlobalInstance()
         global.addObserver(this, NotificationCenter.appUpdateAvailable)
         global.addObserver(this, NotificationCenter.appUpdateLoading)
-        val acct = NotificationCenter.getInstance(UserConfig.selectedAccount)
-        acct.addObserver(this, NotificationCenter.fileLoadProgressChanged)
-        acct.addObserver(this, NotificationCenter.fileLoaded)
-        acct.addObserver(this, NotificationCenter.fileLoadFailed)
+        for (account in 0 until UserConfig.MAX_ACCOUNT_COUNT) {
+            val nc = NotificationCenter.getInstance(account)
+            nc.addObserver(this, NotificationCenter.fileLoadProgressChanged)
+            nc.addObserver(this, NotificationCenter.fileLoaded)
+            nc.addObserver(this, NotificationCenter.fileLoadFailed)
+        }
         return ok
     }
 
@@ -335,10 +337,12 @@ class AboutActivity : SettingsPageActivity(), NotificationCenter.NotificationCen
         val global = NotificationCenter.getGlobalInstance()
         global.removeObserver(this, NotificationCenter.appUpdateAvailable)
         global.removeObserver(this, NotificationCenter.appUpdateLoading)
-        val acct = NotificationCenter.getInstance(UserConfig.selectedAccount)
-        acct.removeObserver(this, NotificationCenter.fileLoadProgressChanged)
-        acct.removeObserver(this, NotificationCenter.fileLoaded)
-        acct.removeObserver(this, NotificationCenter.fileLoadFailed)
+        for (account in 0 until UserConfig.MAX_ACCOUNT_COUNT) {
+            val nc = NotificationCenter.getInstance(account)
+            nc.removeObserver(this, NotificationCenter.fileLoadProgressChanged)
+            nc.removeObserver(this, NotificationCenter.fileLoaded)
+            nc.removeObserver(this, NotificationCenter.fileLoadFailed)
+        }
         variantSwitch?.let { UpdateHelper.cancelVariantSwitchDownload(UserConfig.selectedAccount, it) }
         variantSwitch = null
         isPreparingVariantSwitch = false

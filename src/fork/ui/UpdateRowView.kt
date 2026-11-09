@@ -96,7 +96,7 @@ class UpdateRowView(context: Context) : FrameLayout(context) {
                 refresh(true)
             }
             MediaActionDrawable.ICON_CANCEL -> {
-                UpdateHelper.cancelDownload(account)
+                UpdateHelper.cancelDownload()
                 refresh(true)
             }
             else -> {
@@ -109,7 +109,7 @@ class UpdateRowView(context: Context) : FrameLayout(context) {
 
     fun refresh(animated: Boolean) {
         if (!SharedConfig.isAppUpdateAvailable()) return
-        val account = UserConfig.selectedAccount
+        val account = UpdateHelper.downloadAccount
         val doc = SharedConfig.pendingAppUpdate.document
         val fileName = FileLoader.getAttachFileName(doc)
         val path = FileLoader.getInstance(account).getPathToAttach(doc, true)
