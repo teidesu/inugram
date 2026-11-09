@@ -1,0 +1,22 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Mon, 9 Nov 2026 04:35:00 +0400
+Subject: keep chat pinned to bottom when the last widget resizes
+
+---
+ .../main/java/org/telegram/ui/Components/RichWidgetBlock.java   | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/RichWidgetBlock.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/RichWidgetBlock.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/RichWidgetBlock.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/RichWidgetBlock.java
+@@ -589,7 +589,7 @@ public final class RichWidgetBlock extends RichMessageLayout.RichBlock
+         if (view != null && cell != null && delegate != null) {
+             // Only a cell the chat's list shows has a top to keep (a preview's has none); one laid out off screen
+             // changes height as any message does, and what is on screen stays.
+-            boolean keepTop = changed && !anchorBottom() && shownInList(cell);
++            boolean keepTop = changed && !anchorBottom() && shownInList(cell) && ((View) cell.getParent()).canScrollVertically(1);
+             if (animated) delegate.forceUpdate(cell, keepTop, keepTop);
+             else delegate.forceUpdateNoAnimation(cell, keepTop, keepTop);
+         } else if (view != null) view.requestLayout();
