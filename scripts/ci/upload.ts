@@ -90,6 +90,7 @@ try {
         notes.trim(),
         fullChangelog,
         '</details>',
+        'donate: [boosty](https://boosty.to/teidesu) / [telegram money](https://t.me/sendgrams?to=teidesu&amount=1&text=thx+for+inugram) / [crypto](https://tei.pet/$)',
       ].filter(Boolean).join('\n\n'),
       attachments,
     },

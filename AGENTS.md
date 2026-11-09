@@ -34,7 +34,7 @@ the worktree.
 Mappings live in `scripts/config.ts` → `forkSyncFiles`. Update `FEATURES.md` when
 adding, removing, or meaningfully changing a feature or patch (except for plugin-related stuff).
 
-Release notes live in `changelogs/<build>.md`, drafted with the `inugram-changelog` skill.
+Release notes live in `changelogs/<build>.md`, drafted with the `inugram-prerelease` skill.
 
 ## Rules
 
