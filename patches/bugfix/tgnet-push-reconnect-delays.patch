@@ -1,0 +1,71 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: dreamer <353556243+dreamer4202@users.noreply.github.com>
+Date: Mon, 9 Nov 2026 18:07:13 +0300
+Subject: persistent connection: fix notifications arriving minutes late after sleep or a key change
+
+---
+ .../jni/tgnet/ConnectionsManager.cpp          | 23 +++++++++++++++++--
+ 1 file changed, 21 insertions(+), 2 deletions(-)
+
+diff --git a/TMessagesProj/jni/tgnet/ConnectionsManager.cpp b/TMessagesProj/jni/tgnet/ConnectionsManager.cpp
+index 0000000..0000000 100644
+--- a/TMessagesProj/jni/tgnet/ConnectionsManager.cpp
++++ b/TMessagesProj/jni/tgnet/ConnectionsManager.cpp
+@@ -185,7 +185,9 @@ int ConnectionsManager::callEvents(int64_t now) {
+     }
+     auto timeToPushPing = (int32_t) ((sendingPushPing ? 30000 : nextPingTimeOffset) - llabs(now - lastPushPingTime));
+     if (timeToPushPing <= 0) {
+-        return 1000;
++        // an overdue push ping is handled right after the wait and cannot stay overdue: don't sleep on it for a second,
++        // a device woken by the closing connection is back asleep sooner than that
++        return pushConnectionEnabled ? 0 : 1000;
+     }
+     return timeToPushPing;
+ }
+@@ -230,6 +232,10 @@ void ConnectionsManager::select() {
+     Datacenter *datacenter = getDatacenterWithId(currentDatacenterId);
+     if (pushConnectionEnabled) {
+         if ((sendingPushPing && llabs(now - lastPushPingTime) >= 30000) || llabs(now - lastPushPingTime) >= nextPingTimeOffset + 10000) {
++            // a whole ping interval without this loop running means the device slept, not that the server failed to answer
++            bool inu_slept = llabs(now - lastPushPingTime) >= nextPingTimeOffset + 10000;
++            // the first failure of a connection that had answered, or one the device slept on, is retried at once
++            int32_t inu_delay = inu_slept ? 0 : inu_pushReconnectDelay;
+             lastPushPingTime = 0;
+             sendingPushPing = false;
+             if (datacenter != nullptr) {
+@@ -238,7 +244,10 @@ void ConnectionsManager::select() {
+                     connection->suspendConnection();
+                 }
+             }
+-            if (LOGS_ENABLED) DEBUG_D("push ping timeout");
++            // suspendConnection() reports the close to onConnectionClosed twice: put back what a single failure costs
++            lastPushPingTime = now - nextPingTimeOffset + inu_delay;
++            inu_pushReconnectDelay = inu_delay == 0 ? 4000 : std::min(inu_delay * 2, 180000);
++            if (LOGS_ENABLED) DEBUG_D("push ping timeout%s, reconnecting in %d ms", inu_slept ? " after sleep" : "", inu_delay);
+         }
+         if (llabs(now - lastPushPingTime) >= nextPingTimeOffset) {
+             if (LOGS_ENABLED) DEBUG_D("time for push ping");
+@@ -1680,6 +1689,11 @@ void ConnectionsManager::processServerResponse(TLObject *message, int64_t messag
+             datacenter->addServerSalt(salt, media);
+             saveConfig();
+ 
++            if (connection->getConnectionType() == ConnectionTypePush) {
++                // the push ping was refused along with the old salt and nothing sends it again: it is due now
++                sendingPushPing = false;
++                lastPushPingTime = getCurrentTimeMonotonicMillis() - nextPingTimeOffset;
++            }
+             if (datacenter->hasAuthKey(ConnectionTypeGeneric, 1)) {
+                 processRequestQueue(AllConnectionTypes, datacenter->getDatacenterId());
+             }
+@@ -2349,6 +2363,11 @@ void ConnectionsManager::onDatacenterHandshakeComplete(Datacenter *datacenter, H
+         datacenter->recreateSessions(type);
+         clearRequestsForDatacenter(datacenter, type);
+     }
++    if (type == HandshakeTypeTemp && pushConnectionEnabled && datacenterId == currentDatacenterId) {
++        // the ping sent with the expired temporary key was refused, and the server knows the push connection by its ping: due now
++        sendingPushPing = false;
++        lastPushPingTime = getCurrentTimeMonotonicMillis() - nextPingTimeOffset;
++    }
+     processRequestQueue(AllConnectionTypes, datacenterId);
+     if (type == HandshakeTypeTemp && !proxyCheckQueue.empty()) {
+         ProxyCheckInfo *proxyCheckInfo = proxyCheckQueue[0].release();
