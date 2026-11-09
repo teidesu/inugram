@@ -234,7 +234,7 @@ index 0000000..0000000 100644
                          if (actionsView != null) {
                              actionsView.setParentExpanded(1f);
                          }
-@@ -11530,7 +11536,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -11536,7 +11542,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              actionsView.clipHeight = -1;
              float bottom = extraHeight + newTop - dp(hasMusic || hasBalance ? 25 : 0);
              float height = Math.min(dp(74), bottom - newTop);
@@ -243,7 +243,7 @@ index 0000000..0000000 100644
          }
  
          if (callToActionItem != null && callToActionItem.getTag() != null) {
-@@ -11564,7 +11570,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -11570,7 +11576,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
  //            musicView.clipHeight = -1;
              float bottom = extraHeight + newTop + dp(74);
              float height = Math.min(getActionsExtraHeight(), bottom - newTop);
