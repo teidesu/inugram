@@ -11,7 +11,7 @@ Subject: non-island ui in various parts of the app
  .../ui/ActionBar/SimpleActionBarMenu.java     |  14 +-
  .../telegram/ui/ChannelAdminLogActivity.java  |  21 ++-
  .../java/org/telegram/ui/ChatActivity.java    | 158 ++++++++++------
- .../ui/Components/ChatActivityEnterView.java  |  72 ++++---
+ .../ui/Components/ChatActivityEnterView.java  |  72 +++++---
  ...ChatActivityEnterViewAnimatedIconView.java |  17 +-
  .../ChatActivityTopPanelLayout.java           |  27 ++-
  .../ui/Components/ChatAttachAlert.java        |  29 ++-
@@ -38,7 +38,7 @@ Subject: non-island ui in various parts of the app
  .../ChatActivityBlurredRoundButton.java       |   6 +-
  .../ChatActivityChannelButtonsLayout.java     |  33 +++-
  .../ui/Components/glass/GlassTabView.java     |   5 +-
- .../java/org/telegram/ui/DialogsActivity.java | 175 ++++++++++++------
+ .../java/org/telegram/ui/DialogsActivity.java | 173 ++++++++++++------
  .../java/org/telegram/ui/ProfileActivity.java |  59 ++++--
  .../java/org/telegram/ui/QrShare/QrGlass.java |   3 +
  .../org/telegram/ui/QrShare/QrShareView.java  |   1 +
@@ -51,7 +51,7 @@ Subject: non-island ui in various parts of the app
  .../java/org/telegram/ui/iv/RichEditor.java   |   4 +-
  .../utils/glass/BaseFragmentSimpleGlass.java  |   6 +-
  .../utils/glass/GlassCaptureSourceCanvas.java |  52 ++++--
- 47 files changed, 988 insertions(+), 341 deletions(-)
+ 47 files changed, 987 insertions(+), 340 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -3551,15 +3551,6 @@ index 0000000..0000000 100644
  
          final float actionModeVisible = Math.max(progressToActionMode, animatorActionModeVisible.getFloatValue());
          final float searchFieldVisible = animatorSearchVisible.getFloatValue();
-@@ -13773,7 +13834,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
- 
-         fragmentSearchField.setAlpha(alpha);
-         fragmentSearchField.setVisibility(alpha > 0 ? View.VISIBLE : View.GONE);
--        animatorSearchButtonVisible.setValue(alpha <= 0.01f, true);
-+        animatorSearchButtonVisible.setValue(NonIslandHelper.globalSearch() || alpha <= 0.01f, true);
-     }
- 
-     private void checkUi_searchFieldStyle() {
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
