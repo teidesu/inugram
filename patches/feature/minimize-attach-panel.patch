@@ -64,7 +64,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
-@@ -6167,6 +6167,8 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -6160,6 +6160,8 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
      }
  
      public void init() {
@@ -73,7 +73,7 @@ index 0000000..0000000 100644
          writeButton.setEffect(effectId = 0);
          botButtonWasVisible = false;
          botButtonProgressWasVisible = false;
-@@ -7097,6 +7099,24 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -7090,6 +7092,24 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
  
      private boolean confirmationAlertShown = false;
      protected boolean allowPassConfirmationAlert = false;
@@ -98,7 +98,7 @@ index 0000000..0000000 100644
  
      public void dismiss(boolean passConfirmationAlert) {
          if (passConfirmationAlert) {
-@@ -7127,7 +7147,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -7120,7 +7140,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                  return;
              }
              confirmationAlertShown = true;
@@ -107,7 +107,7 @@ index 0000000..0000000 100644
                  new AlertDialog.Builder(baseFragment.getParentActivity(), resourcesProvider)
                      .setTitle(getString(R.string.DiscardSelectionAlertTitle))
                      .setMessage(getString(R.string.DiscardSelectionAlertMessage))
-@@ -7147,8 +7167,16 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -7140,8 +7160,16 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                      })
                      .setOnPreDismissListener(di -> {
                          confirmationAlertShown = false;

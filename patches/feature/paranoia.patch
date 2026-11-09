@@ -464,7 +464,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaL
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
-@@ -1706,7 +1706,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -1699,7 +1699,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
              this.initialTab = TAB_BOT_PREVIEWS;
          } else if (userInfo != null && userInfo.bot_info != null && userInfo.bot_info.has_preview_medias) {
              this.initialTab = TAB_STORIES;
@@ -473,7 +473,7 @@ index 0000000..0000000 100644
              this.initialTab = TAB_STORIES;
          } else if (main_tab instanceof TLRPC.TL_profileTabGifts && (userInfo != null && userInfo.stargifts_count > 0 || chatInfo != null && chatInfo.stargifts_count > 0)) {
              this.initialTab = TAB_GIFTS;
-@@ -1720,7 +1720,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -1713,7 +1713,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
              this.initialTab = TAB_AUDIO;
          } else if (main_tab instanceof TLRPC.TL_profileTabVoice && (hasMedia[2] == -1 || hasMedia[2] > 0)) {
              this.initialTab = TAB_VOICE;
@@ -482,7 +482,7 @@ index 0000000..0000000 100644
              this.initialTab = getInitialTab();
          } else if (!inuPreferMediaTab && (userInfo != null && userInfo.stargifts_count > 0 || chatInfo != null && chatInfo.stargifts_count > 0)) {
              this.initialTab = TAB_GIFTS;
-@@ -6602,10 +6602,10 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -6580,10 +6580,10 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
      }
  
      public void setUserInfo(TLRPC.UserFull userInfo) {
@@ -495,7 +495,7 @@ index 0000000..0000000 100644
              scrollToPage(TAB_STORIES);
          }
      }
-@@ -6727,7 +6727,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -6705,7 +6705,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
          final TLRPC.User user = dialog_id <= 0 || profileActivity == null ? null : profileActivity.getMessagesController().getUser(dialog_id);
          boolean hasEditBotPreviews = user != null && user.bot && user.bot_has_main_app && user.bot_can_edit;
          boolean hasBotPreviews = user != null && user.bot && !user.bot_can_edit && (userInfo != null && userInfo.bot_info != null && userInfo.bot_info.has_preview_medias) && !hasEditBotPreviews;
@@ -504,7 +504,7 @@ index 0000000..0000000 100644
          boolean hasGifts = giftsContainer != null && (userInfo != null && userInfo.stargifts_count > 0 || info != null && info.stargifts_count > 0);
          final TLRPC.ProfileTab main_tab = info != null ? info.main_tab : userInfo != null ? userInfo.main_tab : null;
          int changed = 0;
-@@ -6841,7 +6841,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -6819,7 +6819,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
              }
              if (hasBotPreviews) {
                  tabs.add(new Pair(TAB_STORIES, getString(R.string.ProfileBotPreviewTab)));

@@ -14,7 +14,7 @@ Subject: non-island ui in various parts of the app
  .../ui/Components/ChatActivityEnterView.java  |  72 ++++---
  ...ChatActivityEnterViewAnimatedIconView.java |  17 +-
  .../ChatActivityTopPanelLayout.java           |  27 ++-
- .../ui/Components/ChatAttachAlert.java        |  20 ++
+ .../ui/Components/ChatAttachAlert.java        |  29 ++-
  .../ui/Components/ChatAvatarContainer.java    |   1 +
  .../ui/Components/ChatSearchTabs.java         |   2 +-
  .../DialogsActivityTopPanelLayout.java        |  20 +-
@@ -27,7 +27,7 @@ Subject: non-island ui in various parts of the app
  .../ui/Components/RecyclerListView.java       |  15 +-
  .../Components/ScrollSlidingTextTabStrip.java | 118 +++++++++++-
  .../ui/Components/SearchTagsList.java         |   3 +
- .../ui/Components/SharedMediaLayout.java      |  97 ++++++++--
+ .../ui/Components/SharedMediaLayout.java      |  61 ++++--
  .../ui/Components/TopicsSidePanel.java        |   7 +-
  .../ui/Components/TopicsTabsView.java         |  78 +++++---
  .../ui/Components/TranslateButton.java        |   4 +-
@@ -51,7 +51,7 @@ Subject: non-island ui in various parts of the app
  .../java/org/telegram/ui/iv/RichEditor.java   |   4 +-
  .../utils/glass/BaseFragmentSimpleGlass.java  |   6 +-
  .../utils/glass/GlassCaptureSourceCanvas.java |  52 ++++--
- 47 files changed, 996 insertions(+), 342 deletions(-)
+ 47 files changed, 971 insertions(+), 340 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -1490,7 +1490,36 @@ index 0000000..0000000 100644
  import me.vkryl.android.animator.BoolAnimator;
  import me.vkryl.android.animator.FactorAnimator;
  import me.vkryl.android.animator.ListAnimator;
-@@ -2105,6 +2106,9 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -1016,6 +1017,8 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+         protected void setBlur3Capture(RecyclerListView iBlur3Capture) {
+             parentAlert.glassEngine.addScrolledView(iBlur3Capture);
+             this.iBlur3Capture = iBlur3Capture;
++            // the noise suppressor aligns its downscale grid by scroll deltas; an edge stretch moves content without any
++            iBlur3Capture.inu_captureEdgeEffects = parentAlert.scrollableViewNoiseSuppressor == null || !parentAlert.scrollableViewNoiseSuppressor.allowNoiseSuppress;
+         }
+     }
+ 
+@@ -1310,7 +1313,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+         glassEngine.addColorSource(iBlur3SourceColor, () -> getThemedColor(Theme.key_windowBackgroundWhite));
+ 
+         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SharedConfig.chatBlurEnabled()) {
+-            scrollableViewNoiseSuppressor = new DownscaleScrollableNoiseSuppressor();
++            scrollableViewNoiseSuppressor = NonIslandHelper.chatElements() ? new DownscaleScrollableNoiseSuppressor(true, true) : new DownscaleScrollableNoiseSuppressor();
+             glassEngine.addNoiseSuppressor(scrollableViewNoiseSuppressor);
+ 
+             iBlur3SourceGlass = new GlassSourceRenderNode(iBlur3SourceColor);
+@@ -1326,8 +1329,8 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+             iBlur3FactoryLiquidGlass.setOutset(LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? dp(8) : dp(48));
+ 
+             iBlur3FactoryFrostedLiquidGlass = new BlurredBackgroundDrawableViewFactory(iBlur3SourceGlassFrosted);
+-            iBlur3FactoryFrostedLiquidGlass.setLiquidGlassEffectAllowed(true);
+-            iBlur3FactoryFrostedLiquidGlass.setOutset(dp(48));
++            iBlur3FactoryFrostedLiquidGlass.setLiquidGlassEffectAllowed(!NonIslandHelper.chatElements());
++            iBlur3FactoryFrostedLiquidGlass.setOutset(NonIslandHelper.chatElements() ? NonIslandHelper.getFrostedBlurReach() : dp(48));
+         } else {
+             scrollableViewNoiseSuppressor = null;
+             iBlur3SourceGlassFrosted = null;
+@@ -2105,6 +2108,9 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
  
              @Override
              public void drawBlurRect(Canvas canvas, float y, Rect rectTmp, Paint blurScrimPaint, boolean top) {
@@ -1500,24 +1529,15 @@ index 0000000..0000000 100644
              }
  
              @Override
-@@ -2599,6 +2603,16 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -2599,6 +2605,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                  super.setTranslationY(translationY);
                  currentAttachLayout.onButtonsTranslationYUpdated();
              }
 +
-+            private final desu.inugram.ui.BlurBehindHelper inu_blurHelper = NonIslandHelper.chatElements()
-+                ? desu.inugram.ui.BlurBehindHelper.create(this, sizeNotifierFrameLayout, Theme.key_dialogBackground, false, NonIslandHelper.ATTACH_TAB_SHADOW_DP, 0f)
-+                : null;
-+
-+            @Override
-+            protected void dispatchDraw(@NonNull Canvas canvas) {
-+                if (inu_blurHelper != null) inu_blurHelper.draw(canvas);
-+                super.dispatchDraw(canvas);
-+            }
          };
          buttonsRecyclerView = new RecyclerListView(context) {
              private final BoolAnimator hasFadeLeft = new BoolAnimator(this, CubicBezierInterpolator.EASE_OUT_QUINT, 320L);
-@@ -2627,6 +2641,9 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -2627,6 +2634,9 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
  
              @Override
              public boolean drawChild(Canvas canvas, View child, long drawingTime) {
@@ -1527,22 +1547,39 @@ index 0000000..0000000 100644
                  final float left = child.getX();
                  final float right = left + child.getWidth();
                  final boolean isFadedLeft = left < dp(10);
-@@ -2743,6 +2760,8 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -2743,6 +2753,8 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
          buttonsRecyclerView.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
          buttonsRecyclerViewWrapper.addView(buttonsRecyclerView, LayoutHelper.createFrameMatchParent());
          containerView.addView(buttonsRecyclerViewWrapper, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 70, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
-+        NonIslandHelper.applyChatAttachTabBar(buttonsRecyclerViewWrapper, buttonsRecyclerView);
++        NonIslandHelper.applyChatAttachTabBar(buttonsRecyclerViewWrapper, buttonsRecyclerView, iBlur3FactoryFrostedLiquidGlass, resourcesProvider);
 +        desu.inugram.helpers.chat.VoiceRecorderHelper.addFab(this, (FrameLayout) containerView, resourcesProvider);
          buttonsRecyclerView.setOnItemClickListener((view, position) -> {
              BaseFragment lastFragment = baseFragment;
              if (lastFragment == null) {
-@@ -4122,6 +4141,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -4122,7 +4134,8 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
              .setStrokeWidth(dpf2(1), dpf2(2 / 3f))
              .build();
  
+-        actionBar.setupGlass(iBlur3FactoryLiquidGlass, colorProvider);
 +        actionBar.inu_nonIsland = NonIslandHelper.chatElements();
-         actionBar.setupGlass(iBlur3FactoryLiquidGlass, colorProvider);
++        actionBar.setupGlass(NonIslandHelper.chatElements() ? iBlur3FactoryFrostedLiquidGlass : iBlur3FactoryLiquidGlass, colorProvider);
          animatorCurrentVisibleLayout.replace((long) LAYOUT_TYPE_PHOTO, false);
+ 
+         glassEngine.setRoot(containerView);
+@@ -7417,7 +7430,13 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+ 
+         if (BitwiseUtils.hasFlag(flags, GlassEngine.FLAG_INVALIDATED_POSITIONS)) {
+             GlassPositionsArray glassPositionsArray = glassEngine.getAllVisibleDrawablesWithDisplayListPositionsMerged();
+-            glassPositionsArray.clip(0, containerView.getY(), containerView.getWidth(), containerView.getY() + containerView.getHeight());
++            if (scrollableViewNoiseSuppressor.allowNoiseSuppress) {
++                // a capture cut at the screen edge gets its edge row smeared by the blur, flickering as content scrolls through it
++                final int inu_reach = NonIslandHelper.getFrostedBlurReach();
++                glassPositionsArray.clip(-inu_reach, containerView.getY() - inu_reach, containerView.getWidth() + inu_reach, containerView.getY() + containerView.getHeight() + inu_reach);
++            } else {
++                glassPositionsArray.clip(0, containerView.getY(), containerView.getWidth(), containerView.getY() + containerView.getHeight());
++            }
+             scrollableViewNoiseSuppressor.setupRenderNodes(glassPositionsArray);
+         }
  
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAvatarContainer.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAvatarContainer.java
 index 0000000..0000000 100644
@@ -2241,15 +2278,12 @@ index 0000000..0000000 100644
  
  import org.telegram.messenger.AndroidUtilities;
  import org.telegram.messenger.AnimationNotificationsLocker;
-@@ -447,9 +448,31 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -447,9 +448,24 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
              for (int i = 0; i < mediaPages.length; i++) {
                  updateFastScrollVisibility(mediaPages[i], true);
              }
 +            if (scrollSlidingTextTabStrip != null && scrollSlidingTextTabStrip.inu_pill != null) {
 +                scrollSlidingTextTabStrip.inu_pill.setDocked(pinnedToTop);
-+            }
-+            if (actionModeLayout instanceof desu.inugram.ui.MediaActionModeLayout) {
-+                ((desu.inugram.ui.MediaActionModeLayout) actionModeLayout).setDocked(pinnedToTop);
 +            }
          }
      }
@@ -2262,10 +2296,6 @@ index 0000000..0000000 100644
 +        return inu_tabsPillMode() ? dp(7) : 0;
 +    }
 +
-+    private int inu_actionModeHeight() {
-+        return inu_flatTabBar() ? 44 : 50;
-+    }
-+
 +    private boolean inu_flatTabBar() {
 +        return NonIslandHelper.sharedMediaTabs() && !inu_tabsPillMode();
 +    }
@@ -2273,7 +2303,7 @@ index 0000000..0000000 100644
      @Override
      public void onButtonClicked(DialogCell dialogCell) {
  
-@@ -1637,10 +1660,17 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -1637,10 +1653,17 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
      private final NotificationCenter.ObserversGroup observersGroup;
  
      public SharedMediaLayout(Context context, long did, SharedMediaPreloader preloader, int commonGroupsCount, ArrayList<Integer> sortedUsers, TLRPC.ChatFull chatInfo, TLRPC.UserFull userInfo, int initialTab, int initialStoryAlbumId, BaseFragment parent, Delegate delegate, int viewType, Theme.ResourcesProvider resourcesProvider, BlurredBackgroundDrawableViewFactory iBlur3FactoryLiquidGlass) {
@@ -2291,29 +2321,7 @@ index 0000000..0000000 100644
  
          if (iBlur3FactoryLiquidGlass == null) {
              iBlur3FactoryLiquidGlass = new BlurredBackgroundDrawableViewFactory(iBlur3SourceColor);
-@@ -1990,7 +2020,20 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
-         }
-         searchItemState = 0;
- 
--        actionModeLayout = new LinearLayout(context);
-+        SizeNotifierFrameLayout sizeNotifierFrameLayout = null;
-+        if (profileActivity != null && profileActivity.getFragmentView() instanceof SizeNotifierFrameLayout) {
-+            sizeNotifierFrameLayout = (SizeNotifierFrameLayout) profileActivity.getFragmentView();
-+        }
-+        if (NonIslandHelper.sharedMediaTabs()) {
-+            actionModeLayout = new desu.inugram.ui.MediaActionModeLayout(context, sizeNotifierFrameLayout, inu_tabsPillMode(), resourcesProvider) {
-+                @Override
-+                public int processColor(int color) {
-+                    return SharedMediaLayout.this.processColor(color);
-+                }
-+            };
-+        } else {
-+            actionModeLayout = new LinearLayout(context);
-+        }
- //        actionModeLayout.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundWhite));
-         actionModeLayout.setAlpha(0.0f);
-         actionModeLayout.setClickable(true);
-@@ -2068,7 +2111,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -2068,7 +2091,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
              savedMessagesContainer.chatActivity.setSavedDialog(dialog_id);
              savedMessagesContainer.chatActivity.reversed = true;
              savedMessagesContainer.setClipToOutline(true);
@@ -2322,7 +2330,7 @@ index 0000000..0000000 100644
                  @Override
                  public void getOutline(View view, Outline outline) {
                      outline.setRoundRect(0, 0, view.getWidth(), view.getHeight() + dp(24), dp(24));
-@@ -2895,7 +2938,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -2895,7 +2918,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
                      if (view instanceof SharedPhotoVideoCell2) {
                          SharedPhotoVideoCell2 cell = (SharedPhotoVideoCell2) view;
                          final int position = mediaPage.animationSupportingListView.getChildAdapterPosition(cell), spanCount = mediaPage.animationSupportingLayoutManager.getSpanCount();
@@ -2331,7 +2339,7 @@ index 0000000..0000000 100644
                          cell.isFirst = position % spanCount == 0;
                          cell.isLast = position % spanCount == spanCount - 1;
                          outRect.left = 0;
-@@ -2928,7 +2971,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -2928,7 +2951,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
                      } else if (view instanceof SharedPhotoVideoCell2) {
                          SharedPhotoVideoCell2 cell = (SharedPhotoVideoCell2) view;
                          final int position = mediaPage.listView.getChildAdapterPosition(cell), spanCount = mediaPage.layoutManager.getSpanCount();
@@ -2340,7 +2348,7 @@ index 0000000..0000000 100644
                          cell.isFirst = position % spanCount == 0;
                          cell.isLast = position % spanCount == spanCount - 1;
                          outRect.left = 0;
-@@ -3478,7 +3521,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -3478,7 +3501,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
              topPanelLayout.setViewVisible(fragmentContextViewWrapper, true, false);
              topPanelLayout.setOnAnimatedHeightChangedListener(() -> {
                  // the player is above the tabs: the tabs and everything under them go down by its glass and the gap
@@ -2349,7 +2357,7 @@ index 0000000..0000000 100644
                  applyTopPanelOffset();
  
                  if (giftsContainer != null) {
-@@ -3516,10 +3559,14 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -3516,10 +3539,14 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
                  }
              };
              fragmentContextViewWrapper.addView(fragmentContextView);
@@ -2365,7 +2373,7 @@ index 0000000..0000000 100644
  
              fragmentContextView.setDelegate((start, show) -> {
                  if (!start) {
-@@ -3538,6 +3585,12 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -3538,6 +3565,12 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
              scrollSlidingTextTabStrip.setOpen(false);
              // the glass of the tabs (inset by its padding) 6dp from the sides of the screen
              addView(scrollSlidingTextTabStrip, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, 50, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 6 - TABS_GLASS_INSET_DP, 0, 6 - TABS_GLASS_INSET_DP, 0));
@@ -2378,28 +2386,7 @@ index 0000000..0000000 100644
              searchTagsList = new SearchTagsList(getContext(), profileActivity, profileActivity.getCurrentAccount(), includeSavedDialogs() ? 0 : dialog_id, resourcesProvider) {
                  @Override
                  protected boolean setFilter(ReactionsLayoutInBubble.VisibleReaction reaction) {
-@@ -3585,12 +3638,14 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
-             addView(searchTagsList, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 38, Gravity.LEFT | Gravity.TOP, 0, 4, 0, 0));
-             if (simpleActionBar == null) {
-                 // the selection takes the place of the tabs: the same glass pill
--                final BlurredBackgroundDrawable actionModeBackground = iBlur3FactoryLiquidGlass.create(actionModeLayout, glassColors);
--                actionModeBackground.setRadius(dp(18));
--                actionModeBackground.setPadding(dp(6.666f));
--                actionModeLayout.setBackground(actionModeBackground);
--                actionModeLayout.setPadding(dp(8), 0, dp(8), 0);
--                addView(actionModeLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 50, Gravity.LEFT | Gravity.TOP));
-+                if (!NonIslandHelper.sharedMediaTabs()) {
-+                    final BlurredBackgroundDrawable actionModeBackground = iBlur3FactoryLiquidGlass.create(actionModeLayout, glassColors);
-+                    actionModeBackground.setRadius(dp(18));
-+                    actionModeBackground.setPadding(dp(6.666f));
-+                    actionModeLayout.setBackground(actionModeBackground);
-+                    actionModeLayout.setPadding(dp(8), 0, dp(8), 0);
-+                }
-+                addView(actionModeLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, inu_actionModeHeight(), Gravity.LEFT | Gravity.TOP));
-             }
-             applyTopPanelOffset();
-         }
-@@ -5467,6 +5522,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -5467,6 +5500,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
          if (heightSize == 0) {
              heightSize = MeasureSpec.getSize(heightMeasureSpec);
          }
@@ -2407,7 +2394,7 @@ index 0000000..0000000 100644
  
          setMeasuredDimension(widthSize, heightSize);
  
-@@ -11861,7 +11917,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -11861,7 +11895,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
              } else {
                  page.setWallpaper(null);
                  page.setBackground(wallpaper);
@@ -2416,7 +2403,7 @@ index 0000000..0000000 100644
                      @Override
                      public void getOutline(View view, Outline outline) {
                          outline.setRoundRect(0, dp(50), view.getWidth(), view.getHeight() + dp(24), dp(24));
-@@ -11878,7 +11934,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -11878,7 +11912,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
  
      private void updateGiftsPaddingTop() {
          if (giftsContainer != null) {
@@ -2425,7 +2412,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -11928,12 +11984,17 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -11928,12 +11962,17 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
      /** The player at the top under the header, the tabs and what is under them below it. */
      private void applyTopPanelOffset() {
          final int tabsTop = pagesTabsTop, shift = topLayoutPadding;

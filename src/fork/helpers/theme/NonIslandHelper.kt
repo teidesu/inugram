@@ -6,6 +6,7 @@ import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.LayerDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -201,9 +202,16 @@ object NonIslandHelper {
     fun applyChatAttachTabBar(
         wrapper: FrameLayout,
         recyclerView: RecyclerListView,
+        factory: BlurredBackgroundDrawableViewFactory,
+        resourcesProvider: Theme.ResourcesProvider?,
     ) {
         if (!chatElements()) return
-        wrapper.background = null
+        val shadow = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(Theme.multAlpha(Theme.getColor(Theme.key_dialogShadowLine, resourcesProvider), 0.5f), 0))
+        wrapper.background = LayerDrawable(arrayOf(shadow, ClassicBarDrawable(factory, wrapper, resourcesProvider, Theme.key_dialogBackground))).apply {
+            setLayerGravity(0, Gravity.TOP or Gravity.FILL_HORIZONTAL)
+            setLayerHeight(0, dp(ATTACH_TAB_SHADOW_DP))
+            setLayerInsetTop(1, dp(ATTACH_TAB_SHADOW_DP))
+        }
         wrapper.clipChildren = false
         recyclerView.clipToOutline = false
         recyclerView.outlineProvider = null

@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaL
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
-@@ -1364,8 +1364,6 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -1357,8 +1357,6 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
                      if (message.getId() == messageObject.getId()) {
                          imageReceiver = cell.imageReceiver;
                          cell.getLocationInWindow(coords);

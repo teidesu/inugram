@@ -21,7 +21,7 @@ index 0000000..0000000 100644
      public static final int LAYOUT_TYPE_PHOTO = 1;
      public static final int LAYOUT_TYPE_MUSIC = 3;
      public static final int LAYOUT_TYPE_DOCUMENTS = 4;
-@@ -1026,7 +1027,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -1028,7 +1029,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
      private MessageSendPreview messageSendPreview;
      public boolean allowLivePhotos = false;
  
@@ -30,7 +30,7 @@ index 0000000..0000000 100644
      private ChatAttachAlertContactsLayout contactsLayout;
      private ChatAttachAlertAudioLayout audioLayout;
      private ChatAttachAlertPollLayout pollLayout;
-@@ -1044,8 +1045,8 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -1046,8 +1047,8 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
      private float gramSendExitTranslationY;
      private AttachAlertLayout[] layouts = new AttachAlertLayout[12];
      private LongSparseArray<ChatAttachAlertBotWebViewLayout> botAttachLayouts = new LongSparseArray<>();
@@ -41,7 +41,7 @@ index 0000000..0000000 100644
  
      private BlurredBackgroundDrawable emojiViewChildBg;
      private BlurredBackgroundDrawable captionContainerBg;
-@@ -1157,7 +1158,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -1159,7 +1160,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
  
      private DecelerateInterpolator decelerateInterpolator = new DecelerateInterpolator();
  
@@ -50,15 +50,15 @@ index 0000000..0000000 100644
      private EmojiView.EmojiViewDelegate emojiViewDelegate;
  
      public int[] scrollOffsetY = new int[2];
-@@ -2762,6 +2763,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -2755,6 +2756,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
          containerView.addView(buttonsRecyclerViewWrapper, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 70, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
-         NonIslandHelper.applyChatAttachTabBar(buttonsRecyclerViewWrapper, buttonsRecyclerView);
+         NonIslandHelper.applyChatAttachTabBar(buttonsRecyclerViewWrapper, buttonsRecyclerView, iBlur3FactoryFrostedLiquidGlass, resourcesProvider);
          desu.inugram.helpers.chat.VoiceRecorderHelper.addFab(this, (FrameLayout) containerView, resourcesProvider);
 +        desu.inugram.helpers.chat.AttachCameraHelper.addFab(this, (FrameLayout) containerView, resourcesProvider);
          buttonsRecyclerView.setOnItemClickListener((view, position) -> {
              BaseFragment lastFragment = baseFragment;
              if (lastFragment == null) {
-@@ -2903,6 +2905,8 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -2896,6 +2898,8 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                          layouts[10] = richLayout = new ChatAttachAlertRichLayout(this, getContext(), currentAccount, resourcesProvider);
                      }
                      showLayout(richLayout);
@@ -67,7 +67,7 @@ index 0000000..0000000 100644
                  } else if (view.getTag() instanceof Integer) {
                      delegate.didPressedButton((Integer) view.getTag(), true, true, 0, 0, 0, isCaptionAbove(), false, 0);
                  }
-@@ -2940,6 +2944,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -2933,6 +2937,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
              }
          });
          buttonsRecyclerView.setOnItemLongClickListener((view, position) -> {
@@ -75,7 +75,7 @@ index 0000000..0000000 100644
              if (view instanceof AttachBotButton) {
                  AttachBotButton button = (AttachBotButton) view;
                  if (destroyed || button.currentUser == null) {
-@@ -6580,6 +6585,14 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -6573,6 +6578,14 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
          return true;
      }
  
@@ -90,7 +90,7 @@ index 0000000..0000000 100644
      private static boolean checkPhotoAndDocumentsPermission(Context context) {
          if (Build.VERSION.SDK_INT >= 33) {
              return ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED
-@@ -6684,6 +6697,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -6677,6 +6690,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
  
          private Context mContext;
          private int galleryButton;
@@ -98,7 +98,7 @@ index 0000000..0000000 100644
  
          private int attachBotsStartRow;
          private int attachBotsEndRow;
-@@ -6737,10 +6751,14 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -6730,10 +6744,14 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                      if (position == galleryButton) {
                          attachButton.setTextAndIcon(1, getString(R.string.ChatGallery), GlassTabView.TabAnimation.GALLERY);
                          attachButton.setTag(1);
@@ -114,7 +114,7 @@ index 0000000..0000000 100644
                      } else if (position == documentButton) {
                          attachButton.setTextAndIcon(4, getString(R.string.ChatDocument), GlassTabView.TabAnimation.FILES);
                          attachButton.setTag(4);
-@@ -6825,6 +6843,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -6818,6 +6836,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
          public void notifyDataSetChanged() {
              buttonsCount = 0;
              galleryButton = -1;
@@ -122,7 +122,7 @@ index 0000000..0000000 100644
              documentButton = -1;
              moneyButton = -1;
              musicButton = -1;
-@@ -6843,6 +6862,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -6836,6 +6855,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
  
              if (isPollAttach) {
                  galleryButton = buttonsCount++;
@@ -130,7 +130,7 @@ index 0000000..0000000 100644
                  if (pollAllowedLayouts == 0 || BitwiseUtils.hasFlag(pollAllowedLayouts, 1 << LAYOUT_TYPE_DOCUMENTS)) {
                      documentButton = buttonsCount++;
                  }
-@@ -6870,11 +6890,13 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -6863,11 +6883,13 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
              } else if (editingMessageObject != null) {
                  if (editType == EDITMEDIA_TYPE_ANY) {
                      galleryButton = buttonsCount++;
@@ -144,7 +144,7 @@ index 0000000..0000000 100644
                      }
                      if (editType == EDITMEDIA_TYPE_FILE) {
                          documentButton = buttonsCount++;
-@@ -6888,6 +6910,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -6881,6 +6903,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                  TLRPC.Chat chat = baseFragment instanceof ChatActivity ? ((ChatActivity) baseFragment).getCurrentChat() : null;
                  final boolean paidUser = user != null && ((ChatActivity) baseFragment).getMessagesController().getSendPaidMessagesStars(user.id) > 0;
                  galleryButton = buttonsCount++;

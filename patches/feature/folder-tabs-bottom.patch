@@ -4,10 +4,10 @@ Date: Fri, 6 Nov 2026 00:04:40 +0400
 Subject: add option to move folder tabs to the bottom
 
 ---
- .../java/org/telegram/ui/DialogsActivity.java | 148 +++++++++++++++---
+ .../java/org/telegram/ui/DialogsActivity.java | 149 +++++++++++++++---
  .../org/telegram/ui/MainTabsActivity.java     |  36 ++++-
  .../ui/MainTabsActivityController.java        |   1 +
- 3 files changed, 160 insertions(+), 25 deletions(-)
+ 3 files changed, 161 insertions(+), 25 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 index 0000000..0000000 100644
@@ -326,7 +326,7 @@ index 0000000..0000000 100644
                  + (topPanelLayout != null && topPanelLayout.getVisibility() == View.VISIBLE ? topPanelLayout.getSumHeightOfAllVisibleChild() : 0)
                  + ((int) scrollYOffset);
  
-@@ -14187,9 +14278,19 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -14187,9 +14278,20 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      fragmentView.getMeasuredWidth(), fragmentView.getMeasuredHeight());
                  iBlur3PositionMainTabs.inset(0, LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0 : -dp(48));
  
@@ -342,11 +342,12 @@ index 0000000..0000000 100644
 +            if (hasBottomBlur && inu_filterTabsAtBottom && NonIslandHelper.foldersBar() && filterTabsView != null) {
 +                final float inu_barTop = fragmentView.getMeasuredHeight() - inu_getBottomFilterTabsOffset() - filterTabsView.getLayoutParams().height;
 +                iBlur3PositionMainTabs.top = Math.min(iBlur3PositionMainTabs.top, inu_barTop - NonIslandHelper.getFrostedBlurReach());
++                iBlur3PositionMainTabs.bottom = Math.max(iBlur3PositionMainTabs.bottom, fragmentView.getMeasuredHeight() + NonIslandHelper.getFrostedBlurReach());
 +            }
              scrollableViewNoiseSuppressor.setupRenderNodes(iBlur3Positions, hasBottomBlur ? 2 : 1);
          }
          scrollableViewNoiseSuppressor.invalidateResultRenderNodes(iBlur3Capture, fragmentView.getMeasuredWidth(), fragmentView.getMeasuredHeight());
-@@ -14197,11 +14298,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -14197,11 +14299,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
  
      private int calculateListViewPaddingBottom() {
          if (commentView != null) {
@@ -360,7 +361,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -14245,6 +14346,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -14245,6 +14347,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          if (chatInputViewsContainer != null) {
              chatInputViewsContainer.checkInsets();
          }
