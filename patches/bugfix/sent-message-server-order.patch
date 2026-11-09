@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -23650,6 +23650,29 @@ public class ChatActivity extends BaseFragment implements
+@@ -23653,6 +23653,29 @@ public class ChatActivity extends BaseFragment implements
                  if (currentEncryptedChat == null && chatMode != MODE_QUICK_REPLIES) {
                      getMediaDataController().loadReplyMessagesForMessages(messArr, dialog_id, chatMode, 0, null, classGuid, null);
                  }

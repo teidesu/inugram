@@ -15,6 +15,7 @@ import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.core.graphics.ColorUtils
 import androidx.core.view.isVisible
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import desu.inugram.InuConfig
 import org.telegram.messenger.AndroidUtilities
@@ -345,6 +346,23 @@ object NonIslandHelper {
 
     private val listRect = RectF()
 
+    @JvmStatic
+    fun clipChatBlurCaptureToScrolledContent(canvas: Canvas, captureRect: RectF, list: RecyclerView, root: View) {
+        if (!chatElements() || captureRect.centerY() < root.height / 2f) return
+        val layoutManager = list.layoutManager as? LinearLayoutManager ?: return
+        val itemCount = list.adapter?.itemCount ?: return
+        val newestItem = layoutManager.findViewByPosition(if (layoutManager.reverseLayout) 0 else itemCount - 1) ?: return
+        if (!ViewPositionWatcher.computeRectInParent(list, root, listRect)) return
+        clipCaptureToListBottom(canvas, list, newestItem)
+    }
+
+    // listRect holds the list's rect in the capture's coordinates
+    private fun clipCaptureToListBottom(canvas: Canvas, list: RecyclerView, edgeItem: View) {
+        val restBottom = list.height - list.paddingBottom
+        val scrolled = edgeItem.bottom + edgeItem.translationY - restBottom
+        if (scrolled < getFrostedBlurReach()) canvas.clipRect(listRect.left, listRect.top + restBottom - max(0f, scrolled), listRect.right, listRect.bottom)
+    }
+
     // the blur samples past a bar's edge, so at a list's end the edge item leaks into the bar with nothing under it yet.
     // near an end, only as much content past the item's resting edge is captured as has scrolled under the bar.
     // rows above the top item (hidden archive) sit under the header by design and are never captured
@@ -357,9 +375,7 @@ object NonIslandHelper {
         if (!ViewPositionWatcher.computeRectInParent(list, root, listRect)) return
         val reach = getFrostedBlurReach()
         if (atBottom) {
-            val restBottom = list.height - list.paddingBottom
-            val scrolled = edgeItem.bottom + edgeItem.translationY - restBottom
-            if (scrolled < reach) canvas.clipRect(listRect.left, listRect.top + restBottom - max(0f, scrolled), listRect.right, listRect.bottom)
+            clipCaptureToListBottom(canvas, list, edgeItem)
         } else {
             val edgeTop = edgeItem.top + edgeItem.translationY
             val restTop = list.paddingTop + topRestOffset

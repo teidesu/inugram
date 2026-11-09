@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -18351,7 +18351,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -18354,7 +18354,8 @@ public class ChatActivity extends BaseFragment implements
          @Override
          public void addView(View child, int index, ViewGroup.LayoutParams params) {
              if (chatActivityEnterView != null && child == chatActivityEnterView.botCommandsMenuContainer) {

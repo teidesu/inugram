@@ -283,7 +283,7 @@ index 0000000..0000000 100644
                  replyLayout.current().hasSpoiler = hasSpoiler;
                  replyImageView.setImage(ImageLocation.getForObject(replyImageLocation, photoSizeObject), hasSpoiler ? "5_5_b" : "50_50", ImageLocation.getForObject(thumbPhotoSize, photoSizeObject), hasSpoiler ? "5_5_b" : "50_50_b", null, size, cacheType, thumbMediaMessageObject);
                  replyImageView.setVisibility(View.VISIBLE);
-@@ -29601,7 +29601,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -29604,7 +29604,7 @@ public class ChatActivity extends BaseFragment implements
                      } else {
                          pinnedMessageImageView[1].setRoundRadius(AndroidUtilities.dp(2));
                      }

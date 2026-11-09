@@ -21,7 +21,7 @@ index 0000000..0000000 100644
          @Override
          protected boolean invalidateOptimized() {
              return true;
-@@ -19219,16 +19216,6 @@ public class ChatActivity extends BaseFragment implements
+@@ -19222,16 +19219,6 @@ public class ChatActivity extends BaseFragment implements
                  }
              }
  
