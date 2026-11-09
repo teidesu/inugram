@@ -393,7 +393,7 @@ index 0000000..0000000 100644
          int messageIdForCell = primaryMessage.getId();
          if (groupedMessagesMap.get(primaryMessage.getGroupId()) != null) {
              int flags = primaryMessage.shouldDrawReactionsInLayout() ? MessageObject.POSITION_FLAG_BOTTOM | MessageObject.POSITION_FLAG_LEFT : MessageObject.POSITION_FLAG_BOTTOM | MessageObject.POSITION_FLAG_RIGHT;
-@@ -47737,8 +47759,14 @@ public class ChatActivity extends BaseFragment implements
+@@ -47739,8 +47761,14 @@ public class ChatActivity extends BaseFragment implements
          } else if (buttonId == ChatActivitySideControlsButtonsLayout.BUTTON_MENTION) {
              loadLastUnreadMention();
          } else if (buttonId == ChatActivitySideControlsButtonsLayout.BUTTON_REACTIONS) {

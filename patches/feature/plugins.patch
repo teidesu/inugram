@@ -1122,7 +1122,7 @@ index 0000000..0000000 100644
          if (chatListView == null) {
              showDialog(dialog);
              return;
-@@ -48004,7 +48114,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -48006,7 +48116,7 @@ public class ChatActivity extends BaseFragment implements
          return createMenuTextOption(context, resourcesProvider, text, 14);
      }
  

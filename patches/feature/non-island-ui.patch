@@ -4,14 +4,14 @@ Date: Thu, 23 Jul 2026 12:29:15 +0400
 Subject: non-island ui in various parts of the app
 
 ---
- .../org/telegram/ui/ActionBar/ActionBar.java  |  53 +++---
+ .../org/telegram/ui/ActionBar/ActionBar.java  |  53 +++--
  .../ui/ActionBar/ActionBarLayout.java         |   2 +-
  .../telegram/ui/ActionBar/BaseFragment.java   |   6 +-
  .../ui/ActionBar/SimpleActionBar.java         |  81 ++++++--
  .../ui/ActionBar/SimpleActionBarMenu.java     |  14 +-
  .../java/org/telegram/ui/CallLogActivity.java |  20 +-
- .../telegram/ui/ChannelAdminLogActivity.java  |  21 ++-
- .../java/org/telegram/ui/ChatActivity.java    | 177 ++++++++++++------
+ .../telegram/ui/ChannelAdminLogActivity.java  |  21 +-
+ .../java/org/telegram/ui/ChatActivity.java    | 193 ++++++++++++------
  .../BitmapSectionsItemDecoration.java         |   3 +
  .../ui/Components/ChatActivityEnterView.java  |  72 ++++---
  ...ChatActivityEnterViewAnimatedIconView.java |  17 +-
@@ -20,28 +20,29 @@ Subject: non-island ui in various parts of the app
  .../ui/Components/ChatAvatarContainer.java    |   1 +
  .../ui/Components/ChatSearchTabs.java         |   2 +-
  .../DialogsActivityTopPanelLayout.java        |  20 +-
- .../ui/Components/FilterTabsView.java         |  21 ++-
+ .../ui/Components/FilterTabsView.java         |  21 +-
  .../ui/Components/FragmentContextView.java    |  11 +-
  .../FragmentContextViewWavesDrawable.java     |  29 ++-
  .../ui/Components/FragmentSearchField.java    |  13 +-
- .../telegram/ui/Components/MediaActivity.java |  21 ++-
+ .../telegram/ui/Components/MediaActivity.java |  21 +-
  .../ui/Components/MentionsContainerView.java  |  19 +-
  .../ui/Components/RecyclerListView.java       |  15 +-
- .../Components/ScrollSlidingTextTabStrip.java | 118 +++++++++++-
+ .../Components/ScrollSlidingTextTabStrip.java | 118 ++++++++++-
  .../ui/Components/SearchTagsList.java         |   3 +
- .../ui/Components/SharedMediaLayout.java      |  61 ++++--
+ .../ui/Components/SharedMediaLayout.java      |  61 +++++-
  .../ui/Components/TopicsSidePanel.java        |   7 +-
- .../ui/Components/TopicsTabsView.java         |  78 +++++---
+ .../ui/Components/TopicsTabsView.java         |  78 ++++---
  .../ui/Components/TranslateButton.java        |   4 +-
  .../ui/Components/ViewPagerFixed.java         |  12 +-
  .../blur3/drawable/GlassRimRenderer.java      |   4 +-
  .../impl/BlurredBackgroundProviderImpl.java   |  13 +-
  .../chat/ChatInputViewsContainer.java         |  30 ++-
  .../ChatActivityBlurredRoundButton.java       |   6 +-
- .../ChatActivityChannelButtonsLayout.java     |  33 +++-
+ .../ChatActivityActionsButtonsLayout.java     |  19 ++
+ .../ChatActivityChannelButtonsLayout.java     |  33 ++-
  .../ui/Components/glass/GlassTabView.java     |   5 +-
- .../java/org/telegram/ui/DialogsActivity.java | 173 +++++++++++------
- .../java/org/telegram/ui/ProfileActivity.java |  63 +++++--
+ .../java/org/telegram/ui/DialogsActivity.java | 173 +++++++++++-----
+ .../java/org/telegram/ui/ProfileActivity.java |  63 ++++--
  .../java/org/telegram/ui/QrShare/QrGlass.java |   3 +
  .../org/telegram/ui/QrShare/QrShareView.java  |   1 +
  .../org/telegram/ui/QrShare/RimPainter.java   |   1 +
@@ -53,7 +54,7 @@ Subject: non-island ui in various parts of the app
  .../java/org/telegram/ui/iv/RichEditor.java   |   4 +-
  .../utils/glass/BaseFragmentSimpleGlass.java  |   6 +-
  .../utils/glass/GlassCaptureSourceCanvas.java |  52 +++--
- 49 files changed, 1023 insertions(+), 350 deletions(-)
+ 50 files changed, 1051 insertions(+), 357 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -739,12 +740,15 @@ index 0000000..0000000 100644
  
          int chatListIndex = contentView.indexOfChild(chatListView);
          chatListIndex = chatListIndex < 0 ? contentView.getChildCount() : (chatListIndex + 1);
-@@ -8189,7 +8201,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -8187,9 +8199,9 @@ public class ChatActivity extends BaseFragment implements
+             updateSelectedMessageReactions();
+         });
          bottomViewsVisibilityController.setViewVisible(MESSAGE_ACTION_CONTAINER, false, false);
-         actionsButtonsLayout.setPadding(0, dp(56), 0, 0);
+-        actionsButtonsLayout.setPadding(0, dp(56), 0, 0);
++        actionsButtonsLayout.setPadding(0, NonIslandHelper.chatElements() ? 0 : dp(56), 0, 0);
          actionsButtonsLayout.setClipToPadding(false);
 -        chatInputBubbleContainer.addView(actionsButtonsLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 106, Gravity.BOTTOM));
-+        chatInputBubbleContainer.addView(actionsButtonsLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 106, Gravity.BOTTOM, 0, 0, 0, NonIslandHelper.chatElements() ? -9 : 0));
++        chatInputBubbleContainer.addView(actionsButtonsLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, NonIslandHelper.chatElements() ? ChatActivityEnterView.DEFAULT_HEIGHT : 106, Gravity.BOTTOM, 0, 0, 0, NonIslandHelper.chatElements() ? -9 : 0));
          chatActivityEnterView.setSuggestionButtonVisible(ChatObject.isMonoForum(currentChat), false);
  
          chatActivityEnterTopView = new ChatActivityEnterTopView(context) {
@@ -1214,7 +1218,41 @@ index 0000000..0000000 100644
              topPanelLayout.setPadding(dp(7) + (int) sideMenu, dp(7), dp(7), dp(7));
          }
      }
-@@ -48059,7 +48118,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -47624,25 +47683,27 @@ public class ChatActivity extends BaseFragment implements
+         final float actionFactor = bottomViewsVisibilityController.getVisibility(MESSAGE_ACTION_CONTAINER);
+ 
+         final float hideFactor = 1f - ((1f - actionFactor) * (1f - pollAddOptionVisibility));
++        final float inu_bubbleHideFactor = NonIslandHelper.chatElements() ? pollAddOptionVisibility : hideFactor;
++        final float inu_shiftFactor = NonIslandHelper.chatElements() && actionFactor < 1f ? pollAddOptionVisibility : hideFactor;
+ 
+         if (actionsButtonsLayout != null) {
+             actionsButtonsLayout.setTotalVisibilityFactor(hideFactor);
+         }
+         if (chatActivityEnterView != null) {
+-            chatActivityEnterView.setTranslationY(dp(54) * hideFactor);
++            chatActivityEnterView.setTranslationY(dp(54) * inu_shiftFactor);
+         }
+         if (searchContainer != null) {
+-            searchContainer.setTranslationY(dp(54) * hideFactor);
++            searchContainer.setTranslationY(dp(54) * inu_shiftFactor);
+         }
+         if (bottomChannelButtonsLayout != null) {
+-            bottomChannelButtonsLayout.setTranslationY(dp(54) * hideFactor);
++            bottomChannelButtonsLayout.setTranslationY(dp(54) * inu_shiftFactor);
+         }
+         if (bottomOverlay != null) {
+-            bottomOverlay.setTranslationY(dp(54) * hideFactor);
++            bottomOverlay.setTranslationY(dp(54) * inu_shiftFactor);
+         }
+         if (chatInputViewsContainer != null) {
+-            chatInputViewsContainer.setInputBubbleAlpha((int) (255 * (1f - hideFactor)));
+-            chatInputViewsContainer.setInputBubbleTranslationY(dp(54) * hideFactor);
++            chatInputViewsContainer.setInputBubbleAlpha((int) (255 * (1f - inu_bubbleHideFactor)));
++            chatInputViewsContainer.setInputBubbleTranslationY(dp(54) * inu_bubbleHideFactor);
+         }
+ 
+ 
+@@ -48059,7 +48120,7 @@ public class ChatActivity extends BaseFragment implements
      }
  
      private float getTopicTabsSideSize(TopicsTabsView.Position position) {
@@ -1223,7 +1261,7 @@ index 0000000..0000000 100644
      }
  
      private void invalidateBlurCaptures(int flags) {
-@@ -48156,7 +48215,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -48156,7 +48217,7 @@ public class ChatActivity extends BaseFragment implements
              if (bottomChannelButtonsLayout != null) {
                  bottomChannelButtonsLayout.setAccentColor(getThemedColor(Theme.key_featuredStickers_addButton));
              }
@@ -2999,6 +3037,64 @@ index 0000000..0000000 100644
      }
  
      public void showLoading(boolean loading, boolean animated) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/layouts/ChatActivityActionsButtonsLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/layouts/ChatActivityActionsButtonsLayout.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/layouts/ChatActivityActionsButtonsLayout.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/layouts/ChatActivityActionsButtonsLayout.java
+@@ -12,6 +12,7 @@ import android.util.TypedValue;
+ import android.view.Gravity;
+ import android.view.View;
+ import android.widget.LinearLayout;
++import android.widget.Space;
+ import android.widget.TextView;
+ 
+ import androidx.annotation.DrawableRes;
+@@ -29,6 +30,7 @@ import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory;
+ import org.telegram.ui.Components.blur3.drawable.color.BlurredBackgroundColorProvider;
+ import org.telegram.ui.Components.chat.buttons.ChatActivityBlurredRoundButton;
+ 
++import desu.inugram.helpers.theme.NonIslandHelper;
+ import me.vkryl.android.AnimatorUtils;
+ import me.vkryl.android.animator.BoolAnimator;
+ import me.vkryl.android.animator.FactorAnimator;
+@@ -36,6 +38,7 @@ import me.vkryl.android.animator.FactorAnimator;
+ @SuppressLint("ViewConstructor")
+ public class ChatActivityActionsButtonsLayout extends LinearLayout {
+     private final Theme.ResourcesProvider resourcesProvider;
++    private final boolean inu_flat = NonIslandHelper.chatElements();
+ 
+     private final ButtonHolder replyButton = new ButtonHolder();
+     private final ButtonHolder forwardButton = new ButtonHolder();
+@@ -65,6 +68,17 @@ public class ChatActivityActionsButtonsLayout extends LinearLayout {
+         setOrientation(HORIZONTAL);
+         setClipChildren(false);
+ 
++        if (inu_flat) {
++            for (ButtonHolder holder : new ButtonHolder[] {replyButton, forwardButton}) {
++                holder.button.setBlurredBackgroundDrawable(null);
++                ScaleStateListAnimator.reset(holder.button);
++                ThemeBind.selectorBackground(holder.button, Theme.createSelectorDrawable(Theme.multAlpha(Theme.getColor(Theme.key_glass_defaultIcon, resourcesProvider), .15f), Theme.RIPPLE_MASK_CIRCLE_TO_BOUND_EDGE), null, ThemeBind.multAlpha(Theme.key_glass_defaultIcon, .15f), resourcesProvider);
++            }
++            addView(replyButton.button, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.MATCH_PARENT));
++            addView(new Space(context), LayoutHelper.createLinear(0, 0, 1f));
++            addView(forwardButton.button, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.MATCH_PARENT));
++            return;
++        }
+         addView(replyButton.button, LayoutHelper.createLinear(0, 56, 1f, 1, 0, -1, 0));
+         addView(forwardButton.button, LayoutHelper.createLinear(0, 56, 1f, -1, 0, 1, 0));
+     }
+@@ -151,6 +165,11 @@ public class ChatActivityActionsButtonsLayout extends LinearLayout {
+ 
+     private void checkHolderPositionsAndVisibility(ButtonHolder holder) {
+         final float visibility = totalVisibilityFactor * holder.visibilityAnimator.getFloatValue();
++        if (inu_flat) {
++            holder.button.setAlpha(visibility);
++            holder.button.setVisibility(visibility > 0 ? VISIBLE : INVISIBLE);
++            return;
++        }
+         final float offsetY = -dp(54) * (1f - visibility);
+         float offsetX = getMeasuredWidth() / 2f * (1f - AnimatorUtils.DECELERATE_INTERPOLATOR.getInterpolation(visibility));
+         if (holder == replyButton) {
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/layouts/ChatActivityChannelButtonsLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/layouts/ChatActivityChannelButtonsLayout.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/layouts/ChatActivityChannelButtonsLayout.java
