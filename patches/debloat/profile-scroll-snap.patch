@@ -27,7 +27,7 @@ index 0000000..0000000 100644
              @Override
              protected boolean canHighlightChildAt(View child, float x, float y) {
                  return !(child instanceof AboutLinkCell);
-@@ -6159,7 +6167,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -6163,7 +6171,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              } else {
                  listView.smoothScrollBy(0, firstRow.getTop() - getHeaderExtraHeight(), CubicBezierInterpolator.EASE_OUT_QUINT);
              }

@@ -11,6 +11,7 @@ Subject: non-island ui in various parts of the app
  .../ui/ActionBar/SimpleActionBarMenu.java     |  14 +-
  .../telegram/ui/ChannelAdminLogActivity.java  |  21 ++-
  .../java/org/telegram/ui/ChatActivity.java    | 177 ++++++++++++------
+ .../BitmapSectionsItemDecoration.java         |   3 +
  .../ui/Components/ChatActivityEnterView.java  |  72 ++++---
  ...ChatActivityEnterViewAnimatedIconView.java |  17 +-
  .../ChatActivityTopPanelLayout.java           |  27 ++-
@@ -39,7 +40,7 @@ Subject: non-island ui in various parts of the app
  .../ChatActivityChannelButtonsLayout.java     |  33 +++-
  .../ui/Components/glass/GlassTabView.java     |   5 +-
  .../java/org/telegram/ui/DialogsActivity.java | 173 +++++++++++------
- .../java/org/telegram/ui/ProfileActivity.java |  59 ++++--
+ .../java/org/telegram/ui/ProfileActivity.java |  63 +++++--
  .../java/org/telegram/ui/QrShare/QrGlass.java |   3 +
  .../org/telegram/ui/QrShare/QrShareView.java  |   1 +
  .../org/telegram/ui/QrShare/RimPainter.java   |   1 +
@@ -51,7 +52,7 @@ Subject: non-island ui in various parts of the app
  .../java/org/telegram/ui/iv/RichEditor.java   |   4 +-
  .../utils/glass/BaseFragmentSimpleGlass.java  |   6 +-
  .../utils/glass/GlassCaptureSourceCanvas.java |  52 +++--
- 47 files changed, 1001 insertions(+), 345 deletions(-)
+ 48 files changed, 1008 insertions(+), 345 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -1168,6 +1169,27 @@ index 0000000..0000000 100644
                  final int color = getThemedColor(Theme.key_featuredStickers_addButton);
                  if (color != bottomOverlayStartButtonColor || bottomOverlayStartButtonDark != Theme.isCurrentThemeDark()) {
                      bottomOverlayStartButtonColor = color;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/BitmapSectionsItemDecoration.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/BitmapSectionsItemDecoration.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/BitmapSectionsItemDecoration.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/BitmapSectionsItemDecoration.java
+@@ -663,6 +663,8 @@ public class BitmapSectionsItemDecoration extends RecyclerView.ItemDecoration im
+         if (recyclerView != parent || radius <= 0.0f) return;
+         updateBackgroundColor();
+         ensureBitmaps();
++        final int inu_restoreCount = canvas.save();
++        if (parent.inu_selectorClipTop != Integer.MIN_VALUE) canvas.clipRect(0, parent.inu_selectorClipTop, parent.getWidth(), parent.getHeight());
+         collectingCornerVertices = drawBackground && drawingMode == RecyclerListView.SectionsDrawingMode.DRAW_VERTICES;
+         if (collectingCornerVertices) beginCornerVertices();
+         if (parent.isAnimating()) {
+@@ -675,6 +677,7 @@ public class BitmapSectionsItemDecoration extends RecyclerView.ItemDecoration im
+             collectingCornerVertices = false;
+             flushCornerVertices(canvas);
+         }
++        canvas.restoreToCount(inu_restoreCount);
+     }
+ 
+     private void drawStableCorners(Canvas canvas) {
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
@@ -3672,7 +3694,18 @@ index 0000000..0000000 100644
                  updateBottomButtonY();
              }
          });
-@@ -6122,10 +6122,12 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -5899,6 +5899,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+             // over the media only they are under the glass: the rows above them would show through the pages' overscan
+             final float mediaProgress = sharedMediaLayout != null && sharedMediaLayout.getParent() == listView ? mediaHeaderAnimationProgress : 0f;
+             if (mediaProgress < 1f) {
++                if (desu.inugram.helpers.theme.NonIslandHelper.profileHeaders()) {
++                    captureFillPaint.setColor(getThemedColor(Theme.key_windowBackgroundGray));
++                    c.drawRect(p, captureFillPaint);
++                }
+                 if (isUnderGlass(topView, p, root)) {
+                     Blur3Utils.captureRelativeParent((canvas, position) -> topView.drawForCapture(canvas), c, p, topView, root);
+                 }
+@@ -6122,10 +6126,12 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              return;
          }
          final boolean media = sharedMediaLayout != null && sharedMediaLayout.getParent() == listView && sharedMediaLayout.isAttachedToWindow();
@@ -3686,7 +3719,7 @@ index 0000000..0000000 100644
          if (media) {
              // at the top of the screen wherever the media are
              headerFadeView.setTranslationY(-(listView.getY() + sharedMediaLayout.getY()));
-@@ -8014,6 +8016,14 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -8014,6 +8020,14 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                  return false;
              });
          }
@@ -3701,7 +3734,7 @@ index 0000000..0000000 100644
      }
  
      /** The old action bar only keeps the geometry of the header; the selection of the media hides the profile's titles. */
-@@ -8084,6 +8094,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -8084,6 +8098,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          simpleActionBar.setButtonsGlass(buttonsGlass.headerFactory);
          simpleActionBar.setMenuGlassStroke(false);
          glass.setViews(contentView, simpleActionBar, resourcesProvider);
@@ -3712,7 +3745,7 @@ index 0000000..0000000 100644
          simpleActionBar.setMenuGlass(buttonsGlass.menuFactory, buttonsGlass.menuSource);
          simpleActionBar.setBackground(null);
          headerMenuGlassColors = BlurredBackgroundProviderImpl.simpleActionBar(resourcesProvider);
-@@ -8100,10 +8114,14 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -8100,10 +8118,14 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              return true;
          });
          sharedMediaLayout.addPagesOverlay(headerFadeView, 0);
@@ -3729,7 +3762,7 @@ index 0000000..0000000 100644
          contentView.addView(headerBlurView, contentView.indexOfChild(avatarContainer2), LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 0, Gravity.TOP));
          glassEngine.addScrolledView(listView);
          sharedMediaLayout.setPagesGlassEngine(glassEngine);
-@@ -8123,7 +8141,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -8123,7 +8145,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          final int statusBar = actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0;
          final int headerHeight = statusBar + ActionBar.getCurrentActionBarHeight();
          // the list starts under the header: the tabs go up into the glass header's extra height, 7dp under its buttons
@@ -3740,7 +3773,7 @@ index 0000000..0000000 100644
          pagesOverscanTop = headerHeight + tabsTop + BaseFragmentSimpleGlass.getOverscan(statusBar);
          sharedMediaLayout.setPagesInsets(tabsTop,
              pagesOverscanTop,
-@@ -8153,8 +8173,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -8153,8 +8177,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              extra = sharedMediaLayout.getParent() == listView ? Math.max(0, shift - Math.max(0, (int) sharedMediaLayout.getY())) : shift;
          }
          final int height = headerBlurBaseHeight + extra;
@@ -3752,7 +3785,7 @@ index 0000000..0000000 100644
      }
  
      private static void setHeaderBlurHeight(View view, int height) {
-@@ -8345,7 +8366,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -8345,7 +8370,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          boolean searchVisible = imageUpdater == null && actionBar.isSearchFieldVisible();
          if (sharedMediaRow != -1 && !searchVisible) {
              holder = (RecyclerListView.Holder) listView.findViewHolderForAdapterPosition(sharedMediaRow);
@@ -3761,7 +3794,7 @@ index 0000000..0000000 100644
          } else {
              mediaHeaderVisible = searchVisible;
          }
-@@ -8578,8 +8599,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -8578,8 +8603,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          nameY = AndroidUtilities.lerp(minNameY, backwardInitialValues[8], backwardDiff);
          onlineY = AndroidUtilities.lerp(minOnlineY, backwardInitialValues[9], backwardDiff);
  
@@ -3772,7 +3805,7 @@ index 0000000..0000000 100644
          nameTextView.setTranslationX(nameX);
          nameTextView.setTranslationY(nameY);
          onlineTextView.setTranslationX(onlineX + customPhotoOffset);
-@@ -9035,7 +9056,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -9035,7 +9060,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                  final float avatarBottom = (float) Math.floor(endNameY) + (avatarContainer.getHeight() * avatarContainer.getScaleY() + dpf2(8)) * (openAnimationInProgress ? avatarAnimationProgress : diff);
                  nameY = avatarBottom + dp(1.3f) + dp(7) * diff + titleAnimationsYDiff * (1f - avatarAnimationProgress);
                  onlineY = avatarBottom + dp(24) + (float) Math.floor(11 * AndroidUtilities.density) * diff;
@@ -3781,7 +3814,7 @@ index 0000000..0000000 100644
  
                  if (showStatusButton != null) {
                      showStatusButton.setAlpha((int) (0xFF * diff));
-@@ -10017,6 +10038,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -10017,6 +10042,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
      public void onTransitionAnimationEnd(boolean isOpen, boolean backward) {
          if (isOpen && simpleActionBar != null) {
              simpleActionBar.setAlpha(1f);
@@ -3789,7 +3822,7 @@ index 0000000..0000000 100644
          }
          if (isOpen) {
              if (!backward) {
-@@ -10070,6 +10092,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -10070,6 +10096,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          checkPhotoDescriptionAlpha();
          if (simpleActionBar != null) {
              simpleActionBar.setAlpha(progress);
@@ -3797,7 +3830,7 @@ index 0000000..0000000 100644
          }
          if (playProfileAnimation == 2) {
              avatarImage.setProgressToExpand(progress);
-@@ -15492,10 +15515,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -15492,10 +15519,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              if (animated) {
                  LinearSmoothScrollerCustom linearSmoothScroller = new LinearSmoothScrollerCustom(getContext(), LinearSmoothScrollerCustom.POSITION_TOP, .6f);
                  linearSmoothScroller.setTargetPosition(sharedMediaRow);

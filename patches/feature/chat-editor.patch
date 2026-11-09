@@ -554,7 +554,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -12369,7 +12369,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -12373,7 +12373,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                          editItemVisible = true;
                      }
                  } else {

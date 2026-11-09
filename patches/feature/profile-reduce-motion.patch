@@ -80,7 +80,7 @@ index 0000000..0000000 100644
          defaultItemAnimator.setMoveDelay(0);
          defaultItemAnimator.setMoveDuration(320);
          defaultItemAnimator.setRemoveDuration(320);
-@@ -6170,6 +6171,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -6174,6 +6175,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              avatarGooey.setVisibility(pullUpProgress >= 1.0f ? View.GONE : View.VISIBLE);
          } else {
              avatarGooey.setHideProgress(pullUpProgress);
@@ -91,7 +91,7 @@ index 0000000..0000000 100644
          }
          if (storyView != null && playProfileAnimation != 2) {
              storyView.setAlpha(pullUpProgress > 0 ? lerp(1.0f, 0.0f, ilerp(pullUpProgress, 0, 0.5f)) : 1.0f);
-@@ -8774,7 +8779,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -8778,7 +8783,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                          + ActionBar.getCurrentActionBarHeight()
                          - dp(21)
                          + actionBar.getTranslationY();
@@ -100,7 +100,7 @@ index 0000000..0000000 100644
              } else {
                  avatarY = endNameY;
              }
-@@ -9042,6 +9047,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -9046,6 +9051,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                      avatarScale = lerp(intoSize, 96, diff) / 100f;
                      pullUpProgress = 1.0f - diff;
                  }
@@ -111,7 +111,7 @@ index 0000000..0000000 100644
  
                  if (actionsView != null) {
                      if (openAnimationInProgress) {
-@@ -9055,7 +9064,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -9059,7 +9068,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                      storyView.invalidate();
                  }
                  if (giftsView != null) {
@@ -120,7 +120,7 @@ index 0000000..0000000 100644
                  }
                  final float nameScale = 1.0f + 0.12f * diff;
                  if (expandAnimator == null || !expandAnimator.isRunning()) {
-@@ -9130,6 +9139,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -9134,6 +9143,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          if (diff >= 1f) {
              avatarImage.setAlpha(1f);
          }
@@ -128,7 +128,7 @@ index 0000000..0000000 100644
      }
  
      private void updateExtraViews(float newTop) {
-@@ -9140,7 +9150,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -9144,7 +9154,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              overlaysView.requestLayout();
          }
          if (topView != null) {
@@ -137,7 +137,7 @@ index 0000000..0000000 100644
              if (topView.backgroundGradient != null) {
                  topView.backgroundGradient.setLocalMatrix(topView.backgroundGradientMatrix);
              }
-@@ -11534,7 +11544,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -11538,7 +11548,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              return;
          }
          final int newTop = ActionBar.getCurrentActionBarHeight() + (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0);
@@ -146,7 +146,7 @@ index 0000000..0000000 100644
  
          if (openAnimationInProgress && playProfileAnimation == 2 && avatarContainer != null) {
              float vh = avatarContainer.getHeight() * avatarContainer.getScaleY();
-@@ -11756,11 +11766,11 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -11760,11 +11770,11 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                  }
                  if (user != null && !MessagesController.isSupportUser(user) && DialogObject.getEmojiStatusDocumentId(user.emoji_status) != 0) {
                      rightIconIsStatus = true;
@@ -160,7 +160,7 @@ index 0000000..0000000 100644
                      nameTextViewRightDrawableContentDescription = LocaleController.getString(R.string.AccDescrPremium);
                  } else {
                      nameTextView.setRightDrawable(null);
-@@ -16679,7 +16689,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -16683,7 +16693,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          if (collectibleHint != null) {
              collectibleHint.hide();
          }

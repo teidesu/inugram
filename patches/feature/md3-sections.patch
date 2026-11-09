@@ -532,7 +532,7 @@ index 0000000..0000000 100644
 +        if (recyclerView != parent || radius <= 0.0f || desu.inugram.helpers.theme.M3SectionsHelper.isEnabled()) return;
          updateBackgroundColor();
          ensureBitmaps();
-         collectingCornerVertices = drawBackground && drawingMode == RecyclerListView.SectionsDrawingMode.DRAW_VERTICES;
+         final int inu_restoreCount = canvas.save();
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ItemOptions.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ItemOptions.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ItemOptions.java
