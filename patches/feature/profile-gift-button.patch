@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -9487,10 +9487,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -9491,10 +9491,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                      avatarImage.setHasStories(needInsetForStories());
                  }
                  if (chatId != 0) {
@@ -24,7 +24,7 @@ index 0000000..0000000 100644
                      }
                  }
              }
-@@ -10708,10 +10708,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -10712,10 +10712,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          fetchUsersFromChannelInfo();
          inu_fetchLinkedChannelMessage();
          if (chatId != 0) {
@@ -37,7 +37,7 @@ index 0000000..0000000 100644
              }
          }
      }
-@@ -12449,7 +12449,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -12453,7 +12453,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                      otherItem.addSubItem(delete_contact, R.drawable.msg_delete, LocaleController.getString(R.string.DeleteContact));
                  }
                  if (!UserObject.isDeleted(user) && !isBot && currentEncryptedChat == null && !userBlocked && userId != 333000 && userId != 777000 && userId != 42777) {
@@ -46,7 +46,7 @@ index 0000000..0000000 100644
                          StarsController.getInstance(currentAccount).loadStarGifts();
                          otherItem.addSubItem(gift_premium, R.drawable.msg_gift_premium, LocaleController.getString(R.string.ProfileSendAGift));
                          giftAction = true;
-@@ -12541,7 +12541,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -12545,7 +12545,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                          otherItem.addSubItem(share, R.drawable.msg_share, LocaleController.getString(R.string.BotShare));
                          shareAction = !chat.creator;
                      }
@@ -55,7 +55,7 @@ index 0000000..0000000 100644
                          StarsController.getInstance(currentAccount).loadStarGifts();
                          otherItem.addSubItem(gift_premium, R.drawable.msg_gift_premium, LocaleController.getString(R.string.ProfileSendAGiftToChannel));
                          otherItem.setSubItemShown(gift_premium, chatInfo != null && chatInfo.stargifts_available);
-@@ -12636,7 +12636,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -12640,7 +12640,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              actionsView.set(ProfileActionsView.KEY_VOICE_CHAT, voiceChatAction);
              actionsView.set(ProfileActionsView.KEY_STREAM, streamAction);
  

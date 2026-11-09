@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -8222,6 +8222,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -8226,6 +8226,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          headerFadeView.setAlpha(0);
          // follows the media every frame: it stays at the top of the screen
          contentView.getViewTreeObserver().addOnPreDrawListener(() -> {
@@ -19,7 +19,7 @@ index 0000000..0000000 100644
              updateHeaderBlurHeight();
              updateHeaderBlurViews();
              return true;
-@@ -8309,7 +8310,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -8313,7 +8314,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
      private void checkPagesVisibleOverscan() {
          if (sharedMediaLayout != null) {
              // until the header has grown back over them: the header draws its color only above (1 - progress) of its height
