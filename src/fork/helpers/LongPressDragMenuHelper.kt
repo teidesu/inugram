@@ -68,7 +68,7 @@ object LongPressDragMenuHelper {
 
     @JvmStatic
     @JvmOverloads
-    fun setHover(item: View, hovered: Boolean, rounded: Boolean = true) {
+    fun setHover(item: View, hovered: Boolean, rounded: Boolean = true, haptic: Boolean = true) {
         if (!hovered) {
             if (hoverItem === item) {
                 item.background = hoverSaved
@@ -80,7 +80,7 @@ object LongPressDragMenuHelper {
         hoverItem = item
         hoverSaved = item.background
         item.background = makeHighlightBg(item, rounded)
-        item.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+        if (haptic) item.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
     }
 
     private fun makeHighlightBg(item: View, rounded: Boolean): GradientDrawable {

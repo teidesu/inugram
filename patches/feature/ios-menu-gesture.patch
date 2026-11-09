@@ -4,16 +4,16 @@ Date: Mon, 20 Apr 2026 12:50:31 +0300
 Subject: improved ios-style release-to-activate gestures: plain backgrounds, gesture detection
 
 ---
- .../ui/ActionBar/ActionBarMenuItem.java       | 37 +++++++++----------
- .../telegram/ui/Components/ItemOptions.java   | 13 ++-----
+ .../ui/ActionBar/ActionBarMenuItem.java       | 36 +++++++++----------
+ .../telegram/ui/Components/ItemOptions.java   | 13 +++----
  .../org/telegram/ui/MainTabsActivity.java     |  7 ++--
- 3 files changed, 24 insertions(+), 33 deletions(-)
+ 3 files changed, 23 insertions(+), 33 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java
-@@ -331,11 +331,13 @@ public class ActionBarMenuItem extends FrameLayout {
+@@ -331,8 +331,9 @@ public class ActionBarMenuItem extends FrameLayout {
              if (showMenuRunnable != null && !isInside(event, ViewConfiguration.get(getContext()).getScaledTouchSlop())) {
                  cancelShowMenuByLongPress();
              }
@@ -24,11 +24,7 @@ index 0000000..0000000 100644
                      if (getParent() != null) {
                          getParent().requestDisallowInterceptTouchEvent(true);
                      }
-+                    performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
-                     toggleSubMenu();
-                     subMenuOpenedByGesture = true;
-                     return true;
-@@ -346,8 +348,7 @@ public class ActionBarMenuItem extends FrameLayout {
+@@ -346,8 +347,7 @@ public class ActionBarMenuItem extends FrameLayout {
          } else if (event.getActionMasked() == MotionEvent.ACTION_UP && (popupShown || overlayShown)) {
              cancelShowMenuByLongPress();
              if (selectedMenuView != null) {
@@ -38,7 +34,7 @@ index 0000000..0000000 100644
                  final View selected = selectedMenuView;
                  final Object tag = selected.getTag();
                  selectedMenuView = null;
-@@ -384,8 +385,7 @@ public class ActionBarMenuItem extends FrameLayout {
+@@ -384,8 +384,7 @@ public class ActionBarMenuItem extends FrameLayout {
                  cancelShowMenuByLongPress();
              }
              if (selectedMenuView != null) {
@@ -48,7 +44,7 @@ index 0000000..0000000 100644
                  selectedMenuView = null;
              }
          }
-@@ -411,7 +411,7 @@ public class ActionBarMenuItem extends FrameLayout {
+@@ -411,7 +410,7 @@ public class ActionBarMenuItem extends FrameLayout {
          getLocationOnScreen(location);
          final float screenX = event.getX() + location[0];
          final float screenY = event.getY() + location[1];
@@ -57,7 +53,7 @@ index 0000000..0000000 100644
          for (int a = 0; a < popupLayout.getItemsCount(); a++) {
              View child = popupLayout.getItemAt(a);
              Object tag = child.getTag();
-@@ -425,20 +425,17 @@ public class ActionBarMenuItem extends FrameLayout {
+@@ -425,20 +424,17 @@ public class ActionBarMenuItem extends FrameLayout {
              final float x = screenX - location[0];
              final float y = screenY - location[1];
              child.getHitRect(rect);
@@ -85,7 +81,7 @@ index 0000000..0000000 100644
 +            }
 +            selectedMenuView = hit;
 +            if (hit != null) {
-+                desu.inugram.helpers.LongPressDragMenuHelper.setHover(hit, true, getShownSubMenuOverlay() == null);
++                desu.inugram.helpers.LongPressDragMenuHelper.setHover(hit, true, getShownSubMenuOverlay() == null, false);
              }
          }
      }

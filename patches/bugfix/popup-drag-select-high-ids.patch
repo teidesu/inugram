@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenu
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java
-@@ -418,7 +418,7 @@ public class ActionBarMenuItem extends FrameLayout {
+@@ -417,7 +417,7 @@ public class ActionBarMenuItem extends FrameLayout {
              View child = popupLayout.getItemAt(a);
              Object tag = child.getTag();
              // the items of the menu, and rows with an action of their own (a nested page)

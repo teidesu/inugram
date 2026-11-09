@@ -14,7 +14,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenu
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java
-@@ -885,7 +885,7 @@ public class ActionBarMenuItem extends FrameLayout {
+@@ -884,7 +884,7 @@ public class ActionBarMenuItem extends FrameLayout {
      private boolean toggleSubMenuInOverlay() {
          final MenuOverlayHost host = getSubMenuOverlayHost();
          final SimpleActionBarMenuOverlay overlay = host != null ? getSubMenuOverlay() : null;

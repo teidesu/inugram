@@ -15,7 +15,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenu
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java
-@@ -2831,6 +2831,11 @@ public class ActionBarMenuItem extends FrameLayout {
+@@ -2830,6 +2830,11 @@ public class ActionBarMenuItem extends FrameLayout {
          item.swipeBackViewFactory = viewFactory;
          return putLazyItem(item);
      }
