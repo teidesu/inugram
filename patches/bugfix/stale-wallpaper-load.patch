@@ -1,0 +1,146 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Mon, 9 Nov 2026 22:54:44 +0400
+Subject: drop stale async wallpaper loads that overwrite a newer theme's wallpaper
+
+---
+ .../java/org/telegram/ui/ActionBar/Theme.java | 75 +++++++++++++------
+ 1 file changed, 52 insertions(+), 23 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java
+@@ -2306,6 +2306,8 @@ public class Theme {
+     public static int currentColor;
+     private static Drawable wallpaper;
+     private static Drawable themedWallpaper;
++    private static final Object inu_wallpaperLock = new Object();
++    private static int inu_wallpaperGeneration;
+     private static int themedWallpaperFileOffset;
+     private static String themedWallpaperLink;
+     private static boolean isWallpaperMotion;
+@@ -9526,13 +9528,16 @@ public class Theme {
+             backgroundGradientDisposable.dispose();
+             backgroundGradientDisposable = null;
+         }
+-        if (wallpaper instanceof MotionBackgroundDrawable) {
+-            previousPhase = ((MotionBackgroundDrawable) wallpaper).getPhase();
+-        } else {
+-            previousPhase = 0;
++        synchronized (inu_wallpaperLock) {
++            inu_wallpaperGeneration++;
++            if (wallpaper instanceof MotionBackgroundDrawable) {
++                previousPhase = ((MotionBackgroundDrawable) wallpaper).getPhase();
++            } else {
++                previousPhase = 0;
++            }
++            wallpaper = null;
++            themedWallpaper = null;
+         }
+-        wallpaper = null;
+-        themedWallpaper = null;
+         loadWallpaper(async);
+     }
+ 
+@@ -9554,8 +9559,12 @@ public class Theme {
+     }
+ 
+     public static void loadWallpaper(boolean async) {
+-        if (wallpaper != null) {
+-            return;
++        final int generation;
++        synchronized (inu_wallpaperLock) {
++            if (wallpaper != null) {
++                return;
++            }
++            generation = ++inu_wallpaperGeneration;
+         }
+         boolean defaultTheme = currentTheme.firstAccentIsDefault && currentTheme.currentAccentId == DEFALT_THEME_ACCENT_ID;
+         File wallpaperFile;
+@@ -9587,7 +9596,11 @@ public class Theme {
+         TLRPC.Document finalWallpaperDocument = wallpaperDocument;
+         if (async) {
+             Utilities.themeQueue.postRunnable(wallpaperLoadTask = () -> {
+-                Drawable drawable = loadWallpaperInternal(overrideWallpaper, wallpaperFile, intensity, wallpaperMotion, finalWallpaperDocument, defaultTheme);
++                BackgroundDrawableSettings settings = loadWallpaperInternal(overrideWallpaper, wallpaperFile, intensity, wallpaperMotion, finalWallpaperDocument, defaultTheme, generation);
++                if (settings == null) {
++                    return;
++                }
++                Drawable drawable = settings.wallpaper;
+                 AndroidUtilities.runOnUIThread(() -> {
+                     wallpaperLoadTask = null;
+                     createCommonChatResources();
+@@ -9599,7 +9612,11 @@ public class Theme {
+                 });
+             });
+         } else {
+-            Drawable drawable = loadWallpaperInternal(overrideWallpaper, wallpaperFile, intensity, wallpaperMotion, finalWallpaperDocument, defaultTheme);
++            BackgroundDrawableSettings settings = loadWallpaperInternal(overrideWallpaper, wallpaperFile, intensity, wallpaperMotion, finalWallpaperDocument, defaultTheme, generation);
++            if (settings == null) {
++                return;
++            }
++            Drawable drawable = settings.wallpaper;
+             createCommonChatResources();
+             if (!disallowChangeServiceMessageColor) {
+                 applyChatServiceMessageColor(null, null, drawable);
+@@ -9609,7 +9626,12 @@ public class Theme {
+         }
+     }
+ 
+-    private static Drawable loadWallpaperInternal(OverrideWallpaperInfo overrideWallpaper, File wallpaperFile, int intensity, boolean wallpaperMotion, TLRPC.Document finalWallpaperDocument, boolean defaultTheme) {
++    private static BackgroundDrawableSettings loadWallpaperInternal(OverrideWallpaperInfo overrideWallpaper, File wallpaperFile, int intensity, boolean wallpaperMotion, TLRPC.Document finalWallpaperDocument, boolean defaultTheme, int generation) {
++        synchronized (inu_wallpaperLock) {
++            if (generation != inu_wallpaperGeneration) {
++                return null;
++            }
++        }
+         BackgroundDrawableSettings settings = createBackgroundDrawable(
+                 currentTheme,
+                 overrideWallpaper,
+@@ -9624,17 +9646,21 @@ public class Theme {
+                 isApplyingAccent,
+                 wallpaperMotion,
+                 finalWallpaperDocument,
+-                false
++                true
+         );
+-        isWallpaperMotion = settings.isWallpaperMotion != null ? settings.isWallpaperMotion : isWallpaperMotion;
+-        isPatternWallpaper = settings.isPatternWallpaper != null ? settings.isPatternWallpaper : isPatternWallpaper;
+-        isCustomTheme = settings.isCustomTheme != null ? settings.isCustomTheme : isCustomTheme;
+-        patternIntensity = intensity;
+-        wallpaper = settings.wallpaper != null ? settings.wallpaper : wallpaper;
+-        Drawable drawable = settings.wallpaper;
+-        calcBackgroundColor(drawable, 1);
+-        applyChatServiceMessageColor();
+-        return drawable;
++        synchronized (inu_wallpaperLock) {
++            if (generation != inu_wallpaperGeneration) {
++                return null;
++            }
++            isWallpaperMotion = settings.isWallpaperMotion != null ? settings.isWallpaperMotion : isWallpaperMotion;
++            isPatternWallpaper = settings.isPatternWallpaper != null ? settings.isPatternWallpaper : isPatternWallpaper;
++            isCustomTheme = settings.isCustomTheme != null ? settings.isCustomTheme : isCustomTheme;
++            patternIntensity = intensity;
++            wallpaper = settings.wallpaper != null ? settings.wallpaper : wallpaper;
++            calcBackgroundColor(settings.wallpaper, 1);
++            applyChatServiceMessageColor();
++        }
++        return settings;
+     }
+ 
+ 
+@@ -9800,8 +9826,11 @@ public class Theme {
+                     }
+                     Bitmap bitmap = loadScreenSizedBitmap(new FileInputStream(file), themedWallpaperFileOffset);
+                     if (bitmap != null) {
+-                        settings.wallpaper = settings.themedWallpaper = wallpaper = new BitmapDrawable(bitmap);
+-                        wallpaper.setFilterBitmap(true);
++                        settings.wallpaper = settings.themedWallpaper = new BitmapDrawable(bitmap);
++                        settings.wallpaper.setFilterBitmap(true);
++                        if (!local) {
++                            wallpaper = settings.wallpaper;
++                        }
+                         settings.isCustomTheme = true;
+                     }
+                 } catch (Throwable e) {

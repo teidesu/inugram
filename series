@@ -440,3 +440,4 @@ bugfix/ipv6-proxy.patch
 bugfix/bitmaps-cache-recycled-shared-bitmaps.patch
 bugfix/profile-media-undock-rows-hidden.patch
 bugfix/widget-resize-at-chat-bottom.patch
+bugfix/stale-wallpaper-load.patch
