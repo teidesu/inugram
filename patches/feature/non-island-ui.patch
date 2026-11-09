@@ -318,7 +318,7 @@ index 0000000..0000000 100644
          final float doneSpace = getDoneButtonSpace(true);
          final int titleSide = Math.max(hasBack ? dp(64) : dp(18), menuWidth > 0 || doneSpace > 0 ? (int) (menuWidth + doneSpace) + dp(6 + 12) : 0);
          titleLayout.setSideInset(titleSide);
-+        titleLayout.inu_leftInset = hasBack ? dp(AndroidUtilities.isTablet() ? 80 : 72) : dp(16);
++        titleLayout.inu_leftInset = hasBack ? dp(AndroidUtilities.isTablet() ? 80 : 72) : dp(18);
 +        titleLayout.inu_rightInset = menuWidth > 0 || doneSpace > 0 ? (int) (menuWidth + doneSpace) + dp(6 + 12) : dp(18);
          setMargins(titleLayout, 0, rowTop, 0);
          titleLayout.getLayoutParams().height = rowHeight;
