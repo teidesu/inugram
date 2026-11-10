@@ -384,6 +384,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - stale unread badges on global-search top peers
 - stale unread mention pointer after reading mention on another device (mention button jumping to old message)
 - unread mentions counter stuck after reading a mention on another device while someone reacted to it (the message edit stored the mention as read without touching the counter, so the read update that followed was ignored)
+- chat bottom bar button (mute/unmute, join, etc.) ripple always starting slightly left of the center instead of at the touch point
 - folder pins silently missing when the pinned dialog isn't in the local dialogs cache (now fetched from server)
 - folder tab unread counters slowly drifting to zero (badge disappearing while the list still shows unread chats) as chats got read
 - photo/video gallery performance improvements

@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Tue, 10 Nov 2026 22:09:57 +0400
+Subject: fix chat bottom bar button ripple starting off-center instead of at the touch point
+
+---
+ .../telegram/ui/Components/UnreadCounterTextView.java  | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/UnreadCounterTextView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/UnreadCounterTextView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/UnreadCounterTextView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/UnreadCounterTextView.java
+@@ -121,6 +121,14 @@ public class UnreadCounterTextView extends View {
+         }
+     }
+ 
++    @Override
++    public void drawableHotspotChanged(float x, float y) {
++        super.drawableHotspotChanged(x, y);
++        if (selectableBackground != null) {
++            selectableBackground.setHotspot(x, y);
++        }
++    }
++
+     @Override
+     public boolean verifyDrawable(Drawable drawable) {
+         if (selectableBackground != null) {
+@@ -190,7 +198,7 @@ public class UnreadCounterTextView extends View {
+                 selectableBackground.setCallback(this);
+             }
+             int start = (getLeft() + x) <= 0 ? x - AndroidUtilities.dp(20) : x;
+-            int end = x + contentWidth > ((View) getParent()).getMeasuredWidth() ? x + contentWidth + AndroidUtilities.dp(20) : x + contentWidth;
++            int end = getLeft() + x + contentWidth >= ((View) getParent()).getMeasuredWidth() ? x + contentWidth + AndroidUtilities.dp(20) : x + contentWidth;
+             selectableBackground.setBounds(
+                     start, getMeasuredHeight() / 2 - contentWidth / 2,
+                     end, getMeasuredHeight() / 2 + contentWidth / 2
