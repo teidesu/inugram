@@ -9,6 +9,9 @@ import android.os.Environment
 import android.os.PowerManager
 import android.os.Process
 import android.os.UserManager
+// #if PLUGINS
+import desu.inugram.helpers.plugins.PluginManager
+// #endif
 import desu.inugram.helpers.update.UpdateHelper
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.ApplicationLoader
@@ -37,6 +40,9 @@ object SystemInfo {
                 if (!value.isNullOrEmpty()) append("$prop=$value ")
             }
         }
+        // #if PLUGINS
+        append("\nplugins: ").append(PluginManager.plugins().filter { it.running }.map { it.describeForLog() })
+        // #endif
     }
 
     private fun profileInfo(): String = buildString {

@@ -787,6 +787,7 @@
     <string name="InuCrashDescOom">Sorry about that. Crash logs aren\'t very useful for out-of-memory issues — a heap dump is what helps.</string>
     <string name="InuCrashDescHeapDump">A heap dump was also saved. DO NOT SHARE IT! It contains private data! Take a look at it yourself, if you want, and share your findings — that would help a lot.</string>
     <string name="InuCrashOomEnableLogs">Enable debug mode in Inugram Settings > About to create a heap dump on every future OOM.</string>
+    <string name="InuCrashPluginHooks">Plugin hooks ran around the crash, one of these plugins may be the cause:</string>
     <string name="InuCrashShare">Share crash log</string>
     <string name="InuCrashShareHeapDump">Save heap dump</string>
     <string name="InuCrashDiscard">Discard</string>

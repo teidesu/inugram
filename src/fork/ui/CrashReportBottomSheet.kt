@@ -82,6 +82,16 @@ class CrashReportBottomSheet(context: Context) : BottomSheet(context, false) {
         }
         container.addView(description, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 28, 7, 28, 16))
 
+        CrashReporter.getCrashPluginHooks()?.let { hooks ->
+            val pluginHooks = TextView(context).apply {
+                setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12f)
+                setTextColor(Theme.getColor(Theme.key_dialogTextGray3))
+                setTextIsSelectable(true)
+                text = LocaleController.getString(R.string.InuCrashPluginHooks) + "\n" + hooks
+            }
+            container.addView(pluginHooks, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 28, 0, 28, 16))
+        }
+
         fun secondaryButton(textRes: Int, onClick: () -> Unit) = makeButton(
             context, textRes,
             background = Theme.createSimpleSelectorRoundRectDrawable(

@@ -9,6 +9,9 @@ import android.content.Intent
 import android.os.Build
 import android.provider.DocumentsContract
 import androidx.core.app.NotificationCompat
+// #if PLUGINS
+import desu.inugram.helpers.plugins.platform.PluginXposed
+// #endif
 import desu.inugram.ui.CrashReportBottomSheet
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.ApplicationLoader
@@ -33,6 +36,8 @@ object CrashReporter {
     private const val HEAP_DUMP_FILE = "last_heap_dump.hprof"
     private const val TMP_HEAP_DUMP_PREFIX = "inugram-heap-dump-"
     private const val TAIL_BYTES = 200 * 1024L
+    private const val HEAD_BYTES = 16 * 1024L
+    private const val PLUGIN_HOOKS_HEADER = "\nplugin hooks:\n  "
     private const val RESTART_LOOP_GUARD_MS = 30_000L
     private const val RESTART_CHANNEL_ID = "inu_crash_restart"
     private const val RESTART_NOTIFICATION_ID = 0x1e75
@@ -68,25 +73,35 @@ object CrashReporter {
 
     fun hasHeapDump(): Boolean = BuildVars.LOGS_ENABLED && getHeapDumpFile().let { it.exists() && it.length() > 0 }
 
-    fun getCrashErrorName(): String? {
+    private fun readLogHead(): String? {
         val file = getLogFile()
         if (!file.exists() || file.length() == 0L) return null
         return try {
             RandomAccessFile(file, "r").use { raf ->
-                val len = minOf(raf.length(), 2048L).toInt()
-                val bytes = ByteArray(len)
+                val bytes = ByteArray(minOf(raf.length(), HEAD_BYTES).toInt())
                 raf.readFully(bytes)
-                val head = String(bytes, Charsets.UTF_8)
-                val sep = head.indexOf("\n\n")
-                if (sep < 0) return null
-                val line = head.substring(sep + 2).lineSequence().firstOrNull { it.isNotBlank() } ?: return null
-                val colonIdx = line.indexOf(':')
-                val fullClass = (if (colonIdx > 0) line.substring(0, colonIdx) else line).trim()
-                fullClass.substringAfterLast('.')
+                String(bytes, Charsets.UTF_8)
             }
         } catch (_: Throwable) {
             null
         }
+    }
+
+    fun getCrashErrorName(): String? {
+        val head = readLogHead() ?: return null
+        val sep = head.indexOf("\n\n")
+        if (sep < 0) return null
+        val line = head.substring(sep + 2).lineSequence().firstOrNull { it.isNotBlank() } ?: return null
+        val colonIdx = line.indexOf(':')
+        val fullClass = (if (colonIdx > 0) line.substring(0, colonIdx) else line).trim()
+        return fullClass.substringAfterLast('.')
+    }
+
+    fun getCrashPluginHooks(): String? {
+        val header = readLogHead()?.substringBefore("\n\n") ?: return null
+        val start = header.indexOf(PLUGIN_HOOKS_HEADER)
+        if (start < 0) return null
+        return header.substring(start + PLUGIN_HOOKS_HEADER.length).replace("\n  ", "\n")
     }
 
     fun deleteCrashLog() {
@@ -183,7 +198,12 @@ object CrashReporter {
                 PrintWriter(sw).use { e.printStackTrace(it) }
                 val tail = if (BuildVars.LOGS_ENABLED) tailCurrentFileLog() else null
                 val body = buildString {
-                    append(SystemInfo.build()).append("\n\n").append(sw.toString())
+                    append(SystemInfo.build())
+                    // #if PLUGINS
+                    val hooks = PluginXposed.describeCrash(t, e)
+                    if (hooks.isNotEmpty()) append(hooks.joinToString("\n  ", PLUGIN_HOOKS_HEADER))
+                    // #endif
+                    append("\n\n").append(sw.toString())
                     if (tail != null) {
                         append("\n----- FileLog tail (last ").append(tail.length).append(" chars) -----\n")
                         append(tail)

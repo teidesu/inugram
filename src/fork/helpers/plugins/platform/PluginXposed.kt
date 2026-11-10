@@ -1,5 +1,6 @@
 package desu.inugram.helpers.plugins.platform
 
+import android.os.SystemClock
 import desu.inugram.helpers.plugins.SessionResource
 import desu.inugram.core.plugins.PluginRefusal
 import desu.inugram.core.plugins.PluginWire.refuse
@@ -136,6 +137,33 @@ object PluginXposed : SessionResource {
         (session.engine.listener?.xposed as? Session)?.close()
     }
 
+    private const val RECENT_DISPATCH_MS = 10_000L
+    private const val RECENT_DISPATCH_LIMIT = 8
+
+    private class HookMark(val label: String) : Throwable("plugin hook: $label") {
+        override fun fillInStackTrace(): Throwable = this
+    }
+
+    /** for the uncaught exception handler, which runs on the [crashed] thread */
+    fun describeCrash(crashed: Thread, error: Throwable): List<String> {
+        val lines = generateSequence(error) { it.cause }.take(16)
+            .flatMap { it.suppressed.asSequence() }
+            .filterIsInstance<HookMark>()
+            .map { "on crash stack: ${it.label}" }
+            .distinct()
+            .toMutableList()
+        val now = SystemClock.uptimeMillis()
+        synchronized(sharedSites) { sharedSites.values.flatMap { it.registrations } }
+            .filter { it.lastDispatchAt != 0L && now - it.lastDispatchAt < RECENT_DISPATCH_MS }
+            .sortedWith(compareBy<Site> { it.lastDispatchThread !== crashed }.thenByDescending { it.lastDispatchAt })
+            .take(RECENT_DISPATCH_LIMIT)
+            .mapTo(lines) {
+                val thread = if (it.lastDispatchThread === crashed) "crashed" else "other"
+                "${now - it.lastDispatchAt}ms ago, $thread thread: ${it.label}"
+            }
+        return lines
+    }
+
     private class NativeHook(val token: String, val before: Any?, val after: Any?)
 
     private class Site(val session: Session, val id: Long, val shared: SharedSite, val native: Boolean) {
@@ -145,6 +173,15 @@ object PluginXposed : SessionResource {
         @Volatile var jsBefores = -1
         @Volatile var filter: PluginJvmRoutine? = null
         @Volatile var live = true
+        // ponytail: last dispatch only, unsynchronized; a per-thread ring if a hook shared between threads hides the culprit
+        var lastDispatchAt = 0L
+        var lastDispatchThread: Thread? = null
+
+        val label: String
+            get() {
+                val name = if (target is Constructor<*>) "<init>" else target.name
+                return "${session.label} ${target.declaringClass.simpleName}.$name"
+            }
     }
 
     private class Session(private val session: PluginSession) : XposedListener {
@@ -155,6 +192,8 @@ object PluginXposed : SessionResource {
         /** read and written twice per hooked call, so no boxing */
         private val dispatching = ThreadLocal.withInitial { BooleanArray(1) }
         @Volatile private var closed = false
+
+        val label: String get() = session.plugin.describeForLog()
 
         private val values: PluginJvm.ValueBridge
             get() = PluginJvm.bridgeFor(session.engine)
@@ -358,10 +397,18 @@ object PluginXposed : SessionResource {
             }
             val filter = entry.filter
             if (filter != null && !runCallbackPhase(guard) { filter.decide(receiver, args) }) return next(args)
-            return when {
-                entry.native -> dispatchNativeHooks(entry, guard, receiver, args, next)
-                entry.jsBefores == 0 -> dispatchAfterOnly(entry, guard, receiver, args, next)
-                else -> dispatchOnce(entry, guard, receiver, args, next)
+            entry.lastDispatchAt = SystemClock.uptimeMillis()
+            entry.lastDispatchThread = Thread.currentThread()
+            return try {
+                when {
+                    entry.native -> dispatchNativeHooks(entry, guard, receiver, args, next)
+                    entry.jsBefores == 0 -> dispatchAfterOnly(entry, guard, receiver, args, next)
+                    else -> dispatchOnce(entry, guard, receiver, args, next)
+                }
+            } catch (e: Throwable) {
+                val label = entry.label
+                if (e.suppressed.none { it is HookMark && it.label == label }) e.addSuppressed(HookMark(label))
+                throw e
             }
         }
 

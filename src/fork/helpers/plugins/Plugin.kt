@@ -55,4 +55,6 @@ class Plugin(
     val settingsPageId: Long? get() = session?.settingsPageId
 
     val running: Boolean get() = engine != null
+
+    fun describeForLog(): String = "${manifest.id ?: id}@${manifest.version ?: "?"}"
 }
