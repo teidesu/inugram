@@ -84,7 +84,7 @@
     <string name="InuRoundRecorderDualCamera">دوربین دوگانه</string>
     <string name="InuRoundRecorderDualCameraInfo">دوربین جلو و عقب را هم‌زمان باز می‌کند تا هنگام ضبط، جابه‌جایی فوری باشد. باتری بیشتری مصرف می‌کند.</string>
     <string name="InuRoundRecorderCamera2Settings">تنظیمات Camera2</string>
-    <string name="InuRoundRecorderCameraApi">ضبط‌کنندهٔ گرد از رابط %1$s استفاده می‌کند. **تغییر به %2$s >**</string>
+    <string name="InuRoundRecorderCameraApi">دوربین دایره‌ای>**</string>
     <string name="InuShowAllRecentStickers">نمایش همهٔ استیکرهای اخیر</string>
     <string name="InuHideKeyboardOnScroll">پنهان کردن صفحه‌کلید هنگام اسکرول</string>
     <string name="InuDisablePullToNext">غیرفعال کردن کشیدن برای کانال بعدی</string>
@@ -358,7 +358,7 @@
     <string name="InuProfileIdCopied">شناسه در کلیپ‌بورد کپی شد</string>
     <string name="InuMessageInput">ورودی پیام</string>
     <string name="InuAttachmentSheet">برگهٔ پیوست</string>
-    <string name="InuVoiceRecorder">ضبط‌کنندهٔ صدا / گرد</string>
+    <string name="InuVoiceRecorder">ضبط‌کننده‌ی صدا </string>
     <string name="InuIconReplacement">بستهٔ نمادها</string>
     <string name="InuIconPackLoadFromFile">بارگذاری از فایل</string>
     <string name="InuIconPacksInstalled">بسته‌های نصب‌شده</string>
@@ -423,7 +423,7 @@
     <string name="InuOptimizedAttachmentMenuInfo">روانی انیمیشن را هنگام باز کردن عکس‌ها و ویدیوها بهبود می‌دهد</string>
     <string name="InuDisableIntroSticker">ارسال نکردن استیکر خوش‌آمدگویی</string>
     <string name="InuDisableIntroStickerInfo">…و پنهان کردن پیشنهادهای استیکر سلام</string>
-    <string name="InuRoundDefaultCamera">دوربین پیش‌فرض گرد</string>
+    <string name="InuRoundDefaultCamera">دوربین پیش‌فرض دایره‌ای</string>
     <string name="InuRoundCameraFront">جلو</string>
     <string name="InuRoundCameraRear">عقب</string>
     <string name="InuRoundCameraAsk">هر بار بپرس</string>
@@ -553,7 +553,7 @@
     <string name="InuSearchFilterVideos">ویدیوها</string>
     <string name="InuSearchFilterFiles">فایل‌ها</string>
     <string name="InuSearchFilterVoice">پیام‌های صوتی</string>
-    <string name="InuSearchFilterRound">گردها</string>
+    <string name="InuSearchFilterRound">کادر فیلتر جستجو</string>
     <string name="InuSearchFilterMusic">موسیقی</string>
     <string name="InuSearchFilterGifs">گیف‌ها</string>
     <string name="InuSearchFilterPoll">نظرسنجی‌ها</string>
