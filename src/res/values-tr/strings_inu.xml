@@ -624,6 +624,12 @@
     <string name="InuUpdateInstalledNotification">Güncelleme yüklendi, yeniden başlatmak için dokunun</string>
     <string name="InuUpdateNotificationChannel">Uygulama güncellemeleri</string>
     <string name="InuUpdateFailedToInstall">Yükleme başarısız oldu (%1$d)</string>
+    <string name="InuWhatsNew">Yenilikler</string>
+    <string name="InuWhatsNewOnUpdate">Güncellemeden sonra değişiklik günlüğünü göster</string>
+    <string name="InuWhatsNewBadge">Yeni</string>
+    <string name="InuWhatsNewDontShowAgain">Bir daha gösterme</string>
+    <string name="InuWhatsNewDisabled">Değişiklik günlükleri artık gösterilmeyecek</string>
+    <string name="InuWhatsNewDisabledInfo">Onları her zaman **Inugram Ayarları › Yenilikler** bölümünden okuyabilirsiniz</string>
     <string name="InuRefetchWebPreview">Web önizlemesini yeniden çek</string>
     <string name="InuSendStickers">Çıkartma gönder</string>
     <string name="InuSendGifs">GIF gönder</string>
@@ -788,6 +794,7 @@
     <string name="InuCrashDescOom">Bunun için üzgünüz. Çökme günlükleri bellek yetersizliği sorunları için pek yararlı değildir — bellek dökümü (heap dump) daha çok yardımcı olur.</string>
     <string name="InuCrashDescHeapDump">Bir bellek dökümü de kaydedildi. BUNU PAYLAŞMAYIN! Özel veriler içerir! İsterseniz kendiniz inceleyin ve bulgularınızı paylaşın — bu çok yardımcı olur.</string>
     <string name="InuCrashOomEnableLogs">Gelecekteki her OOM durumunda bellek dökümü oluşturmak için Inugram Ayarları > Hakkında bölümünden hata ayıklama modunu etkinleştirin.</string>
+    <string name="InuCrashPluginHooks">Çökme sırasında eklenti kancaları çalışıyordu, sebep bu eklentilerden biri olabilir:</string>
     <string name="InuCrashShare">Çökme günlüğünü paylaş</string>
     <string name="InuCrashShareHeapDump">Bellek dökümünü kaydet</string>
     <string name="InuCrashDiscard">Vazgeç</string>
@@ -902,6 +909,7 @@
     <string name="InuPluginGrantOpenUrl">Bağlantıları açma</string>
     <string name="InuPluginGrantAppVisibility">Uygulama görünürlüğünü izleme</string>
     <string name="InuPluginGrantNotificationsSuppress">Bildirimleri engelleme</string>
+    <string name="InuPluginGrantNotificationsPost">Bildirim gönderme</string>
     <string name="InuPluginGrantClipboardRead">Panoyu okuma</string>
     <string name="InuPluginGrantFetch">İnternet erişimi</string>
     <string name="InuPluginGrantAccountRead">Hesap verilerini okuma</string>
@@ -1039,4 +1047,8 @@
     <string name="InuWalletKeyReplacedInfo">Bu cüzdan artık adresiniz ve 12 yeni kelimeyle geri yüklenir.</string>
     <string name="InuWalletPrivateKeyBackupUnavailable">Özel anahtardan içe aktarılan cüzdanlar Telegram\'a yedeklenemez, çünkü diğer uygulamalar bunları geri yükleyemez. Anahtarı kendiniz güvende tutun.</string>
     <string name="InuSendServerError">Telegram mesajınızı iletmekte zorlanıyor. Yeniden deneniyor…</string>
+    <string name="InuLinkedChats">Hesaplar arası sohbetler</string>
+    <string name="InuLinkedChatsInfo">Bir sohbeti başka bir hesabın sohbet listesine ekleyin ve hesap değiştirmeden oradan kullanın.</string>
+    <string name="InuLinkedChatsAdd">Hesaba ekle</string>
+    <string name="InuLinkedChatsRemove">Bu hesaptan kaldır</string>
 </resources>

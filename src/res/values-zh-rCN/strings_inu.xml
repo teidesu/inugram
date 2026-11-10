@@ -510,6 +510,12 @@
     <string name="InuUpdateInstalledNotification">更新已安装，点击重启</string>
     <string name="InuUpdateNotificationChannel">应用更新</string>
     <string name="InuUpdateFailedToInstall">安装失败 (%1$d)</string>
+    <string name="InuWhatsNew">新功能</string>
+    <string name="InuWhatsNewOnUpdate">更新后显示更新日志</string>
+    <string name="InuWhatsNewBadge">新</string>
+    <string name="InuWhatsNewDontShowAgain">不再显示</string>
+    <string name="InuWhatsNewDisabled">将不再显示更新日志</string>
+    <string name="InuWhatsNewDisabledInfo">你可以随时在 **Inugram 设置 › 新功能** 中查看</string>
     <string name="InuRefetchWebPreview">重新获取网页预览</string>
     <string name="InuSendStickers">发送贴纸</string>
     <string name="InuSendGifs">发送 GIF</string>
@@ -811,6 +817,7 @@
     <string name="InuCrashDescOom">抱歉。崩溃日志对内存不足问题帮助不大 —— 堆转储才有用。</string>
     <string name="InuCrashDescHeapDump">同时保存了堆转储。请勿分享！里面包含隐私数据！如果愿意，可以自己查看一下，并把你的发现告诉开发者——会非常有帮助。</string>
     <string name="InuCrashOomEnableLogs">在 Inugram 设置 > 关于 中启用调试模式，以便在今后每次内存不足时生成堆转储。</string>
+    <string name="InuCrashPluginHooks">崩溃前后有插件钩子在运行，可能是以下插件之一导致的：</string>
     <string name="InuCrashShareHeapDump">保存堆转储</string>
 
     <string name="InuDeleteOwnMessages">删除我的消息</string>
@@ -899,6 +906,7 @@
     <string name="InuPluginGrantOpenUrl">打开链接</string>
     <string name="InuPluginGrantAppVisibility">监视应用可见性</string>
     <string name="InuPluginGrantNotificationsSuppress">抑制通知</string>
+    <string name="InuPluginGrantNotificationsPost">发送通知</string>
     <string name="InuPluginGrantClipboardRead">读取剪贴板</string>
     <string name="InuPluginGrantFetch">访问互联网</string>
     <string name="InuPluginGrantAccountRead">读取账号数据</string>
@@ -1033,4 +1041,8 @@
     <string name="InuWalletKeyReplacedInfo">现在可通过地址和新的 12 个助记词恢复此钱包。</string>
     <string name="InuWalletPrivateKeyBackupUnavailable">从私钥导入的钱包无法备份到 Telegram，因为其他应用无法恢复它们。请自行妥善保管密钥。</string>
     <string name="InuSendServerError">Telegram 投递消息时遇到问题，正在重试…</string>
+    <string name="InuLinkedChats">跨账号聊天</string>
+    <string name="InuLinkedChatsInfo">将聊天添加到另一个账号的聊天列表中，无需切换账号即可在那里使用。</string>
+    <string name="InuLinkedChatsAdd">添加到账号</string>
+    <string name="InuLinkedChatsRemove">从此账号中移除</string>
 </resources>

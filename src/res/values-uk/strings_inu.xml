@@ -600,6 +600,12 @@
     <string name="InuUpdateInstalledNotification">Оновлення встановлено, натисніть для перезапуску</string>
     <string name="InuUpdateNotificationChannel">Оновлення додатка</string>
     <string name="InuUpdateFailedToInstall">Помилка встановлення (%1$d)</string>
+    <string name="InuWhatsNew">Що нового</string>
+    <string name="InuWhatsNewOnUpdate">Показувати список змін після оновлення</string>
+    <string name="InuWhatsNewBadge">Нове</string>
+    <string name="InuWhatsNewDontShowAgain">Більше не показувати</string>
+    <string name="InuWhatsNewDisabled">Список змін більше не показуватиметься</string>
+    <string name="InuWhatsNewDisabledInfo">Його завжди можна відкрити в **Налаштуваннях Inugram › Що нового**</string>
     <string name="InuRefetchWebPreview">Оновити прев\'ю посилання</string>
     <string name="InuSendStickers">Надсилати наліпки</string>
     <string name="InuSendGifs">Надсилати GIF</string>
@@ -768,6 +774,7 @@
     <string name="InuCrashDescOom">Перепрошуємо. Звичайні журнали збоїв мало чим допоможуть у разі вичерпання пам\'яті — натомість потрібен дамп купи (heap dump).</string>
     <string name="InuCrashDescHeapDump">Також збережено дамп купи. НЕ ДІЛІТЬСЯ НИМ! Він містить особисті дані! За бажанням ви можете переглянути його самостійно та поділитися знахідками — це дуже допоможе.</string>
     <string name="InuCrashOomEnableLogs">Увімкніть режим налагодження в Налаштуваннях Inugram > Про додаток, щоб створювати дамп купи (heap dump) у разі кожного наступного OOM.</string>
+    <string name="InuCrashPluginHooks">Під час збою працювали хуки плагінів, причиною може бути один із них:</string>
     <string name="InuCrashShare">Поділитися звітом про збій</string>
     <string name="InuCrashShareHeapDump">Зберегти дамп купи</string>
     <string name="InuCrashDiscard">Скасувати</string>
@@ -886,6 +893,7 @@
     <string name="InuPluginGrantOpenUrl">Відкриття посилань</string>
     <string name="InuPluginGrantAppVisibility">Відстеження видимості додатка</string>
     <string name="InuPluginGrantNotificationsSuppress">Придушення сповіщень</string>
+    <string name="InuPluginGrantNotificationsPost">Надсилання сповіщень</string>
     <string name="InuPluginGrantClipboardRead">Читання буфера обміну</string>
     <string name="InuPluginGrantFetch">Доступ до інтернету</string>
     <string name="InuPluginGrantAccountRead">Читання даних акаунта</string>
@@ -1029,4 +1037,8 @@
     <string name="InuWalletKeyReplacedInfo">Тепер гаманець відновлюється за адресою та 12 новими словами.</string>
     <string name="InuWalletPrivateKeyBackupUnavailable">Гаманці, імпортовані з приватного ключа, не можна зберегти в Telegram, бо інші застосунки не зможуть їх відновити. Зберігайте ключ у надійному місці самостійно.</string>
     <string name="InuSendServerError">Telegram має проблеми з доставкою повідомлення. Повторюємо спроби…</string>
+    <string name="InuLinkedChats">Чати з інших акаунтів</string>
+    <string name="InuLinkedChatsInfo">Додайте чат до списку чатів іншого акаунта й користуйтеся ним звідти без перемикання акаунтів.</string>
+    <string name="InuLinkedChatsAdd">Додати до акаунта</string>
+    <string name="InuLinkedChatsRemove">Прибрати з цього акаунта</string>
 </resources>

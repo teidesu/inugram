@@ -511,6 +511,12 @@
     <string name="InuUpdateInstalledNotification">アップデートをインストールしました。タップして再起動。</string>
     <string name="InuUpdateNotificationChannel">アプリのアップデート</string>
     <string name="InuUpdateFailedToInstall">インストール失敗 (%1$d)</string>
+    <string name="InuWhatsNew">新機能</string>
+    <string name="InuWhatsNewOnUpdate">アップデート後に変更履歴を表示</string>
+    <string name="InuWhatsNewBadge">NEW</string>
+    <string name="InuWhatsNewDontShowAgain">今後表示しない</string>
+    <string name="InuWhatsNewDisabled">変更履歴は今後表示されません</string>
+    <string name="InuWhatsNewDisabledInfo">**Inugram 設定 › 新機能** からいつでも確認できます</string>
     <string name="InuRefetchWebPreview">ウェブプレビューを再取得</string>
     <string name="InuSendStickers">スタンプを送信</string>
     <string name="InuSendGifs">GIF を送信</string>
@@ -811,6 +817,7 @@
     <string name="InuCrashTitleOom">Inugram のメモリが不足しました</string>
     <string name="InuCrashDescHeapDump">ヒープダンプも保存されました。共有しないでください！プライベートな情報が含まれています！自分で確認して、気づいたことを教えていただけると、大変助かります。</string>
     <string name="InuCrashOomEnableLogs">Inugram 設定 > アプリについて でデバッグモードを有効にすると、次回以降の OOM 発生時にヒープダンプを作成します。</string>
+    <string name="InuCrashPluginHooks">クラッシュ前後にプラグインのフックが実行されていました。以下のいずれかが原因の可能性があります:</string>
     <string name="InuCrashShareHeapDump">ヒープダンプを保存</string>
 
     <string name="InuDeleteOwnMessages">自分のメッセージを削除</string>
@@ -899,6 +906,7 @@
     <string name="InuPluginGrantOpenUrl">リンクを開く</string>
     <string name="InuPluginGrantAppVisibility">アプリの表示状態を監視</string>
     <string name="InuPluginGrantNotificationsSuppress">通知を抑制</string>
+    <string name="InuPluginGrantNotificationsPost">通知の送信</string>
     <string name="InuPluginGrantClipboardRead">クリップボードを読み取る</string>
     <string name="InuPluginGrantFetch">インターネットアクセス</string>
     <string name="InuPluginGrantAccountRead">アカウントデータを読み取る</string>
@@ -1033,4 +1041,8 @@
     <string name="InuWalletKeyReplacedInfo">今後はアドレスと新しい12単語でこのウォレットを復元できます。</string>
     <string name="InuWalletPrivateKeyBackupUnavailable">秘密鍵からインポートしたウォレットは、他のアプリで復元できないため Telegram にバックアップできません。鍵はご自身で安全に保管してください。</string>
     <string name="InuSendServerError">Telegram でメッセージの配信に問題が発生しています。再試行中…</string>
+    <string name="InuLinkedChats">アカウント間チャット</string>
+    <string name="InuLinkedChatsInfo">チャットを別のアカウントのチャットリストに追加し、アカウントを切り替えずにそこから利用できます。</string>
+    <string name="InuLinkedChatsAdd">アカウントに追加</string>
+    <string name="InuLinkedChatsRemove">このアカウントから削除</string>
 </resources>

@@ -513,6 +513,12 @@
     <string name="InuUpdateInstalledNotification">Обновление установлено, нажмите для перезапуска</string>
     <string name="InuUpdateNotificationChannel">Обновления приложения</string>
     <string name="InuUpdateFailedToInstall">Не удалось установить (%1$d)</string>
+    <string name="InuWhatsNew">Что нового</string>
+    <string name="InuWhatsNewOnUpdate">Показывать список изменений после обновления</string>
+    <string name="InuWhatsNewBadge">Новое</string>
+    <string name="InuWhatsNewDontShowAgain">Больше не показывать</string>
+    <string name="InuWhatsNewDisabled">Список изменений больше не будет показываться</string>
+    <string name="InuWhatsNewDisabledInfo">Его всегда можно открыть в **Настройках Inugram › Что нового**</string>
     <string name="InuRefetchWebPreview">Обновить превью ссылки</string>
     <string name="InuSendStickers">Отправлять стикеры</string>
     <string name="InuSendGifs">Отправлять GIF</string>
@@ -823,6 +829,7 @@
     <string name="InuCrashTitleOom">Inugram исчерпал память</string>
     <string name="InuCrashDescOom">Извиняемся. Логи краша не очень полезны при нехватке памяти — тут помогает хипдамп.</string>
     <string name="InuCrashOomEnableLogs">Включи режим отладки в Настройках Inugram > О приложении, чтобы создавать хипдамп при каждом будущем OOM.</string>
+    <string name="InuCrashPluginHooks">Во время краша работали хуки плагинов, причиной может быть один из них:</string>
     <string name="InuCrashDescHeapDump">Также сохранён дамп кучи. НЕ ОТПРАВЛЯЙТЕ ЕГО! Он содержит личные данные! Можете посмотреть его сами и поделиться находками — это сильно поможет.</string>
     <string name="InuCrashShareHeapDump">Сохранить дамп кучи</string>
 
@@ -922,6 +929,7 @@
     <string name="InuPluginGrantOpenUrl">Открытие ссылок</string>
     <string name="InuPluginGrantAppVisibility">Отслеживание видимости приложения</string>
     <string name="InuPluginGrantNotificationsSuppress">Блокировка уведомлений</string>
+    <string name="InuPluginGrantNotificationsPost">Отправка уведомлений</string>
     <string name="InuPluginGrantClipboardRead">Чтение буфера обмена</string>
     <string name="InuPluginGrantFetch">Доступ в интернет</string>
     <string name="InuPluginGrantAccountRead">Чтение данных аккаунта</string>
@@ -1065,4 +1073,8 @@
     <string name="InuWalletKeyReplacedInfo">Теперь кошелёк восстанавливается по адресу и 12 новым словам.</string>
     <string name="InuWalletPrivateKeyBackupUnavailable">Кошельки, импортированные из приватного ключа, нельзя сохранить в Telegram, так как другие приложения не смогут их восстановить. Храните ключ в надёжном месте сами.</string>
     <string name="InuSendServerError">У Telegram проблемы с доставкой сообщения. Повторяем попытки…</string>
+    <string name="InuLinkedChats">Чаты из других аккаунтов</string>
+    <string name="InuLinkedChatsInfo">Добавь чат в список чатов другого аккаунта и пользуйся им оттуда без переключения аккаунтов.</string>
+    <string name="InuLinkedChatsAdd">Добавить в аккаунт</string>
+    <string name="InuLinkedChatsRemove">Убрать из этого аккаунта</string>
 </resources>
