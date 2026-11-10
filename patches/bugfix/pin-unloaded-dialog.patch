@@ -108,7 +108,7 @@ index 0000000..0000000 100644
      private void fetchFolderInLoadedPinnedDialogs(TLRPC.TL_messages_peerDialogs res) {
          for (int a = 0, N = res.dialogs.size(); a < N; a++) {
              TLRPC.Dialog dialog = res.dialogs.get(a);
-@@ -17782,6 +17862,9 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -17843,6 +17923,9 @@ public class MessagesController extends BaseController implements NotificationCe
              }
          }
          getMessagesStorage().setDialogPinned(dialogId, dialog.pinnedNum);
@@ -118,7 +118,7 @@ index 0000000..0000000 100644
          return true;
      }
  
-@@ -23054,7 +23137,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -23118,7 +23201,7 @@ public class MessagesController extends BaseController implements NotificationCe
                          }
                      }
                      if (maxDate > Integer.MIN_VALUE) {

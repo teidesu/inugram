@@ -349,6 +349,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - reaction effect and haptic skipped whenever the in-chat counter was already 0, and never played for reactions reached via the jump button (the jump marked them read before the message was even shown)
 - album reactions counted once per bottom-row photo; a stale reactions update could also mark a just-seen reaction unread again
 - in-memory unread reactions count overwritten by a stale database copy after deleting messages
+- unread reactions counter stuck in groups after reading a reaction on another device (the read only arrives as a message edit, which stock ignores outside private chats); the count is now re-requested from the server
 - channel reactions: toggling "Enable Reactions" was silently discarded on back (unsaved-changes check only compared the emoji selection, never the enabled state), and re-enabling always saved the prefilled list as an explicit set instead of "All"
 - rounded section backgrounds ignored the alpha of the fading container they lived in, so they stayed fully opaque during the animation and only popped away on the next unrelated redraw (e.g. toggling "Enable Reactions" in channel reactions)
 - sticky date pill jump and color shift when replacing an inline date separator
