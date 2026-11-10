@@ -105,6 +105,7 @@ object LinkedChatsHelper {
     @JvmStatic
     fun getDialogs(account: Int, dialogsType: Int, folderId: Int, onlySelect: Boolean): List<LinkedDialog> {
         if (!InuConfig.LINKED_CHATS.value || folderId != 0 || onlySelect) return emptyList()
+        if (!MessagesController.getInstance(account).dialogsLoaded) return emptyList()
         val filter = when (dialogsType) {
             DialogsActivity.DIALOGS_TYPE_DEFAULT -> null
             DialogsActivity.DIALOGS_TYPE_FOLDER1 -> MessagesController.getInstance(account).selectedDialogFilter[0] ?: return emptyList()
