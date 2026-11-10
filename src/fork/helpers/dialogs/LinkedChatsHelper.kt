@@ -218,6 +218,7 @@ object LinkedChatsHelper {
         val foregroundIndex = menu.addViewToSwipeBack(options.linearLayout)
         (options.linearLayout.layoutParams as FrameLayout.LayoutParams).gravity = Gravity.TOP
         swipeBack.inu_pinnedScrimForegroundIndex = foregroundIndex
+        swipeBack.inu_pinnedForegroundAtBackgroundTop = true
         val item = ActionBarMenuSubItem(menu.context, false, false)
         item.setTextAndIcon(LocaleController.getString(R.string.InuLinkedChatsAdd), R.drawable.msg_openprofile)
         item.minimumWidth = 160

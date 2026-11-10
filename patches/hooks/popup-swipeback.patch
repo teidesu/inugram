@@ -6,10 +6,10 @@ Subject: Expose foreground translation and unified touch coords on swipeback pop
 ---
  .../ui/ActionBar/ActionBarMenuItem.java       |  5 ++
  .../ui/ActionBar/ActionBarPopupWindow.java    |  5 +-
- .../java/org/telegram/ui/ChatActivity.java    |  3 ++
- .../ChatScrimPopupContainerLayout.java        | 25 ++++++++--
- .../ui/Components/PopupSwipeBackLayout.java   | 48 +++++++++++++++++--
- 5 files changed, 77 insertions(+), 9 deletions(-)
+ .../java/org/telegram/ui/ChatActivity.java    |  3 +
+ .../ChatScrimPopupContainerLayout.java        | 25 +++++++--
+ .../ui/Components/PopupSwipeBackLayout.java   | 55 +++++++++++++++++--
+ 5 files changed, 84 insertions(+), 9 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarMenuItem.java
 index 0000000..0000000 100644
@@ -141,13 +141,14 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/PopupSwipeBa
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/PopupSwipeBackLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/PopupSwipeBackLayout.java
-@@ -54,12 +54,23 @@ public class PopupSwipeBackLayout extends FrameLayout {
+@@ -54,12 +54,24 @@ public class PopupSwipeBackLayout extends FrameLayout {
      private float overrideForegroundHeight;
      private ValueAnimator foregroundAnimator;
  
 +    private final SparseIntArray inu_foregroundOffsetIndex = new SparseIntArray();
 +    private int inu_foregroundOffsetY = 0;
 +    public int inu_pinnedScrimForegroundIndex = -1;
++    public boolean inu_pinnedForegroundAtBackgroundTop;
 +
 +    public boolean inu_isCurrentForegroundPinningScrim() {
 +        return currentForegroundIndex >= 0 && currentForegroundIndex == inu_pinnedScrimForegroundIndex;
@@ -165,7 +166,7 @@ index 0000000..0000000 100644
  
      private Rect hitRect = new Rect();
  
-@@ -205,8 +216,11 @@ public class PopupSwipeBackLayout extends FrameLayout {
+@@ -205,8 +217,11 @@ public class PopupSwipeBackLayout extends FrameLayout {
          float bSc = 0.95f + (1f - transitionProgress) * 0.05f;
          backgroundView.setScaleX(bSc);
          backgroundView.setScaleY(bSc);
@@ -177,15 +178,18 @@ index 0000000..0000000 100644
          }
          invalidateVisibility();
  
-@@ -231,6 +245,7 @@ public class PopupSwipeBackLayout extends FrameLayout {
+@@ -231,6 +246,10 @@ public class PopupSwipeBackLayout extends FrameLayout {
          if (applyBackScaleY) {
              p.setBackScaleY(Math.min(1, h / p.getMeasuredHeight()));
          }
 +        p.inu_backOffsetY = inu_curOffsetY + inu_backTopY;
++        if (foregroundView != null && inu_pinnedForegroundAtBackgroundTop && inu_isCurrentForegroundPinningScrim()) {
++            p.inu_backOffsetY += AndroidUtilities.lerp(backgroundView.getTop(), foregroundView.getTop(), transitionProgress);
++        }
          p.updateAnimation = true;
  
          for (int i = 0; i < getChildCount(); i++) {
-@@ -268,7 +283,10 @@ public class PopupSwipeBackLayout extends FrameLayout {
+@@ -268,7 +287,10 @@ public class PopupSwipeBackLayout extends FrameLayout {
          View bv = getChildAt(0);
          View fv = getChildAt(currentForegroundIndex);
  
@@ -197,7 +201,7 @@ index 0000000..0000000 100644
          if (!b && act == MotionEvent.ACTION_DOWN) {
              return true;
          }
-@@ -338,6 +356,11 @@ public class PopupSwipeBackLayout extends FrameLayout {
+@@ -338,6 +360,11 @@ public class PopupSwipeBackLayout extends FrameLayout {
                  transitionProgress = f;
                  if (f <= 0) {
                      currentForegroundIndex = -1;
@@ -209,7 +213,7 @@ index 0000000..0000000 100644
                  }
                  invalidateTransforms();
                  isAnimationInProgress = false;
-@@ -372,9 +395,18 @@ public class PopupSwipeBackLayout extends FrameLayout {
+@@ -372,9 +399,18 @@ public class PopupSwipeBackLayout extends FrameLayout {
          }
          currentForegroundIndex = viewIndex;
          overrideForegroundHeight = overrideHeightIndex.get(viewIndex);
@@ -228,11 +232,14 @@ index 0000000..0000000 100644
      public void closeForeground() {
          closeForeground(true);
      }
-@@ -410,10 +442,11 @@ public class PopupSwipeBackLayout extends FrameLayout {
+@@ -410,10 +446,14 @@ public class PopupSwipeBackLayout extends FrameLayout {
                      ch.layout(0, bottom - top - ch.getMeasuredHeight(), ch.getMeasuredWidth(), bottom - top);
                  }
              } else {
 +                int inu_top = ((MarginLayoutParams) ch.getLayoutParams()).topMargin;
++                if (inu_pinnedForegroundAtBackgroundTop && i == inu_pinnedScrimForegroundIndex) {
++                    inu_top = Math.max(0, Math.min(getChildAt(0).getTop(), bottom - top - ch.getMeasuredHeight()));
++                }
                  if (stickToRight) {
 -                    ch.layout((right - left) - ch.getMeasuredWidth(), 0, right - left, ch.getMeasuredHeight());
 +                    ch.layout((right - left) - ch.getMeasuredWidth(), inu_top, right - left, inu_top + ch.getMeasuredHeight());
@@ -242,7 +249,7 @@ index 0000000..0000000 100644
                  }
              }
          }
-@@ -439,9 +472,10 @@ public class PopupSwipeBackLayout extends FrameLayout {
+@@ -439,9 +479,10 @@ public class PopupSwipeBackLayout extends FrameLayout {
              h = fH;
          } else {
              View foregroundView = getChildAt(currentForegroundIndex);
@@ -254,7 +261,7 @@ index 0000000..0000000 100644
              if (backgroundView.getMeasuredWidth() == 0 || backgroundView.getMeasuredHeight() == 0 || foregroundView.getMeasuredWidth() == 0 || foregroundView.getMeasuredHeight() == 0) {
                  y = fY;
                  w = fW;
-@@ -456,6 +490,7 @@ public class PopupSwipeBackLayout extends FrameLayout {
+@@ -456,6 +497,7 @@ public class PopupSwipeBackLayout extends FrameLayout {
          int s = canvas.save();
          mPath.rewind();
          int rad = AndroidUtilities.dp(12);
@@ -262,7 +269,7 @@ index 0000000..0000000 100644
          if (stickToRight) {
              mRect.set(getWidth() - w, y, getWidth(), y + h);
          } else {
-@@ -469,6 +504,11 @@ public class PopupSwipeBackLayout extends FrameLayout {
+@@ -469,6 +511,11 @@ public class PopupSwipeBackLayout extends FrameLayout {
          if (onHeightUpdateListener != null && lastHeightReported != mRect.height()) {
              onHeightUpdateListener.run(lastHeightReported = (int) mRect.height());
          }
