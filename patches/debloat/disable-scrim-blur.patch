@@ -8,10 +8,10 @@ Subject: option to disable scrim blur throughout the app
  .../ui/Components/BlurBehindDrawable.java       | 15 +++++++++++++++
  .../telegram/ui/Components/ScrimOptions.java    | 10 +++++++++-
  .../org/telegram/ui/ContentPreviewViewer.java   |  4 ++--
- .../java/org/telegram/ui/DialogsActivity.java   | 10 ++++++++++
+ .../java/org/telegram/ui/DialogsActivity.java   | 12 +++++++++++-
  .../org/telegram/ui/MessageSendPreview.java     | 17 ++++++++++++++---
  .../java/org/telegram/ui/TopicsFragment.java    | 12 ++++++++++++
- 7 files changed, 69 insertions(+), 6 deletions(-)
+ 7 files changed, 70 insertions(+), 7 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
 index 0000000..0000000 100644
@@ -115,11 +115,11 @@ index 0000000..0000000 100644
          if (blurredView == null) {
              return;
          }
++        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
++            blurredView.setForeground(desu.inugram.InuConfig.DISABLE_SCRIM_BLUR.getValue() ? null : new ColorDrawable(ColorUtils.setAlphaComponent(getThemedColor(Theme.key_windowBackgroundWhite), 100)));
++        }
 +        if (desu.inugram.InuConfig.DISABLE_SCRIM_BLUR.getValue()) {
 +            blurredView.setBackgroundColor(0x60000000);
-+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-+                blurredView.setForeground(null);
-+            }
 +            blurredView.setAlpha(0.0f);
 +            blurredView.setVisibility(View.VISIBLE);
 +            checkUi_mainTabsVisible();
@@ -128,6 +128,15 @@ index 0000000..0000000 100644
          int w = (int) (fragmentView.getMeasuredWidth() / 9.0f);
          int h = (int) (fragmentView.getMeasuredHeight() / 9.0f);
          Bitmap bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+@@ -14378,7 +14388,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+                         searchTabsAndFiltersLayout.updateColors();
+                     }
+                     if (blurredView != null) {
+-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
++                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !desu.inugram.InuConfig.DISABLE_SCRIM_BLUR.getValue()) {
+                             final int blurredColor = ColorUtils.setAlphaComponent(getThemedColor(Theme.key_windowBackgroundWhite), 100);
+                             if (blurredView.getForeground() instanceof ColorDrawable) {
+                                 if (((ColorDrawable) blurredView.getForeground()).getColor() != blurredColor) {
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/MessageSendPreview.java b/TMessagesProj/src/main/java/org/telegram/ui/MessageSendPreview.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/MessageSendPreview.java
