@@ -214,6 +214,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - biometric confirmation before deleting/clearing a chat or logging out - *inspired by [Cherrygram](https://github.com/arsLan4k1390/Cherrygram)*
 - import the Money wallet from raw ed25519 private key (+ support for 12 words rotation) - *engine patch from [gettele/money](https://github.com/gettele/money)*
   - replace an imported key with 12 new words via an on-chain key rotation, offered once right after import - *inspired by [tele](https://github.com/nitreojs/tele)*
+- "View in Explorer" for Money wallet addresses: in the My Money menu and on the profile wallet card
 
 ## behavior
 

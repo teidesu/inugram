@@ -1,0 +1,158 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Tue, 10 Nov 2026 17:05:37 +0400
+Subject: wallet: view address in explorer from profile card and My Money menu
+
+---
+ .../ui/Wallet/ProfileWalletCardDialog.java    | 43 ++++++++++++++++++-
+ .../telegram/ui/Wallet/WalletActivity.java    | 13 ++++--
+ 2 files changed, 50 insertions(+), 6 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Wallet/ProfileWalletCardDialog.java b/TMessagesProj/src/main/java/org/telegram/ui/Wallet/ProfileWalletCardDialog.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Wallet/ProfileWalletCardDialog.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Wallet/ProfileWalletCardDialog.java
+@@ -12,6 +12,7 @@ import android.graphics.Canvas;
+ import android.graphics.Color;
+ import android.graphics.Paint;
+ import android.graphics.RectF;
++import android.net.Uri;
+ import android.os.Bundle;
+ import android.text.SpannableStringBuilder;
+ import android.text.Spanned;
+@@ -73,6 +74,7 @@ public class ProfileWalletCardDialog extends Dialog {
+     private final WalletCardComponent card;
+     private final WalletGiftStickers stickers;
+     private final ProfileActivity.Button2 sendPill;
++    private final ProfileActivity.Button2 inu_explorerPill;
+     private final TextView publicNote;
+     private final Paint blurPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+     private final RectF blurBounds = new RectF();
+@@ -113,10 +115,12 @@ public class ProfileWalletCardDialog extends Dialog {
+                 final int safeWidth = Math.max(1, width - insets.left - insets.right);
+                 sendPill.measure(MeasureSpec.makeMeasureSpec(Math.max(1, safeWidth - dp(24)), MeasureSpec.AT_MOST),
+                         MeasureSpec.makeMeasureSpec(dp(60), MeasureSpec.EXACTLY));
++                inu_explorerPill.measure(MeasureSpec.makeMeasureSpec(Math.max(1, safeWidth - dp(24)), MeasureSpec.AT_MOST),
++                        MeasureSpec.makeMeasureSpec(dp(60), MeasureSpec.EXACTLY));
+                 publicNote.measure(MeasureSpec.makeMeasureSpec(Math.max(1, safeWidth - dp(48)), MeasureSpec.AT_MOST),
+                         MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
+                 int cardWidth = Math.min(dp(420), Math.max(1, safeWidth - dp(24)));
+-                final int maxHeight = Math.max(1, height - safeTop() - insets.bottom - dp(showButton() ? 120 : 48) - noteHeight());
++                final int maxHeight = Math.max(1, height - safeTop() - insets.bottom - dp(showButton() ? 120 : 48) - noteHeight() - inu_getExplorerHeight());
+                 card.measure(MeasureSpec.makeMeasureSpec(cardWidth, MeasureSpec.EXACTLY),
+                         MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
+                 if (card.getMeasuredHeight() > maxHeight) {
+@@ -141,12 +145,15 @@ public class ProfileWalletCardDialog extends Dialog {
+                 final int buttonTop = getHeight() - insets.bottom - dp(16) - (showButton() ? sendPill.getMeasuredHeight() : 0);
+                 sendPill.layout(centerX - sendPill.getMeasuredWidth() / 2, buttonTop,
+                         centerX + (sendPill.getMeasuredWidth() + 1) / 2, buttonTop + sendPill.getMeasuredHeight());
++                final int explorerTop = buttonTop - inu_getExplorerHeight();
++                inu_explorerPill.layout(centerX - inu_explorerPill.getMeasuredWidth() / 2, explorerTop,
++                        centerX + (inu_explorerPill.getMeasuredWidth() + 1) / 2, explorerTop + inu_explorerPill.getMeasuredHeight());
+                 final int noteTop = safeTop() + dp(36);
+                 publicNote.layout(centerX - publicNote.getMeasuredWidth() / 2, noteTop,
+                         centerX + (publicNote.getMeasuredWidth() + 1) / 2, noteTop + publicNote.getMeasuredHeight());
+                 updateNoteColor();
+                 final int minTop = safeTop() + dp(24) + noteHeight();
+-                final int maxTop = Math.max(minTop, buttonTop - dp(24) - card.getMeasuredHeight());
++                final int maxTop = Math.max(minTop, explorerTop - dp(24) - card.getMeasuredHeight());
+                 final int cardTop = Math.max(minTop, Math.min(maxTop,
+                         (getHeight() - card.getMeasuredHeight()) / 2));
+                 final int cardLeft = centerX - card.getMeasuredWidth() / 2;
+@@ -266,6 +273,29 @@ public class ProfileWalletCardDialog extends Dialog {
+         sendPill.setVisibility(showButton() ? View.VISIBLE : View.GONE);
+         root.addView(sendPill, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, 60, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
+ 
++        inu_explorerPill = new ProfileActivity.Button2(getContext());
++        BlurredBackgroundDrawable explorerBackground = buttonBlurFactory.create(inu_explorerPill,
++                new BlurredBackgroundColorProviderThemed(fragment.getResourceProvider(), Theme.key_windowBackgroundWhite));
++        explorerBackground.setPadding(dp(8));
++        explorerBackground.setRadius(dp(22));
++        inu_explorerPill.setBackground(explorerBackground);
++        ScaleStateListAnimator.apply(inu_explorerPill, .02f, 1.2f);
++        ButtonWithCounterView explorer = new ButtonWithCounterView(getContext(), false, fragment.getResourceProvider());
++        explorer.setUseWrapContent(true);
++        explorer.setPadding(dp(16), 0, dp(16), 0);
++        explorer.setRoundRadius(19);
++        explorer.setText(getString(R.string.WalletViewInExplorer), false);
++        explorer.setStateListAnimator(null);
++        inu_explorerPill.addView(explorer, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.MATCH_PARENT, Gravity.CENTER));
++        inu_explorerPill.setContentDescription(getString(R.string.WalletViewInExplorer));
++        inu_explorerPill.setOnClickListener(v -> {
++            if (dismissing) return;
++            WalletActivity.inu_openInExplorer(getContext(), fragment.getCurrentAccount(), Uri.encode(profileCard.address));
++        });
++        inu_explorerPill.setAlpha(0);
++        inu_explorerPill.setVisibility(TextUtils.isEmpty(profileCard.address) ? View.GONE : View.VISIBLE);
++        root.addView(inu_explorerPill, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, 60, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
++
+         publicNote = new TextView(getContext());
+         publicNote.setTextSize(14);
+         publicNote.setTypeface(AndroidUtilities.bold());
+@@ -304,6 +334,10 @@ public class ProfileWalletCardDialog extends Dialog {
+         return publicNote.getVisibility() == View.VISIBLE ? dp(12) + publicNote.getMeasuredHeight() : 0;
+     }
+ 
++    private int inu_getExplorerHeight() {
++        return inu_explorerPill.getVisibility() == View.VISIBLE ? inu_explorerPill.getMeasuredHeight() : 0;
++    }
++
+     private boolean showButton() {
+         return showSendMoney || showHowItWorks || isSelf;
+     }
+@@ -361,6 +395,10 @@ public class ProfileWalletCardDialog extends Dialog {
+         sendPill.setTranslationY(dp(16) * (1 - settle));
+         sendPill.setScaleX(AndroidUtilities.lerp(.8f, 1f, settle));
+         sendPill.setScaleY(AndroidUtilities.lerp(.8f, 1f, settle));
++        inu_explorerPill.setAlpha(settle);
++        inu_explorerPill.setTranslationY(dp(16) * (1 - settle));
++        inu_explorerPill.setScaleX(AndroidUtilities.lerp(.8f, 1f, settle));
++        inu_explorerPill.setScaleY(AndroidUtilities.lerp(.8f, 1f, settle));
+         root.invalidate();
+     }
+ 
+@@ -469,6 +507,7 @@ public class ProfileWalletCardDialog extends Dialog {
+         // Freeze the ramp; the closing animation fades the current tilt out with settle.
+         if (gyroscopeAnimator != null) gyroscopeAnimator.cancel();
+         sendPill.setEnabled(false);
++        inu_explorerPill.setEnabled(false);
+         if (!root.isAttachedToWindow() || progress == 0) finishDismiss();
+         else animateTo(0);
+     }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Wallet/WalletActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/Wallet/WalletActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Wallet/WalletActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Wallet/WalletActivity.java
+@@ -412,6 +412,10 @@ public class WalletActivity extends UniversalFragment implements NotificationCen
+                 o.dismiss();
+                 presentFragment(new WalletTonConnectSessionsFragment());
+             })
++            .addIf(!TextUtils.isEmpty(wallet.getAddress()), R.drawable.msg_search, getString(R.string.WalletViewInExplorer), () -> {
++                o.dismiss();
++                inu_openInExplorer(getContext(), currentAccount, Uri.encode(wallet.getAddress()));
++            })
+             .addGap()
+             .add(R.drawable.wallet_help, LocaleController.getString(R.string.WalletWhatIsWallet), () -> {
+                 o.dismiss();
+@@ -3326,16 +3330,17 @@ public class WalletActivity extends UniversalFragment implements NotificationCen
+         if (TextUtils.isEmpty(hash)) {
+             return;
+         }
++        inu_openInExplorer(context, currentAccount, "transaction/" + Uri.encode(hash));
++    }
++
++    public static void inu_openInExplorer(Context context, int currentAccount, String path) {
+         String baseUrl = MessagesController.getInstance(currentAccount).tonBlockchainExplorerUrl;
+         if (TextUtils.isEmpty(baseUrl)) {
+             baseUrl = "https://tonviewer.com/";
+         } else if (!baseUrl.endsWith("/")) {
+             baseUrl += "/";
+         }
+-        Browser.openUrlInSystemBrowser(
+-                context,
+-                baseUrl + "transaction/" + Uri.encode(hash)
+-        );
++        Browser.openUrlInSystemBrowser(context, baseUrl + path);
+     }
+ 
+     private static CharSequence formatTransactionAmount(long nanotons, boolean recolorIcon) {
