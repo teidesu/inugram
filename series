@@ -442,3 +442,6 @@ bugfix/profile-media-undock-rows-hidden.patch
 bugfix/widget-resize-at-chat-bottom.patch
 bugfix/stale-wallpaper-load.patch
 feature/wallet_explorer_links.patch
+bugfix/non-selected-account-media.patch
+hooks/fragment-lifecycle.patch
+feature/cross-account-chats.patch

@@ -11,6 +11,7 @@ import desu.inugram.helpers.SplashScreenHelper
 import desu.inugram.helpers.UrlCleanerHelper
 import desu.inugram.helpers.cloud.CloudSettingsHelper
 import desu.inugram.helpers.dialogs.DrawerHelper
+import desu.inugram.helpers.dialogs.LinkedChatsHelper
 import desu.inugram.helpers.font.FontHelper
 import desu.inugram.helpers.maps.MapsHelper
 import desu.inugram.helpers.media.MediaSendDebugHelper
@@ -34,6 +35,7 @@ import org.telegram.messenger.R
 import org.telegram.messenger.UserConfig
 import org.telegram.messenger.Utilities
 import org.telegram.tgnet.TLObject
+import org.telegram.ui.ActionBar.BaseFragment
 import org.telegram.ui.Components.AnimatedEmojiDrawable
 import org.telegram.ui.Components.AnimatedFloat
 import org.telegram.ui.Components.BulletinFactory
@@ -170,6 +172,16 @@ object InuHooks {
         // #if PLUGINS
         PluginManager.onAppInteractive()
         // #endif
+    }
+
+    @JvmStatic
+    fun onFragmentResume(fragment: BaseFragment) {
+        LinkedChatsHelper.onFragmentResume(fragment)
+    }
+
+    @JvmStatic
+    fun onFragmentPause(fragment: BaseFragment) {
+        LinkedChatsHelper.onFragmentPause(fragment)
     }
 
     @JvmStatic

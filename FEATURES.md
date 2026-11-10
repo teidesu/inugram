@@ -60,6 +60,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - bottom tabs: material design 3 style with a pill indicator behind the selected icon
 - double-tap account tab to switch to next account
 - long-tap "chats" tab to pick folder from menu
+- cross-account chats (experimental, off by default): add a chat to another account's chat list, then open it and send messages from there without switching accounts
 - folder display modes: titles / titles+icons / icons-only
 - folder unread counter modes: hide / regular / exclude muted / 🐶 exclude muted non-dms
 - hide "all chats" folder tab

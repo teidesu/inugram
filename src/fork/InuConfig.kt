@@ -6,6 +6,7 @@ import androidx.core.content.edit
 import desu.inugram.helpers.ProcessTextConfig
 import desu.inugram.helpers.chat.DoubleTapActionHelper
 import desu.inugram.helpers.chat.PinnedReactionsHelper
+import desu.inugram.helpers.dialogs.LinkedChatsHelper
 import desu.inugram.helpers.font.FontConfig
 import desu.inugram.helpers.menu.ChatMenuConfig
 import desu.inugram.helpers.menu.DrawerMenuConfig
@@ -983,6 +984,12 @@ object InuConfig {
 
     @JvmField
     val ACCOUNT_ORDER = StringItem("account_order", "", exportable = false)
+
+    @JvmField
+    val LINKED_CHATS = BoolItem("linked_chats", false)
+
+    @JvmField
+    val LINKED_CHATS_LIST = LinkedChatsHelper.LinksItem()
 
     @JvmField
     val ACCOUNT_SWITCH_SHORTCUT = BoolItem("account_switch_shortcut", false)

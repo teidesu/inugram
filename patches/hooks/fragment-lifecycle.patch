@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Tue, 10 Nov 2026 20:24:49 +0400
+Subject: fragment resume/pause hooks
+
+---
+ .../src/main/java/org/telegram/ui/ActionBar/BaseFragment.java  | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BaseFragment.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BaseFragment.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BaseFragment.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BaseFragment.java
+@@ -639,6 +639,7 @@ public abstract class BaseFragment {
+ 
+     @CallSuper
+     public void onFragmentDestroy() {
++        desu.inugram.InuHooks.onFragmentPause(this);
+         getConnectionsManager().cancelRequestsForGuid(classGuid);
+         getMessagesStorage().cancelTasksForGuid(classGuid);
+         isFinished = true;
+@@ -677,6 +678,7 @@ public abstract class BaseFragment {
+ 
+     @CallSuper
+     public void onResume() {
++        desu.inugram.InuHooks.onFragmentResume(this);
+         isPaused = false;
+         if (actionBar != null) {
+             actionBar.onResume();
+@@ -689,6 +691,7 @@ public abstract class BaseFragment {
+ 
+     @CallSuper
+     public void onPause() {
++        desu.inugram.InuHooks.onFragmentPause(this);
+         if (actionBar != null) {
+             actionBar.onPause();
+         }

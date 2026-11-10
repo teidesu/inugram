@@ -1,0 +1,257 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Tue, 10 Nov 2026 20:20:09 +0400
+Subject: load media through the owning account in chats opened on a non-selected account
+
+---
+ .../org/telegram/messenger/AndroidUtilities.java |  2 +-
+ .../java/org/telegram/messenger/FileLoader.java  |  2 +-
+ .../org/telegram/messenger/ImageReceiver.java    |  3 +++
+ .../org/telegram/ui/Cells/ChatActionCell.java    |  6 ++++++
+ .../org/telegram/ui/Cells/ChatMessageCell.java   |  6 ++++++
+ .../org/telegram/ui/Cells/SharedAudioCell.java   |  5 +++++
+ .../telegram/ui/Cells/SharedDocumentCell.java    |  5 +++++
+ .../telegram/ui/Cells/SharedPhotoVideoCell2.java |  2 ++
+ .../ui/Components/ChatAvatarContainer.java       |  4 ++++
+ .../main/java/org/telegram/ui/PhotoViewer.java   |  2 +-
+ .../org/telegram/ui/Stories/PeerStoriesView.java |  3 +++
+ .../org/telegram/ui/Stories/StoryViewer.java     | 16 ++++++++++------
+ 12 files changed, 47 insertions(+), 9 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
+@@ -4294,7 +4294,7 @@ public class AndroidUtilities {
+             f = new File(message.messageOwner.attachPath);
+         }
+         if (f == null || f != null && !f.exists()) {
+-            f = FileLoader.getInstance(UserConfig.selectedAccount).getPathToMessage(message.messageOwner);
++            f = FileLoader.getInstance(message.currentAccount).getPathToMessage(message.messageOwner);
+         }
+         if (f != null && f.exists()) {
+             if (parentFragment != null && f.getName().toLowerCase().endsWith("attheme")) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/FileLoader.java b/TMessagesProj/src/main/java/org/telegram/messenger/FileLoader.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/FileLoader.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/FileLoader.java
+@@ -1434,7 +1434,7 @@ public class FileLoader extends BaseController {
+             return new File("");
+         }
+         if (documentId != 0) {
+-            String path = getInstance(UserConfig.selectedAccount).getFileDatabase().getPath(documentId, dcId, type, useFileDatabaseQueue);
++            String path = getFileDatabase().getPath(documentId, dcId, type, useFileDatabaseQueue);
+             if (path != null) {
+                 return new File(path);
+             }
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/ImageReceiver.java b/TMessagesProj/src/main/java/org/telegram/messenger/ImageReceiver.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/ImageReceiver.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/ImageReceiver.java
+@@ -573,6 +573,9 @@ public class ImageReceiver implements NotificationCenter.NotificationCenterDeleg
+     }
+ 
+     public void setImage(ImageLocation mediaLocation, String mediaFilter, ImageLocation imageLocation, String imageFilter, ImageLocation thumbLocation, String thumbFilter, Drawable thumb, long size, String ext, Object parentObject, int cacheType) {
++        if (parentObject instanceof MessageObject) {
++            currentAccount = ((MessageObject) parentObject).currentAccount;
++        }
+         if (allowLoadingOnAttachedOnly && !attachedToWindow) {
+             if (setImageBackup == null) {
+                 setImageBackup = new SetImageBackup();
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatActionCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatActionCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatActionCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatActionCell.java
+@@ -642,6 +642,12 @@ public class ChatActionCell extends BaseCell implements DownloadController.FileD
+ 
+     public void setMessageObject(MessageObject messageObject, boolean force) {
+         if (messageObject == null) return;
++        if (messageObject != null && currentAccount != messageObject.currentAccount) {
++            DownloadController.getInstance(currentAccount).removeLoadingFileObserver(this);
++            currentAccount = messageObject.currentAccount;
++            TAG = DownloadController.getInstance(currentAccount).generateObserverTag();
++        }
++        imageReceiver.setCurrentAccount(currentAccount);
+         if (currentMessageObject != messageObject && walletSlidingOffset != 0) setWalletSlidingOffset(0);
+         final boolean walletStateChanged = messageObject.messageOwner != null
+                 && messageObject.messageOwner.action instanceof TLRPC.TL_messageActionGramTransfer
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+@@ -1891,6 +1891,11 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+         blurredPhotoImage = new ImageReceiver(this);
+         blurredPhotoImage.setAllowLoadingOnAttachedOnly(true);
+         blurredPhotoImage.setUseRoundForThumbDrawable(true);
++        avatarImage.setCurrentAccount(currentAccount);
++        replyImageReceiver.setCurrentAccount(currentAccount);
++        locationImageReceiver.setCurrentAccount(currentAccount);
++        photoImage.setCurrentAccount(currentAccount);
++        blurredPhotoImage.setCurrentAccount(currentAccount);
+         radialProgress = new RadialProgress2(this, resourcesProvider);
+         videoRadialProgress = new RadialProgress2(this, resourcesProvider);
+         videoRadialProgress.setDrawBackground(false);
+@@ -1981,6 +1986,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+         commentAvatarImagesVisible = new boolean[3];
+         for (int a = 0; a < commentAvatarImages.length; a++) {
+             commentAvatarImages[a] = new ImageReceiver(this);
++            commentAvatarImages[a].setCurrentAccount(currentAccount);
+             commentAvatarImages[a].setRoundRadius(dp(12));
+             commentAvatarDrawables[a] = new AvatarDrawable();
+             commentAvatarDrawables[a].setTextSize(dp(18));
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedAudioCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedAudioCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedAudioCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedAudioCell.java
+@@ -271,6 +271,11 @@ public class SharedAudioCell extends FrameLayout implements DownloadController.F
+     }
+ 
+     public void setMessageObject(MessageObject messageObject, boolean divider) {
++        if (messageObject != null && currentAccount != messageObject.currentAccount) {
++            DownloadController.getInstance(currentAccount).removeLoadingFileObserver(this);
++            currentAccount = messageObject.currentAccount;
++            TAG = DownloadController.getInstance(currentAccount).generateObserverTag();
++        }
+         needDivider = divider;
+         currentMessageObject = messageObject;
+         final TLRPC.Document document = messageObject.getDocument();
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedDocumentCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedDocumentCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedDocumentCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedDocumentCell.java
+@@ -388,6 +388,11 @@ public class SharedDocumentCell extends FrameLayout implements Theme.Colorable,
+     }
+ 
+     public void setDocument(MessageObject messageObject, boolean divider) {
++        if (messageObject != null && currentAccount != messageObject.currentAccount) {
++            DownloadController.getInstance(currentAccount).removeLoadingFileObserver(this);
++            currentAccount = messageObject.currentAccount;
++            TAG = DownloadController.getInstance(currentAccount).generateObserverTag();
++        }
+         boolean animated = message != null && messageObject != null && message.getId() != messageObject.getId();
+         needDivider = divider;
+         message = messageObject;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedPhotoVideoCell2.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedPhotoVideoCell2.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedPhotoVideoCell2.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedPhotoVideoCell2.java
+@@ -158,6 +158,8 @@ public class SharedPhotoVideoCell2 extends FrameLayout {
+         super(context);
+         this.sharedResources = sharedResources;
+         this.currentAccount = currentAccount;
++        imageReceiver.setCurrentAccount(currentAccount);
++        imageReceiverFullSize.setCurrentAccount(currentAccount);
+ 
+         setChecked(false, false);
+         imageReceiver.setParentView(this);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAvatarContainer.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAvatarContainer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAvatarContainer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAvatarContainer.java
+@@ -178,6 +178,9 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
+     public ChatAvatarContainer(Context context, BaseFragment baseFragment, boolean needTime, Theme.ResourcesProvider resourcesProvider) {
+         super(context);
+         this.resourcesProvider = resourcesProvider;
++        if (baseFragment != null) {
++            currentAccount = baseFragment.getCurrentAccount();
++        }
+         if (baseFragment instanceof ChatActivity) {
+             parentFragment = (ChatActivity) baseFragment;
+         }
+@@ -265,6 +268,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
+         }
+         avatarImageView.setContentDescription(getString(R.string.AccDescrProfilePicture));
+         avatarImageView.setRoundRadius(dp(21));
++        avatarImageView.getImageReceiver().setCurrentAccount(currentAccount);
+         addView(avatarImageView);
+         if (avatarClickable) {
+             final TLRPC.Chat chat = parentFragment != null ? parentFragment.getCurrentChat() : null;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+@@ -4737,7 +4737,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         Theme.createChatResources(activity, false);
+         this.resourcesProvider = resourcesProvider;
+         this.parentFragment = fragment;
+-        currentAccount = UserConfig.selectedAccount;
++        currentAccount = fragment != null ? fragment.getCurrentAccount() : UserConfig.selectedAccount;
+         centerImage.setCurrentAccount(currentAccount);
+         leftImage.setCurrentAccount(currentAccount);
+         rightImage.setCurrentAccount(currentAccount);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stories/PeerStoriesView.java b/TMessagesProj/src/main/java/org/telegram/ui/Stories/PeerStoriesView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Stories/PeerStoriesView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Stories/PeerStoriesView.java
+@@ -6275,6 +6275,9 @@ public class PeerStoriesView extends SizeNotifierFrameLayout implements Notifica
+ 
+     public void setAccount(int currentAccount) {
+         this.currentAccount = currentAccount;
++        imageReceiver.setCurrentAccount(currentAccount);
++        leftPreloadImageReceiver.setCurrentAccount(currentAccount);
++        rightPreloadImageReceiver.setCurrentAccount(currentAccount);
+         storiesController = MessagesController.getInstance(currentAccount).storiesController;
+         emojiAnimationsOverlay.setAccount(currentAccount);
+         if (reactionsContainerLayout != null) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoryViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoryViewer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoryViewer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoryViewer.java
+@@ -308,8 +308,12 @@ public class StoryViewer implements NotificationCenter.NotificationCenterDelegat
+         }
+     }
+ 
++    private int inu_getFragmentAccount() {
++        return fragment != null ? fragment.getCurrentAccount() : UserConfig.selectedAccount;
++    }
++
+     public void open(Context context, TL_stories.StoryItem storyItem, PlaceProvider placeProvider) {
+-        open(UserConfig.selectedAccount, context, storyItem, placeProvider);
++        open(inu_getFragmentAccount(), context, storyItem, placeProvider);
+     }
+     public void open(int account, Context context, TL_stories.StoryItem storyItem, PlaceProvider placeProvider) {
+         if (storyItem == null) {
+@@ -328,7 +332,7 @@ public class StoryViewer implements NotificationCenter.NotificationCenterDelegat
+     }
+ 
+     public void open(Context context, long dialogId, PlaceProvider placeProvider) {
+-        currentAccount = UserConfig.selectedAccount;
++        currentAccount = inu_getFragmentAccount();
+         int position = 0;
+         ArrayList<Long> peerIds = new ArrayList<>();
+         peerIds.add(dialogId);
+@@ -337,7 +341,7 @@ public class StoryViewer implements NotificationCenter.NotificationCenterDelegat
+     }
+ 
+     public void open(Context context, int startStoryId, StoriesController.StoriesList storiesList, PlaceProvider placeProvider) {
+-        currentAccount = UserConfig.selectedAccount;
++        currentAccount = inu_getFragmentAccount();
+         ArrayList<Long> peerIds = new ArrayList<>();
+         peerIds.add(storiesList.dialogId);
+         dayStoryId = startStoryId;
+@@ -349,14 +353,14 @@ public class StoryViewer implements NotificationCenter.NotificationCenterDelegat
+             doOnAnimationReadyRunnables.clear();
+             return;
+         }
+-        currentAccount = UserConfig.selectedAccount;
++        currentAccount = inu_getFragmentAccount();
+         ArrayList<Long> peerIds = new ArrayList<>();
+         peerIds.add(DialogObject.getPeerDialogId(userStories.peer));
+         open(context, userStories.stories.get(0), peerIds, 0, null, userStories, placeProvider, false);
+     }
+ 
+     public void open(Context context, TL_stories.StoryItem storyItem, int startStoryId, StoriesController.StoriesList storiesList, boolean reversed, PlaceProvider placeProvider) {
+-        currentAccount = UserConfig.selectedAccount;
++        currentAccount = inu_getFragmentAccount();
+         ArrayList<Long> peerIds = new ArrayList<>();
+         peerIds.add(storiesList.dialogId);
+         dayStoryId = startStoryId;
+@@ -365,7 +369,7 @@ public class StoryViewer implements NotificationCenter.NotificationCenterDelegat
+ 
+     @SuppressLint("WrongConstant")
+     public void open(Context context, TL_stories.StoryItem storyItem, ArrayList<Long> peerIds, int position, StoriesController.StoriesList storiesList, TL_stories.PeerStories userStories, PlaceProvider placeProvider, boolean reversed) {
+-        open(UserConfig.selectedAccount, context, storyItem, peerIds, position, storiesList, userStories, placeProvider, reversed);
++        open(inu_getFragmentAccount(), context, storyItem, peerIds, position, storiesList, userStories, placeProvider, reversed);
+     }
+     public void open(int account, Context context, TL_stories.StoryItem storyItem, ArrayList<Long> peerIds, int position, StoriesController.StoriesList storiesList, TL_stories.PeerStories userStories, PlaceProvider placeProvider, boolean reversed) {
+         if (!isContextSafe(context)) {

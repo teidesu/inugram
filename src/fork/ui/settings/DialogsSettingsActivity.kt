@@ -115,6 +115,15 @@ class DialogsSettingsActivity : SettingsPageActivity() {
                 communityDisplayModeLabel(InuConfig.COMMUNITY_DISPLAY_MODE.value),
             )
         )
+        items.add(
+            mkTwoLineCheckItem(
+                TOGGLE_LINKED_CHATS,
+                R.string.InuLinkedChats,
+                R.string.InuLinkedChatsInfo,
+                InuConfig.LINKED_CHATS.value,
+                experimental = true,
+            )
+        )
         items.add(UItem.asShadow(null))
         // end chat list section
 
@@ -245,6 +254,12 @@ class DialogsSettingsActivity : SettingsPageActivity() {
 
             BUTTON_COMMUNITY_DISPLAY_MODE -> showCommunityDisplayModeSelector()
 
+            TOGGLE_LINKED_CHATS -> {
+                val new = InuConfig.LINKED_CHATS.toggle()
+                (view as? NotificationsCheckCell)?.isChecked = new
+                softRebuild()
+            }
+
             BUTTON_FAB_MAIN_ACTION -> showFabActionDialog(view, InuConfig.DIALOGS_FAB_MAIN_ACTION)
             BUTTON_FAB_SECONDARY_ACTION -> showFabActionDialog(view, InuConfig.DIALOGS_FAB_SECONDARY_ACTION)
 
@@ -354,6 +369,7 @@ class DialogsSettingsActivity : SettingsPageActivity() {
         private val TOGGLE_FOLDER_TABS_AT_BOTTOM = InuUtils.generateId()
         private val BUTTON_COMMUNITY_DISPLAY_MODE = InuUtils.generateId()
         private val BUTTON_TITLE_TEXT = InuUtils.generateId()
+        private val TOGGLE_LINKED_CHATS = InuUtils.generateId()
 
         private fun titleTextLabel(value: Int): String = when (value) {
             InuConfig.DialogsTitleTextItem.USERNAME -> LocaleController.getString(R.string.Username)
@@ -396,6 +412,7 @@ class DialogsSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("hide-bot-webview-dialogs", R.string.InuHideBotWebView, TOGGLE_BOT_WEBVIEW_BUTTON),
                 SearchRegistry.Entry("disable-chat-preview-expand", R.string.InuDisableChatPreviewExpand, TOGGLE_INTERACTIVE_CHAT_PREVIEW),
                 SearchRegistry.Entry("community-display-mode", R.string.InuCommunityDisplayMode, BUTTON_COMMUNITY_DISPLAY_MODE),
+                SearchRegistry.Entry("linked-chats", R.string.InuLinkedChats, TOGGLE_LINKED_CHATS),
                 SearchRegistry.Entry("dialogs-fab-main-action", R.string.InuDialogsFabMainAction, BUTTON_FAB_MAIN_ACTION),
                 SearchRegistry.Entry("dialogs-fab-secondary-action", R.string.InuDialogsFabSecondaryAction, BUTTON_FAB_SECONDARY_ACTION),
                 SearchRegistry.Entry("dialogs-fab-hide-on-scroll", R.string.InuDialogsFabHideOnScroll, TOGGLE_FAB_HIDE_ON_SCROLL),

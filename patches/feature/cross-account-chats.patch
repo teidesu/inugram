@@ -1,0 +1,431 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Tue, 10 Nov 2026 20:20:10 +0400
+Subject: cross-account chats: show a chat from another account in the chat list
+
+---
+ .../ui/ActionBar/ActionBarLayout.java         |  1 +
+ .../telegram/ui/Adapters/DialogsAdapter.java  | 73 ++++++++++++++++++-
+ .../ui/Adapters/DialogsSearchAdapter.java     | 10 +++
+ .../org/telegram/ui/Cells/DialogCell.java     | 34 +++++++++
+ .../telegram/ui/Cells/ProfileSearchCell.java  | 29 ++++++++
+ .../java/org/telegram/ui/DialogsActivity.java | 26 +++++++
+ 6 files changed, 170 insertions(+), 3 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
+@@ -2083,6 +2083,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
+         boolean check = params.checkPresentFromDelegate;
+         boolean preview = params.preview;
+         ActionBarPopupWindow.ActionBarPopupWindowLayout menu = params.menuView;
++        desu.inugram.helpers.dialogs.LinkedChatsHelper.inheritAccount(getLastFragment(), fragment);
+ 
+         if (fragment == null || checkTransitionAnimation() || animationInProgress || startedTracking || delegate != null && check && !delegate.needPresentFragment(this, params) || !fragment.onFragmentCreate()) {
+             return false;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsAdapter.java b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsAdapter.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsAdapter.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsAdapter.java
+@@ -111,7 +111,8 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
+             VIEW_TYPE_GRAY_SECTION = 20,
+             VIEW_TYPE_FORWARD_TO_STORIES_CELL = 21,
+             VIEW_TYPE_HEADER_3 = 22,
+-            VIEW_TYPE_DIALOG_COMMUNITY = 23;
++            VIEW_TYPE_DIALOG_COMMUNITY = 23,
++            VIEW_TYPE_DIALOG_LINKED = 900;
+ 
+     private Context mContext;
+     private ArchiveHintCell archiveHintCell;
+@@ -374,6 +375,19 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
+             }
+         }
+ 
++        public ItemInternal(desu.inugram.helpers.dialogs.LinkedChatsHelper.LinkedDialog dialog) {
++            super(VIEW_TYPE_DIALOG_LINKED, true);
++            this.dialog = dialog;
++            Integer currentId = dialogsHeaderStableIds.get(dialog.key);
++            if (currentId != null) {
++                stableId = currentId;
++            } else {
++                stableId = stableIdPointer++;
++                dialogsHeaderStableIds.put(dialog.key, stableId);
++            }
++            isForumCell = MessagesController.getInstance(dialog.account).isForum(dialog.id);
++        }
++
+         public ItemInternal(int viewTypeMeUrl, TLRPC.RecentMeUrl recentMeUrl) {
+             super(viewTypeMeUrl, true);
+             this.recentMeUrl = recentMeUrl;
+@@ -426,6 +440,9 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
+                         isForumCell == itemInternal.isForumCell &&
+                         pinned == itemInternal.pinned;
+             }
++            if (viewType == VIEW_TYPE_DIALOG_LINKED) {
++                return stableId == itemInternal.stableId && isForumCell == itemInternal.isForumCell;
++            }
+             if (viewType == VIEW_TYPE_HEADER_2) {
+                 return dialog != null && itemInternal.dialog != null && dialog.id == itemInternal.dialog.id && dialog.isFolder == itemInternal.dialog.isFolder;
+             }
+@@ -685,6 +702,9 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
+                 }
+                 view = dialogCell2;
+                 break;
++            case VIEW_TYPE_DIALOG_LINKED:
++                view = new DialogCell(parentFragment, mContext, true, false, currentAccount, parentFragment.getResourceProvider());
++                break;
+             case VIEW_TYPE_FORWARD_TO_STORIES_CELL:
+             case VIEW_TYPE_DIALOG:
+                 if (dialogsType == DialogsActivity.DIALOGS_TYPE_ADD_USERS_TO ||
+@@ -957,6 +977,14 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
+                 }
+                 break;
+             }
++            case VIEW_TYPE_DIALOG_LINKED: {
++                desu.inugram.helpers.dialogs.LinkedChatsHelper.LinkedDialog dialog = (desu.inugram.helpers.dialogs.LinkedChatsHelper.LinkedDialog) getItem(i);
++                DialogCell cell = (DialogCell) holder.itemView;
++                cell.inu_setLinkedAccount(dialog.account);
++                cell.setDialog(dialog, dialogsType, folderId);
++                cell.checkHeight();
++                break;
++            }
+             case VIEW_TYPE_DIALOG: {
+                 TLRPC.Dialog dialog = (TLRPC.Dialog) getItem(i);
+                 Object nextObject = getItem(i + 1);
+@@ -1546,7 +1574,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
+                 int cellHeight = AndroidUtilities.dp(SharedConfig.useThreeLinesLayout ? 76 : 70);
+                 int dialogsHeight = 0;
+                 for (int i = 0; i < size; i++) {
+-                    if (itemInternals.get(i).viewType == VIEW_TYPE_DIALOG) {
++                    if (itemInternals.get(i).viewType == VIEW_TYPE_DIALOG || itemInternals.get(i).viewType == VIEW_TYPE_DIALOG_LINKED) {
+                         if (itemInternals.get(i).isForumCell && !collapsedView) {
+                             dialogsHeight += AndroidUtilities.dp(SharedConfig.useThreeLinesLayout ? 86 : 91);
+                         } else {
+@@ -1853,10 +1881,49 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
+                 }
+             }
+         }
++        inu_addLinkedChats();
++    }
++
++    private void inu_addLinkedChats() {
++        java.util.List<desu.inugram.helpers.dialogs.LinkedChatsHelper.LinkedDialog> linked = desu.inugram.helpers.dialogs.LinkedChatsHelper.getDialogs(currentAccount, dialogsType, folderId, isOnlySelect);
++        int next = 0;
++        for (int i = 0; i < itemInternals.size() && next < linked.size(); i++) {
++            ItemInternal item = itemInternals.get(i);
++            if (item.viewType != VIEW_TYPE_DIALOG || item.dialog == null) {
++                continue;
++            }
++            boolean last = i + 1 >= itemInternals.size() || itemInternals.get(i + 1).viewType != VIEW_TYPE_DIALOG;
++            if (!item.pinned && !item.isFolder) {
++                while (next < linked.size() && linked.get(next).last_message_date >= item.dialog.last_message_date) {
++                    itemInternals.add(i++, new ItemInternal(linked.get(next++)));
++                }
++            }
++            if (last) {
++                while (next < linked.size()) {
++                    itemInternals.add(++i, new ItemInternal(linked.get(next++)));
++                }
++            }
++        }
++        if (next < linked.size() && isEmpty) {
++            for (int i = 0; i < itemInternals.size(); i++) {
++                if (itemInternals.get(i).viewType != VIEW_TYPE_EMPTY) {
++                    continue;
++                }
++                isEmpty = false;
++                itemInternals.remove(i);
++                while (next < linked.size()) {
++                    itemInternals.add(i++, new ItemInternal(linked.get(next++)));
++                }
++                if (i == itemInternals.size()) {
++                    itemInternals.add(new ItemInternal(VIEW_TYPE_LAST_EMPTY));
++                }
++                break;
++            }
++        }
+     }
+ 
+     public int getItemHeight(int position) {
+-        if (itemInternals.get(position).viewType == VIEW_TYPE_DIALOG) {
++        if (itemInternals.get(position).viewType == VIEW_TYPE_DIALOG || itemInternals.get(position).viewType == VIEW_TYPE_DIALOG_LINKED) {
+             if (itemInternals.get(position).isForumCell && !collapsedView) {
+                 return AndroidUtilities.dp(SharedConfig.useThreeLinesLayout ? 86 : 91) + 1;
+             } else {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java
+@@ -909,6 +909,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+             filteredRecentSearchObjects.clear();
+             recentSearchObjects.clear();
+             recentSearchObjectsById.clear();
++            desu.inugram.helpers.dialogs.LinkedChatsHelper.clearRecentSearch(currentAccount);
+             queryFilter = new StringBuilder("1");
+         }
+         final StringBuilder finalQueryFilter = queryFilter;
+@@ -952,6 +953,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+     }
+ 
+     private void setRecentSearch(ArrayList<RecentSearchObject> arrayList, LongSparseArray<RecentSearchObject> hashMap) {
++        desu.inugram.helpers.dialogs.LinkedChatsHelper.addRecentSearch(currentAccount, dialogsType, arrayList);
+         recentSearchObjects = arrayList;
+         recentSearchObjectsById = hashMap;
+         for (int a = 0; a < recentSearchObjects.size(); a++) {
+@@ -1068,6 +1070,9 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+                 }
+             }
+             MessagesController.getInstance(currentAccount).putUsers(encUsers, true);
++            if (filterDialogIds == null) {
++                desu.inugram.helpers.dialogs.LinkedChatsHelper.addSearchResults(currentAccount, dialogsType, lastSearchText, result, names);
++            }
+             searchResult = result;
+             searchResultNames = names;
+          //   searchContacts = contacts;
+@@ -1761,6 +1766,11 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+                 String un = null;
+                 ArrayList<TLRPC.TL_username> usernames = null;
+                 Object obj = getItem(position);
++                desu.inugram.helpers.dialogs.LinkedChatsHelper.LinkedDialog inu_linked = obj instanceof desu.inugram.helpers.dialogs.LinkedChatsHelper.LinkedDialog ? (desu.inugram.helpers.dialogs.LinkedChatsHelper.LinkedDialog) obj : null;
++                cell.inu_setLinkedAccount(inu_linked != null ? inu_linked.account : -1);
++                if (inu_linked != null) {
++                    obj = desu.inugram.helpers.dialogs.LinkedChatsHelper.getPeer(inu_linked);
++                }
+ 
+                 if (obj instanceof TLRPC.TL_sponsoredPeer) {
+                     final TLRPC.TL_sponsoredPeer sponsoredPeer = (TLRPC.TL_sponsoredPeer) obj;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
+@@ -242,6 +242,11 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
+             return super.onAvatarClick(view, dialogId);
+         }
+ 
++        @Override
++        public boolean checkOnTouchEvent(MotionEvent event, View view) {
++            return inu_linkedBadge == null && super.checkOnTouchEvent(event, view);
++        }
++
+         @Override
+         public void openStory(long dialogId, Runnable onDone) {
+             if (delegate == null) {
+@@ -453,6 +458,22 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
+     private int paintIndex;
+ 
+     private int currentAccount;
++    private desu.inugram.helpers.dialogs.LinkedChatsHelper.Badge inu_linkedBadge;
++
++    public void inu_setLinkedAccount(int account) {
++        currentAccount = account;
++        avatarImage.setCurrentAccount(account);
++        for (int i = 0; i < thumbImage.length; ++i) {
++            thumbImage[i].setCurrentAccount(account);
++        }
++        if (inu_linkedBadge == null) {
++            inu_linkedBadge = new desu.inugram.helpers.dialogs.LinkedChatsHelper.Badge(this);
++            if (attachedToWindow) {
++                inu_linkedBadge.attach();
++            }
++        }
++        inu_linkedBadge.setAccount(account);
++    }
+     private CustomDialog customDialog;
+     private long currentDialogId;
+     private String customMessage;
+@@ -974,6 +995,9 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
+         for (int i = 0; i < thumbImage.length; ++i) {
+             thumbImage[i].onDetachedFromWindow();
+         }
++        if (inu_linkedBadge != null) {
++            inu_linkedBadge.detach();
++        }
+         if (translationDrawable != null) {
+             translationDrawable.stop();
+             translationDrawable.setProgress(0.0f);
+@@ -1005,6 +1029,9 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
+         for (int i = 0; i < thumbImage.length; ++i) {
+             thumbImage[i].onAttachedToWindow();
+         }
++        if (inu_linkedBadge != null) {
++            inu_linkedBadge.attach();
++        }
+         resetPinnedArchiveState();
+         animatedEmojiStack = AnimatedEmojiSpan.update(AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES, this, animatedEmojiStack, messageLayout);
+         animatedEmojiStack2 = AnimatedEmojiSpan.update(AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES, this, animatedEmojiStack2, messageNameLayout);
+@@ -3230,6 +3257,9 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
+     }
+ 
+     public void setChecked(boolean checked, boolean animated) {
++        if (inu_linkedBadge != null) {
++            return;
++        }
+         if (checkBox == null && !checked) {
+             return;
+         }
+@@ -4840,6 +4870,10 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
+                 DrawableUtils.drawCommunityCardDrawable(canvas, Theme.dialogs_communityCardsDrawable,
+                     avatarImage.getCenterX(), avatarImage.getCenterY(), dp(48));
+                 avatarImage.draw(canvas);
++            } else if (inu_linkedBadge != null) {
++                avatarImage.setImageCoords(storyParams.originalAvatarRect);
++                avatarImage.draw(canvas);
++                inu_linkedBadge.draw(canvas, avatarImage, Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider));
+             } else {
+                 storyParams.drawHiddenStoriesAsSegments = isShareToStoryCell || currentDialogFolderId != 0;
+                 int s = storyParams.forceState;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileSearchCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileSearchCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileSearchCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileSearchCell.java
+@@ -84,6 +84,26 @@ public class ProfileSearchCell extends BaseCell implements NotificationCenter.No
+     private AvatarDrawable avatarDrawable;
+     private CharSequence subLabel;
+     private Theme.ResourcesProvider resourcesProvider;
++    private desu.inugram.helpers.dialogs.LinkedChatsHelper.Badge inu_linkedBadge;
++
++    public void inu_setLinkedAccount(int account) {
++        currentAccount = account >= 0 ? account : UserConfig.selectedAccount;
++        avatarImage.setCurrentAccount(currentAccount);
++        if (account < 0) {
++            if (inu_linkedBadge != null) {
++                inu_linkedBadge.detach();
++                inu_linkedBadge = null;
++            }
++            return;
++        }
++        if (inu_linkedBadge == null) {
++            inu_linkedBadge = new desu.inugram.helpers.dialogs.LinkedChatsHelper.Badge(this);
++            if (isAttachedToWindow()) {
++                inu_linkedBadge.attach();
++            }
++        }
++        inu_linkedBadge.setAccount(account);
++    }
+     private TLRPC.TL_sponsoredPeer ad;
+ 
+     private TLRPC.User user;
+@@ -337,6 +357,9 @@ public class ProfileSearchCell extends BaseCell implements NotificationCenter.No
+     protected void onDetachedFromWindow() {
+         super.onDetachedFromWindow();
+         avatarImage.onDetachedFromWindow();
++        if (inu_linkedBadge != null) {
++            inu_linkedBadge.detach();
++        }
+         NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.emojiLoaded);
+         if (showPremiumBlocked) {
+             NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.userIsPremiumBlockedUpadted);
+@@ -349,6 +372,9 @@ public class ProfileSearchCell extends BaseCell implements NotificationCenter.No
+     protected void onAttachedToWindow() {
+         super.onAttachedToWindow();
+         avatarImage.onAttachedToWindow();
++        if (inu_linkedBadge != null) {
++            inu_linkedBadge.attach();
++        }
+         NotificationCenter.getGlobalInstance().addWeakObserver(this, NotificationCenter.emojiLoaded);
+         if (showPremiumBlocked) {
+             NotificationCenter.getGlobalInstance().addWeakObserver(this, NotificationCenter.userIsPremiumBlockedUpadted);
+@@ -1081,6 +1107,9 @@ public class ProfileSearchCell extends BaseCell implements NotificationCenter.No
+             avatarImage.setImageCoords(avatarStoryParams.originalAvatarRect);
+             avatarImage.draw(canvas);
+         }
++        if (inu_linkedBadge != null && !dontDrawAvatar) {
++            inu_linkedBadge.draw(canvas, avatarImage, Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider));
++        }
+ 
+         final float lockT = premiumBlockedT.set(premiumBlocked);
+         if (lockT > 0) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+@@ -724,6 +724,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+     private final static int remove_from_folder = 110;
+     private final static int community_ungroup = 111;
+     private final static int inu_select_all = 900;
++    private desu.inugram.helpers.dialogs.LinkedChatsHelper.Observer inu_linkedChatsObserver;
+ 
+     private final static int ARCHIVE_ITEM_STATE_PINNED = 0;
+     private final static int ARCHIVE_ITEM_STATE_SHOWED = 1;
+@@ -2473,6 +2474,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+ 
+         @Override
+         public int getMovementFlags(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder viewHolder) {
++            if (viewHolder.getItemViewType() == DialogsAdapter.VIEW_TYPE_DIALOG_LINKED) {
++                return 0;
++            }
+             if (waitingForDialogsAnimationEnd(parentPage) || parentLayout != null && parentLayout.isInPreviewMode() || rightSlidingDialogContainer.hasFragment() || communityId != 0) {
+                 return 0;
+             }
+@@ -2883,6 +2887,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+                 observersGroup.add(NotificationCenter.filterSettingsUpdated);
+                 observersGroup.add(NotificationCenter.dialogsUnreadCounterChanged);
+             }
++            inu_linkedChatsObserver = new desu.inugram.helpers.dialogs.LinkedChatsHelper.Observer(this);
+             observersGroup
+                 .add(NotificationCenter.dialogsNeedReload)
+                 .add(NotificationCenter.dialogFiltersUpdated)
+@@ -3059,6 +3064,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+             observersGroup.removeAllObservers();
+             observersGroup = null;
+         }
++        if (inu_linkedChatsObserver != null) {
++            inu_linkedChatsObserver.detach();
++            inu_linkedChatsObserver = null;
++        }
+ 
+         if (commentView != null) {
+             commentView.onDestroy();
+@@ -8048,6 +8057,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+         if (getParentActivity() == null) {
+             return;
+         }
++        if (desu.inugram.helpers.dialogs.LinkedChatsHelper.onItemClick(this, adapter, position)) {
++            return;
++        }
+         long dialogId = 0;
+         long topicId = 0;
+         int message_id = 0;
+@@ -8474,6 +8486,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+         if (adapter.getItemViewType(position) == DialogsAdapter.VIEW_TYPE_FORWARD_TO_STORIES_CELL) {
+             return false;
+         }
++        if (desu.inugram.helpers.dialogs.LinkedChatsHelper.onItemLongClick(this, view, adapter, position)) {
++            return true;
++        }
+ 
+         if (!actionBar.isActionModeShowed() && !AndroidUtilities.isTablet() && !onlySelect && view instanceof DialogCell && !getMessagesController().isForum(((DialogCell) view).getDialogId()) && !rightSlidingDialogContainer.hasFragment()) {
+             DialogCell cell = (DialogCell) view;
+@@ -8798,6 +8813,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+         if (hasFolders) {
+             flags |= ActionBarPopupWindow.ActionBarPopupWindowLayout.FLAG_USE_SWIPEBACK;
+         }
++        final boolean inu_canAddToAccount = desu.inugram.helpers.dialogs.LinkedChatsHelper.canAdd(currentAccount, dialogIdArray);
++        if (inu_canAddToAccount) {
++            flags |= ActionBarPopupWindow.ActionBarPopupWindowLayout.FLAG_USE_SWIPEBACK;
++        }
+ 
+         final BaseFragment[] previewActivity = new BaseFragment[1];
+         previewMenu[0] = new ActionBarPopupWindow.ActionBarPopupWindowLayout(getParentActivity(), R.drawable.popup_fixed_alert4, getResourceProvider(), flags);
+@@ -8812,6 +8831,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+             );
+             previewMenu[0].addView(addToFolderItem);
+             previewMenu[0].getSwipeBack().setOnHeightUpdateListener(height -> {
++                if (previewMenu[0].getSwipeBack().inu_isCurrentForegroundPinningScrim()) {
++                    return;
++                }
+                 if (previewActivity[0] == null || previewActivity[0].getFragmentView() == null || !previewActivity[0].isInPreviewMode()) {
+                     return;
+                 }
+@@ -8998,6 +9020,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+             previewMenu[0].addView(muteItem);
+         }
+ 
++        if (inu_canAddToAccount) {
++            desu.inugram.helpers.dialogs.LinkedChatsHelper.addToPreviewMenu(this, previewMenu[0], dialogIdArray);
++        }
++
+         if (!isCommunityCell) {
+             ActionBarMenuSubItem deleteItem = new ActionBarMenuSubItem(getParentActivity(), false, true);
+             deleteItem.setIconColor(getThemedColor(Theme.key_text_RedRegular));
