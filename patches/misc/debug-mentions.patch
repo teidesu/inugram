@@ -87,7 +87,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
-@@ -5976,6 +5976,9 @@ public class MessagesStorage extends BaseController {
+@@ -5984,6 +5984,9 @@ public class MessagesStorage extends BaseController {
                  cursor.dispose();
                  cursor = null;
                  database.executeFast(String.format(Locale.US, "UPDATE dialogs SET unread_count_i = %d WHERE did = %d", old_mentions_count, did)).stepThis().dispose();
@@ -97,7 +97,7 @@ index 0000000..0000000 100644
                  LongSparseIntArray sparseArray = new LongSparseIntArray(1);
                  sparseArray.put(did, old_mentions_count);
                  if (old_mentions_count == 0) {
-@@ -6032,6 +6035,9 @@ public class MessagesStorage extends BaseController {
+@@ -6040,6 +6043,9 @@ public class MessagesStorage extends BaseController {
      }
  
      public void resetMentionsCount(long did, long topicId, int count) {
@@ -107,7 +107,7 @@ index 0000000..0000000 100644
          storageQueue.postRunnable(() -> {
              SQLiteCursor cursor = null;
              try {
-@@ -6043,6 +6049,9 @@ public class MessagesStorage extends BaseController {
+@@ -6051,6 +6057,9 @@ public class MessagesStorage extends BaseController {
                      }
                      cursor.dispose();
                      cursor = null;
@@ -117,7 +117,7 @@ index 0000000..0000000 100644
                      if (prevUnreadCount != 0 || count != 0) {
                          if (count == 0) {
                              database.executeFast(String.format(Locale.US, "UPDATE messages_v2 SET read_state = read_state | 2 WHERE uid = %d AND mention = 1 AND read_state IN(0, 1)", did)).stepThis().dispose();
-@@ -7059,6 +7068,9 @@ public class MessagesStorage extends BaseController {
+@@ -7067,6 +7076,9 @@ public class MessagesStorage extends BaseController {
                          while (cursor.next()) {
                              long did = cursor.longValue(0);
                              notFoundMentions.remove((Integer) cursor.intValue(4));
@@ -127,7 +127,7 @@ index 0000000..0000000 100644
                              if (cursor.intValue(1) < 2 && cursor.intValue(2) == 0 && cursor.intValue(3) == 1) {
                                  int unread_count = dialogsToUpdateMentions.get(did, -1);
                                  if (unread_count < 0) {
-@@ -7076,6 +7088,9 @@ public class MessagesStorage extends BaseController {
+@@ -7084,6 +7096,9 @@ public class MessagesStorage extends BaseController {
                              channelId = cursor.longValue(5);
                          }
                          cursor.dispose();
@@ -137,7 +137,7 @@ index 0000000..0000000 100644
                          if (!notFoundMentions.isEmpty() && channelId != 0) {
                              if (!channelMentionsToReload.contains(channelId)) {
                                  channelMentionsToReload.add(channelId);
-@@ -9092,6 +9107,9 @@ public class MessagesStorage extends BaseController {
+@@ -9100,6 +9115,9 @@ public class MessagesStorage extends BaseController {
                  } else {
                      result = 0;
                  }
@@ -147,7 +147,7 @@ index 0000000..0000000 100644
                  cursor.dispose();
                  AndroidUtilities.runOnUIThread(() -> callback.run(result));
              } catch (Exception e) {
-@@ -13204,6 +13222,9 @@ public class MessagesStorage extends BaseController {
+@@ -13212,6 +13230,9 @@ public class MessagesStorage extends BaseController {
                          mentions_count = 0;
                      } else {
                          mentionCounts.put(key, mentions_count + old_mentions_count);
@@ -157,7 +157,7 @@ index 0000000..0000000 100644
                      }
                      int messageId = message != null ? message.id : last_mid;
                      if (message != null) {
-@@ -14494,6 +14515,25 @@ public class MessagesStorage extends BaseController {
+@@ -14502,6 +14523,25 @@ public class MessagesStorage extends BaseController {
          }
      }
  
@@ -183,7 +183,7 @@ index 0000000..0000000 100644
      private void markMessagesAsReadInternal(LongSparseIntArray inbox, LongSparseIntArray outbox, SparseIntArray encryptedMessages) {
          SQLitePreparedStatement state = null;
          try {
-@@ -14503,6 +14543,9 @@ public class MessagesStorage extends BaseController {
+@@ -14511,6 +14551,9 @@ public class MessagesStorage extends BaseController {
                      long key = inbox.keyAt(b);
                      int messageId = inbox.get(key);
                      database.executeFast(String.format(Locale.US, "UPDATE messages_v2 SET read_state = read_state | 1 WHERE uid = %d AND mid > 0 AND mid <= %d AND read_state IN(0,2) AND out = 0", key, messageId)).stepThis().dispose();
@@ -193,7 +193,7 @@ index 0000000..0000000 100644
  
                      state.requery();
                      state.bindLong(1, key);
-@@ -15031,6 +15074,9 @@ public class MessagesStorage extends BaseController {
+@@ -15039,6 +15082,9 @@ public class MessagesStorage extends BaseController {
                      state.requery();
                      state.bindInteger(1, Math.max(0, old_unread_count - counts[0]));
                      state.bindInteger(2, Math.max(0, old_mentions_count - counts[1]));
@@ -203,7 +203,7 @@ index 0000000..0000000 100644
                      state.bindLong(3, did);
                      state.step();
                      state.dispose();
-@@ -15647,6 +15693,9 @@ public class MessagesStorage extends BaseController {
+@@ -15655,6 +15701,9 @@ public class MessagesStorage extends BaseController {
                  state.requery();
                  state.bindInteger(1, Math.max(0, old_unread_count - counts[0]));
                  state.bindInteger(2, Math.max(0, old_mentions_count - counts[1]));
@@ -213,7 +213,7 @@ index 0000000..0000000 100644
                  state.bindLong(3, did);
                  state.step();
                  state.dispose();
-@@ -16884,6 +16933,9 @@ public class MessagesStorage extends BaseController {
+@@ -16907,6 +16956,9 @@ public class MessagesStorage extends BaseController {
                      putChatsInternal(messages.chats);
  
                      if (mentionCountUpdate != Integer.MAX_VALUE) {

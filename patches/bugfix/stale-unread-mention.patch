@@ -4,15 +4,45 @@ Date: Fri, 6 Nov 2026 22:06:02 +0400
 Subject: fix stale unread mention from breaking "jump to mention" button
 
 ---
- .../java/org/telegram/messenger/MessagesStorage.java   | 10 ++++++----
- .../src/main/java/org/telegram/ui/ChatActivity.java    |  2 +-
- 2 files changed, 7 insertions(+), 5 deletions(-)
+ .../telegram/messenger/MessagesStorage.java   | 37 ++++++++++++++++---
+ .../java/org/telegram/ui/ChatActivity.java    |  2 +-
+ 2 files changed, 32 insertions(+), 7 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
-@@ -6363,6 +6363,7 @@ public class MessagesStorage extends BaseController {
+@@ -5952,11 +5952,19 @@ public class MessagesStorage extends BaseController {
+         storageQueue.postRunnable(() -> {
+             SQLiteCursor cursor = null;
+             try {
++                cursor = database.queryFinalized(String.format(Locale.US, "SELECT read_state FROM messages_v2 WHERE mid = %d AND uid = %d", messageId, dialogId));
++                final int inu_readState = cursor.next() ? cursor.intValue(0) : -1;
++                final int inu_delta = inu_readState >= 2 ? 0 : 1;
++                cursor.dispose();
++                cursor = null;
++                if (inu_delta == 0 && desu.inugram.helpers.DebugLogUtils.isEnabled()) {
++                    FileLog.d("InuMn db mark read not counted, row already read did=" + did + " mid=" + messageId + " readState=" + inu_readState);
++                }
+                 database.executeFast(String.format(Locale.US, "UPDATE messages_v2 SET read_state = read_state | 2 WHERE mid = %d AND uid = %d", messageId, dialogId)).stepThis().dispose();
+                 cursor = database.queryFinalized("SELECT unread_count_i FROM dialogs WHERE did = " + did);
+                 int old_mentions_count = 0;
+                 if (cursor.next()) {
+-                    old_mentions_count = Math.max(0, cursor.intValue(0) - 1);
++                    old_mentions_count = Math.max(0, cursor.intValue(0) - inu_delta);
+                 }
+                 cursor.dispose();
+                 cursor = null;
+@@ -5986,7 +5994,7 @@ public class MessagesStorage extends BaseController {
+                     int topicMentionsCount = 0;
+                     cursor = database.queryFinalized(String.format(Locale.US, "SELECT unread_mentions FROM topics WHERE did = %d AND topic_id = %d", did, topicId));
+                     if (cursor.next()) {
+-                        topicMentionsCount = Math.max(0, cursor.intValue(0) - 1);
++                        topicMentionsCount = Math.max(0, cursor.intValue(0) - inu_delta);
+                     }
+                     cursor.dispose();
+                     cursor = null;
+@@ -6363,6 +6371,7 @@ public class MessagesStorage extends BaseController {
                  if (idx1 == 1) {
                      archivedDialogs.put(user.id, true);
                  }
@@ -20,7 +50,7 @@ index 0000000..0000000 100644
                  if (isUserCollapsedInCommunity(chatsDict, user)) {
                      communities[idx1][idx2]++;
                  } else if (user.bot) {
-@@ -6372,6 +6373,7 @@ public class MessagesStorage extends BaseController {
+@@ -6372,6 +6381,7 @@ public class MessagesStorage extends BaseController {
                  } else {
                      nonContacts[idx1][idx2]++;
                  }
@@ -28,7 +58,7 @@ index 0000000..0000000 100644
                  usersDict.put(user.id, user);
              }
          }
-@@ -9060,17 +9062,17 @@ public class MessagesStorage extends BaseController {
+@@ -9060,17 +9070,17 @@ public class MessagesStorage extends BaseController {
          return result[0];
      }
  
@@ -50,6 +80,28 @@ index 0000000..0000000 100644
                      result = cursor.intValue(0);
                  } else {
                      result = 0;
+@@ -16554,6 +16564,21 @@ public class MessagesStorage extends BaseController {
+                                         }
+                                     }
+                                 }
++                                if (oldMention && message.mentioned && desu.inugram.helpers.DebugLogUtils.isEnabled()) {
++                                    FileLog.d("InuMn db edit row did=" + dialogId + " mid=" + message.id + " readState=" + readState + " mediaUnread=" + message.media_unread + " unread=" + message.unread);
++                                }
++                                if (oldMention && message.mentioned && readState <= 1 && !message.media_unread) {
++                                    if (mentionCountUpdate == Integer.MAX_VALUE) {
++                                        SQLiteCursor cursor2 = database.queryFinalized("SELECT unread_count_i FROM dialogs WHERE did = " + dialogId);
++                                        if (cursor2.next()) {
++                                            mentionCountUpdate = cursor2.intValue(0);
++                                        }
++                                        cursor2.dispose();
++                                    }
++                                    if (mentionCountUpdate != Integer.MAX_VALUE) {
++                                        mentionCountUpdate = Math.max(0, mentionCountUpdate - 1);
++                                    }
++                                }
+                             }
+                             cursor.dispose();
+                             cursor = null;
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java

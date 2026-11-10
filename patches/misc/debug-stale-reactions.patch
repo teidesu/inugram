@@ -210,7 +210,7 @@ index 0000000..0000000 100644
                                  MessageObject.updateReactions(message, reactions);
                                  SQLitePreparedStatement state;
                                  if (i == 0) {
-@@ -17270,6 +17273,9 @@ public class MessagesStorage extends BaseController {
+@@ -17293,6 +17296,9 @@ public class MessagesStorage extends BaseController {
                          }
                          dialog.folder_id = cursor.intValue(17);
                          dialog.unread_reactions_count = cursor.intValue(19);
@@ -220,7 +220,7 @@ index 0000000..0000000 100644
                          long groupMessagesId = cursor.longValue(20);
                          if (groupMessagesId != 0) {
                              dialogsToLoadGroupMessages.add(new Pair<>(dialogId, groupMessagesId));
-@@ -18868,6 +18874,9 @@ public class MessagesStorage extends BaseController {
+@@ -18891,6 +18897,9 @@ public class MessagesStorage extends BaseController {
      }
  
      private void updateUnreadReactionsCountInternal(String tableMentionsForDialogs, String tableMentionsForTopics, String mentionsCounterFieldForDialogs, String mentionsCounterFieldForTopics, long dialogId, long topicId, int count, boolean increment) {
@@ -230,7 +230,7 @@ index 0000000..0000000 100644
          storageQueue.postRunnable(() -> {
              SQLitePreparedStatement state = null;
              if (topicId != 0) {
-@@ -18938,7 +18947,24 @@ public class MessagesStorage extends BaseController {
+@@ -18961,7 +18970,24 @@ public class MessagesStorage extends BaseController {
          executeInStorageQueue(() -> markMessageReactionsAsReadInternal("poll_votes_mentions", "poll_votes_mentions_topics", dialogId, topicId, messageId, false));
      }
  
@@ -255,7 +255,7 @@ index 0000000..0000000 100644
          SQLitePreparedStatement state = null;
          SQLiteCursor cursor = null;
          try {
-@@ -19023,6 +19049,9 @@ public class MessagesStorage extends BaseController {
+@@ -19046,6 +19072,9 @@ public class MessagesStorage extends BaseController {
      }
  
      private void updateDialogUnreadReactionsInternal(long dialogId, long topicId, int newUnreadCount, boolean increment, boolean isReactions) {
