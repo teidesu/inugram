@@ -41,6 +41,7 @@ import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory
 import org.telegram.ui.Components.blur3.DownscaleScrollableNoiseSuppressor
 import org.telegram.ui.Components.chat.ViewPositionWatcher
 import org.telegram.ui.Components.blur3.drawable.color.impl.BlurredBackgroundProviderImpl
+import java.util.function.BooleanSupplier
 import kotlin.math.ceil
 import kotlin.math.max
 
@@ -71,9 +72,10 @@ object NonIslandHelper {
         resourcesProvider: Theme.ResourcesProvider?,
         glass: BaseFragmentSimpleGlass,
         enabled: Boolean = headers(),
+        isOnTop: BooleanSupplier? = null,
     ): Boolean {
         if (!enabled) return false
-        val background = ClassicHeaderBackground(glass.frostedFactory, header, resourcesProvider, list != null)
+        val background = ClassicHeaderBackground(glass.frostedFactory, header, resourcesProvider, list != null || isOnTop != null)
         header.background = background
         when (list) {
             is RecyclerView -> list.addOnScrollListener(object : RecyclerView.OnScrollListener() {
@@ -86,7 +88,7 @@ object NonIslandHelper {
         // the parent may be dispatching attach to its children right now: adding a sibling then skips the last one
         header.post {
             val parent = header.parent as? ViewGroup ?: return@post
-            val shadow = ClassicHeaderShadow(header, background)
+            val shadow = ClassicHeaderShadow(header, background, isOnTop)
             parent.addView(shadow, parent.indexOfChild(header) + 1, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, shadow.background.intrinsicHeight))
         }
         return true
@@ -125,11 +127,14 @@ object NonIslandHelper {
             Theme.getColor(Theme.key_windowBackgroundGray, resourcesProvider),
             factor,
         )
+
+        override fun getAlphaFactor(): Float = if (adaptive && !AndroidUtilities.isTablet()) 1f - onTopFactor else 1f
     }
 
     private class ClassicHeaderShadow(
         private val header: View,
         private val headerBackground: ClassicHeaderBackground,
+        private val isOnTop: BooleanSupplier?,
     ) : View(header.context), ViewTreeObserver.OnPreDrawListener {
         init {
             setBackgroundResource(R.drawable.header_shadow)
@@ -147,6 +152,7 @@ object NonIslandHelper {
         }
 
         override fun onPreDraw(): Boolean {
+            isOnTop?.let { headerBackground.setOnTop(it.asBoolean) }
             visibility = header.visibility
             translationY = header.y + header.height - top
             alpha = header.alpha * headerBackground.shadowAlpha

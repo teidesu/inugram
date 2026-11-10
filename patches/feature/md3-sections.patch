@@ -1085,7 +1085,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/StatisticActivity.java 
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/StatisticActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/StatisticActivity.java
-@@ -1221,6 +1221,7 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
+@@ -1223,6 +1223,7 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
                  };
                  headerCell.setWillNotDraw(false);
                  headerCell.setPadding(headerCell.getPaddingLeft(), dp(16), headerCell.getRight(), dp(16));

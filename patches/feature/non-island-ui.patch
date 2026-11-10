@@ -48,13 +48,14 @@ Subject: non-island ui in various parts of the app
  .../org/telegram/ui/QrShare/RimPainter.java   |   1 +
  .../ui/SearchTabsAndFiltersLayout.java        |   7 +
  .../org/telegram/ui/SettingsActivity.java     |   4 +-
+ .../org/telegram/ui/StatisticActivity.java    |  17 ++
  .../java/org/telegram/ui/bots/BotAdView.java  |   2 +-
  .../ui/bots/BotCommandsMenuContainer.java     |   4 +-
  .../bots/ChatAttachAlertBotWebViewLayout.java |   5 +-
  .../java/org/telegram/ui/iv/RichEditor.java   |   4 +-
  .../utils/glass/BaseFragmentSimpleGlass.java  |   6 +-
  .../utils/glass/GlassCaptureSourceCanvas.java |  52 +++--
- 50 files changed, 1051 insertions(+), 357 deletions(-)
+ 51 files changed, 1068 insertions(+), 357 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -4094,6 +4095,42 @@ index 0000000..0000000 100644
          contentView.addView(actionBarFadeView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 0, Gravity.TOP));
          contentView.addView(simpleActionBar, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.FILL_HORIZONTAL | Gravity.TOP));
  
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/StatisticActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/StatisticActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/StatisticActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/StatisticActivity.java
+@@ -986,7 +986,9 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
+         getBaseSimpleGlass().setClipView(null);
+ 
+         simpleActionBar.setBackground(null);
++        if (!desu.inugram.helpers.theme.NonIslandHelper.applyClassicHeaderBackground(listTopOverlay, null, resourceProvider, getBaseSimpleGlass(), desu.inugram.helpers.theme.NonIslandHelper.headers(), this::inu_isCurrentPageOnTop)) {
+         listTopOverlay.setBackground(getBaseSimpleGlass().createActionBarFadeDrawable(listTopOverlay));
++        }
+ 
+         AndroidUtilities.removeFromParent(avatarContainer.avatarImageView);
+         contentLayout.addView(avatarContainer.avatarImageView, LayoutHelper.createFrame(42, 42, 53));
+@@ -3486,6 +3488,21 @@ public class StatisticActivity extends BaseFragment implements NotificationCente
+         checkUi_listPaddings();
+     }
+ 
++    private boolean inu_isCurrentPageOnTop() {
++        final View[] pages = viewPagerFixed.getViewPages();
++        final boolean next = pages[1] != null && pages[1].getVisibility() == View.VISIBLE && (viewPagerFixed.isManualScrolling() || viewPagerFixed.getNextPositionAlpha() > 0.5f);
++        final View page = pages[next ? 1 : 0];
++        final RecyclerListView list;
++        if (boostLayout != null && page == boostLayout) {
++            list = boostLayout.listView;
++        } else if (monetizationLayout != null && page == monetizationLayout) {
++            list = monetizationLayout.listView;
++        } else {
++            list = recyclerListView;
++        }
++        return list == null || !list.canScrollVertically(-1);
++    }
++
+     private void updateHeaderOverlayHeight() {
+         if (listTopOverlay == null) return;
+         int height = mSystemInsets.top + ActionBar.getCurrentActionBarHeight() + dp(44);
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/bots/BotAdView.java b/TMessagesProj/src/main/java/org/telegram/ui/bots/BotAdView.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/bots/BotAdView.java

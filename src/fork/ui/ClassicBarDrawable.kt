@@ -40,22 +40,24 @@ open class ClassicBarDrawable @JvmOverloads constructor(
             && BlurredBackgroundProviderImpl.checkBlurEnabled(resourcesProvider)
 
     protected open fun getColor(): Int = Theme.getColor(colorKey, resourcesProvider)
+    protected open fun getAlphaFactor(): Float = 1f
 
     override fun draw(canvas: Canvas) {
-        if (bounds.isEmpty || drawableAlpha == 0) return
+        val alpha = (drawableAlpha * getAlphaFactor()).toInt()
+        if (bounds.isEmpty || alpha == 0) return
         val blurred = isBlurred
         if (!(blurred && externalBlur)) {
             if (blurred) {
                 blur.bounds = bounds
-                blur.alpha = drawableAlpha
+                blur.alpha = alpha
                 blur.draw(canvas)
             }
-            drawTint(canvas, bounds.left.toFloat(), bounds.top.toFloat(), bounds.right.toFloat(), bounds.bottom.toFloat())
+            drawTint(canvas, bounds.left.toFloat(), bounds.top.toFloat(), bounds.right.toFloat(), bounds.bottom.toFloat(), alpha)
         }
         if (drawTopDivider || drawBottomDivider) {
             val divider = Theme.dividerPaint
             val dividerAlpha = divider.alpha
-            divider.alpha = dividerAlpha * drawableAlpha / 255
+            divider.alpha = dividerAlpha * alpha / 255
             val l = bounds.left.toFloat()
             val r = bounds.right.toFloat()
             if (drawTopDivider) canvas.drawRect(l, bounds.top.toFloat(), r, bounds.top + 1f, divider)
@@ -87,7 +89,7 @@ open class ClassicBarDrawable @JvmOverloads constructor(
 
     override fun getAlpha(): Int = drawableAlpha
     override fun setColorFilter(colorFilter: ColorFilter?) {}
-    override fun getOpacity(): Int = if (isBlurred || drawableAlpha < 255) PixelFormat.TRANSLUCENT else PixelFormat.OPAQUE
+    override fun getOpacity(): Int = if (isBlurred || drawableAlpha < 255 || getAlphaFactor() < 1f) PixelFormat.TRANSLUCENT else PixelFormat.OPAQUE
 
     private object NoColors : BlurredBackgroundColorProvider {
         override fun getShadowColor(): Int = 0
