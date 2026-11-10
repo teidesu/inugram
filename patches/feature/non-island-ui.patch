@@ -13,7 +13,7 @@ Subject: non-island ui in various parts of the app
  .../telegram/ui/ChannelAdminLogActivity.java  |  21 +-
  .../java/org/telegram/ui/ChatActivity.java    | 193 ++++++++++++------
  .../BitmapSectionsItemDecoration.java         |   3 +
- .../ui/Components/ChatActivityEnterView.java  |  72 ++++---
+ .../ui/Components/ChatActivityEnterView.java  |  75 ++++---
  ...ChatActivityEnterViewAnimatedIconView.java |  17 +-
  .../ChatActivityTopPanelLayout.java           |  27 ++-
  .../ui/Components/ChatAttachAlert.java        |  29 ++-
@@ -55,7 +55,7 @@ Subject: non-island ui in various parts of the app
  .../java/org/telegram/ui/iv/RichEditor.java   |   4 +-
  .../utils/glass/BaseFragmentSimpleGlass.java  |   6 +-
  .../utils/glass/GlassCaptureSourceCanvas.java |  52 +++--
- 51 files changed, 1068 insertions(+), 357 deletions(-)
+ 51 files changed, 1070 insertions(+), 358 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -1398,6 +1398,15 @@ index 0000000..0000000 100644
          sendButton.setOnClickListener(view -> {
              if ((messageSendPreview != null && messageSendPreview.isShowing()) || (runningAnimationAudio != null && runningAnimationAudio.isRunning()) || moveToSendStateRunnable != null) {
                  return;
+@@ -4511,7 +4514,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+             }
+         });
+         senderSelectView.setVisibility(GONE);
+-        messageEditTextContainer.addView(senderSelectView, LayoutHelper.createFrame(36, 36, Gravity.BOTTOM | Gravity.LEFT, 4.66f, 4, 4.66f, 4));
++        messageEditTextContainer.addView(senderSelectView, LayoutHelper.createFrame(36, 36, Gravity.BOTTOM | Gravity.LEFT, 4.66f + (desu.inugram.helpers.theme.NonIslandHelper.chatElements() ? 4 : 0), (DEFAULT_HEIGHT - 36) / 2f, 4.66f, (DEFAULT_HEIGHT - 36) / 2f));
+     }
+ 
+     private void createBotCommandsMenuButton() {
 @@ -4548,7 +4551,7 @@ public class ChatActivityEnterView extends FrameLayout implements
                  botCommandsMenuContainer.dismiss();
              }
@@ -1522,7 +1531,15 @@ index 0000000..0000000 100644
              }
          }
      }
-@@ -15429,10 +15443,12 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -14763,6 +14777,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+         } else if (senderSelectView != null && senderSelectView.getVisibility() == View.VISIBLE) {
+             int width = senderSelectView.getLayoutParams().width, height = senderSelectView.getLayoutParams().height;
+             senderSelectView.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY));
++            width += desu.inugram.helpers.theme.NonIslandHelper.chatElements() ? dp(4) : 0;
+             ((MarginLayoutParams) emojiButton.getLayoutParams()).leftMargin = dp(7) + width;
+             if (deleteRichDraftButton != null) {
+                 ((MarginLayoutParams) deleteRichDraftButton.getLayoutParams()).leftMargin = dp(7) + width;
+@@ -15429,10 +15444,12 @@ public class ChatActivityEnterView extends FrameLayout implements
              final float appear = this.appear.set(1);
              if (openProgress < 1) {
                  canvas.save();
@@ -1535,7 +1552,7 @@ index 0000000..0000000 100644
                  drawable.setBounds(x, y, x + drawable.getIntrinsicWidth(), y + drawable.getIntrinsicHeight());
                  drawable.setAlpha((int) (0xFF * (1.0f - priceProgress)));
                  drawable.draw(canvas);
-@@ -15904,9 +15920,11 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -15904,9 +15921,11 @@ public class ChatActivityEnterView extends FrameLayout implements
          final float visibility = animatorTopViewVisibility.getFloatValue();
  
          if (topView != null) {

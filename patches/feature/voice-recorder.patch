@@ -278,7 +278,7 @@ index 0000000..0000000 100644
                  if (animated) {
                      if (runningAnimationType == 1 && caption == null || runningAnimationType == 3 && caption != null) {
                          return;
-@@ -15029,7 +15082,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -15030,7 +15083,7 @@ public class ChatActivityEnterView extends FrameLayout implements
      private void updateAttachLayoutParams() {
          updateAttachButtonTranslationX();
          if (attachLayout != null) {
@@ -287,7 +287,7 @@ index 0000000..0000000 100644
              attachLayout.setAlpha(attachLayoutAlpha * attachLayoutPaddingAlpha);
              attachLayout.setVisibility(attachLayout.getAlpha() > 0 ? View.VISIBLE : View.GONE);
              if (attachButton != null && isStories) {
-@@ -15046,8 +15099,8 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -15047,8 +15100,8 @@ public class ChatActivityEnterView extends FrameLayout implements
      }
  
      private void updateAttachButtonTranslationX() {
