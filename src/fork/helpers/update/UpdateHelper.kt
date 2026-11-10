@@ -1,9 +1,14 @@
 package desu.inugram.helpers.update
 
+import android.content.DialogInterface
 import android.os.Build
+import android.os.Looper
 import android.util.Base64
+import androidx.core.view.doOnLayout
 import desu.inugram.InuConfig
 import desu.inugram.helpers.security.ParanoiaHelper
+import desu.inugram.ui.ChangelogSheet
+import desu.inugram.ui.settings.WhatsNewActivity
 import org.telegram.messenger.AndroidUtilities
 import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.BetaUpdate
@@ -22,6 +27,9 @@ import org.telegram.tgnet.ConnectionsManager
 import org.telegram.tgnet.SerializedData
 import org.telegram.tgnet.TLRPC
 import org.telegram.tgnet.tl.TL_iv
+import org.telegram.ui.Components.BulletinFactory
+import org.telegram.ui.LaunchActivity
+import java.lang.ref.WeakReference
 
 object UpdateHelper {
     const val USERNAME = "InugramCI"
@@ -241,38 +249,24 @@ object UpdateHelper {
         }
         inflight = true
         inflightSince = now
-        MessagesController.getInstance(account).userNameResolver.resolve(USERNAME) { id ->
-            if (id == null || id == 0L || id == Long.MAX_VALUE) {
-                finishVariantSwitch(callback, VariantSwitchResult.Error("resolve failed"))
-                return@resolve
+        searchReleases(account, 10) { messages, error ->
+            if (messages == null) {
+                finishVariantSwitch(callback, VariantSwitchResult.Error(error.orEmpty()))
+                return@searchReleases
             }
-            val req = TLRPC.TL_messages_search().apply {
-                peer = MessagesController.getInstance(account).getInputPeer(id)
-                q = "#release"
-                filter = TLRPC.TL_inputMessagesFilterEmpty()
-                limit = 10
-            }
-            ConnectionsManager.getInstance(account).sendRequest(req) { resp, err ->
-                AndroidUtilities.runOnUIThread {
-                    if (err != null || resp !is TLRPC.messages_Messages) {
-                        finishVariantSwitch(callback, VariantSwitchResult.Error(err?.text ?: "no response"))
-                        return@runOnUIThread
-                    }
-                    val latest = resp.messages.filter { it.rich_message != null }.maxByOrNull { it.id }
-                    fun onLoaded(msg: TLRPC.Message?) {
-                        val info = msg?.let {
-                            extractApkInfo(it, if (BuildConfig.INU_PLUGINLESS) "full" else "pluginless")
-                        }
-                        finishVariantSwitch(
-                            callback,
-                            if (msg == null || info == null || info.verCode < currentBuild().versionCode) VariantSwitchResult.Unavailable
-                            else VariantSwitchResult.Ready(VariantSwitch(info.document, msg)),
-                        )
-                    }
-                    if (latest?.rich_message?.part == true) loadRichMessage(account, latest.id, ::onLoaded)
-                    else onLoaded(latest)
+            val latest = messages.firstOrNull()
+            fun onLoaded(msg: TLRPC.Message?) {
+                val info = msg?.let {
+                    extractApkInfo(it, if (BuildConfig.INU_PLUGINLESS) "full" else "pluginless")
                 }
+                finishVariantSwitch(
+                    callback,
+                    if (msg == null || info == null || info.verCode < currentBuild().versionCode) VariantSwitchResult.Unavailable
+                    else VariantSwitchResult.Ready(VariantSwitch(info.document, msg)),
+                )
             }
+            if (latest?.rich_message?.part == true) loadRichMessage(account, latest.id, ::onLoaded)
+            else onLoaded(latest)
         }
     }
 
@@ -302,48 +296,221 @@ object UpdateHelper {
         }
         inflight = true
         inflightSince = now
-        MessagesController.getInstance(account).userNameResolver.resolve(USERNAME) { id ->
-            if (id == null || id == 0L || id == Long.MAX_VALUE) {
-                finish(callback, CheckResult.Error("resolve failed"))
-                return@resolve
+        searchReleases(account, 10) { messages, error ->
+            if (messages == null) {
+                finish(callback, CheckResult.Error(error.orEmpty()))
+                return@searchReleases
             }
-            performSearch(account, id, variant, callback)
+            val latest = messages.firstOrNull()
+            fun onLoaded(msg: TLRPC.Message?) {
+                val info = msg?.let { extractApkInfo(it, variant) }
+                val current = currentBuild()
+                if (info == null || !isNewer(info, current)) {
+                    clearPending()
+                    finish(callback, CheckResult.UpToDate)
+                    return
+                }
+                stashChangelogs(msg, info, current, variant)
+                finish(callback, CheckResult.Updated(applyUpdate(msg, info, current, variant)))
+            }
+            if (latest?.rich_message?.part == true) loadRichMessage(account, latest.id, ::onLoaded)
+            else onLoaded(latest)
         }
     }
 
-    private fun performSearch(
+    private fun searchReleases(
         account: Int,
-        peerId: Long,
-        variant: String,
-        callback: ((CheckResult) -> Unit)?,
+        limit: Int,
+        callback: (messages: List<TLRPC.Message>?, error: String?) -> Unit,
     ) {
         val mc = MessagesController.getInstance(account)
-        val req = TLRPC.TL_messages_search().apply {
-            peer = mc.getInputPeer(peerId)
-            q = "#release"
-            filter = TLRPC.TL_inputMessagesFilterEmpty()
-            limit = 10
-        }
-        ConnectionsManager.getInstance(account).sendRequest(req) { resp, err ->
-            AndroidUtilities.runOnUIThread {
-                if (err != null || resp !is TLRPC.messages_Messages) {
-                    finish(callback, CheckResult.Error(err?.text ?: "no response"))
-                    return@runOnUIThread
-                }
-                val latest = resp.messages.filter { it.rich_message != null }.maxByOrNull { it.id }
-                fun onLoaded(msg: TLRPC.Message?) {
-                    val info = msg?.let { extractApkInfo(it, variant) }
-                    val current = currentBuild()
-                    if (info == null || !isNewer(info, current)) {
-                        clearPending()
-                        finish(callback, CheckResult.UpToDate)
-                        return
-                    }
-                    finish(callback, CheckResult.Updated(applyUpdate(msg, info, current, variant)))
-                }
-                if (latest?.rich_message?.part == true) loadRichMessage(account, latest.id, ::onLoaded)
-                else onLoaded(latest)
+        mc.userNameResolver.resolve(USERNAME) { id ->
+            if (id == null || id == 0L || id == Long.MAX_VALUE) {
+                AndroidUtilities.runOnUIThread { callback(null, "resolve failed") }
+                return@resolve
             }
+            val req = TLRPC.TL_messages_search().apply {
+                peer = mc.getInputPeer(id)
+                q = "#release"
+                filter = TLRPC.TL_inputMessagesFilterEmpty()
+                this.limit = limit
+            }
+            ConnectionsManager.getInstance(account).sendRequest(req) { resp, err ->
+                AndroidUtilities.runOnUIThread {
+                    if (err != null || resp !is TLRPC.messages_Messages) {
+                        callback(null, err?.text ?: "no response")
+                    } else {
+                        callback(resp.messages.filter { it.rich_message != null }.sortedByDescending { it.id }, null)
+                    }
+                }
+            }
+        }
+    }
+
+    // ponytail: no pagination, the newest `limit` releases are all anyone gets to see
+    fun loadReleases(
+        limit: Int,
+        versions: IntRange = 1..currentBuild().versionCode,
+        callback: (List<Release>?) -> Unit,
+    ) {
+        val account = UserConfig.selectedAccount
+        if (!UserConfig.getInstance(account).isClientActivated) {
+            callback(null)
+            return
+        }
+        searchReleases(account, limit) { messages, _ ->
+            if (messages == null) {
+                callback(null)
+                return@searchReleases
+            }
+            val variant = currentVariant()
+            val loaded = arrayOfNulls<TLRPC.Message>(messages.size)
+            var pending = messages.size
+            if (pending == 0) callback(emptyList())
+            fun onLoaded(index: Int, msg: TLRPC.Message?) {
+                loaded[index] = msg
+                if (--pending > 0) return
+                callback(loaded.mapNotNull { full -> full?.let { createRelease(it, variant) }?.takeIf { it.verCode in versions } })
+            }
+            messages.forEachIndexed { index, msg ->
+                if (msg.rich_message.part) loadRichMessage(account, msg.id) { onLoaded(index, it) }
+                else onLoaded(index, msg)
+            }
+        }
+    }
+
+    private fun createRelease(msg: TLRPC.Message, variant: String): Release? {
+        val info = extractApkInfo(msg, variant) ?: return null
+        val changelog = extractChangelog(msg, variant)
+        changelog.blocks.add(0, TL_iv.pageBlockHeading1().apply {
+            text = TL_iv.textPlain().apply { text = "v${info.verCode}" }
+        })
+        return Release(info.verCode, changelog)
+    }
+
+    private fun isUpdatedInstall() = packageInfo.firstInstallTime != packageInfo.lastUpdateTime
+
+    fun hasUnseenWhatsNew(): Boolean {
+        val seen = InuConfig.WHATS_NEW_SEEN_BUILD.value
+        return if (seen == 0) isUpdatedInstall() else seen < currentBuild().versionCode
+    }
+
+    // the update dialog marks the build it is about to download, ahead of the installed one
+    fun markWhatsNewSeen(build: Int = currentBuild().versionCode) {
+        InuConfig.WHATS_NEW_SEEN_BUILD.value = maxOf(InuConfig.WHATS_NEW_SEEN_BUILD.value, build)
+    }
+
+    // in-process only: whether the stash was already found to hold nothing for this build
+    @Volatile
+    private var whatsNewChecked = false
+
+    private var whatsNewSheetActivity: WeakReference<LaunchActivity>? = null
+
+    private val passcodeObserver = object : NotificationCenter.NotificationCenterDelegate {
+        override fun didReceivedNotification(id: Int, account: Int, vararg args: Any?) {
+            NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.passcodeDismissed)
+            AndroidUtilities.runOnUIThread { maybeShowWhatsNew(LaunchActivity.instance ?: return@runOnUIThread) }
+        }
+    }
+
+    private fun writeStashedReleases(releases: List<Release>) {
+        val data = SerializedData()
+        data.writeInt32(releases.size)
+        for (release in releases) {
+            data.writeInt32(release.verCode)
+            release.changelog.serializeToStream(data)
+        }
+        InuConfig.WHATS_NEW_STASH.value = Base64.encodeToString(data.toByteArray(), Base64.NO_WRAP)
+        data.cleanup()
+        whatsNewChecked = false
+    }
+
+    private fun readStashedReleases(): List<Release> {
+        val stash = InuConfig.WHATS_NEW_STASH.value
+        if (stash.isEmpty()) return emptyList()
+        var data: SerializedData? = null
+        return try {
+            data = SerializedData(Base64.decode(stash, Base64.NO_WRAP))
+            List(data.readInt32(true)) {
+                val verCode = data.readInt32(true)
+                Release(verCode, TL_iv.RichMessage.TLdeserialize(data, data.readInt32(true), true))
+            }
+        } catch (e: Exception) {
+            emptyList()
+        } finally {
+            data?.cleanup()
+        }
+    }
+
+    // the stash survives until the user closes the sheet: an activity recreated during startup
+    // takes a sheet shown on it down without dismissing it, so the next resume shows it again
+    fun maybeShowWhatsNew(activity: LaunchActivity) {
+        if (whatsNewChecked || whatsNewSheetActivity?.get() === activity) return
+        val current = currentBuild().versionCode
+        val seen = InuConfig.WHATS_NEW_SEEN_BUILD.value
+        val releases = readStashedReleases().filter { it.verCode in seen + 1..current }
+        if (releases.isEmpty()) {
+            whatsNewChecked = true
+            return
+        }
+        if (!InuConfig.WHATS_NEW_ON_UPDATE.value || ParanoiaHelper.isDisguised()) {
+            InuConfig.WHATS_NEW_STASH.value = ""
+            whatsNewChecked = true
+            return
+        }
+        if (AndroidUtilities.needShowPasscode(false) || SharedConfig.isWaitingForPasscodeEnter) {
+            NotificationCenter.getGlobalInstance().addObserver(passcodeObserver, NotificationCenter.passcodeDismissed)
+            return
+        }
+        whatsNewSheetActivity = WeakReference(activity)
+        // stock sheets size their header and insets from the global system bar sizes, which a cold
+        // start only fills in during the activity's first layout. Waiting for the main thread to go
+        // idle after that keeps the open animation out of the startup work
+        activity.window.decorView.doOnLayout {
+            Looper.myQueue().addIdleHandler {
+                var disabled = false
+                ChangelogSheet(
+                    activity,
+                    LocaleController.getString(R.string.InuWhatsNew),
+                    releases.map {
+                        RichMessageLayout.PreviewView(activity, UserConfig.selectedAccount, null).apply {
+                            set(it.changelog)
+                            setPadding(AndroidUtilities.dp(23f), AndroidUtilities.dp(15f), AndroidUtilities.dp(23f), AndroidUtilities.dp(8f))
+                        }
+                    },
+                    LocaleController.getString(R.string.InuWhatsNewDontShowAgain),
+                    {
+                        InuConfig.WHATS_NEW_ON_UPDATE.value = false
+                        disabled = true
+                    },
+                    LocaleController.getString(R.string.OK),
+                    {},
+                ).apply {
+                    setOnDismissListener(DialogInterface.OnDismissListener {
+                        InuConfig.WHATS_NEW_STASH.value = ""
+                        markWhatsNewSeen()
+                        whatsNewChecked = true
+                        whatsNewSheetActivity = null
+                        if (disabled) {
+                            BulletinFactory.global().createSimpleBulletin(
+                                R.raw.info,
+                                LocaleController.getString(R.string.InuWhatsNewDisabled),
+                                AndroidUtilities.replaceSingleTag(LocaleController.getString(R.string.InuWhatsNewDisabledInfo)) {
+                                    LaunchActivity.getSafeLastFragment()?.presentFragment(WhatsNewActivity())
+                                },
+                            ).show()
+                        }
+                    })
+                }.show()
+                false
+            }
+        }
+    }
+
+    private fun stashChangelogs(msg: TLRPC.Message, info: ApkInfo, current: CurrentBuild, variant: String) {
+        writeStashedReleases(listOfNotNull(createRelease(msg, variant)))
+        loadReleases(10, current.versionCode + 1..info.verCode) { releases ->
+            if (!releases.isNullOrEmpty()) writeStashedReleases(releases)
         }
     }
 
@@ -370,6 +537,7 @@ object UpdateHelper {
             val info = full?.let { extractApkInfo(it, variant) } ?: return
             val current = currentBuild()
             if (!isNewer(info, current)) return
+            stashChangelogs(full, info, current, variant)
             applyUpdate(full, info, current, variant)
             revealPendingUpdate()
             InuConfig.UPDATE_LAST_CHECK_MS.value = System.currentTimeMillis()
@@ -386,18 +554,7 @@ object UpdateHelper {
         current: CurrentBuild,
         variant: String,
     ): TLRPC.TL_help_appUpdate {
-        var skipping = false
-        val blocks = msg.rich_message.blocks.filterIsInstance<TL_iv.pageBlockDetails>().firstOrNull()?.blocks.orEmpty().filterTo(ArrayList()) {
-            if (it is TL_iv.pageBlockHeading2) {
-                skipping = variant == "pluginless" && RichMessageLayout.getString(it.text).trim() == "Plugins"
-            }
-            !skipping
-        }
-        val changelog = TL_iv.RichMessage().apply {
-            this.blocks = blocks
-            photos = msg.rich_message.photos
-            documents = msg.rich_message.documents
-        }
+        val changelog = extractChangelog(msg, variant)
         val data = SerializedData(changelog.objectSize)
         changelog.serializeToStream(data)
 
@@ -417,6 +574,21 @@ object UpdateHelper {
         pendingBetaUpdate = BetaUpdate(info.appVerName, info.verCode, null)
         pendingSourceMessage = msg
         return updateObj
+    }
+
+    private fun extractChangelog(msg: TLRPC.Message, variant: String): TL_iv.RichMessage {
+        var skipping = false
+        val blocks = msg.rich_message.blocks.filterIsInstance<TL_iv.pageBlockDetails>().firstOrNull()?.blocks.orEmpty().filterTo(ArrayList()) {
+            if (it is TL_iv.pageBlockHeading2) {
+                skipping = variant == "pluginless" && RichMessageLayout.getString(it.text).trim() == "Plugins"
+            }
+            !skipping
+        }
+        return TL_iv.RichMessage().apply {
+            this.blocks = blocks
+            photos = msg.rich_message.photos
+            documents = msg.rich_message.documents
+        }
     }
 
     private fun finish(callback: ((CheckResult) -> Unit)?, result: CheckResult) {
@@ -472,6 +644,8 @@ object UpdateHelper {
         val document: TLRPC.Document,
         internal val sourceMessage: TLRPC.Message,
     )
+
+    class Release(val verCode: Int, val changelog: TL_iv.RichMessage)
 
     private data class ApkInfo(
         val verCode: Int,

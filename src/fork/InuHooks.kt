@@ -166,6 +166,7 @@ object InuHooks {
             MonetHelper.refreshMonetThemeIfChanged()
         }
         CrashReporter.maybeShowReportSheet(launchActivity)
+        UpdateHelper.maybeShowWhatsNew(launchActivity)
         ProxyVpnHelper.reconcile()
         DrawerHelper.refreshUpdateState()
         MediaSendDebugHelper.startWatchingCache()

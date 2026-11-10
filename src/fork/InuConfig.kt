@@ -943,6 +943,9 @@ object InuConfig {
     val UPDATES_ENABLED = UpdatesEnabledItem()
 
     @JvmField
+    val WHATS_NEW_ON_UPDATE = BoolItem("whats_new_on_update", true)
+
+    @JvmField
     val EXTRA_DEBUG_LOGS = BoolItem("extra_debug_logs", false, exportable = false)
 
     // internal state
@@ -954,6 +957,12 @@ object InuConfig {
 
     @JvmField
     val UPDATE_LAST_CHECK_MS = LongItem("update_last_check_ms", 0L, exportable = false)
+
+    @JvmField
+    val WHATS_NEW_STASH = StringItem("whats_new_stash", "", exportable = false)
+
+    @JvmField
+    val WHATS_NEW_SEEN_BUILD = IntItem("whats_new_seen_build", 0, exportable = false)
 
     @JvmField
     val CLOUD_SYNC_ACCOUNT_ID = LongItem("cloud_sync_account_id", 0L, exportable = false)

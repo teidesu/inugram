@@ -46,7 +46,7 @@ class PluginInstallSheet(
     previous: PluginManifest? = null,
     onInstall: (enable: Boolean) -> Unit,
 ) : BottomSheetWithRecyclerListView(
-    context, fragment, false, true, false, false, false, ActionBarType.SLIDING, null,
+    context, fragment, false, false, false, false, ActionBarType.SLIDING, null,
 ) {
     private class Content(
         val manifest: PluginManifest,
@@ -81,7 +81,7 @@ class PluginInstallSheet(
         actionBar.setTitle(getTitle())
         setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundGray))
 
-        recyclerListView.setPadding(backgroundPaddingLeft, 0, backgroundPaddingLeft, dp(76f) + AndroidUtilities.navigationBarHeight)
+        recyclerListView.setPadding(backgroundPaddingLeft, 0, backgroundPaddingLeft, dp(76f))
         recyclerListView.setSections()
         recyclerListView.clipToPadding = false
         recyclerListView.setOnItemClickListener { _, position -> onItemClick(position - 1) }
@@ -126,7 +126,7 @@ class PluginInstallSheet(
                 LayoutHelper.MATCH_PARENT, 48f, Gravity.BOTTOM,
                 dp(12f) + backgroundPaddingLeft, 0,
                 dp(12f) + backgroundPaddingLeft,
-                dp(12f) + AndroidUtilities.navigationBarHeight,
+                dp(12f),
             ),
         )
         containerView.addView(

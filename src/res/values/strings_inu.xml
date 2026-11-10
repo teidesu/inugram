@@ -623,6 +623,12 @@
     <string name="InuUpdateInstalledNotification">Update installed, tap to relaunch</string>
     <string name="InuUpdateNotificationChannel">App updates</string>
     <string name="InuUpdateFailedToInstall">Install failed (%1$d)</string>
+    <string name="InuWhatsNew">What\'s new</string>
+    <string name="InuWhatsNewOnUpdate">Show changelog after update</string>
+    <string name="InuWhatsNewBadge">New</string>
+    <string name="InuWhatsNewDontShowAgain">Don\'t show again</string>
+    <string name="InuWhatsNewDisabled">Changelogs won\'t be shown anymore</string>
+    <string name="InuWhatsNewDisabledInfo">You can always read them in **Settings › What\'s new**</string>
     <string name="InuRefetchWebPreview">Refetch web preview</string>
     <string name="InuSendStickers">Send stickers</string>
     <string name="InuSendGifs">Send GIFs</string>

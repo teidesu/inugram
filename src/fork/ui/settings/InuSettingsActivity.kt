@@ -3,15 +3,44 @@ package desu.inugram.ui.settings
 import android.view.View
 import desu.inugram.SearchRegistry
 import desu.inugram.helpers.InuUtils
+import desu.inugram.helpers.update.UpdateHelper
 import org.telegram.messenger.LocaleController
 import org.telegram.messenger.R
+import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Components.UItem
 import org.telegram.ui.Components.UniversalAdapter
 
 class InuSettingsActivity : SettingsPageActivity() {
     override fun getTitle(): CharSequence = LocaleController.getString(R.string.InuSettings)
 
+    private var showWhatsNewBadge = UpdateHelper.hasUnseenWhatsNew()
+
+    // opening the page clears the badge: refresh once the page covers this one, not mid-transition
+    override fun onTransitionAnimationEnd(isOpen: Boolean, backward: Boolean) {
+        super.onTransitionAnimationEnd(isOpen, backward)
+        if (!isOpen && !backward && showWhatsNewBadge && !UpdateHelper.hasUnseenWhatsNew()) {
+            showWhatsNewBadge = false
+            listView?.adapter?.update(false)
+        }
+    }
+
     override fun fillItems(items: ArrayList<UItem>, adapter: UniversalAdapter) {
+        items.add(
+            UItem.asButton(
+                BUTTON_WHATS_NEW,
+                R.drawable.menu_premium_main,
+                LocaleController.getString(R.string.InuWhatsNew).let {
+                    if (!showWhatsNewBadge) it
+                    else appendTag(
+                        it,
+                        LocaleController.getString(R.string.InuWhatsNewBadge),
+                        Theme.getColor(Theme.key_windowBackgroundWhiteBlueHeader),
+                    )
+                }
+            )
+        )
+        items.add(UItem.asShadow(null))
+
         items.add(UItem.asHeader(LocaleController.getString(R.string.InuAppearance)))
         items.add(
             UItem.asButton(
@@ -109,6 +138,7 @@ class InuSettingsActivity : SettingsPageActivity() {
 
     override fun onClick(item: UItem, view: View, position: Int, x: Float, y: Float) {
         when (item.id) {
+            BUTTON_WHATS_NEW -> presentFragment(WhatsNewActivity())
             BUTTON_GENERAL -> presentFragment(AppearanceSettingsActivity())
             BUTTON_CHATS -> presentFragment(ChatsSettingsActivity())
             BUTTON_MESSAGES -> presentFragment(MessagesSettingsActivity())
@@ -127,6 +157,7 @@ class InuSettingsActivity : SettingsPageActivity() {
     }
 
     companion object {
+        private val BUTTON_WHATS_NEW = InuUtils.generateId()
         private val BUTTON_GENERAL = InuUtils.generateId()
         private val BUTTON_CHATS = InuUtils.generateId()
         private val BUTTON_MESSAGES = InuUtils.generateId()
@@ -147,6 +178,7 @@ class InuSettingsActivity : SettingsPageActivity() {
             iconRes = R.drawable.msg_settings,
             factory = ::InuSettingsActivity,
             entries = listOf(
+                SearchRegistry.Entry("whats-new", R.string.InuWhatsNew, BUTTON_WHATS_NEW),
                 SearchRegistry.Entry("about", R.string.InuAbout, BUTTON_ABOUT),
             ),
         )
