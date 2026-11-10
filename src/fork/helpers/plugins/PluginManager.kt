@@ -157,6 +157,7 @@ object PluginManager {
         PluginPaths.emptyTrash()
         PluginActions.retainInstalls(live)
         PluginTranslation.retainInstalls(live)
+        PluginNotifications.sweepOrphans(live)
     }
 
     fun isEngineEnabled(): Boolean = InuConfig.PLUGINS_ENABLED.value
@@ -625,6 +626,7 @@ object PluginManager {
         wipeSessionScratch(installId)
         PluginFs.wipe(installId)
         PluginAssetFiles.wipe(installId)
+        PluginNotifications.wipe(installId)
         // a class cannot be unloaded, so staged dex outlives the engine
         PluginJvm.wipe(installId)
     }

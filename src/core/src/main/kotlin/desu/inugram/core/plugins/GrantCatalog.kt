@@ -96,6 +96,15 @@ object GrantCatalog {
             tierWhenUnscoped = null,
         ),
         Entry(
+            name = "notifications.post",
+            scopes = ScopeKind.NONE,
+            values = emptySet(),
+            extraValues = emptySet(),
+            refusesTakeover = false,
+            tier = GrantTier.NEUTRAL,
+            tierWhenUnscoped = null,
+        ),
+        Entry(
             name = "fetch",
             scopes = ScopeKind.DOMAIN,
             values = emptySet(),

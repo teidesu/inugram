@@ -1787,6 +1787,62 @@ declare namespace inu {
      * @needs-grant notifications.suppress
      */
     function suppress(): Disposer
+
+    interface PostOptions {
+      title: string
+      text?: string
+      /**
+       * Small icon shown in the status bar, drawn as a mask.
+       *
+       * Only {@link icons.common} and {@link icons.svg} icons are supported
+       */
+      icon?: UIIcon
+      /**
+       * Unique ID of the notification.
+       * Posting again with the same id replaces that notification.
+       *
+       * **Limits: 64 bytes**
+       */
+      id?: string
+      /** Whether to post without sound or vibration */
+      silent?: boolean
+      /**
+       * JSON-serializable custom payload, passed to {@link onClick} when the notification is tapped.
+       *
+       * **Limits: 4 KiB as JSON.**
+       */
+      data?: unknown
+    }
+
+    /**
+     * Post a system notification
+     *
+     * The notification can outlive the plugin, in which case the taps are delivered on the next run.
+     *
+     * **Limits: 8 shown at once; 5 posts in a burst, then one per second.**
+     *
+     * @needs-grant notifications.post
+     * @returns  A function to cancel the notification
+     * @throws  `forbidden` if the user turned off notifications for the app
+     */
+    function post(options: PostOptions): Disposer
+
+    /**
+     * Remove the notification posted with {@link PostOptions.id}, or every notification this plugin has shown
+     * (including ones from its earlier runs) when `id` is omitted.
+     *
+     * @needs-grant notifications.post
+     */
+    function cancel(id?: string): void
+
+    /**
+     * Register a handler for taps on the notifications posted by this plugin, called with their {@link PostOptions.id}
+     * and {@link PostOptions.data}.
+     * Taps from before the first handler is registered (e.g. one that launched the app) are delivered to it.
+     *
+     * @needs-grant notifications.post
+     */
+    function onClick(callback: (id: string | undefined, data: unknown) => void): Disposer
   }
 
   /**

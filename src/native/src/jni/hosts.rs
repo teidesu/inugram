@@ -340,6 +340,26 @@ impl NotificationHost for JniBridge {
       &[Arg::Int(token as i32), Arg::Int(account), Arg::Bool(on)],
     );
   }
+
+  fn notification_post(&self, token: u32, options_json: &str) -> Option<String> {
+    self.call_refusal(
+      "notifications.post",
+      self.on_notification_post,
+      &[Arg::Int(token as i32), Arg::Str(options_json)],
+    )
+  }
+
+  fn notification_cancel(&self, token: u32) {
+    self.call_void("notifications.post", self.on_notification_cancel, &[Arg::Int(token as i32)]);
+  }
+
+  fn notification_cancel_by_id(&self, id: &str) {
+    self.call_void("notifications.cancel", self.on_notification_cancel_by_id, &[Arg::Str(id)]);
+  }
+
+  fn notification_listen_clicks(&self) {
+    self.call_void("notifications.onClick", self.on_notification_listen_clicks, &[]);
+  }
 }
 
 impl FilesHost for JniBridge {

@@ -14,6 +14,7 @@ internal val KNOWN_GRANTS: Map<String, GrantPresentation> = mapOf(
     "openUrl" to GrantPresentation(R.string.InuPluginGrantOpenUrl, R.drawable.msg_link),
     "onAppVisibilityChange" to GrantPresentation(R.string.InuPluginGrantAppVisibility, R.drawable.menu_hide_gift),
     "notifications.suppress" to GrantPresentation(R.string.InuPluginGrantNotificationsSuppress, R.drawable.msg_mute),
+    "notifications.post" to GrantPresentation(R.string.InuPluginGrantNotificationsPost, R.drawable.msg_notifications),
     "fetch" to GrantPresentation(R.string.InuPluginGrantFetch, R.drawable.msg_language),
     "account.read" to GrantPresentation(R.string.InuPluginGrantAccountRead, R.drawable.msg_contacts),
     "account.write" to GrantPresentation(R.string.InuPluginGrantAccountWrite, R.drawable.msg_send),

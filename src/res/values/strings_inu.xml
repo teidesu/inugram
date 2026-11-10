@@ -901,6 +901,7 @@
     <string name="InuPluginGrantOpenUrl">Open links</string>
     <string name="InuPluginGrantAppVisibility">Monitor app visibility</string>
     <string name="InuPluginGrantNotificationsSuppress">Hold back notifications</string>
+    <string name="InuPluginGrantNotificationsPost">Post notifications</string>
     <string name="InuPluginGrantClipboardRead">Read clipboard</string>
     <string name="InuPluginGrantFetch">Internet access</string>
     <string name="InuPluginGrantAccountRead">Read account data</string>

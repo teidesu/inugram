@@ -13,6 +13,7 @@ import android.graphics.drawable.Drawable
 import android.util.Base64
 import android.util.LruCache
 import android.view.View
+import androidx.core.graphics.drawable.IconCompat
 import desu.inugram.helpers.plugins.QuickJs
 import desu.inugram.helpers.plugins.platform.PluginJvm
 import desu.inugram.helpers.plugins.telegram.PeerSpecs
@@ -362,6 +363,14 @@ object PluginIcons {
     fun commonIconName(name: String): String? {
         val id = COMMON_ICONS[name] ?: return null
         return ApplicationLoader.applicationContext?.resources?.getResourceEntryName(id)
+    }
+
+    /** the status bar draws only a resource or a bitmap mask */
+    fun createNotificationIcon(spec: String): IconCompat? = when (spec.firstOrNull()) {
+        'r' -> resolveIdentifier(resourceIds, spec.substring(1), "drawable").takeIf { it != 0 }
+            ?.let { IconCompat.createWithResource(ApplicationLoader.applicationContext, it) }
+        's' -> loadSvgMask(spec.substring(1))?.let { IconCompat.createWithBitmap(it) }
+        else -> null
     }
 
     fun loadCommonDrawable(context: Context, name: String): Drawable? = COMMON_ICONS[name]?.let { loadDrawable(context, it) }

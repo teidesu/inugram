@@ -258,4 +258,15 @@ interface NotificationListener {
 
     /** while any token is held, the app posts no notification of its own for [account], or all with [PluginNotifications.ANY_ACCOUNT] */
     fun suppress(token: Int, account: Int, on: Boolean)
+
+    /** a system notification, replaced by a later post with the same `id`. null on success, else a refusal wire */
+    fun notificationPost(token: Int, optionsJson: String): String?
+
+    fun notificationCancel(token: Int)
+
+    /** the notification posted with that `id`, or every one this plugin has shown when [id] is empty */
+    fun notificationCancelById(id: String)
+
+    /** clicks are held until the plugin subscribes, then delivered through [QuickJs.dispatchNotificationClick] */
+    fun notificationListenClicks()
 }

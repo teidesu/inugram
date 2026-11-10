@@ -15,7 +15,7 @@ index 0000000..0000000 100644
  
      @SuppressLint("Range")
      private boolean handleIntent(Intent intent, boolean isNew, boolean restore, boolean fromPassword, Browser.Progress progress, boolean rebuildFragments, boolean openedTelegram) {
-+        if (desu.inugram.InuHooks.handleIntent(this, intent)) return true;
++        if (desu.inugram.InuHooks.handleIntent(this, intent, restore)) return true;
          if (GiftInfoBottomSheet.handleIntent(intent, progress)) {
              return true;
          }

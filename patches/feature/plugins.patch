@@ -5,6 +5,7 @@ Subject: Add the QuickJS plugin engine (hooks, action rows)
 
 ---
  TMessagesProj/jni/gifvideo.cpp                |  13 ++
+ TMessagesProj/src/main/AndroidManifest.xml    |   4 +
  .../org/telegram/messenger/MessageObject.java |  22 ++-
  .../messenger/MessagesController.java         | 131 ++++++++------
  .../messenger/NotificationsController.java    |   2 +-
@@ -19,7 +20,7 @@ Subject: Add the QuickJS plugin engine (hooks, action rows)
  .../ui/Components/ChatAvatarContainer.java    |   9 +-
  .../org/telegram/ui/GroupCreateActivity.java  |  33 +++-
  .../java/org/telegram/ui/LaunchActivity.java  |   1 +
- 15 files changed, 336 insertions(+), 101 deletions(-)
+ 16 files changed, 340 insertions(+), 101 deletions(-)
 
 diff --git a/TMessagesProj/jni/gifvideo.cpp b/TMessagesProj/jni/gifvideo.cpp
 index 0000000..0000000 100644
@@ -45,6 +46,21 @@ index 0000000..0000000 100644
  extern "C" JNIEXPORT jint JNICALL Java_org_telegram_ui_Components_AnimatedFileNative_nGetVideoFrame(JNIEnv *env, jclass clazz, jlong ptr, jobject bitmap, jintArray data, jboolean preview, jfloat start_time, jfloat end_time, jboolean loop) {
      if (ptr == 0) {
          return 0;
+diff --git a/TMessagesProj/src/main/AndroidManifest.xml b/TMessagesProj/src/main/AndroidManifest.xml
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/AndroidManifest.xml
++++ b/TMessagesProj/src/main/AndroidManifest.xml
+@@ -430,6 +430,10 @@
+             android:excludeFromRecents="true"
+             android:theme="@style/Theme.TMessages.TransparentWithAlerts"
+             android:exported="true"/>
++        <activity-alias
++            android:name="desu.inugram.PluginNotificationClick"
++            android:targetActivity="org.telegram.ui.LaunchActivity"
++            android:exported="false"/>
+         <activity
+             android:name="org.telegram.ui.PopupNotificationActivity"
+             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenLayout|uiMode|screenSize|smallestScreenSize"
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java

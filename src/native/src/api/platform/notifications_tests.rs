@@ -30,6 +30,16 @@ impl NotificationHost for TestNotificationHost {
   fn notification_suppress(&self, token: u32, account: i32, on: bool) {
     self.suppressed.borrow_mut().push((token, account, on));
   }
+
+  fn notification_post(&self, _token: u32, _options_json: &str) -> Option<String> {
+    None
+  }
+
+  fn notification_cancel(&self, _token: u32) {}
+
+  fn notification_cancel_by_id(&self, _id: &str) {}
+
+  fn notification_listen_clicks(&self) {}
 }
 
 type Disposing = crate::testing::harness::DisposeOnDrop<NotificationState>;

@@ -1124,6 +1124,21 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchN
 }
 
 #[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDispatchNotificationClick(
+  mut env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  id: JString,
+  data_json: JString,
+) {
+  in_env(&mut env, (), |env| {
+    let id = jstring_to_string(env, &id);
+    let data_json = jstring_to_string(env, &data_json);
+    with_engine(ptr, (), |engine| engine.notifications.dispatch_click(&engine.ctx, &id, &data_json))
+  })
+}
+
+#[no_mangle]
 pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeNotifyUnload(
   _env: EnvUnowned,
   _this: JObject,

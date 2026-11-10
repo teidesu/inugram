@@ -85,6 +85,8 @@ open class QuickJs {
     open fun dispatchNotification(callbackId: Int, name: String, accountId: Int, args: Array<String>) =
         ifLive { nativeDispatchNotification(it, callbackId, name, accountId, args) }
 
+    fun dispatchNotificationClick(id: String, dataJson: String) = ifLive { nativeDispatchNotificationClick(it, id, dataJson) }
+
     fun evaluate(code: String, filename: String = "<plugin>"): String? = requireLive { nativeEvaluate(it, code, filename) }
 
     /** json, see `describe_memory_usage`. Engine thread only */
@@ -364,6 +366,7 @@ open class QuickJs {
     private external fun nativeDispatchTextEntity(ptr: Long, token: Int, secondary: Boolean, tapId: Long, tapJson: String)
     private external fun nativeAbandonTextEntityTap(ptr: Long, tapId: Long, timedOut: Boolean)
     private external fun nativeDispatchNotification(ptr: Long, callbackId: Int, name: String, accountId: Int, args: Array<String>)
+    private external fun nativeDispatchNotificationClick(ptr: Long, id: String, dataJson: String)
     private external fun nativeWriteProgress(ptr: Long, requestId: Long, loaded: Long, total: Long)
     private external fun nativeDispatchRpc(ptr: Long, callbackId: Int, dispatchId: Long, method: String, accountId: Int, requestWire: String)
     private external fun nativeDispatchSend(ptr: Long, callbackId: Int, dispatchId: Long, accountId: Int, messageJson: String)

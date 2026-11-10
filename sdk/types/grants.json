@@ -95,6 +95,14 @@
       "description": "hold back the notifications the app posts itself while the plugin runs"
     },
     {
+      "name": "notifications.post",
+      "scopes": "none",
+      "tier": "neutral",
+      "title": "InuPluginGrantNotificationsPost",
+      "icon": "msg_notifications",
+      "description": "post system notifications, and be told when one is tapped"
+    },
+    {
       "name": "fetch",
       "scopes": "domain",
       "tier": "neutral",

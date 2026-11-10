@@ -2,18 +2,20 @@ use crate::api::telegram::account::{account_slot, AccountState};
 use crate::runtime::enter_js;
 use crate::runtime::Dispose;
 use crate::utils::qjs::qjs_object_freeze;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use rquickjs::function::Args;
+use rquickjs::function::{Args, Opt};
 use rquickjs::{Ctx, Exception, Function, Persistent, Result as JsResult, Value};
 
 use crate::api::error::format_exception;
-use crate::api::error::{host_error_to_js, report_callback_error, PluginErrorCode};
+use crate::api::error::{call_callback, host_error_to_js, report_callback_error, PluginErrorCode};
 use crate::api::platform::jvm::JvmState;
+use crate::api::ui::icons;
 use crate::runtime::pump_jobs;
 use crate::sandbox::grants::{GrantHost, MATCH_EXACT, MATCH_NAMESPACE};
-use crate::sandbox::registry::{make_disposer, noop_disposer, Lifecycle, Registry};
+use crate::sandbox::registry::{make_disposer, noop_disposer, CallbackRegistry, Lifecycle, Registry};
+use crate::utils::arguments::{self, opt_bool, opt_str, req_str, stringify_json};
 
 pub trait NotificationHost {
   fn notification_register(&self, callback_id: u32, events: &[String]) -> Option<String>;
@@ -23,9 +25,25 @@ pub trait NotificationHost {
   /// while at least one token is held, the app posts no notification of its own; `account` is
   /// [`ANY_ACCOUNT`] for a hold taken over every account at once
   fn notification_suppress(&self, token: u32, account: i32, on: bool);
+
+  fn notification_post(&self, token: u32, options_json: &str) -> Option<String>;
+
+  fn notification_cancel(&self, token: u32);
+
+  /// empty `id` cancels every notification the plugin has shown, including ones from earlier runs
+  fn notification_cancel_by_id(&self, id: &str);
+
+  /// the host holds clicks for a plugin until it first subscribes, so a click that launched the app is not lost
+  fn notification_listen_clicks(&self);
 }
 
 const SUPPRESS_GRANT: &str = "notifications.suppress";
+const POST_GRANT: &str = "notifications.post";
+const POST: &str = "notifications.post";
+
+/// carried in the notification's pending intent, which lives in the system server
+const DATA_LIMIT_BYTES: usize = 4 * 1024;
+const ID_LIMIT: usize = 64;
 
 pub const ANY_ACCOUNT: i32 = -1;
 
@@ -58,6 +76,9 @@ pub struct NotificationState {
   jvm: Option<Rc<JvmState>>,
   delegates: Registry<Rc<Delegate>>,
   suppressors: Registry<i32>,
+  posted: Registry<()>,
+  click_fns: CallbackRegistry,
+  listening_clicks: Cell<bool>,
 }
 
 pub fn install_notifications<'js>(
@@ -77,6 +98,9 @@ pub fn install_notifications<'js>(
     jvm,
     delegates: Registry::default(),
     suppressors: Registry::default(),
+    posted: Registry::default(),
+    click_fns: CallbackRegistry::default(),
+    listening_clicks: Cell::new(false),
   });
 
   let android = globals.get_namespace(ctx, "android")?;
@@ -93,7 +117,30 @@ pub fn install_notifications<'js>(
   notifications
     .set("suppress", Function::new(ctx.clone(), move |ctx: Ctx<'js>| state3.js_suppress(&ctx, ANY_ACCOUNT))?)?;
 
+  let state4 = state.clone();
+  notifications
+    .set("post", Function::new(ctx.clone(), move |ctx: Ctx<'js>, options: Value<'js>| state4.js_post(&ctx, options))?)?;
+
+  let state6 = state.clone();
+  notifications.set(
+    "cancel",
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>, id: Opt<Value<'js>>| state6.js_cancel(&ctx, id.0))?,
+  )?;
+
+  let state5 = state.clone();
+  notifications.set(
+    "onClick",
+    Function::new(ctx.clone(), move |ctx: Ctx<'js>, callback: Function<'js>| state5.js_on_click(&ctx, callback))?,
+  )?;
+
   Ok(state)
+}
+
+fn check_id(ctx: &Ctx<'_>, what: &str, id: &str) -> JsResult<()> {
+  if id.is_empty() || id.len() > ID_LIMIT {
+    return Err(Exception::throw_type(ctx, &format!("{what}: 'id' must be 1 to {ID_LIMIT} bytes")));
+  }
+  Ok(())
 }
 
 impl NotificationState {
@@ -114,6 +161,92 @@ impl NotificationState {
       };
       state.host.notification_suppress(token, account, false);
     })
+  }
+
+  fn js_post<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, options: Value<'js>) -> JsResult<Function<'js>> {
+    if self.lifecycle.is_unloading() {
+      return noop_disposer(ctx);
+    }
+    self.grants.check_grant(ctx, POST_GRANT, None, MATCH_EXACT)?;
+    let Some(options) = options.as_object() else {
+      return Err(Exception::throw_type(ctx, &format!("{POST}: expected an options object")));
+    };
+    let out = rquickjs::Object::new(ctx.clone())?;
+    out.set("title", req_str(ctx, options, POST, "title")?)?;
+    if let Some(text) = opt_str(ctx, options, POST, "text")? {
+      out.set("text", text)?;
+    }
+    if let Some(id) = opt_str(ctx, options, POST, "id")? {
+      check_id(ctx, POST, &id)?;
+      out.set("id", id)?;
+    }
+    if let Some(silent) = opt_bool(ctx, options, POST, "silent")? {
+      out.set("silent", silent)?;
+    }
+    if let Some(icon) = icons::opt_icon(ctx, options, POST, self.jvm.as_ref())? {
+      // the status bar draws only a resource or a bitmap mask
+      if !icon.spec.starts_with(['r', 's']) {
+        return PluginErrorCode::Unsupported.throw(ctx, &format!("{POST}: only common and svg icons can be used"));
+      }
+      out.set("icon", icon.spec)?;
+    }
+    let data = arguments::field(ctx, options, POST, "data")?;
+    if !data.is_undefined() {
+      let json = stringify_json(ctx, data, &format!("{POST}: 'data' is not JSON-serializable"))?;
+      if json.len() > DATA_LIMIT_BYTES {
+        return PluginErrorCode::QuotaExceeded(json.len() as i64, DATA_LIMIT_BYTES as i64)
+          .throw(ctx, &format!("{POST}: 'data' exceeds {DATA_LIMIT_BYTES} bytes as JSON"));
+      }
+      out.set("data", json)?;
+    }
+    let json = stringify_json(ctx, out.into_value(), POST)?;
+
+    let token = self.posted.alloc();
+    if let Some(err) = self.host.notification_post(token, &json) {
+      let value = host_error_to_js(ctx, &err)?;
+      return Err(ctx.throw(value));
+    }
+    self.posted.insert(token, None, ());
+
+    let state = self.clone();
+    make_disposer(ctx, move |_| {
+      if state.posted.remove(token).is_some() {
+        state.host.notification_cancel(token);
+      }
+    })
+  }
+
+  fn js_cancel<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, id: Option<Value<'js>>) -> JsResult<()> {
+    const CANCEL: &str = "notifications.cancel";
+    if self.lifecycle.is_unloading() {
+      return Ok(());
+    }
+    self.grants.check_grant(ctx, POST_GRANT, None, MATCH_EXACT)?;
+    let id = match id.filter(|id| !id.is_undefined()) {
+      None => String::new(),
+      Some(id) => {
+        let Some(id) = id.as_string() else {
+          return Err(Exception::throw_type(ctx, &format!("{CANCEL}: 'id' must be a string")));
+        };
+        let id = id.to_string()?;
+        check_id(ctx, CANCEL, &id)?;
+        id
+      }
+    };
+    self.host.notification_cancel_by_id(&id);
+    Ok(())
+  }
+
+  fn js_on_click<'js>(self: &Rc<Self>, ctx: &Ctx<'js>, callback: Function<'js>) -> JsResult<Function<'js>> {
+    if self.lifecycle.is_unloading() {
+      return noop_disposer(ctx);
+    }
+    self.grants.check_grant(ctx, POST_GRANT, None, MATCH_EXACT)?;
+    let disposer = CallbackRegistry::subscribe(ctx, self, &self.lifecycle, |s| &s.click_fns, callback)?;
+    if !self.listening_clicks.replace(true) {
+      self.host.notification_listen_clicks();
+    }
+    Ok(disposer)
   }
 
   /// Layered on the account prototype like `invokeRpc`: this installs before reads and writes build it.
@@ -235,12 +368,40 @@ impl NotificationState {
   }
 }
 
+impl NotificationState {
+  /// `id` and `data_json` (what `post` stringified) are empty for a notification posted without them
+  pub fn dispatch_click(self: &Rc<Self>, context: &rquickjs::Context, id: &str, data_json: &str) {
+    if self.lifecycle.is_unloading() {
+      return;
+    }
+    enter_js(context, |ctx| {
+      let data = if data_json.is_empty() {
+        Value::new_undefined(ctx.clone())
+      } else {
+        match ctx.json_parse(data_json) {
+          Ok(data) => data,
+          Err(_) => {
+            (self.log)(&format!("notifications.onClick: bad click payload: {}", format_exception(&ctx)));
+            return;
+          }
+        }
+      };
+      let id = (!id.is_empty()).then_some(id);
+      for callback in self.click_fns.snapshot(&ctx) {
+        call_callback(&ctx, &self.log, "notifications.onClick callback", &callback, (id, data.clone()));
+      }
+    });
+    pump_jobs(context, self.log.as_ref());
+  }
+}
+
 impl Dispose for NotificationState {
   fn dispose(&self, context: &rquickjs::Context) {
     enter_js(context, |ctx| {
       for delegate in self.delegates.remove_matching(|_| true) {
         delegate.release(&ctx);
       }
+      self.click_fns.release_all(&ctx);
     });
   }
 }
