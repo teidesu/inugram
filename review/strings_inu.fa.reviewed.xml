@@ -866,7 +866,7 @@
     <string name="InuPluginGrantClipboardWrite">نوشتن در کلیپ‌بورد</string>
     <string name="InuPluginGrantOpenUrl">باز کردن پیوندها</string>
     <string name="InuPluginGrantAppVisibility">پایش نمایان بودن برنامه</string>
-    <string name="InuPluginGrantNotificationsSuppress">نگه داشتن اعلان‌ها</string>
+    <string name="InuPluginGrantNotificationsSuppress">جلوگیری از ارسال اعلان‌های برنامه</string>
     <string name="InuPluginGrantClipboardRead">خواندن کلیپ‌بورد</string>
     <string name="InuPluginGrantFetch">دسترسی به اینترنت</string>
     <string name="InuPluginGrantAccountRead">خواندن داده‌های حساب</string>
@@ -879,13 +879,13 @@
     <string name="InuPluginGrantFilterMessages">پنهان کردن یا تغییر پیام‌ها در گفتگوها</string>
     <string name="InuPluginGrantInterceptRpc">رهگیری درخواست‌های API</string>
     <string name="InuPluginGrantInvokeRpc">دسترسی خام به API</string>
-    <string name="InuPluginGrantTakeout">نشست‌های استخراج داده</string>
+    <string name="InuPluginGrantTakeout">نشست‌های خروجی‌گیری از داده‌ها</string>
     <string name="InuPluginGrantUnsafeFs">دسترسی به فایل‌های دستگاه</string>
     <string name="InuPluginGrantUnsafeInvokeRaw">دسترسی بدون بررسی به API</string>
     <string name="InuPluginGrantUnsafeJvm">اجرای کد جاوا</string>
     <string name="InuPluginGrantUnsafeXposed">هوک‌های کد برنامه</string>
     <string name="InuPluginGrantUnsafeNotificationCenter">دسترسی به رویدادهای داخلی</string>
-    <string name="InuPluginGrantUnsafeDisableApiFiltering">غیرفعال کردن محافظت از حساب</string>
+    <string name="InuPluginGrantUnsafeDisableApiFiltering">غیرفعال کردن فیلتر درخواست‌های API</string>
     <string name="InuPluginGrantNotificationsSuppressInfo">می‌تواند تا زمانی که برنامه در حال اجراست، مانع ارسال اعلان‌های خود برنامه شود</string>
     <string name="InuPluginGrantTakeoutInfo">پس از تأیید شما، می‌تواند بدون محدودیت‌های معمول نرخ از داده‌هایتان خروجی بگیرد</string>
     <string name="InuPluginGrantUnsafeFsInfo">می‌تواند هر فایلی را که برنامه به آن دسترسی دارد در دستگاه بخواند و بنویسد</string>
@@ -942,7 +942,7 @@
     <string name="InuPluginsDevPushed_other">%d افزونه ارسال شد</string>
     <string name="InuPluginsDevModeSheetTitle">حالت توسعه‌دهنده روشن شود؟</string>
     <string name="InuPluginsDevModeSheetInfo">این حالت برای توسعه‌ی افزونه است: رایانه‌ی شما فایلی را از طریق adb می‌فرستد و برنامه فوراً آن را نصب می‌کند.\nتا وقتی روشن است:</string>
-    <string name="InuPluginsDevMode1Title">هر چیزی با adb</string>
+    <string name="InuPluginsDevMode1Title">هر چیزی که به adb دسترسی دارد</string>
     <string name="InuPluginsDevMode1Text">هر رایانه‌ای که به آن وصل می‌شوید و هر چیزی که از قبل از طریق adb با این دستگاه در ارتباط است (مثلاً Shizuku) می‌تواند افزونه ارسال کند.</string>
     <string name="InuPluginsDevMode2Title">بدون بازبینی مجوزها</string>
     <string name="InuPluginsDevMode2Text">افزونه‌ی ارسال‌شده نصب می‌شود و هر مجوزی که اعلام کرده به آن داده می‌شود. نه صفحه‌ی اعتماد هست، نه فهرست مجوزها و نه امکان بازگشت.</string>
