@@ -49,6 +49,7 @@ object FontHelper {
 
     fun init(context: Context) {
         FontLibrary.loadStorage(context)
+        VazirmatnHelper.applyAsDefaultOnce(context)
         validateActiveAppFont()
         validateMonoFont()
 
