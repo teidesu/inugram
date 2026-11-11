@@ -449,3 +449,4 @@ bugfix/bottom-bar-ripple-origin.patch
 feature/persistent-connection.patch
 bugfix/tgnet-push-reconnect-backoff.patch
 bugfix/tgnet-push-reconnect-delays.patch
+feature/persistent-connection-heartbeat.patch

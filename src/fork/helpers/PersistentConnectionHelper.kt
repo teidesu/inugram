@@ -1,6 +1,7 @@
 package desu.inugram.helpers
 
 import android.app.ActivityManager
+import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -14,6 +15,7 @@ import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -23,6 +25,7 @@ import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
 import desu.inugram.InuConfig
 import org.telegram.messenger.AndroidUtilities
+import org.telegram.messenger.AppStartReceiver
 import org.telegram.messenger.ApplicationLoader
 import org.telegram.messenger.BuildVars
 import org.telegram.messenger.FileLog
@@ -49,9 +52,18 @@ object PersistentConnectionHelper {
     private const val NOTIFICATION_ID = 0x1e7a
     private const val PUSH_WAKELOCK_TIMEOUT_MS = 60_000L
     private const val BATTERY_REQUEST_DELAY_MS = 1500L
+    private const val HEARTBEAT_ACTION = "desu.inugram.PUSH_HEARTBEAT"
+    // the server keeps a push connection for 7 minutes after a ping, but xray and similar proxies silently drop a
+    // connection idle for 5. Counted from the pong, so a round 5 minutes would always come too late
+    private const val HEARTBEAT_INTERVAL_MS = 270_000L
+    // outlasts INU_PUSH_PROBE_TIMEOUT in tgnet (5 s); the most awake time an unanswered ping costs
+    private const val PING_WAKELOCK_TIMEOUT_MS = 7_000L
 
     private val lock = Any()
     private var pushWakeLock: PowerManager.WakeLock? = null
+    private var pingWakeLock: PowerManager.WakeLock? = null
+    private val pingsPending = HashSet<Int>()
+    private val lastPong = LongArray(UserConfig.MAX_ACCOUNT_COUNT)
     private var inForeground = false
     private var batteryRequestPending = false
     @Volatile private var unregisterPending = false
@@ -123,7 +135,10 @@ object PersistentConnectionHelper {
 
     @JvmStatic
     fun onServiceCreate(service: Service) {
-        if (enabled) applyStockPush(true)
+        if (enabled) {
+            applyStockPush(true)
+            synchronized(lock) { scheduleHeartbeat() }
+        }
         enterForeground(service, "create", 0)
     }
 
@@ -166,6 +181,10 @@ object PersistentConnectionHelper {
     /** `AppStartReceiver`: true when stock should run `startPushService` for this intent, as it does on boot. */
     @JvmStatic
     fun onStartReceiver(intent: Intent): Boolean {
+        if (HEARTBEAT_ACTION == intent.action) {
+            onHeartbeat()
+            return false
+        }
         log { "start receiver: ${intent.action}" }
         // after an update the service is gone until the app is opened; MY_PACKAGE_REPLACED may start it from background
         return enabled && Intent.ACTION_MY_PACKAGE_REPLACED == intent.action
@@ -205,6 +224,94 @@ object PersistentConnectionHelper {
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, tag)
             .apply { setReferenceCounted(false) }
 
+    /**
+     * tgnet, on an account's network thread: a push ping was sent, or its answer arrived. The device is kept awake in
+     * between: a sleeping phone is up for a fraction of a second, too short for the answer. Returns whether it is
+     * kept awake, which lets tgnet ask a connection after a sleep instead of replacing it outright.
+     */
+    @JvmStatic
+    fun onPushPing(account: Int, answered: Boolean): Boolean {
+        try {
+            if (!enabled) return false
+            synchronized(lock) {
+                val wakeLock = pingWakeLock ?: newWakeLock("inugram:ping").also { pingWakeLock = it }
+                if (answered) {
+                    lastPong[account] = SystemClock.elapsedRealtime()
+                    scheduleHeartbeat()
+                    pingsPending.remove(account)
+                    if (pingsPending.isEmpty() && wakeLock.isHeld) wakeLock.release()
+                } else {
+                    // once the lock has timed out, an account that never answered must not hold it for the others
+                    if (!wakeLock.isHeld) pingsPending.clear()
+                    pingsPending.add(account)
+                    wakeLock.acquire(PING_WAKELOCK_TIMEOUT_MS)
+                }
+            }
+            return true
+        } catch (e: Exception) {
+            // nothing may be thrown into tgnet
+            Log.d(TAG, "push ping", e)
+            return false
+        }
+    }
+
+    private fun heartbeatIntent(context: Context): PendingIntent = PendingIntent.getBroadcast(
+        context,
+        0,
+        Intent(HEARTBEAT_ACTION).setClass(context, AppStartReceiver::class.java),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+
+    /**
+     * tgnet pings the push connection every 3 minutes, but only while the CPU runs: asleep, the connection goes
+     * unpinged until the server or a proxy on the way drops it, and nothing tells the phone. The alarm sits where the
+     * account pinged longest ago runs out of time, and every answered ping moves it away. Waking up is all it does:
+     * tgnet's loop resumes with the device and pings by itself. Called with [lock] held.
+     */
+    private fun scheduleHeartbeat() {
+        val context = ApplicationLoader.applicationContext
+        val alarms = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val oldest = lastPong.filter { it != 0L }.minOrNull() ?: SystemClock.elapsedRealtime()
+        val at = oldest + HEARTBEAT_INTERVAL_MS
+        try {
+            // exact, because the system may hold an inexact alarm back for minutes. An app exempt from battery
+            // optimisation needs no permission for it; without the exemption Android 12+ throws
+            alarms.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, at, heartbeatIntent(context))
+        } catch (e: SecurityException) {
+            alarms.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, at, heartbeatIntent(context))
+        }
+    }
+
+    /**
+     * An account silent for the whole interval is forgotten until it answers again, or it would pin the alarm to the
+     * past. The alarm itself is always set again, so an unreachable server gets one attempt per interval.
+     */
+    private fun onHeartbeat() {
+        // left over from before the mode was turned off
+        if (!enabled) return
+        var silent = 0
+        synchronized(lock) {
+            val now = SystemClock.elapsedRealtime()
+            for (a in lastPong.indices) {
+                if (lastPong[a] != 0L && now - lastPong[a] >= HEARTBEAT_INTERVAL_MS) {
+                    lastPong[a] = 0
+                    silent++
+                }
+            }
+            scheduleHeartbeat()
+        }
+        log { "heartbeat alarm, accounts due: $silent" }
+    }
+
+    private fun cancelHeartbeat() {
+        synchronized(lock) {
+            lastPong.fill(0)
+            pingsPending.clear()
+            val context = ApplicationLoader.applicationContext
+            (context.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(heartbeatIntent(context))
+        }
+    }
+
     @JvmStatic
     fun onConfigChanged() {
         if (enabled || InuConfig.PERSISTENT_CONNECTION_STOCK_PUSH_FORCED.value) applyStockPush(enabled)
@@ -212,7 +319,9 @@ object PersistentConnectionHelper {
         ApplicationLoader.startPushService()
         if (enabled) {
             dropFcmToken()
+            synchronized(lock) { scheduleHeartbeat() }
         } else {
+            cancelHeartbeat()
             // the token is about to be registered again, nothing left to unregister
             InuConfig.PERSISTENT_CONNECTION_FCM_TOKEN_TO_DROP.value = ""
             // back to FCM: stock asks for a token only at app start. Asked even when a token is still around: a

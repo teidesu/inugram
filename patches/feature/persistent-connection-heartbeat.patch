@@ -1,0 +1,169 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: dreamer <353556243+dreamer4202@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 19:15:05 +0300
+Subject: persistent connection: add a wake-up alarm that keeps the connection alive while the device sleeps
+
+---
+ TMessagesProj/jni/TgNetWrapper.cpp            |  9 +++++++
+ .../jni/tgnet/ConnectionsManager.cpp          | 26 +++++++++++++++++--
+ TMessagesProj/jni/tgnet/ConnectionsManager.h  |  2 ++
+ TMessagesProj/jni/tgnet/Defines.h             |  3 +++
+ .../telegram/tgnet/ConnectionsManager.java    |  5 ++++
+ 5 files changed, 43 insertions(+), 2 deletions(-)
+
+diff --git a/TMessagesProj/jni/TgNetWrapper.cpp b/TMessagesProj/jni/TgNetWrapper.cpp
+index 0000000..0000000 100644
+--- a/TMessagesProj/jni/TgNetWrapper.cpp
++++ b/TMessagesProj/jni/TgNetWrapper.cpp
+@@ -29,6 +29,7 @@ jmethodID jclass_ConnectionsManager_onSessionCreated;
+ jmethodID jclass_ConnectionsManager_onLogout;
+ jmethodID jclass_ConnectionsManager_onConnectionStateChanged;
+ jmethodID jclass_ConnectionsManager_onInternalPushReceived;
++jmethodID jclass_ConnectionsManager_inu_onPushPing;
+ jmethodID jclass_ConnectionsManager_onUpdateConfig;
+ jmethodID jclass_ConnectionsManager_onBytesSent;
+ jmethodID jclass_ConnectionsManager_onBytesReceived;
+@@ -365,6 +366,10 @@ class Delegate : public ConnectiosManagerDelegate {
+         jniEnv[instanceNum]->CallStaticVoidMethod(jclass_ConnectionsManager, jclass_ConnectionsManager_onInternalPushReceived, instanceNum);
+     }
+ 
++    bool inu_onPushPing(int32_t instanceNum, bool answered) {
++        return jniEnv[instanceNum]->CallStaticBooleanMethod(jclass_ConnectionsManager, jclass_ConnectionsManager_inu_onPushPing, instanceNum, (jboolean) answered) == JNI_TRUE;
++    }
++
+     void onBytesReceived(int32_t amount, int32_t networkType, int32_t instanceNum) {
+         jniEnv[instanceNum]->CallStaticVoidMethod(jclass_ConnectionsManager, jclass_ConnectionsManager_onBytesReceived, amount, networkType, instanceNum);
+     }
+@@ -656,6 +661,10 @@ extern "C" int registerNativeTgNetFunctions(JavaVM *vm, JNIEnv *env) {
+     if (jclass_ConnectionsManager_onInternalPushReceived == 0) {
+         return JNI_FALSE;
+     }
++    jclass_ConnectionsManager_inu_onPushPing = env->GetStaticMethodID(jclass_ConnectionsManager, "inu_onPushPing", "(IZ)Z");
++    if (jclass_ConnectionsManager_inu_onPushPing == 0) {
++        return JNI_FALSE;
++    }
+     jclass_ConnectionsManager_onUpdateConfig = env->GetStaticMethodID(jclass_ConnectionsManager, "onUpdateConfig", "(JI)V");
+     if (jclass_ConnectionsManager_onUpdateConfig == 0) {
+         return JNI_FALSE;
+diff --git a/TMessagesProj/jni/tgnet/ConnectionsManager.cpp b/TMessagesProj/jni/tgnet/ConnectionsManager.cpp
+index 0000000..0000000 100644
+--- a/TMessagesProj/jni/tgnet/ConnectionsManager.cpp
++++ b/TMessagesProj/jni/tgnet/ConnectionsManager.cpp
+@@ -183,7 +183,7 @@ int ConnectionsManager::callEvents(int64_t now) {
+     if (!networkPaused) {
+         return 1000;
+     }
+-    auto timeToPushPing = (int32_t) ((sendingPushPing ? 30000 : nextPingTimeOffset) - llabs(now - lastPushPingTime));
++    auto timeToPushPing = (int32_t) ((sendingPushPing ? inu_pushPingTimeout : nextPingTimeOffset) - llabs(now - lastPushPingTime));
+     if (timeToPushPing <= 0) {
+         // an overdue push ping is handled right after the wait and cannot stay overdue: don't sleep on it for a second,
+         // a device woken by the closing connection is back asleep sooner than that
+@@ -231,7 +231,18 @@ void ConnectionsManager::select() {
+ 
+     Datacenter *datacenter = getDatacenterWithId(currentDatacenterId);
+     if (pushConnectionEnabled) {
+-        if ((sendingPushPing && llabs(now - lastPushPingTime) >= 30000) || llabs(now - lastPushPingTime) >= nextPingTimeOffset + 10000) {
++        // after a sleep, a connection the server may still be holding is asked with a short deadline before it is
++        // replaced: only while Java keeps the device awake for the answer, and never after a failure
++        if (inu_pushProbe && !sendingPushPing && inu_pushReconnectDelay == 0 && datacenter != nullptr
++                && llabs(now - lastPushPingTime) >= nextPingTimeOffset + 10000 && llabs(now - lastPushPingTime) < INU_PUSH_SERVER_KEEP_TIME) {
++            Connection *connection = datacenter->getPushConnection(false);
++            if (connection != nullptr && !connection->isDisconnected()) {
++                if (LOGS_ENABLED) DEBUG_D("push ping overdue after sleep, asking the connection");
++                inu_pushPingTimeout = INU_PUSH_PROBE_TIMEOUT;
++                lastPushPingTime = now - nextPingTimeOffset;
++            }
++        }
++        if ((sendingPushPing && llabs(now - lastPushPingTime) >= inu_pushPingTimeout) || llabs(now - lastPushPingTime) >= nextPingTimeOffset + 10000) {
+             // a whole ping interval without this loop running means the device slept, not that the server failed to answer
+             bool inu_slept = llabs(now - lastPushPingTime) >= nextPingTimeOffset + 10000;
+             // the first failure of a connection that had answered, or one the device slept on, is retried at once
+@@ -247,6 +258,7 @@ void ConnectionsManager::select() {
+             // suspendConnection() reports the close to onConnectionClosed twice: put back what a single failure costs
+             lastPushPingTime = now - nextPingTimeOffset + inu_delay;
+             inu_pushReconnectDelay = inu_delay == 0 ? 4000 : std::min(inu_delay * 2, 180000);
++            inu_pushPingTimeout = 30000;
+             if (LOGS_ENABLED) DEBUG_D("push ping timeout%s, reconnecting in %d ms", inu_slept ? " after sleep" : "", inu_delay);
+         }
+         if (llabs(now - lastPushPingTime) >= nextPingTimeOffset) {
+@@ -775,6 +787,7 @@ void ConnectionsManager::onConnectionClosed(Connection *connection, int reason)
+     } else if (connection->getConnectionType() == ConnectionTypePush) {
+         if (LOGS_ENABLED) DEBUG_D("connection(%p) push connection closed", connection);
+         sendingPushPing = false;
++        inu_pushPingTimeout = 30000;
+         lastPushPingTime = getCurrentTimeMonotonicMillis() - nextPingTimeOffset + inu_pushReconnectDelay;
+         // every failed attempt doubles the wait instead of retrying every 4 seconds. The cap has to stay under two ping
+         // intervals: the checks take llabs() of a ping time that is then in the future, and would fire at once
+@@ -1207,6 +1220,10 @@ void ConnectionsManager::processServerResponse(TLObject *message, int64_t messag
+             sendingPushPing = false;
+             // a working connection: reconnect at once if it goes away, then back off
+             inu_pushReconnectDelay = 0;
++            inu_pushPingTimeout = 30000;
++            if (delegate != nullptr) {
++                delegate->inu_onPushPing(instanceNum, true);
++            }
+         } else {
+             auto response = (TL_pong *) message;
+             if (response->ping_id >= 2000000) {
+@@ -1869,6 +1886,11 @@ void ConnectionsManager::sendPing(Datacenter *datacenter, bool usePushConnection
+     if (usePushConnection) {
+         if (LOGS_ENABLED) DEBUG_D("dc%d send ping to push connection", datacenter->getDatacenterId());
+         sendingPushPing = true;
++        // Java keeps the device awake for the answer, and only then may a connection be asked after a sleep. Not for
++        // retries that are already backing off, nor without a network: a phone that can't connect has to sleep
++        if (delegate != nullptr && networkAvailable && inu_pushReconnectDelay <= 4000) {
++            inu_pushProbe = delegate->inu_onPushPing(instanceNum, false);
++        }
+     } else {
+         sendingPing = true;
+     }
+diff --git a/TMessagesProj/jni/tgnet/ConnectionsManager.h b/TMessagesProj/jni/tgnet/ConnectionsManager.h
+index 0000000..0000000 100644
+--- a/TMessagesProj/jni/tgnet/ConnectionsManager.h
++++ b/TMessagesProj/jni/tgnet/ConnectionsManager.h
+@@ -164,6 +164,8 @@ private:
+     int64_t sendingPushPingTime = 0;
+     bool sendingPushPing = false;
+     int32_t inu_pushReconnectDelay = 4000;
++    int32_t inu_pushPingTimeout = 30000;
++    bool inu_pushProbe = false;
+     bool sendingPing = false;
+     bool updatingDcSettings = false;
+     bool updatingDcSettingsAgain = false;
+diff --git a/TMessagesProj/jni/tgnet/Defines.h b/TMessagesProj/jni/tgnet/Defines.h
+index 0000000..0000000 100644
+--- a/TMessagesProj/jni/tgnet/Defines.h
++++ b/TMessagesProj/jni/tgnet/Defines.h
+@@ -29,6 +29,8 @@
+ #define UPLOAD_CONNECTIONS_COUNT 8
+ #define CONNECTION_BACKGROUND_KEEP_TIME 10000
+ #define INU_CONNECTION_BACKGROUND_PENDING_KEEP_TIME 120000
++#define INU_PUSH_PROBE_TIMEOUT 5000
++#define INU_PUSH_SERVER_KEEP_TIME ((60 * 7 - 15) * 1000)
+ #define MAX_ACCOUNT_COUNT 8
+ #define USE_DELEGATE_HOST_RESOLVE
+ 
+@@ -149,6 +151,7 @@ typedef struct ConnectiosManagerDelegate {
+     virtual void onLogout(int32_t instanceNum) = 0;
+     virtual void onUpdateConfig(TL_config *config, int32_t instanceNum) = 0;
+     virtual void onInternalPushReceived(int32_t instanceNum) = 0;
++    virtual bool inu_onPushPing(int32_t instanceNum, bool answered) = 0;
+     virtual void onBytesSent(int32_t amount, int32_t networkType, int32_t instanceNum) = 0;
+     virtual void onBytesReceived(int32_t amount, int32_t networkType, int32_t instanceNum) = 0;
+     virtual void onRequestNewServerIpAndPort(int32_t second, int32_t instanceNum) = 0;
+diff --git a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java b/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
++++ b/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
+@@ -988,6 +988,11 @@ public class ConnectionsManager extends BaseController {
+         KeepAliveJob.startJob();
+     }
+ 
++    @Keep
++    public static boolean inu_onPushPing(int currentAccount, boolean answered) {
++        return desu.inugram.helpers.PersistentConnectionHelper.onPushPing(currentAccount, answered);
++    }
++
+     public static void setProxySettings(boolean enabled, ProxySettings settings) {
+         String address = "";
+         int port = 0;
