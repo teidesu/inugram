@@ -108,7 +108,7 @@ index 0000000..0000000 100644
      private void fetchFolderInLoadedPinnedDialogs(TLRPC.TL_messages_peerDialogs res) {
          for (int a = 0, N = res.dialogs.size(); a < N; a++) {
              TLRPC.Dialog dialog = res.dialogs.get(a);
-@@ -17843,6 +17923,9 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -17872,6 +17952,9 @@ public class MessagesController extends BaseController implements NotificationCe
              }
          }
          getMessagesStorage().setDialogPinned(dialogId, dialog.pinnedNum);
@@ -118,7 +118,7 @@ index 0000000..0000000 100644
          return true;
      }
  
-@@ -23121,7 +23204,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -23152,7 +23235,7 @@ public class MessagesController extends BaseController implements NotificationCe
                          }
                      }
                      if (maxDate > Integer.MIN_VALUE) {
@@ -131,7 +131,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
-@@ -18267,6 +18267,33 @@ public class MessagesStorage extends BaseController {
+@@ -18346,6 +18346,33 @@ public class MessagesStorage extends BaseController {
          });
      }
  

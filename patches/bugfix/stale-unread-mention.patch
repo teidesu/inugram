@@ -4,9 +4,9 @@ Date: Fri, 6 Nov 2026 22:06:02 +0400
 Subject: fix stale unread mention from breaking "jump to mention" button
 
 ---
- .../telegram/messenger/MessagesStorage.java   | 37 ++++++++++++++++---
- .../java/org/telegram/ui/ChatActivity.java    |  2 +-
- 2 files changed, 32 insertions(+), 7 deletions(-)
+ .../telegram/messenger/MessagesStorage.java   | 116 +++++++++++++++++-
+ .../java/org/telegram/ui/ChatActivity.java    |   2 +-
+ 2 files changed, 111 insertions(+), 7 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
 index 0000000..0000000 100644
@@ -42,7 +42,92 @@ index 0000000..0000000 100644
                      }
                      cursor.dispose();
                      cursor = null;
-@@ -6363,6 +6371,7 @@ public class MessagesStorage extends BaseController {
+@@ -6006,6 +6014,84 @@ public class MessagesStorage extends BaseController {
+         });
+     }
+ 
++    private void inu_applyOverwrittenMentionReads(ArrayList<TLRPC.Message> messages) throws Exception {
++        LongSparseArray<ArrayList<Integer>> readMentions = new LongSparseArray<>();
++        for (int a = 0; a < messages.size(); a++) {
++            TLRPC.Message message = messages.get(a);
++            if (message == null || !message.mentioned || message.media_unread || MessageObject.isOut(message)) {
++                continue;
++            }
++            ArrayList<Integer> ids = readMentions.get(message.dialog_id);
++            if (ids == null) {
++                ids = new ArrayList<>();
++                readMentions.put(message.dialog_id, ids);
++            }
++            ids.add(message.id);
++        }
++        if (readMentions.size() == 0) {
++            return;
++        }
++        LongSparseIntArray counts = new LongSparseIntArray();
++        LongSparseIntArray clearedCounts = new LongSparseIntArray();
++        ArrayList<long[]> topicReads = new ArrayList<>();
++        SQLiteCursor cursor = null;
++        try {
++            for (int b = 0; b < readMentions.size(); b++) {
++                long did = readMentions.keyAt(b);
++                String ids = TextUtils.join(",", readMentions.valueAt(b));
++                cursor = database.queryFinalized(String.format(Locale.US, "SELECT COUNT(*) FROM messages_v2 WHERE uid = %d AND mid IN(%s) AND mention = 1 AND read_state < 2 AND out = 0", did, ids));
++                int read = cursor.next() ? cursor.intValue(0) : 0;
++                cursor.dispose();
++                cursor = null;
++                if (read > 0) {
++                    cursor = database.queryFinalized("SELECT unread_count_i FROM dialogs WHERE did = " + did);
++                    if (cursor.next() && cursor.intValue(0) > 0) {
++                        int count = Math.max(0, cursor.intValue(0) - read);
++                        counts.put(did, count);
++                        if (count == 0) {
++                            clearedCounts.put(did, 0);
++                        }
++                    }
++                    cursor.dispose();
++                    cursor = null;
++                }
++                cursor = database.queryFinalized(String.format(Locale.US, "SELECT topic_id, COUNT(*) FROM messages_topics WHERE uid = %d AND mid IN(%s) AND mention = 1 AND read_state < 2 AND out = 0 GROUP BY topic_id", did, ids));
++                while (cursor.next()) {
++                    topicReads.add(new long[]{did, cursor.longValue(0), cursor.intValue(1)});
++                }
++                cursor.dispose();
++                cursor = null;
++            }
++            for (int a = 0; a < counts.size(); a++) {
++                database.executeFast(String.format(Locale.US, "UPDATE dialogs SET unread_count_i = %d WHERE did = %d", counts.valueAt(a), counts.keyAt(a))).stepThis().dispose();
++                if (desu.inugram.helpers.DebugLogUtils.isEnabled()) {
++                    FileLog.d("InuMn db overwritten mention read did=" + counts.keyAt(a) + " count=" + counts.valueAt(a));
++                }
++            }
++            for (int a = 0; a < topicReads.size(); a++) {
++                long[] topicRead = topicReads.get(a);
++                cursor = database.queryFinalized(String.format(Locale.US, "SELECT unread_mentions FROM topics WHERE did = %d AND topic_id = %d", topicRead[0], topicRead[1]));
++                if (cursor.next()) {
++                    int count = (int) Math.max(0, cursor.intValue(0) - topicRead[2]);
++                    database.executeFast(String.format(Locale.US, "UPDATE topics SET unread_mentions = %d WHERE did = %d AND topic_id = %d", count, topicRead[0], topicRead[1])).stepThis().dispose();
++                    getMessagesController().getTopicsController().updateMentionsUnread(topicRead[0], topicRead[1], count);
++                }
++                cursor.dispose();
++                cursor = null;
++            }
++        } finally {
++            if (cursor != null) {
++                cursor.dispose();
++            }
++        }
++        if (clearedCounts.size() > 0) {
++            updateFiltersReadCounter(null, clearedCounts, true);
++        }
++        if (counts.size() > 0) {
++            getMessagesController().processDialogsUpdateRead(null, counts);
++        }
++    }
++
+     public void markMessageAsMention(long dialogId, int mid) {
+         storageQueue.postRunnable(() -> {
+             try {
+@@ -6363,6 +6449,7 @@ public class MessagesStorage extends BaseController {
                  if (idx1 == 1) {
                      archivedDialogs.put(user.id, true);
                  }
@@ -50,7 +135,7 @@ index 0000000..0000000 100644
                  if (isUserCollapsedInCommunity(chatsDict, user)) {
                      communities[idx1][idx2]++;
                  } else if (user.bot) {
-@@ -6372,6 +6381,7 @@ public class MessagesStorage extends BaseController {
+@@ -6372,6 +6459,7 @@ public class MessagesStorage extends BaseController {
                  } else {
                      nonContacts[idx1][idx2]++;
                  }
@@ -58,7 +143,7 @@ index 0000000..0000000 100644
                  usersDict.put(user.id, user);
              }
          }
-@@ -9060,17 +9070,17 @@ public class MessagesStorage extends BaseController {
+@@ -9060,17 +9148,17 @@ public class MessagesStorage extends BaseController {
          return result[0];
      }
  
@@ -80,7 +165,15 @@ index 0000000..0000000 100644
                      result = cursor.intValue(0);
                  } else {
                      result = 0;
-@@ -16554,6 +16564,21 @@ public class MessagesStorage extends BaseController {
+@@ -12716,6 +12804,7 @@ public class MessagesStorage extends BaseController {
+                     }
+                 }
+ 
++                inu_applyOverwrittenMentionReads(messages);
+                 if (!messageIdsMap.isEmpty()) {
+                     for (int b = 0, N2 = messageIdsMap.size(); b < N2; b++) {
+                         long dialogId = messageIdsMap.keyAt(b);
+@@ -16554,6 +16643,21 @@ public class MessagesStorage extends BaseController {
                                          }
                                      }
                                  }
