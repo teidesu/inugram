@@ -1354,11 +1354,18 @@ object ChatHelper {
     @JvmStatic
     fun maybeHandleFileClick(fragment: BaseFragment, message: MessageObject): Boolean {
         val name = message.documentName ?: return false
-        return maybeHandleFile(fragment, name, message.mimeType) {
-            message.messageOwner?.attachPath?.takeIf { it.isNotEmpty() }?.let { File(it) }?.takeIf { it.exists() }
-                ?: FileLoader.getInstance(fragment.currentAccount).getPathToMessage(message.messageOwner)
+        val fontAlbum = (fragment as? ChatActivity)?.getValidGroupedMessage(message)?.messages
+            ?.filter { it.documentName?.let(FontImportHelper::isFontFileName) == true }
+            ?.takeIf { it.size > 1 }
+            .orEmpty()
+        return maybeHandleFile(fragment, name, message.mimeType, fontAlbum) {
+            getMessageFile(fragment.currentAccount, message)
         }
     }
+
+    fun getMessageFile(account: Int, message: MessageObject): File? =
+        message.messageOwner?.attachPath?.takeIf { it.isNotEmpty() }?.let { File(it) }?.takeIf { it.exists() }
+            ?: FileLoader.getInstance(account).getPathToMessage(message.messageOwner)?.takeIf { it.exists() }
 
     @JvmStatic
     fun maybeHandleRichDocumentClick(document: TLRPC.Document, file: File): Boolean {
@@ -1366,7 +1373,13 @@ object ChatHelper {
         return maybeHandleFile(fragment, FileLoader.getDocumentFileName(document), document.mime_type) { file }
     }
 
-    private fun maybeHandleFile(fragment: BaseFragment, name: String, mimeType: String?, resolveFile: () -> File?): Boolean {
+    private fun maybeHandleFile(
+        fragment: BaseFragment,
+        name: String,
+        mimeType: String?,
+        fontAlbum: List<MessageObject> = emptyList(),
+        resolveFile: () -> File?,
+    ): Boolean {
         val isSettings = name.endsWith(SettingsBackupHelper.FILENAME_SUFFIX)
         val isPlugin = !isSettings && name.endsWith(".inu.js", ignoreCase = true)
         val isFont = !isSettings && !isPlugin && FontImportHelper.isFontFileName(name)
@@ -1390,7 +1403,7 @@ object ChatHelper {
                 R.string.InuPluginsOpenSettings,
             ) { AboutActivity() }
             // #endif
-            else -> FontImportHelper.startImportFromFile(fragment, file, name, mimeType)
+            else -> FontImportHelper.startImportFromFile(fragment, file, name, mimeType, fontAlbum)
         }
         return true
     }

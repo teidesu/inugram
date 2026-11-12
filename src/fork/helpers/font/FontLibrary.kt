@@ -2,6 +2,7 @@ package desu.inugram.helpers.font
 
 import android.content.Context
 import android.graphics.Paint
+import android.graphics.Rect
 import android.graphics.Typeface
 import android.graphics.fonts.Font
 import android.graphics.fonts.FontStyle
@@ -79,7 +80,8 @@ object FontLibrary {
             val cacheKey = "$targetWeight/$targetItalic"
             cache[cacheKey]?.let { return it }
 
-            val pick = pickBestFace(targetWeight, targetItalic) ?: return null
+            val weight = getEffectiveWeight(targetWeight, targetItalic)
+            val pick = pickBestFace(weight, targetItalic) ?: return null
             val file = faceFile(pick)
             if (!file.isFile) {
                 FileLog.d("$TAG: resolve: face file missing: ${file.absolutePath} (family=$id)")
@@ -89,8 +91,7 @@ object FontLibrary {
             val base: Typeface = try {
                 val builder = Typeface.Builder(file).setTtcIndex(pick.ttcIndex)
                 if (pick.variable && pick.wghtMin != pick.wghtMax) {
-                    val w = targetWeight.coerceIn(pick.wghtMin, pick.wghtMax)
-                    builder.setFontVariationSettings("'wght' $w")
+                    builder.setFontVariationSettings("'wght' ${weight.coerceIn(pick.wghtMin, pick.wghtMax)}")
                 }
                 builder.build()
             } catch (e: Throwable) {
@@ -103,15 +104,15 @@ object FontLibrary {
 
             // synthesize italic / weight tweaks when the picked face doesn't match exactly
             val needSynth = (targetItalic && !pick.italic) ||
-                (!pick.variable && pick.weight != targetWeight)
+                (!pick.variable && pick.weight != weight)
             // Telegram's "bold" is Medium (500); Typeface.create(weight) only emboldens at a large delta,
             // so a font whose heaviest face is lighter than the request would render bold ≈ regular. The
             // style API fake-bolds reliably — use it when an emphasis weight (≥500) can't be satisfied.
-            val fakeBold = !pick.variable && targetWeight >= 500 && pick.weight < targetWeight
+            val fakeBold = !pick.variable && weight >= 500 && pick.weight < weight
             val finalTf = if (needSynth && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 try {
                     if (fakeBold) Typeface.create(base, if (targetItalic) Typeface.BOLD_ITALIC else Typeface.BOLD)
-                    else Typeface.create(base, targetWeight, targetItalic)
+                    else Typeface.create(base, weight, targetItalic)
                 } catch (_: Throwable) {
                     base
                 }
@@ -121,9 +122,30 @@ object FontLibrary {
             return finalTf
         }
 
+        private fun getFacePool(italic: Boolean): List<Face> = faces.filter { it.italic == italic }.ifEmpty { faces }
+
+        private fun getRenderedWeight(face: Face, weight: Int): Int =
+            if (face.variable) weight.coerceIn(face.wghtMin, face.wghtMax) else face.weight
+
+        /**
+         * Emphasis (≥500) must render heavier than regular text. Weight matching alone fails that when
+         * the lightest face is already ≥500 (e.g. Medium + Bold packs): both 400 and 500 land on Medium.
+         */
+        private fun getEffectiveWeight(targetWeight: Int, targetItalic: Boolean): Int {
+            if (targetWeight < 500) return targetWeight
+            val regular = pickBestFace(400, targetItalic) ?: return targetWeight
+            val regularWeight = getRenderedWeight(regular, 400)
+            val pick = pickBestFace(targetWeight, targetItalic) ?: return targetWeight
+            if (getRenderedWeight(pick, targetWeight) > regularWeight) return targetWeight
+            val bumped = regularWeight + (targetWeight - 400)
+            return getFacePool(targetItalic)
+                .filter { (if (it.variable) it.wghtMax else it.weight) > regularWeight }
+                .minOfOrNull { getRenderedWeight(it, bumped) }
+                ?: bumped
+        }
+
         private fun pickBestFace(targetWeight: Int, targetItalic: Boolean): Face? {
-            val sameItalic = faces.filter { it.italic == targetItalic }
-            val pool = sameItalic.ifEmpty { faces }
+            val pool = getFacePool(targetItalic)
             if (pool.isEmpty()) return null
 
             pool.firstOrNull { it.variable && targetWeight in it.wghtMin..it.wghtMax }
@@ -193,7 +215,8 @@ object FontLibrary {
         @RequiresApi(Build.VERSION_CODES.Q)
         @Synchronized
         fun fontFor(targetWeight: Int, targetItalic: Boolean): Font? {
-            val pick = pickBestFace(targetWeight, targetItalic) ?: return null
+            val weight = getEffectiveWeight(targetWeight, targetItalic)
+            val pick = pickBestFace(weight, targetItalic) ?: return null
             val file = faceFile(pick)
             if (!file.isFile) {
                 FileLog.d("$TAG: fontFor: face file missing: ${file.absolutePath} (family=$id)")
@@ -202,7 +225,7 @@ object FontLibrary {
             return try {
                 val b = Font.Builder(file).setTtcIndex(pick.ttcIndex)
                 if (pick.variable && pick.wghtMin != pick.wghtMax) {
-                    b.setFontVariationSettings("'wght' ${targetWeight.coerceIn(pick.wghtMin, pick.wghtMax)}")
+                    b.setFontVariationSettings("'wght' ${weight.coerceIn(pick.wghtMin, pick.wghtMax)}")
                 }
                 b.setWeight(targetWeight.coerceIn(1, 1000))
                 b.setSlant(if (targetItalic) FontStyle.FONT_SLANT_ITALIC else FontStyle.FONT_SLANT_UPRIGHT)
@@ -213,9 +236,10 @@ object FontLibrary {
             }
         }
 
-        /** True if no face reaches [weight] (so emphasis at that weight must be synthesized). */
+        /** True if no face reaches [targetWeight] (so emphasis at that weight must be synthesized). */
         @Synchronized
-        fun lacksWeight(weight: Int, italic: Boolean): Boolean {
+        fun lacksWeight(targetWeight: Int, italic: Boolean): Boolean {
+            val weight = getEffectiveWeight(targetWeight, italic)
             val pick = pickBestFace(weight, italic) ?: return false
             if (pick.variable && weight in pick.wghtMin..pick.wghtMax) return false
             return pick.weight < weight
@@ -370,7 +394,9 @@ object FontLibrary {
     /**
      * Some Google Fonts downloads (notably Google Sans variable) carry a reasonable line box but a wildly
      * oversized safety bbox/win box. Android can let those outer boxes leak into text metrics, which shifts
-     * Telegram text and makes emoji spans huge. Replace pathological vertical metrics with stock UI ratios.
+     * Telegram text and makes emoji spans huge. Others (e.g. Gilroy) put the cap height almost at the top of
+     * the line box, so text centered by Telegram looks shifted up. Replace such vertical metrics with stock
+     * UI ratios scaled by cap height.
      */
     private fun normalizeVerticalMetrics(file: File) {
         try {
@@ -455,18 +481,34 @@ object FontLibrary {
             (hheaAsc <= 0 || hheaDescAbs <= 0 || hheaTotal > typoTotal * 3 / 2 || hheaDescAbs > typoDescAbs * 2)
         val headDescAbs = -headYMin
         val shouldNormalizeHeadBox = headDescAbs > typoDescAbs * 2 || headYMax > typoAsc * 3 / 2
-        if (!shouldNormalizeWinBox && !shouldNormalizeLineBox && !shouldNormalizeHeadBox) return false
         if (unitsPerEm <= 0) return false
 
-        val stockMetrics = Paint().apply {
+        val capHeight = if (os2Version >= 2 && os2Table.length >= 90) {
+            raf.seek(os2Table.offset.toLong() + 88)
+            raf.readShort().toInt()
+        } else 0
+        val stockPaint = Paint().apply {
             typeface = FontHelper.stockDefault
             textSize = unitsPerEm.toFloat()
-        }.fontMetrics
-        val targetAsc = (-stockMetrics.ascent).roundToInt().coerceIn(1, Short.MAX_VALUE.toInt())
-        val targetDesc = stockMetrics.descent.roundToInt().coerceIn(1, Short.MAX_VALUE.toInt())
-        val targetGap = stockMetrics.leading.roundToInt().coerceIn(0, Short.MAX_VALUE.toInt())
-        val targetTop = (-stockMetrics.top).roundToInt().coerceIn(targetAsc, Short.MAX_VALUE.toInt())
-        val targetBottom = stockMetrics.bottom.roundToInt().coerceIn(targetDesc, Short.MAX_VALUE.toInt())
+        }
+        val stockMetrics = stockPaint.fontMetrics
+        val stockCapHeight = Rect().also { stockPaint.getTextBounds("H", 0, 1, it) }.let { -it.top }
+        val scale = if (capHeight > 0 && stockCapHeight > 0) capHeight.toFloat() / stockCapHeight else 1f
+        val targetAsc = (-stockMetrics.ascent * scale).roundToInt().coerceIn(1, Short.MAX_VALUE.toInt())
+        val targetDesc = (stockMetrics.descent * scale).roundToInt().coerceIn(1, Short.MAX_VALUE.toInt())
+        val targetGap = (stockMetrics.leading * scale).roundToInt().coerceIn(0, Short.MAX_VALUE.toInt())
+        val targetTop = (-stockMetrics.top * scale).roundToInt().coerceIn(targetAsc, Short.MAX_VALUE.toInt())
+        val targetBottom = (stockMetrics.bottom * scale).roundToInt().coerceIn(targetDesc, Short.MAX_VALUE.toInt())
+
+        val lineAsc = if (hheaTable != null) hheaAsc else typoAsc
+        val lineDesc = if (hheaTable != null) hheaDescAbs else typoDescAbs
+        // a line box taller above the caps than stock is normal for fonts sized for taller scripts (CJK)
+        val capShift = (lineAsc - lineDesc) - (targetAsc - targetDesc)
+        val shouldNormalizeCapPosition = capHeight > 0 && capShift < -unitsPerEm * 6 / 100
+
+        if (!shouldNormalizeWinBox && !shouldNormalizeLineBox && !shouldNormalizeHeadBox && !shouldNormalizeCapPosition) {
+            return false
+        }
         var changed = false
         var os2Changed = false
 
@@ -782,20 +824,22 @@ object FontLibrary {
         return ImportResult(mergeStagedFiles(dir, staging, staged), rejected)
     }
 
-    fun importFromFile(source: File): ImportResult {
+    fun importFromFiles(sources: List<File>): ImportResult {
         val dir = rootDir ?: run {
-            FileLog.d("$TAG: importFromFile: rootDir not initialized")
+            FileLog.d("$TAG: importFromFiles: rootDir not initialized")
             return ImportResult(0, 0)
         }
         val staging = File(dir, STAGING).apply { mkdirs() }
-        val tmp = File(staging, "s0_${System.nanoTime()}.bin")
         val staged = ArrayList<StagedFile>()
         var rejected = 0
-        try {
-            source.copyTo(tmp, overwrite = true, bufferSize = COPY_BUFFER)
-            if (stageParsedFile(tmp, staged) == StageResult.UNSUPPORTED) rejected++
-        } catch (e: Throwable) {
-            FileLog.e("$TAG: importFromFile: failed to stage ${source.absolutePath}", e)
+        for ((i, source) in sources.withIndex()) {
+            val tmp = File(staging, "s${i}_${System.nanoTime()}.bin")
+            try {
+                source.copyTo(tmp, overwrite = true, bufferSize = COPY_BUFFER)
+                if (stageParsedFile(tmp, staged) == StageResult.UNSUPPORTED) rejected++
+            } catch (e: Throwable) {
+                FileLog.e("$TAG: importFromFiles: failed to stage ${source.absolutePath}", e)
+            }
         }
         return ImportResult(mergeStagedFiles(dir, staging, staged), rejected)
     }
