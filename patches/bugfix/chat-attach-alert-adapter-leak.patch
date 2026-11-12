@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
-@@ -6326,6 +6326,9 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -6329,6 +6329,9 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
          if (topCommentTextView != null) {
              topCommentTextView.onDestroy();
          }

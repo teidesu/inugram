@@ -236,6 +236,114 @@ object NonIslandHelper {
         lp.bottomMargin = -AndroidUtilities.navigationBarHeight
     }
 
+    // ShareAlert.java, ChatAttachAlert.java
+    @JvmStatic
+    fun createSheetBottomBar(
+        container: ViewGroup,
+        factory: BlurredBackgroundDrawableViewFactory,
+        resourcesProvider: Theme.ResourcesProvider?,
+        caption: View,
+        captionTopOffset: () -> Float,
+        sendButton: View,
+        vararg others: View?,
+    ): Boolean {
+        if (!chatElements()) return false
+        // SendButton draws its circle 2dp from the top of its 50dp box, the caption row is 48dp
+        sendButton.translationY = dp(5f).toFloat()
+        val tracked = listOf(caption) + others.filterNotNull()
+        val index = tracked.minOf { view ->
+            var child = view
+            while (child.parent !== container) child = child.parent as View
+            container.indexOfChild(child)
+        }
+        val bar = SheetBottomBar(container, factory, resourcesProvider, caption, captionTopOffset, tracked)
+        container.addView(bar, index, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        return true
+    }
+
+    private class SheetBottomBar(
+        private val container: ViewGroup,
+        factory: BlurredBackgroundDrawableViewFactory,
+        resourcesProvider: Theme.ResourcesProvider?,
+        private val caption: View,
+        private val captionTopOffset: () -> Float,
+        private val tracked: List<View>,
+    ) : View(container.context), ViewTreeObserver.OnPreDrawListener {
+        private val background = ClassicBarDrawable(factory, this, resourcesProvider, Theme.key_dialogBackground)
+        private val shadow = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(Theme.multAlpha(Theme.getColor(Theme.key_dialogShadowLine, resourcesProvider), 0.5f), 0))
+        private var segments = FloatArray(0)
+
+        init {
+            background.callback = this
+            importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+
+        override fun onAttachedToWindow() {
+            super.onAttachedToWindow()
+            viewTreeObserver.addOnPreDrawListener(this)
+        }
+
+        override fun onDetachedFromWindow() {
+            viewTreeObserver.removeOnPreDrawListener(this)
+            super.onDetachedFromWindow()
+        }
+
+        override fun onPreDraw(): Boolean {
+            val visible = ArrayList<Pair<Float, Float>>(tracked.size)
+            for (view in tracked) {
+                var y = if (view === caption) captionTopOffset() else 0f
+                var alpha = 1f
+                var v = view
+                while (v !== container && alpha > 0f) {
+                    if (v.visibility != VISIBLE) alpha = 0f
+                    alpha *= v.alpha
+                    y += v.top + v.translationY
+                    v = v.parent as? View ?: break
+                }
+                if (v === container && alpha > 0f) visible.add(y to alpha)
+            }
+            visible.sortBy { it.first }
+            val next = FloatArray(visible.size * 2) { if (it % 2 == 0) visible[it / 2].first else visible[it / 2].second }
+            if (!next.contentEquals(segments)) {
+                segments = next
+                invalidate()
+            }
+            return true
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            val count = segments.size / 2
+            if (count == 0) return
+            val originY = top + translationY
+            val bottom = ceil(container.height - originY).toInt()
+            var alpha = 0f
+            for (i in 0 until count) {
+                alpha = maxOf(alpha, segments[i * 2 + 1])
+                val bandTop = (segments[i * 2] - originY).toInt()
+                val bandBottom = if (i + 1 < count) (segments[i * 2 + 2] - originY).toInt() else bottom
+                if (i == 0) {
+                    drawWithAlpha(canvas, alpha, 0, bandTop - dp(ATTACH_TAB_SHADOW_DP), width, bandTop) {
+                        shadow.setBounds(0, bandTop - dp(ATTACH_TAB_SHADOW_DP), width, bandTop)
+                        shadow.draw(canvas)
+                    }
+                }
+                if (bandBottom <= bandTop) continue
+                drawWithAlpha(canvas, alpha, 0, bandTop, width, bandBottom) {
+                    background.setBounds(0, bandTop, width, bandBottom)
+                    background.draw(canvas)
+                }
+            }
+        }
+
+        private inline fun drawWithAlpha(canvas: Canvas, alpha: Float, left: Int, top: Int, right: Int, bottom: Int, draw: () -> Unit) {
+            val saved = if (alpha < 1f) canvas.saveLayerAlpha(left.toFloat(), top.toFloat(), right.toFloat(), bottom.toFloat(), (alpha * 255).toInt()) else -1
+            draw()
+            if (saved >= 0) canvas.restoreToCount(saved)
+        }
+
+        override fun verifyDrawable(who: Drawable): Boolean = who === background || super.verifyDrawable(who)
+    }
+
     // DialogsActivity.java
     const val FOLDERS_BAR_HEIGHT_DP = 44
     const val FOLDERS_BAR_OVERLAP_DP = 10

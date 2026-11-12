@@ -16,7 +16,7 @@ Subject: non-island ui in various parts of the app
  .../ui/Components/ChatActivityEnterView.java  |  75 ++++---
  ...ChatActivityEnterViewAnimatedIconView.java |  17 +-
  .../ChatActivityTopPanelLayout.java           |  27 ++-
- .../ui/Components/ChatAttachAlert.java        |  29 ++-
+ .../ui/Components/ChatAttachAlert.java        |  38 +++-
  .../ui/Components/ChatAvatarContainer.java    |   1 +
  .../ui/Components/ChatSearchTabs.java         |   2 +-
  .../DialogsActivityTopPanelLayout.java        |  20 +-
@@ -29,6 +29,7 @@ Subject: non-island ui in various parts of the app
  .../ui/Components/RecyclerListView.java       |  15 +-
  .../Components/ScrollSlidingTextTabStrip.java | 118 ++++++++++-
  .../ui/Components/SearchTagsList.java         |   3 +
+ .../telegram/ui/Components/ShareAlert.java    |  39 +++-
  .../ui/Components/SharedMediaLayout.java      |  61 +++++-
  .../ui/Components/TopicsSidePanel.java        |   7 +-
  .../ui/Components/TopicsTabsView.java         |  78 ++++---
@@ -55,7 +56,7 @@ Subject: non-island ui in various parts of the app
  .../java/org/telegram/ui/iv/RichEditor.java   |   4 +-
  .../utils/glass/BaseFragmentSimpleGlass.java  |   6 +-
  .../utils/glass/GlassCaptureSourceCanvas.java |  52 +++--
- 51 files changed, 1069 insertions(+), 357 deletions(-)
+ 52 files changed, 1109 insertions(+), 365 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -1771,7 +1772,35 @@ index 0000000..0000000 100644
          buttonsRecyclerView.setOnItemClickListener((view, position) -> {
              BaseFragment lastFragment = baseFragment;
              if (lastFragment == null) {
-@@ -4122,7 +4134,8 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -3017,14 +3029,14 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+ 
+             @Override
+             protected void dispatchDraw(@NonNull Canvas canvas) {
+-                if (captionContainerBg != null) {
++                if (captionContainerBg != null && !NonIslandHelper.chatElements()) {
+                     captionContainerBg.setBounds(0, (int) captionEditTextTopOffset, getMeasuredWidth(), getMeasuredHeight());
+                     captionContainerBg.draw(canvas);
+                 }
+ 
+                 final float r = dp(20);
+-                final int pt = dp(7);
+-                final int pb = dp(7);
++                final int pt = NonIslandHelper.chatElements() ? 0 : dp(7);
++                final int pb = NonIslandHelper.chatElements() ? 0 : dp(7);
+ 
+                 AndroidUtilities.rectTmp.set(getPaddingLeft(), pt, getWidth() - getPaddingRight(), getHeight() - pb);
+                 path.rewind();
+@@ -3584,6 +3596,9 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+         writeButton.setCircleSize(dp(52), dp(38));
+         writeButton.setCirclePadding(dp(7), dp(6));
+         writeButton.newCounterPos = true;
++        if (NonIslandHelper.createSheetBottomBar(containerView, iBlur3FactoryFrostedLiquidGlass, resourcesProvider, captionContainer, () -> captionEditTextTopOffset, writeButton)) {
++            captionContainer.setPadding(0, 0, 0, 0);
++        }
+         writeButton.setOnClickListener(v -> {
+             onWriteButtonPressed();
+         });
+@@ -4122,7 +4137,8 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
              .setStrokeWidth(dpf2(1), dpf2(2 / 3f))
              .build();
  
@@ -1781,7 +1810,7 @@ index 0000000..0000000 100644
          animatorCurrentVisibleLayout.replace((long) LAYOUT_TYPE_PHOTO, false);
  
          glassEngine.setRoot(containerView);
-@@ -7417,7 +7430,13 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -7417,7 +7433,13 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
  
          if (BitwiseUtils.hasFlag(flags, GlassEngine.FLAG_INVALIDATED_POSITIONS)) {
              GlassPositionsArray glassPositionsArray = glassEngine.getAllVisibleDrawablesWithDisplayListPositionsMerged();
@@ -2481,6 +2510,112 @@ index 0000000..0000000 100644
                  canvas.drawPath(clipPath, strokePaint);
                  canvas.restore();
              }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ShareAlert.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ShareAlert.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ShareAlert.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ShareAlert.java
+@@ -128,6 +128,7 @@ import org.telegram.ui.PhotoViewer;
+ import org.telegram.ui.PremiumPreviewFragment;
+ import org.telegram.ui.Stories.DarkThemeResourceProvider;
+ import org.telegram.utils.glass.GlassEngine;
++import desu.inugram.helpers.theme.NonIslandHelper;
+ import org.telegram.utils.glass.positions.GlassPositionsArray;
+ import org.telegram.utils.glass.positions.GlassPositionsMerger;
+ 
+@@ -393,7 +394,7 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
+ 
+         iBlur3SourceColor = glassEngine.createThemedColorSource(() -> getThemedColor(Theme.key_windowBackgroundWhite));
+         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SharedConfig.chatBlurEnabled()) {
+-            scrollableViewNoiseSuppressor = new DownscaleScrollableNoiseSuppressor();
++            scrollableViewNoiseSuppressor = NonIslandHelper.chatElements() ? new DownscaleScrollableNoiseSuppressor(true, true) : new DownscaleScrollableNoiseSuppressor();
+             glassEngine.addNoiseSuppressor(scrollableViewNoiseSuppressor);
+ 
+             iBlur3SourceGlass = new GlassSourceRenderNode(iBlur3SourceColor);
+@@ -410,8 +411,8 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
+             iBlur3FactoryLiquidGlass.setGlassEngine(glassEngine);
+ 
+             iBlur3FactoryFrostedLiquidGlass = new BlurredBackgroundDrawableViewFactory(iBlur3SourceGlassFrosted);
+-            iBlur3FactoryFrostedLiquidGlass.setLiquidGlassEffectAllowed(true);
+-            iBlur3FactoryFrostedLiquidGlass.setOutset(dp(48));
++            iBlur3FactoryFrostedLiquidGlass.setLiquidGlassEffectAllowed(!NonIslandHelper.chatElements());
++            iBlur3FactoryFrostedLiquidGlass.setOutset(NonIslandHelper.chatElements() ? NonIslandHelper.getFrostedBlurReach() : dp(48));
+             iBlur3FactoryFrostedLiquidGlass.setGlassEngine(glassEngine);
+ 
+             iBlur3FactoryFade = new BlurredBackgroundDrawableViewFactory(iBlur3SourceColor);
+@@ -695,6 +696,15 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
+                 }
+                 int padding = (contentSize < availableHeight ? 0 : availableHeight - (availableHeight / 5 * 3));
+                 int bottomPadding = dp(100 + (timestampFrameLayout != null ? 48 : 0)) + systemInsets.bottom;
++                if (NonIslandHelper.chatElements() && pickerBottom != null && timestampFrameLayout == null) {
++                    final LayoutParams lp = (LayoutParams) pickerBottom.getLayoutParams();
++                    lp.height = dp(48) + systemInsets.bottom;
++                    lp.bottomMargin = -systemInsets.bottom;
++                    for (int i = 0; i < pickerBottomLayout.getChildCount(); i++) {
++                        final View child = pickerBottomLayout.getChildAt(i);
++                        child.setPadding(child.getPaddingLeft(), child.getPaddingTop(), child.getPaddingRight(), systemInsets.bottom);
++                    }
++                }
+                 if (gridView.getPaddingTop() != padding || gridView.getPaddingBottom() != bottomPadding) {
+                     ignoreLayout = true;
+                     gridView.setPadding(0, padding, 0, bottomPadding);
+@@ -1335,6 +1345,7 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
+             @Override
+             public void draw(@NonNull Canvas canvas) {
+                 if (desu.inugram.helpers.chat.ChatHelper.shouldHideFadeView()) return;
++                if (NonIslandHelper.chatElements()) return;
+                 super.draw(canvas);
+                 fadeDrawable.setBounds(0, getMeasuredHeight() - systemInsets.bottom - dp(72), getMeasuredWidth(), getMeasuredHeight());
+                 fadeDrawable.draw(canvas);
+@@ -1463,7 +1474,7 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
+ 
+                 TextView pickerTextView = new TextView(context);
+                 // ripple within the rounded glass pill of pickerBottomLayout (40dp high inside its 9dp padding)
+-                ThemeBind.selectorBackground(pickerTextView, Theme.createRadSelectorDrawable(getThemedColor(Theme.key_listSelector), 20, 20), null, ThemeBind.of(Theme.key_listSelector), resourcesProvider);
++                ThemeBind.selectorBackground(pickerTextView, NonIslandHelper.chatElements() ? Theme.createSelectorDrawable(getThemedColor(Theme.key_listSelector), Theme.RIPPLE_MASK_ALL) : Theme.createRadSelectorDrawable(getThemedColor(Theme.key_listSelector), 20, 20), null, ThemeBind.of(Theme.key_listSelector), resourcesProvider);
+                 ThemeBind.textColor(pickerTextView, darkTheme ? Theme.key_voipgroup_listeningText : Theme.key_dialogTextBlue2, resourcesProvider);
+                 pickerTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+                 pickerTextView.setPadding(dp(18), 0, dp(18), 0);
+@@ -1571,7 +1582,7 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
+             @Override
+             protected void dispatchDraw(@NonNull Canvas canvas) {
+                 captionContainerBg.setBounds(0, (int) captionEditTextTopOffset, getMeasuredWidth(), getMeasuredHeight());
+-                captionContainerBg.draw(canvas);
++                if (!NonIslandHelper.chatElements()) captionContainerBg.draw(canvas);
+                 canvas.save();
+                 canvas.clipRect(0, captionEditTextTopOffset, getMeasuredWidth(), getMeasuredHeight());
+                 super.dispatchDraw(canvas);
+@@ -1842,6 +1853,19 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
+             timestampFrameLayout.setBackground(d);
+             timestampFrameLayout.setPadding(dp(9), dp(9), dp(9), dp(9));
+         }
++        if (NonIslandHelper.createSheetBottomBar(containerView, iBlur3FactoryFrostedLiquidGlass, resourcesProvider, frameLayout2, () -> captionEditTextTopOffset, writeButton, pickerBottomLayout, timestampFrameLayout)) {
++            frameLayout2.setPadding(0, 0, 0, 0);
++            if (pickerBottomLayout != null) {
++                pickerBottomLayout.setBackground(null);
++                pickerBottomLayout.setPadding(0, 0, 0, 0);
++                pickerBottom.getLayoutParams().height = dp(48);
++            }
++            if (timestampFrameLayout != null) {
++                timestampFrameLayout.setBackground(null);
++                timestampFrameLayout.setPadding(0, 0, 0, 0);
++                timestampFrameLayout.getLayoutParams().height = dp(48);
++            }
++        }
+ 
+         updateSelectedCount(0);
+ 
+@@ -2827,6 +2851,11 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
+         if (pickerBottomLayout != null) {
+             animators.add(ObjectAnimator.ofFloat(pickerBottomLayout, View.TRANSLATION_Y, darkTheme ? (show ? dp(timestampLayout != null ? 5 : 16) : 0.0f) : 0));
+         }
++        if (NonIslandHelper.chatElements() && pickerBottomLayout != null) {
++            for (int i = 0; i < pickerBottomLayout.getChildCount(); i++) {
++                animators.add(ObjectAnimator.ofFloat(pickerBottomLayout.getChildAt(i), View.ALPHA, show ? 0.0f : 1.0f));
++            }
++        }
+ 
+         animatorSet.playTogether(animators);
+         animatorSet.setInterpolator(new DecelerateInterpolator());
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
