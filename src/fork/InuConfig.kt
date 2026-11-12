@@ -959,6 +959,9 @@ object InuConfig {
     val UPDATE_LAST_CHECK_MS = LongItem("update_last_check_ms", 0L, exportable = false)
 
     @JvmField
+    val LAST_EXIT_REASON_MS = LongItem("last_exit_reason_ms", 0L, exportable = false)
+
+    @JvmField
     val WHATS_NEW_STASH = StringItem("whats_new_stash", "", exportable = false)
 
     @JvmField

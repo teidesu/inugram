@@ -1,6 +1,9 @@
 package desu.inugram.helpers
 
 import android.app.Activity
+import android.app.ActivityManager
+import android.app.Application
+import android.app.ApplicationExitInfo
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -8,7 +11,9 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.provider.DocumentsContract
+import android.util.Base64
 import androidx.core.app.NotificationCompat
+import desu.inugram.InuConfig
 // #if PLUGINS
 import desu.inugram.helpers.plugins.platform.PluginXposed
 // #endif
@@ -29,6 +34,7 @@ import java.io.IOException
 import java.io.PrintWriter
 import java.io.RandomAccessFile
 import java.io.StringWriter
+import java.time.Instant
 import java.util.concurrent.atomic.AtomicBoolean
 
 object CrashReporter {
@@ -36,6 +42,7 @@ object CrashReporter {
     private const val HEAP_DUMP_FILE = "last_heap_dump.hprof"
     private const val TMP_HEAP_DUMP_PREFIX = "inugram-heap-dump-"
     private const val TAIL_BYTES = 200 * 1024L
+    private const val ANR_TRACE_BYTES = 256 * 1024
     private const val HEAD_BYTES = 16 * 1024L
     private const val PLUGIN_HOOKS_HEADER = "\nplugin hooks:\n  "
     private const val RESTART_LOOP_GUARD_MS = 30_000L
@@ -55,6 +62,138 @@ object CrashReporter {
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler(Handler(previous))
         dismissRestartNotification()
+    }
+
+    fun collectNativeExit(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        if (Application.getProcessName() != context.packageName) return
+        try {
+            val exit = context.getSystemService(ActivityManager::class.java)
+                .getHistoricalProcessExitReasons(null, 0, 0)
+                .firstOrNull { it.processName == context.packageName }
+                ?: return
+            val lastSeen = InuConfig.LAST_EXIT_REASON_MS.value
+            if (exit.timestamp <= lastSeen) return
+            InuConfig.LAST_EXIT_REASON_MS.value = exit.timestamp
+            if (lastSeen == 0L) return
+            val details = when (exit.reason) {
+                ApplicationExitInfo.REASON_CRASH_NATIVE -> describeNativeCrash(exit)
+                ApplicationExitInfo.REASON_ANR -> describeAnr(exit)
+                else -> return
+            }
+            getLogFile().writeText(buildString {
+                append(SystemInfo.build())
+                append("Exited ").append(Instant.ofEpochMilli(exit.timestamp))
+                append(", importance ").append(exit.importance)
+                append(", pss ").append(exit.pss).append("K, rss ").append(exit.rss).append("K")
+                append("\n\n").append(details)
+            })
+        } catch (e: Throwable) {
+            FileLog.e(e)
+        }
+    }
+
+    private fun describeNativeCrash(exit: ApplicationExitInfo): String {
+        val trace = exit.traceInputStream?.use { it.readBytes() }
+            ?: return "NativeCrash: signal ${exit.status}, ${exit.description}\n"
+        return try {
+            formatTombstone(Proto(trace, 0, trace.size))
+        } catch (e: Throwable) {
+            "NativeCrash: signal ${exit.status}, ${exit.description}\n\n" +
+                "unparsable tombstone ($e), base64:\n" + Base64.encodeToString(trace, Base64.NO_WRAP)
+        }
+    }
+
+    private fun describeAnr(exit: ApplicationExitInfo): String {
+        val head = "ANR: ${exit.description}\n"
+        val trace = exit.traceInputStream?.use { it.readBytes() } ?: return head
+        return head + "\n" + String(trace, 0, minOf(trace.size, ANR_TRACE_BYTES), Charsets.UTF_8)
+    }
+
+    private fun formatTombstone(t: Proto): String = buildString {
+        val tid = t.getLong(6)
+        val threads = t.getMessages(16).mapNotNull { it.getMessage(2) }
+            .sortedBy { if (it.getLong(1) == tid) 0 else 1 }
+        val signal = t.getMessage(10)
+        if (signal != null) {
+            append(signal.getString(2).ifEmpty { "NativeCrash" }).append(": signal ").append(signal.getLong(1))
+            append(", code ").append(signal.getLong(3).toInt()).append(" (").append(signal.getString(4)).append(")")
+            if (signal.getLong(8) != 0L) append(", fault addr 0x").append(java.lang.Long.toHexString(signal.getLong(9)))
+            append("\n")
+        } else {
+            append("NativeCrash: no signal info\n")
+        }
+        append("pid: ").append(t.getLong(5)).append(", tid: ").append(tid)
+        append("  >>> ").append(t.getStrings(9).joinToString(" ")).append(" <<<\n")
+        t.getString(14).takeIf { it.isNotEmpty() }?.let { append("Abort message: '").append(it).append("'\n") }
+        t.getMessages(15).forEach { append("Cause: ").append(it.getString(1)).append("\n") }
+        for (thread in threads) {
+            append("\n--- tid ").append(thread.getLong(1)).append(" \"").append(thread.getString(2)).append("\" ---\n")
+            thread.getStrings(7).forEach { append("  NOTE: ").append(it).append("\n") }
+            thread.getMessages(4).forEachIndexed { i, frame ->
+                append("  #").append(i.toString().padStart(2, '0'))
+                append(" pc ").append(java.lang.Long.toHexString(frame.getLong(1)).padStart(16, '0'))
+                append("  ").append(frame.getString(6))
+                frame.getString(4).takeIf { it.isNotEmpty() }?.let { append(" (").append(it).append("+").append(frame.getLong(5)).append(")") }
+                frame.getString(8).takeIf { it.isNotEmpty() }?.let { append(" (BuildId: ").append(it).append(")") }
+                append("\n")
+            }
+        }
+        for (buffer in t.getMessages(18)) {
+            append("\n--- log ").append(buffer.getString(1)).append(" ---\n")
+            for (log in buffer.getMessages(2)) {
+                append(log.getString(1)).append(" ").append(log.getLong(2)).append(" ").append(log.getLong(3)).append(" ")
+                append("VDIWEF".getOrElse(log.getLong(4).toInt() - 2) { '?' }).append(" ")
+                append(log.getString(5)).append(": ").append(log.getString(6)).append("\n")
+            }
+        }
+    }
+
+    private class Proto(private val buf: ByteArray, private val start: Int, private val end: Int) {
+        private val fields: Map<Int, List<Any>> by lazy {
+            val result = HashMap<Int, MutableList<Any>>()
+            var pos = start
+            fun readVarint(): Long {
+                var value = 0L
+                var shift = 0
+                while (true) {
+                    require(pos < end && shift < 64) { "bad varint" }
+                    val b = buf[pos++].toInt()
+                    value = value or ((b and 0x7f).toLong() shl shift)
+                    if (b and 0x80 == 0) return value
+                    shift += 7
+                }
+            }
+            fun readFixed(size: Int): Long {
+                require(end - pos >= size) { "truncated" }
+                var value = 0L
+                for (i in 0 until size) value = value or ((buf[pos + i].toLong() and 0xff) shl (8 * i))
+                pos += size
+                return value
+            }
+            while (pos < end) {
+                val key = readVarint()
+                val value: Any = when ((key and 7).toInt()) {
+                    0 -> readVarint()
+                    1 -> readFixed(8)
+                    2 -> {
+                        val len = readVarint()
+                        require(len in 0..(end - pos).toLong()) { "truncated" }
+                        Proto(buf, pos, pos + len.toInt()).also { pos += len.toInt() }
+                    }
+                    5 -> readFixed(4)
+                    else -> throw IllegalArgumentException("wire type ${key and 7}")
+                }
+                result.getOrPut((key ushr 3).toInt()) { mutableListOf() }.add(value)
+            }
+            result
+        }
+
+        fun getLong(field: Int): Long = fields[field]?.firstOrNull() as? Long ?: 0L
+        fun getMessages(field: Int): List<Proto> = fields[field].orEmpty().filterIsInstance<Proto>()
+        fun getMessage(field: Int): Proto? = getMessages(field).firstOrNull()
+        fun getStrings(field: Int): List<String> = getMessages(field).map { String(it.buf, it.start, it.end - it.start, Charsets.UTF_8) }
+        fun getString(field: Int): String = getStrings(field).firstOrNull().orEmpty()
     }
 
     fun getLogFile(): File {
