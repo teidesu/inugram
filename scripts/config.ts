@@ -53,6 +53,26 @@ export const submodulePatches: SubmodulePatch[] = [
   },
 ]
 
+export interface VendoredCrate {
+  name: string
+  version: string
+  sha256: string
+  patch: string
+}
+
+export const nativeVendorDir = join(rootDir, 'src/native/vendor')
+
+// crates.io crates carried with patches: unpacked into nativeVendorDir and wired in through
+// [patch.crates-io] in src/native/Cargo.toml
+export const vendoredCrates: VendoredCrate[] = [
+  {
+    name: 'rquickjs-sys',
+    version: '0.14.0',
+    sha256: 'cee271d0eeba64f0915b846cb7ae02e16faf3dfdffdca91731101d9d30fe3423',
+    patch: join(rootDir, 'patches-native/rquickjs-sys-security.patch'),
+  },
+]
+
 export const debugAppId = 'desu.inugram.beta'
 
 export interface ForkSyncFile {

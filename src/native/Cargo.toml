@@ -45,6 +45,10 @@ yuv = { version = "0.8.18", default-features = false, features = [ "rdm" ] }
 [target.'cfg(not(target_os = "android"))'.dependencies]
 libsqlite3-sys = { version = "0.38", features = [ "bundled" ] }
 
+# unpacked and patched by `pnpm run setup`, see `vendoredCrates`
+[patch.crates-io]
+rquickjs-sys = { path = "vendor/rquickjs-sys-0.14.0" }
+
 [build-dependencies]
 rquickjs = { version = "0.14", features = [ "loader" ] }
 

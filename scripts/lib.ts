@@ -1,16 +1,20 @@
+import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import fs from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { glob } from 'tinyglobby'
 import { $, chalk } from 'zx'
 import {
   forkSyncFiles,
+  nativeVendorDir,
   rootDir,
   seriesFile,
   skippedSubmodules,
   submodulePatches,
   upstreamCommitFile,
   upstreamUrl,
+  vendoredCrates,
 } from './config.js'
 
 $.verbose = false
@@ -149,21 +153,76 @@ export async function syncSubmodules(repoDir: string, excludedSubmodules: string
 export async function applySubmodulePatches(repoDir: string, excludedSubmodules: string[] = []) {
   let appliedAny = false
 
-  for (const { submodule, patch } of submodulePatches) {
+  for (const [submodule, entries] of Map.groupBy(submodulePatches, it => it.submodule)) {
     if (excludedSubmodules.includes(submodule)) continue
     const dir = join(repoDir, submodule)
     if (!existsSync(dir)) continue
 
-    const git = cd(dir)
-    const alreadyApplied = await git`git apply --reverse --check ${patch}`.nothrow().quiet()
-    if (alreadyApplied.exitCode === 0) continue
+    const patches = entries.map(it => it.patch)
+    const state = await getSubmodulePatchState(dir, patches)
+    if (state === 'applied') continue
+    if (state === 'modified') {
+      throw new Error(`${submodule} has changes to patched files that match neither its pin nor its patches`)
+    }
 
     step(`Patching ${submodule}`)
-    await git`git apply ${patch}`
+    for (const patch of patches) await cd(dir)`git apply ${patch}`
     appliedAny = true
   }
 
   return appliedAny
+}
+
+// a submodule's patches can overlap, so a single one may neither apply nor reverse on its own
+async function getSubmodulePatchState(dir: string, patches: string[]) {
+  const texts = await Promise.all(patches.map(patch => fs.readFile(patch, 'utf8')))
+  const paths = [...new Set(texts.flatMap(text => [...text.matchAll(/^diff --git a\/(\S+) b\/(\S+)$/gm)].flatMap(m => [m[1], m[2]])))]
+  const indexDir = await fs.mkdtemp(join(tmpdir(), 'inu-index-'))
+  try {
+    const expected = $({ cwd: dir, env: { ...process.env, GIT_INDEX_FILE: join(indexDir, 'expected') } })
+    await expected`git read-tree HEAD`
+    for (const patch of patches) await expected`git apply --cached ${patch}`
+
+    const actual = $({ cwd: dir, env: { ...process.env, GIT_INDEX_FILE: join(indexDir, 'actual') } })
+    await actual`git read-tree HEAD`
+    await actual`git update-index --add --remove -- ${paths}`
+
+    const actualTree = (await actual`git write-tree`).stdout.trim()
+    if (actualTree === (await expected`git write-tree`).stdout.trim()) return 'applied'
+    if (actualTree === (await cd(dir)`git rev-parse HEAD^{tree}`).stdout.trim()) return 'pristine'
+    return 'modified'
+  } finally {
+    await fs.rm(indexDir, { recursive: true, force: true })
+  }
+}
+
+export async function prepareVendoredCrates() {
+  let preparedAny = false
+
+  for (const crate of vendoredCrates) {
+    const dir = join(nativeVendorDir, `${crate.name}-${crate.version}`)
+    const stampFile = join(dir, '.inu-stamp')
+    const patch = await fs.readFile(crate.patch)
+    const stamp = createHash('sha256').update(crate.sha256).update(patch).digest('hex')
+    if (await fs.readFile(stampFile, 'utf8').catch(() => null) === stamp) continue
+
+    step(`Vendoring ${crate.name} ${crate.version}`)
+    const url = `https://static.crates.io/crates/${crate.name}/${crate.name}-${crate.version}.crate`
+    const res = await fetch(url)
+    if (!res.ok) throw new Error(`Failed to download ${url}: ${res.status} ${res.statusText}`)
+    const archive = Buffer.from(await res.arrayBuffer())
+    const actual = createHash('sha256').update(archive).digest('hex')
+    if (actual !== crate.sha256) throw new Error(`${crate.name} ${crate.version}: sha256 ${actual}, expected ${crate.sha256}`)
+
+    await fs.rm(dir, { recursive: true, force: true })
+    await ensureDir(nativeVendorDir)
+    await $({ cwd: nativeVendorDir, input: archive })`tar -xzf -`
+    await $({ cwd: dir })`patch -s -p1 -i ${crate.patch}`
+    await fs.writeFile(stampFile, stamp)
+    preparedAny = true
+  }
+
+  return preparedAny
 }
 
 export function hasGitRepo(repoDir: string) {

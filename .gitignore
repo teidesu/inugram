@@ -11,4 +11,5 @@ src/res/assets/adguard_url_tracking.txt
 TODO.md
 CLAUDE.local.md
 src/native/target
+src/native/vendor
 out

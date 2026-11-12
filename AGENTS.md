@@ -151,6 +151,9 @@ refresh `src/test/assets/routines.json` with `pnpm --filter @inugram/cli test --
 added only in `sdk/types/grants.json` (`pnpm run generate-grants`); TL tables and typings come
 from `pnpm run generate-tl`, rerun after every rebase and never hand-edited.
 
+`rquickjs-sys` is vendored from crates.io into `src/native/vendor` by `pnpm run setup` and patched with
+`patches-native/rquickjs-sys-security.patch` (`vendoredCrates` in `scripts/config.ts`); cargo needs it.
+
 Engine work runs on `EngineDispatch.scheduler`; caller-thread JVM/Xposed callbacks take the
 serialized engine lease, and no engine `Rc`/`Persistent` state may escape it (keep rquickjs
 `parallel`). Grant checks fail closed. Runtime work carries its `PluginSession`, never an
