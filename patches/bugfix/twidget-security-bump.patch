@@ -1,0 +1,24 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Thu, 12 Nov 2026 22:27:30 +0400
+Subject: update widget engine and renderer to fix widget sandbox escapes
+
+---
+ TMessagesProj/jni/twidget/twidget        | 2 +-
+ TMessagesProj/jni/twidget/widget-sandbox | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/TMessagesProj/jni/twidget/twidget b/TMessagesProj/jni/twidget/twidget
+index 0000000..0000000 160000
+--- a/TMessagesProj/jni/twidget/twidget
++++ b/TMessagesProj/jni/twidget/twidget
+@@ -1 +1 @@
+-Subproject commit 4769d72c5c5a9bace3c7bd8b6308cb79bc150bab
++Subproject commit 7249ce7121c2a5be35d90dc7fbbd08a164909bd9
+diff --git a/TMessagesProj/jni/twidget/widget-sandbox b/TMessagesProj/jni/twidget/widget-sandbox
+index 0000000..0000000 160000
+--- a/TMessagesProj/jni/twidget/widget-sandbox
++++ b/TMessagesProj/jni/twidget/widget-sandbox
+@@ -1 +1 @@
+-Subproject commit c498cefddefaba765282c9f3ab0b330f4bc990f6
++Subproject commit 1cde0068daba8437f53eac0b61c395d29b8f89e3

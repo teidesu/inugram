@@ -280,6 +280,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 
 ## 🐶 bugfixes (vs stock)
 
+- bot widgets: engine and renderer updated ahead of stock to close memory-safety holes reachable from widget scripts and hostile markup
 - no extra bottom padding under stickers
 - 12/24-hour time follows the system locale again when the system clock format is automatic (stock switched to the Telegram language's format after any configuration change)
 - android 16 "expanded" dark theme no longer force-inverts the app
