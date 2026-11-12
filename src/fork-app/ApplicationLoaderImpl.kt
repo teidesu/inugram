@@ -3,6 +3,7 @@ package desu.inugram
 import android.app.Activity
 import android.content.Context
 import android.view.ViewGroup
+import desu.inugram.helpers.PersistentConnectionHelper
 import desu.inugram.helpers.update.ApkInstaller
 import desu.inugram.helpers.update.UpdateHelper
 import org.telegram.messenger.ApplicationLoader
@@ -12,6 +13,7 @@ import org.telegram.messenger.FileLoader
 import org.telegram.messenger.FileLog
 import org.telegram.messenger.GoogleMapsProvider
 import org.telegram.messenger.IMapsProvider
+import org.telegram.messenger.PushListenerController
 import org.telegram.messenger.SharedConfig
 import org.telegram.messenger.UserConfig
 import org.telegram.tgnet.TLRPC
@@ -58,6 +60,18 @@ class ApplicationLoaderImpl : BaseApplicationLoaderImpl() {
         }
         return true
     }
+
+    override fun onSuggestionFill(suggestion: String?, output: Array<CharSequence?>, closeable: BooleanArray): Boolean =
+        suggestion == null && PersistentConnectionHelper.fillHint(output)
+
+    override fun onSuggestionClick(suggestion: String?): Boolean {
+        if (suggestion != null) return false
+        PersistentConnectionHelper.onHintClick()
+        return true
+    }
+
+    override fun onCreatePushProvider(): PushListenerController.IPushListenerServiceProvider =
+        PersistentConnectionHelper.pushProvider
 
     override fun takeUpdateLayout(activity: Activity, sideMenuContainer: ViewGroup): IUpdateLayout {
         return UpdateLayout(activity, sideMenuContainer)

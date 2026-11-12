@@ -1,0 +1,183 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: dreamer <353556243+dreamer4202@users.noreply.github.com>
+Date: Sat, 7 Nov 2026 05:23:41 +0300
+Subject: implement persistent connection to receive notifications without Google Play Services
+
+---
+ TMessagesProj/src/main/AndroidManifest.xml        |  8 ++++++--
+ .../org/telegram/messenger/AppStartReceiver.java  |  2 +-
+ .../org/telegram/messenger/ApplicationLoader.java |  1 +
+ .../messenger/GcmPushListenerService.java         |  2 ++
+ .../java/org/telegram/messenger/KeepAliveJob.java |  2 ++
+ .../telegram/messenger/NotificationsService.java  |  3 +++
+ .../ui/NotificationsSettingsActivity.java         | 15 +++++++++++++--
+ 7 files changed, 28 insertions(+), 5 deletions(-)
+
+diff --git a/TMessagesProj/src/main/AndroidManifest.xml b/TMessagesProj/src/main/AndroidManifest.xml
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/AndroidManifest.xml
++++ b/TMessagesProj/src/main/AndroidManifest.xml
+@@ -25,6 +25,8 @@
+     <uses-permission android:name="android.permission.INTERNET" />
+     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
++    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
++    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+@@ -539,8 +541,9 @@
+             android:name=".NotificationsService"
+             android:enabled="true"
+             android:exported="true"
+-            android:foregroundServiceType="dataSync"
+-        />
++            android:foregroundServiceType="dataSync|specialUse">
++            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Real-time notifications without Play services" />
++        </service>
+         <service
+             android:name=".NotificationRepeat"
+             android:exported="false"
+@@ -623,6 +626,7 @@
+             <intent-filter>
+                 <action android:name="org.telegram.start" />
+                 <action android:name="android.intent.action.BOOT_COMPLETED" />
++                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+             </intent-filter>
+         </receiver>
+ 
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/AppStartReceiver.java b/TMessagesProj/src/main/java/org/telegram/messenger/AppStartReceiver.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/AppStartReceiver.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/AppStartReceiver.java
+@@ -15,7 +15,7 @@ import android.content.Intent;
+ public class AppStartReceiver extends BroadcastReceiver {
+ 
+     public void onReceive(Context context, Intent intent) {
+-        if (intent != null && Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) {
++        if (intent != null && (desu.inugram.helpers.PersistentConnectionHelper.onStartReceiver(intent) || Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction()))) {
+             AndroidUtilities.runOnUIThread(() -> {
+                 SharedConfig.loadConfig();
+                 if (SharedConfig.passcodeHash.length() > 0) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java b/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java
+@@ -375,6 +375,7 @@ public class ApplicationLoader extends Application {
+     });
+ 
+     public static void startPushService() {
++        if (desu.inugram.helpers.PersistentConnectionHelper.startService(applicationContext)) return;
+         SharedPreferences preferences = MessagesController.getGlobalNotificationsSettings();
+         boolean enabled;
+         if (preferences.contains("pushService")) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/GcmPushListenerService.java b/TMessagesProj/src/main/java/org/telegram/messenger/GcmPushListenerService.java
+index 0000000..0000000 100755
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/GcmPushListenerService.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/GcmPushListenerService.java
+@@ -37,6 +37,8 @@ public class GcmPushListenerService extends FirebaseMessagingService {
+                 FileLog.d("Refreshed FCM token: " + token);
+             }
+             ApplicationLoader.postInitApplication();
++            // the persistent connection has taken the device off FCM; a rotated token must not put it back
++            if (desu.inugram.helpers.PersistentConnectionHelper.getEnabled()) return;
+             PushListenerController.sendRegistrationToServer(PushListenerController.PUSH_TYPE_FIREBASE, token);
+         });
+     }
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/KeepAliveJob.java b/TMessagesProj/src/main/java/org/telegram/messenger/KeepAliveJob.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/KeepAliveJob.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/KeepAliveJob.java
+@@ -21,6 +21,7 @@ public class KeepAliveJob extends JobIntentService {
+     private static final Object sync = new Object();
+ 
+     public static void startJob() {
++        desu.inugram.helpers.PersistentConnectionHelper.onPushWorkStarted();
+         Utilities.globalQueue.postRunnable(() -> {
+             if (startingJob || countDownLatch != null) {
+                 return;
+@@ -57,6 +58,7 @@ public class KeepAliveJob extends JobIntentService {
+     }
+ 
+     public static void finishJob() {
++        desu.inugram.helpers.PersistentConnectionHelper.onPushWorkFinished();
+         Utilities.globalQueue.postRunnable(KeepAliveJob::finishJobInternal);
+     }
+ 
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsService.java b/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsService.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsService.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsService.java
+@@ -18,11 +18,13 @@ public class NotificationsService extends Service {
+     @Override
+     public void onCreate() {
+         super.onCreate();
++        desu.inugram.helpers.PersistentConnectionHelper.onServiceCreate(this);
+         ApplicationLoader.postInitApplication();
+     }
+ 
+     @Override
+     public int onStartCommand(Intent intent, int flags, int startId) {
++        desu.inugram.helpers.PersistentConnectionHelper.onServiceStartCommand(this, intent, flags);
+         return START_STICKY;
+     }
+ 
+@@ -33,6 +35,7 @@ public class NotificationsService extends Service {
+ 
+     public void onDestroy() {
+         super.onDestroy();
++        desu.inugram.helpers.PersistentConnectionHelper.onServiceDestroy(this);
+         SharedPreferences preferences = MessagesController.getGlobalNotificationsSettings();
+         if (preferences.getBoolean("pushService", true)) {
+             Intent intent = new Intent("org.telegram.start");
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/NotificationsSettingsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/NotificationsSettingsActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/NotificationsSettingsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/NotificationsSettingsActivity.java
+@@ -515,6 +515,9 @@ public class NotificationsSettingsActivity extends BaseFragment implements Notif
+             if (getParentActivity() == null) {
+                 return;
+             }
++            if (!view.isEnabled()) {
++                return;
++            }
+             if (position == privateRow || position == groupRow || position == channelsRow || position == storiesRow || position == reactionsRow) {
+                 int type;
+                 ArrayList<NotificationException> exceptions;
+@@ -941,9 +944,16 @@ public class NotificationsSettingsActivity extends BaseFragment implements Notif
+             mContext = context;
+         }
+ 
++        // the persistent connection keeps both push toggles on; shown as they are, dimmed and locked
++        private boolean inu_isPushRowFrozen(int position) {
++            return (position == notificationsServiceRow || position == notificationsServiceConnectionRow) &&
++                    desu.inugram.helpers.PersistentConnectionHelper.getEnabled();
++        }
++
+         @Override
+         public boolean isEnabled(RecyclerView.ViewHolder holder) {
+             int position = holder.getAdapterPosition();
++            if (inu_isPushRowFrozen(position)) return false;
+             return !(position == notificationsSectionRow || position == notificationsSection2Row || position == inappSectionRow ||
+                     position == eventsSectionRow || position == otherSectionRow || position == resetSectionRow ||
+                     position == badgeNumberSection || position == otherSection2Row || position == resetSection2Row ||
+@@ -1013,6 +1023,7 @@ public class NotificationsSettingsActivity extends BaseFragment implements Notif
+                 }
+                 case 1: {
+                     TextCheckCell checkCell = (TextCheckCell) holder.itemView;
++                    checkCell.setEnabled(!inu_isPushRowFrozen(position), null);
+                     SharedPreferences preferences = MessagesController.getNotificationsSettings(currentAccount);
+                     if (position == inappSoundRow) {
+                         checkCell.setTextAndCheck(getString(R.string.InAppSounds), preferences.getBoolean("EnableInAppSounds", true), true);
+@@ -1029,9 +1040,9 @@ public class NotificationsSettingsActivity extends BaseFragment implements Notif
+                     } else if (position == androidAutoAlertRow) {
+                         checkCell.setTextAndCheck("Android Auto", preferences.getBoolean("EnableAutoNotifications", false), true);
+                     } else if (position == notificationsServiceRow) {
+-                        checkCell.setTextAndValueAndCheck(getString("NotificationsService", R.string.NotificationsService), getString("NotificationsServiceInfo", R.string.NotificationsServiceInfo), preferences.getBoolean("pushService", getMessagesController().keepAliveService), true, true);
++                        checkCell.setTextAndValueAndCheck(getString("NotificationsService", R.string.NotificationsService), getString("NotificationsServiceInfo", R.string.NotificationsServiceInfo), inu_isPushRowFrozen(position) || preferences.getBoolean("pushService", getMessagesController().keepAliveService), true, true);
+                     } else if (position == notificationsServiceConnectionRow) {
+-                        checkCell.setTextAndValueAndCheck(getString("NotificationsServiceConnection", R.string.NotificationsServiceConnection), getString("NotificationsServiceConnectionInfo", R.string.NotificationsServiceConnectionInfo), preferences.getBoolean("pushConnection", getMessagesController().backgroundConnection), true, true);
++                        checkCell.setTextAndValueAndCheck(getString("NotificationsServiceConnection", R.string.NotificationsServiceConnection), getString("NotificationsServiceConnectionInfo", R.string.NotificationsServiceConnectionInfo), inu_isPushRowFrozen(position) || preferences.getBoolean("pushConnection", getMessagesController().backgroundConnection), true, true);
+                     } else if (position == badgeNumberShowRow) {
+                         checkCell.setTextAndCheck(getString("BadgeNumberShow", R.string.BadgeNumberShow), getNotificationsController().showBadgeNumber, true);
+                     } else if (position == badgeNumberMutedRow) {

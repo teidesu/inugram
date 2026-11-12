@@ -1009,6 +1009,28 @@ object InuConfig {
     @JvmField
     val FASTER_UPLOADS = BoolItem("faster_uploads", true)
 
+    class PersistentConnectionModeItem : IntItem("persistent_connection_mode", AUTO) {
+        companion object {
+            const val AUTO = 0
+            const val ON = 1
+            const val OFF = 2
+        }
+    }
+
+    @JvmField
+    val PERSISTENT_CONNECTION_MODE = PersistentConnectionModeItem()
+
+    @JvmField
+    val PERSISTENT_CONNECTION_BATTERY_ASKED = BoolItem("persistent_connection_battery_asked", false, exportable = false)
+
+    @JvmField
+    val PERSISTENT_CONNECTION_STOCK_PUSH_FORCED = BoolItem("persistent_connection_stock_push_forced", false, exportable = false)
+
+    // Kinda dirty... but it's really better to keep the token until we are absolutely sure unregisterDevice() is confirmed
+    // or notifications will end up in a blackhole for ~30 mins
+    @JvmField
+    val PERSISTENT_CONNECTION_FCM_TOKEN_TO_DROP = StringItem("persistent_connection_fcm_token_to_drop", "", exportable = false)
+
     @JvmField
     val BIOMETRIC_CONFIRM_DELETE_CHAT = BoolItem("biometric_confirm_delete_chat", false)
 

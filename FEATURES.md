@@ -244,6 +244,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - open bottom-tab menus early by swiping up; open header menus by dragging down from the button and release on an item; flat highlight (not ripple) on menu hover
 - faster downloads/uploads
 - auto-disable the configured proxy while a VPN is active
+- persistent connection for notifications without Google Play Services: keeps stock's Keep-Alive Service running in the foreground with a silent notification, so the process isn't frozen in background, and pings the server while the device sleeps so the connection isn't dropped. on automatically when no push provider is found - *inspired by [Telegram-FOSS](https://github.com/Telegram-FOSS-Team/Telegram-FOSS)*
 - batch import proxy links from clipboard (one per line)
 - send MP4 files attached through Files as playable videos without conversion
 - enable muting, quality changes, and cropping for AV1 and other video formats when Android provides a compatible decoder; conversion selects a decoder matching the video format, including software decoders
@@ -286,6 +287,8 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - channel update queue no longer replays the same update indefinitely after an earlier queued update advances PTS
 - flaky networks: server time offset no longer reset to the epoch by a `bad_msg_notification` inside a container (messages sent meanwhile were dated 1 Jan 1970); session resets on old retransmitted server messages re-send pending requests with fresh msg_id/seqno instead of stale ones (which made the server reject them and cascaded into more resets)
 - network stays awake in background for up to 2 minutes while generic requests (sends, getDifference) are pending, instead of pausing after 10 seconds regardless
+- 🐶 persistent connection: fix notifications arriving minutes late because of a variety of stock push connection bugs
+- 🐶 persistent connection: fix non-stop reconnects under censorship or with the server unreachable, retries now slow down (stock retried every 4 seconds, or every 400 ms after a connection reset)
 - text messages no longer show the "sent" tick on transport quick ack (server received the packet, not the send); the clock stays until the server confirms the message, which on bad links could be minutes later
 - sticker cutout/eraser edits no longer progressively fade and/or darken transparent PNGs
 - connection status title no longer gets stuck on "Updating..." when its transition animation is cancelled
