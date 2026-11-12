@@ -43,7 +43,7 @@ index 0000000..0000000 100644
                  }
                  if (factCheckHint != null) {
                      factCheckHint.hide();
-@@ -28492,8 +28495,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -28500,8 +28503,8 @@ public class ChatActivity extends BaseFragment implements
              videoConversionTimeHint.setJointPx(0, -dp(16) + loc[0] + foundCell.timeX + foundCell.timeWidth / 2f);
              videoConversionTimeHint.show();
          } else {
@@ -54,7 +54,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -28523,6 +28526,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -28531,6 +28534,9 @@ public class ChatActivity extends BaseFragment implements
  
      private long lastScrollTime;
      private boolean savedMessagesTagHintShown;
@@ -64,7 +64,7 @@ index 0000000..0000000 100644
      private void checkSavedMessagesTagHint() {
          if (savedMessagesTagHint == null || savedMessagesTagHint.shown() || savedMessagesTagHintShown || !checkedSavedMessagesHint) {
              return;
-@@ -28556,8 +28562,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -28564,8 +28570,8 @@ public class ChatActivity extends BaseFragment implements
  
                  MessagesController.getGlobalMainSettings().edit().putInt("savedsearchtaghint", 1).apply();
              } else {

@@ -54,7 +54,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -12762,7 +12762,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -12770,7 +12770,7 @@ public class ChatActivity extends BaseFragment implements
          }
  
          final float paddingBottom;
@@ -63,7 +63,7 @@ index 0000000..0000000 100644
              paddingBottom = AndroidUtilities.navigationBarHeight;
          } else {
              paddingBottom = blurredViewBottomOffset + dp(NonIslandHelper.chatElements() ? 3 : 9 + 7)
-@@ -46690,7 +46690,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -46694,7 +46694,7 @@ public class ChatActivity extends BaseFragment implements
                  removeTag.setColorKeys(Theme.key_color_red, Theme.key_color_red);
                  popupLayout.addView(removeTag);
                  scrimPopupContainerLayout.addView(popupLayout);
@@ -72,7 +72,7 @@ index 0000000..0000000 100644
                  final boolean canDeleteReactions = ChatObject.canUserDoAdminAction(currentChat, ChatObject.ACTION_DELETE_MESSAGES)
                      && (reaction.count > 1 || !reaction.chosen);
  
-@@ -47865,7 +47865,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -47869,7 +47869,7 @@ public class ChatActivity extends BaseFragment implements
              parentChatActivity.checkUi_messagesSearchListPadding();
          }
  
