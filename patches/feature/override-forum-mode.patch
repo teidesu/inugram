@@ -4,15 +4,15 @@ Date: Wed, 12 Aug 2026 22:55:15 +0400
 Subject: local overrides for forum topics view
 
 ---
- .../src/main/java/org/telegram/messenger/ChatObject.java      | 4 ++++
- .../src/main/java/org/telegram/messenger/MessagesStorage.java | 4 ++--
- 2 files changed, 6 insertions(+), 2 deletions(-)
+ .../src/main/java/org/telegram/messenger/ChatObject.java  | 8 ++++++++
+ .../main/java/org/telegram/messenger/MessagesStorage.java | 4 ++--
+ 2 files changed, 10 insertions(+), 2 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/ChatObject.java b/TMessagesProj/src/main/java/org/telegram/messenger/ChatObject.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/ChatObject.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/ChatObject.java
-@@ -2629,6 +2629,10 @@ public class ChatObject {
+@@ -2629,11 +2629,19 @@ public class ChatObject {
      }
  
      public static boolean areTabsEnabled(TLRPC.Chat chat) {
@@ -23,6 +23,15 @@ index 0000000..0000000 100644
          return SharedConfig.forceForumTabs || chat != null && chat.forum_tabs;
      }
  
+     /** The topics in a panel that slides in from the right: a forum's own choice, apart from its tabs; always in direct messages. */
+     public static boolean isSidebarEnabled(TLRPC.Chat chat) {
++        final int inuOverride = chat == null || !chat.forum ? 0 : desu.inugram.helpers.chat.ForumDisplayHelper.getOverride(chat.id);
++        if (inuOverride != 0) {
++            return inuOverride == desu.inugram.helpers.chat.ForumDisplayHelper.MODE_SIDEBAR;
++        }
+         return chat != null && (chat.forum && chat.forum_sidebar || chat.monoforum);
+     }
+ }
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java

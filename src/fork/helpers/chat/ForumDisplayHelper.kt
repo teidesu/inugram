@@ -24,6 +24,7 @@ object ForumDisplayHelper {
     const val MODE_DEFAULT = 0
     const val MODE_TABS = 1
     const val MODE_LIST = 2
+    const val MODE_SIDEBAR = 3
 
     private fun overrideKey(chatId: Long) = "forum_display:$chatId"
 
@@ -50,8 +51,8 @@ object ForumDisplayHelper {
             ).setOnClickListener { swipeBack.closeForeground() }
         }
 
-        val labels = intArrayOf(R.string.Default, R.string.TopicsLayoutTabs, R.string.TopicsLayoutList)
-        for (mode in MODE_DEFAULT..MODE_LIST) {
+        val labels = intArrayOf(R.string.Default, R.string.TopicsLayoutTabs, R.string.TopicsLayoutList, R.string.TopicsSidebar)
+        for (mode in MODE_DEFAULT..MODE_SIDEBAR) {
             val cell = ActionBarMenuItem.addItem(
                 windowLayout, 0,
                 LocaleController.getString(labels[mode]), true, resourcesProvider,
@@ -95,7 +96,8 @@ object ForumDisplayHelper {
                 layout.removeFragmentFromStack(f)
                 f.clearViews()
                 layout.addFragmentToStack(f, i)
-                if (!tabs) {
+                val prev = fragments.getOrNull(i - 1)
+                if (!tabs && !(prev is TopicsFragment && prev.currentChat?.id == chatId)) {
                     layout.addFragmentToStack(TopicsFragment(Bundle().apply { putLong("chat_id", chatId) }), i)
                     i++
                 }
