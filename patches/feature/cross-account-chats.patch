@@ -6,11 +6,11 @@ Subject: cross-account chats: show a chat from another account in the chat list
 ---
  .../ui/ActionBar/ActionBarLayout.java         |  1 +
  .../telegram/ui/Adapters/DialogsAdapter.java  | 73 ++++++++++++++++++-
- .../ui/Adapters/DialogsSearchAdapter.java     | 10 +++
+ .../ui/Adapters/DialogsSearchAdapter.java     | 12 ++-
  .../org/telegram/ui/Cells/DialogCell.java     | 34 +++++++++
  .../telegram/ui/Cells/ProfileSearchCell.java  | 29 ++++++++
  .../java/org/telegram/ui/DialogsActivity.java | 26 +++++++
- 6 files changed, 170 insertions(+), 3 deletions(-)
+ 6 files changed, 171 insertions(+), 4 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
 index 0000000..0000000 100644
@@ -195,6 +195,15 @@ index 0000000..0000000 100644
  
                  if (obj instanceof TLRPC.TL_sponsoredPeer) {
                      final TLRPC.TL_sponsoredPeer sponsoredPeer = (TLRPC.TL_sponsoredPeer) obj;
+@@ -1920,7 +1930,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+                 }
+                 cell.setChecked(false, false);
+                 boolean savedMessages = false;
+-                if (user != null && user.id == selfUserId && dialogsType != DialogsActivity.DIALOGS_TYPE_BOT_SELECT_VERIFY) {
++                if (user != null && user.id == (inu_linked != null ? UserConfig.getInstance(inu_linked.account).getClientUserId() : selfUserId) && dialogsType != DialogsActivity.DIALOGS_TYPE_BOT_SELECT_VERIFY) {
+                     name = LocaleController.getString(R.string.SavedMessages);
+                     username = null;
+                     savedMessages = true;
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
