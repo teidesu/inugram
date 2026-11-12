@@ -174,7 +174,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -1049,6 +1049,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -1050,6 +1050,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              blurSizeFraction = value;
              this.avatarScale = avatarScale;
              this.isPulledDown = isPulledDown;
@@ -182,7 +182,7 @@ index 0000000..0000000 100644
          }
  
          public void setRoundRadiusCollapse(int roundRadiusCollapse) {
-@@ -1151,7 +1152,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -1152,7 +1153,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                  }
              }
  
@@ -191,7 +191,7 @@ index 0000000..0000000 100644
                  canvas.translate(inset, inset + thisHeight);
                  float fraction = !isPulledDown && !blurView.isUsingRenderNode() && avatarsViewPager.getRealPosition() != 0 ? 1f : (1f - blurSizeFraction);
                  blurView.draw(canvas, this, thisWidth - inset * 2f, thisHeight - inset * 2f, true, fraction, alpha);
-@@ -1353,11 +1354,12 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -1354,11 +1355,12 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          private void updateBackgroundPaint() {
              final int color1 = color1Animated.set(this.color1);
              final int color2 = color2Animated.set(this.color2);
@@ -206,7 +206,7 @@ index 0000000..0000000 100644
              }
              if (buttonsGlass != null) {
                  buttonsGlass.setButtonColor(btnColor, hasColorById);
-@@ -1599,14 +1601,17 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -1600,14 +1602,17 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              for (int i = 0; i < 2; i++) {
                  if (pressedOverlayAlpha[i] > 0f) {
                      pressedOverlayGradient[i].setAlpha((int) (pressedOverlayAlpha[i] * 255));
@@ -226,7 +226,7 @@ index 0000000..0000000 100644
  
              int count = avatarsViewPager.getRealCount();
              selectedPosition = avatarsViewPager.getRealPosition();
-@@ -3140,6 +3145,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -3141,6 +3146,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                          if (giftsView != null) {
                              giftsView.setExpandProgress(1f);
                          }
@@ -234,7 +234,7 @@ index 0000000..0000000 100644
                          if (actionsView != null) {
                              actionsView.setParentExpanded(1f);
                          }
-@@ -11543,7 +11549,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -11653,7 +11659,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              actionsView.clipHeight = -1;
              float bottom = extraHeight + newTop - dp(hasMusic || hasBalance ? 25 : 0);
              float height = Math.min(dp(74), bottom - newTop);
@@ -243,7 +243,7 @@ index 0000000..0000000 100644
          }
  
          if (callToActionItem != null && callToActionItem.getTag() != null) {
-@@ -11577,7 +11583,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -11687,7 +11693,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
  //            musicView.clipHeight = -1;
              float bottom = extraHeight + newTop + dp(74);
              float height = Math.min(getActionsExtraHeight(), bottom - newTop);

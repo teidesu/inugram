@@ -13,7 +13,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayou
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java
-@@ -4290,14 +4290,7 @@ public class RichMessageLayout {
+@@ -4301,14 +4301,7 @@ public class RichMessageLayout {
              }
              tableLayout.setMinimumCellHeight(dp(block.compact ? 18 : 36));
  

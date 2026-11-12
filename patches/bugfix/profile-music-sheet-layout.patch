@@ -4,8 +4,8 @@ Date: Wed, 12 Aug 2026 23:17:45 +0400
 Subject: music sheet bugfixes
 
 ---
- .../ui/Components/AudioPlayerAlert.java       | 71 ++++++++++++++++++-
- 1 file changed, 69 insertions(+), 2 deletions(-)
+ .../ui/Components/AudioPlayerAlert.java       | 66 +++++++++++++++++++
+ 1 file changed, 66 insertions(+)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerAlert.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerAlert.java
 index 0000000..0000000 100644
@@ -100,15 +100,3 @@ index 0000000..0000000 100644
                  if (ev.getAction() == MotionEvent.ACTION_DOWN && scrollOffsetY != 0 && actionBar.getAlpha() == 0.0f) {
                      boolean dismiss;
                      if (listAdapter.getItemCount() > 0) {
-@@ -469,8 +535,9 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
- 
-                     if (isProfilePlaylist) {
-                         actionBar.setVisibility(View.VISIBLE);
--                        actionBar.setTranslationY(Math.max(0, top - backgroundPaddingTop - dp(10) + dp(6) * (1.0f - actionBarSlide) - actionBar.getTop()));
--                        actionBarShadow.setTranslationY(Math.max(0, top - backgroundPaddingTop - dp(10) + dp(6) * (1.0f - actionBarSlide) - actionBar.getTop()));
-+                        final float actionBarTranslation = Math.max(0, top + backgroundPaddingTop - AndroidUtilities.statusBarHeight + dp(6) * (1.0f - actionBarSlide) - actionBar.getTop());
-+                        actionBar.setTranslationY(actionBarTranslation);
-+                        actionBarShadow.setTranslationY(actionBarTranslation);
-                     }
-                 }
-             }

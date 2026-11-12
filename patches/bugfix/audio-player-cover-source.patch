@@ -74,7 +74,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerA
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerAlert.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerAlert.java
-@@ -2416,8 +2416,8 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+@@ -2417,8 +2417,8 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
              TLRPC.Document document = messageObject.getDocument();
              currentFile = FileLoader.getAttachFileName(document);
              currentAudioFinishedLoading = false;

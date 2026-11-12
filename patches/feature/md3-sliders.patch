@@ -13,7 +13,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerA
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerAlert.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerAlert.java
-@@ -711,6 +711,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+@@ -712,6 +712,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
              }
          };
          seekBarView.setLineWidth(4);
@@ -21,7 +21,7 @@ index 0000000..0000000 100644
          seekBarView.setDelegate(new SeekBarView.SeekBarViewDelegate() {
              @Override
              public void onSeekBarDrag(boolean stop, float progress) {
-@@ -2366,6 +2367,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+@@ -2367,6 +2368,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
              updateProgress(messageObject, !sameMessageObject);
              updateCover(messageObject, !sameMessageObject);
  

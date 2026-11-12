@@ -6,11 +6,11 @@ Subject: remove play services stuff only available for official apps
 ---
  TMessagesProj/build.gradle                    |   4 -
  .../telegram/messenger/CaptchaController.java |  95 ----
- ...FirebasePhoneNumberVerificationHelper.java | 386 -------------
+ ...FirebasePhoneNumberVerificationHelper.java | 372 ------------
  .../messenger/MessagesController.java         |  12 -
  .../telegram/tgnet/ConnectionsManager.java    |  43 +-
- .../java/org/telegram/ui/LoginActivity.java   | 534 +-----------------
- 6 files changed, 14 insertions(+), 1060 deletions(-)
+ .../java/org/telegram/ui/LoginActivity.java   | 528 +-----------------
+ 6 files changed, 14 insertions(+), 1040 deletions(-)
  delete mode 100644 TMessagesProj/src/main/java/org/telegram/messenger/CaptchaController.java
  delete mode 100644 TMessagesProj/src/main/java/org/telegram/messenger/FirebasePhoneNumberVerificationHelper.java
 
@@ -149,7 +149,7 @@ deleted file mode 100644
 index 0000000..0000000
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/FirebasePhoneNumberVerificationHelper.java
 +++ /dev/null
-@@ -1,386 +0,0 @@
+@@ -1,372 +0,0 @@
 -package org.telegram.messenger;
 -
 -import android.Manifest;
@@ -193,7 +193,6 @@ index 0000000..0000000
 -import java.util.ArrayList;
 -import java.util.Collections;
 -import java.util.List;
--import java.util.Locale;
 -import java.util.concurrent.CancellationException;
 -
 -public class FirebasePhoneNumberVerificationHelper {
@@ -215,8 +214,6 @@ index 0000000..0000000
 -    public static class SimInfo {
 -        public int slot;
 -        public String carrierName;
--        public String countryName;
--        public String mccMnc;
 -        public String phoneNumber;
 -    }
 -
@@ -246,17 +243,6 @@ index 0000000..0000000
 -            }
 -            if (!TextUtils.isEmpty(carrierName)) {
 -                info.carrierName = carrierName;
--            }
--
--            final String countryIso = tm.getSimCountryIso();
--            if (!TextUtils.isEmpty(countryIso)) {
--                final Locale locale = LocaleController.getInstance().getCurrentLocale();
--                info.countryName = emptyToNull(new Locale("", countryIso.toUpperCase(Locale.US)).getDisplayCountry(locale != null ? locale : Locale.getDefault()));
--            }
--
--            final String operator = tm.getSimOperator();
--            if (operator != null && operator.length() >= 5) {
--                info.mccMnc = operator.substring(0, 3) + " " + operator.substring(3);
 -            }
 -
 -            info.phoneNumber = emptyToNull(readPhoneNumber(context, tm, subId));
@@ -834,7 +820,7 @@ index 0000000..0000000 100644
                  }
              }, SHOW_DELAY);
          }
-@@ -3441,182 +3311,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -3441,176 +3311,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                  cancelRequestingPasskey.run();
                  cancelRequestingPasskey = null;
              }
@@ -911,12 +897,6 @@ index 0000000..0000000 100644
 -            }
 -            if (sim.phoneNumber != null) {
 -                tableView.addRow(getString(R.string.FpnvConsentPhoneNumber), sim.phoneNumber.startsWith("+") ? PhoneFormat.getInstance().format(sim.phoneNumber) : sim.phoneNumber);
--            }
--            if (sim.countryName != null) {
--                tableView.addRow(getString(R.string.FpnvConsentCountry), sim.countryName);
--            }
--            if (sim.mccMnc != null) {
--                tableView.addRow(getString(R.string.FpnvConsentMccMnc), sim.mccMnc);
 -            }
 -            final FrameLayout tableContainer = new FrameLayout(context);
 -            tableContainer.addView(tableView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP | Gravity.FILL_HORIZONTAL, 24, 4, 24, 4));
@@ -1017,7 +997,7 @@ index 0000000..0000000 100644
          }
  
          private boolean requestedPasskey = false;
-@@ -3725,14 +3419,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -3719,14 +3419,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
          public void didReceivedNotification(int id, int account, Object... args) {
              if (id == NotificationCenter.emojiLoaded) {
                  countryButton.getCurrentView().invalidate();
@@ -1032,7 +1012,7 @@ index 0000000..0000000 100644
              }
          }
      }
-@@ -6169,8 +5855,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -6163,8 +5855,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
  
          private TextView titleView;
          private TextView subtitleView;
@@ -1041,7 +1021,7 @@ index 0000000..0000000 100644
          private RLottieImageView inboxImageView;
  
          private Bundle currentParams;
-@@ -6179,8 +5863,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -6173,8 +5863,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
          private String phone, emailPhone;
          private String requestPhone, phoneHash;
  
@@ -1050,7 +1030,7 @@ index 0000000..0000000 100644
          public LoginActivitySetupEmail(Context context) {
              super(context);
  
-@@ -6236,72 +5918,8 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -6230,72 +5918,8 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
  
              addView(emailOutlineView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 58, 16, 24, 16, 0));
  
@@ -1123,7 +1103,7 @@ index 0000000..0000000 100644
          }
  
          @Override
-@@ -6310,8 +5928,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -6304,8 +5928,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
              subtitleView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText6));
              subtitleView.setLinkTextColor(Theme.getColor(Theme.key_chat_messageLinkIn));
              emailField.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
@@ -1132,7 +1112,7 @@ index 0000000..0000000 100644
  
              emailOutlineView.invalidate();
          }
-@@ -6338,10 +5954,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -6332,10 +5954,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
              requestPhone = currentParams.getString("phoneFormated");
              phoneHash = currentParams.getString("phoneHash");
  
@@ -1143,7 +1123,7 @@ index 0000000..0000000 100644
              showKeyboard(emailField);
              emailField.requestFocus();
          }
-@@ -6368,7 +5980,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -6362,7 +5980,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                  return;
              }
  
@@ -1152,7 +1132,7 @@ index 0000000..0000000 100644
              Bundle params = new Bundle();
              params.putString("phone", phone);
              params.putString("ephone", emailPhone);
-@@ -6377,44 +5989,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -6371,44 +5989,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
              params.putString("email", email);
              params.putBoolean("setup", true);
  
@@ -1197,7 +1177,7 @@ index 0000000..0000000 100644
              if (TextUtils.isEmpty(email)) {
                  onPasscodeError(false);
                  return;
-@@ -6502,21 +6076,17 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -6496,21 +6076,17 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
          private CodeFieldContainer codeFieldContainer;
          private TextView titleView;
          private TextView confirmTextView;
@@ -1219,7 +1199,7 @@ index 0000000..0000000 100644
          private int resetAvailablePeriod, resetPendingDate;
          private String phone, emailPhone, email;
          private String requestPhone, phoneHash;
-@@ -6582,61 +6152,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -6576,61 +6152,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
  
              addView(codeFieldContainer, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, 42, Gravity.CENTER_HORIZONTAL, 0, setup ? 48 : 32, 0, 0));
  
@@ -1281,7 +1261,7 @@ index 0000000..0000000 100644
              cantAccessEmailFrameLayout = new FrameLayout(context);
              AndroidUtilities.updateViewVisibilityAnimated(cantAccessEmailFrameLayout, activityMode != MODE_CHANGE_LOGIN_EMAIL && !isSetup, 1f, false);
  
-@@ -6750,9 +6265,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -6744,9 +6265,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
              });
              AndroidUtilities.updateViewVisibilityAnimated(resendCodeView, false, 1f, false);
  
@@ -1291,7 +1271,7 @@ index 0000000..0000000 100644
              errorViewSwitcher = new ViewSwitcher(context) {
                  @Override
                  protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-@@ -6785,8 +6297,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -6779,8 +6297,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
              } else {
                  bottomContainer.addView(errorViewSwitcher, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP));
                  bottomContainer.addView(cantAccessEmailFrameLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP));
@@ -1300,7 +1280,7 @@ index 0000000..0000000 100644
              }
              addView(bottomContainer, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 0, 1f));
          }
-@@ -6836,8 +6346,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -6830,8 +6346,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
          public void updateColors() {
              titleView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
              confirmTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText6));
@@ -1309,7 +1289,7 @@ index 0000000..0000000 100644
              resendCodeView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText4));
              cantAccessEmailView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText4));
              emailResetInView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText6));
-@@ -6856,11 +6364,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -6850,11 +6364,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
          private void showResendCodeView(boolean show) {
              AndroidUtilities.updateViewVisibilityAnimated(resendCodeView, show);
              AndroidUtilities.updateViewVisibilityAnimated(cantAccessEmailFrameLayout, !show && activityMode != MODE_CHANGE_LOGIN_EMAIL && !isSetup);
@@ -1321,7 +1301,7 @@ index 0000000..0000000 100644
          }
  
          @Override
-@@ -6953,10 +6456,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -6947,10 +6456,6 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                  confirmTextView.setText(AndroidUtilities.formatSpannable(getString(R.string.CheckYourEmailSubtitle), confirmText));
              }
  
@@ -1332,7 +1312,7 @@ index 0000000..0000000 100644
              showKeyboard(codeFieldContainer.codeField[0]);
              codeFieldContainer.requestFocus();
  
-@@ -7091,7 +6590,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -7085,7 +6590,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
              }
  
              code = codeFieldContainer.getCode();
@@ -1341,7 +1321,7 @@ index 0000000..0000000 100644
                  onPasscodeError(false);
                  return;
              }
-@@ -7120,15 +6619,9 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -7114,15 +6619,9 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                  TLRPC.TL_auth_signIn request = new TLRPC.TL_auth_signIn();
                  request.phone_number = requestPhone;
                  request.phone_code_hash = phoneHash;
@@ -1360,7 +1340,7 @@ index 0000000..0000000 100644
                  request.flags |= 2;
                  req = request;
              }
-@@ -7235,15 +6728,10 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
+@@ -7229,15 +6728,10 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                          }
                      }
                  }

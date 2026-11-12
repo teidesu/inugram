@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -10751,7 +10751,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -10753,7 +10753,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              if (filterTabsView != null && filterTabsView.getVisibility() == View.VISIBLE && (mask & MessagesController.UPDATE_MASK_READ_DIALOG_MESSAGE) != 0) {
                  filterTabsView.checkTabsCounter();
              }

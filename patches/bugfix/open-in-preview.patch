@@ -13,7 +13,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -13151,7 +13151,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -13166,7 +13166,7 @@ public class ChatActivity extends BaseFragment implements
          }
      }
  
@@ -22,7 +22,7 @@ index 0000000..0000000 100644
          if (getParentActivity() == null || getContext() == null) {
              return;
          }
-@@ -21342,6 +21342,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -21358,6 +21358,7 @@ public class ChatActivity extends BaseFragment implements
                  ((ChatAttachAlertRichLayout) chatAttachAlert.getCurrentAttachLayout()).onExternalDocumentPicked(data);
                  return;
              } else if (requestCode == 1) {

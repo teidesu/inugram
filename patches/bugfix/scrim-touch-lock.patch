@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -4799,6 +4799,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -4806,6 +4806,9 @@ public class ChatActivity extends BaseFragment implements
                  if (quickShareSelectorOverlay != null && quickShareSelectorOverlay.isActive()) {
                      return false;
                  }
@@ -21,7 +21,7 @@ index 0000000..0000000 100644
                  boolean result = super.onInterceptTouchEvent(e);
                  if (actionBar.isActionModeShowed() || isReport()) {
                      return result;
-@@ -5201,6 +5204,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -5205,6 +5208,9 @@ public class ChatActivity extends BaseFragment implements
  
              @Override
              public boolean onTouchEvent(MotionEvent e) {
@@ -31,7 +31,7 @@ index 0000000..0000000 100644
                  textSelectionHelper.checkSelectionCancel(e);
                  if (e.getAction() == MotionEvent.ACTION_DOWN) {
                      scrollByTouch = true;
-@@ -38044,7 +38050,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -38111,7 +38117,7 @@ public class ChatActivity extends BaseFragment implements
          if (animatorSearchResultAsListVisibility.getValue()) {
              return false;
          }
@@ -40,7 +40,7 @@ index 0000000..0000000 100644
              && (quickShareSelectorOverlay == null || !quickShareSelectorOverlay.isActive());
      }
  
-@@ -38059,7 +38065,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -38126,7 +38132,7 @@ public class ChatActivity extends BaseFragment implements
          if (animatorSearchResultAsListVisibility.getValue()) {
              return false;
          }
@@ -49,7 +49,7 @@ index 0000000..0000000 100644
              && (quickShareSelectorOverlay == null || !quickShareSelectorOverlay.isActive());
      }
  
-@@ -45444,6 +45450,23 @@ public class ChatActivity extends BaseFragment implements
+@@ -45512,6 +45518,23 @@ public class ChatActivity extends BaseFragment implements
          ).setDuration(8000).show(true);
      }
  
@@ -73,7 +73,7 @@ index 0000000..0000000 100644
      public void didLongPressLink(ChatMessageCell cell, MessageObject messageObject, CharacterStyle span, String str) {
          final ItemOptions options = ItemOptions.makeOptions(ChatActivity.this, cell, true);
          final ScrimOptions dialog = new ScrimOptions(getContext(), themeDelegate);
-@@ -45595,7 +45618,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -45663,7 +45686,7 @@ public class ChatActivity extends BaseFragment implements
          } else {
              dialog.setScrim(cell, span, null);
          }
@@ -82,7 +82,7 @@ index 0000000..0000000 100644
      }
  
      public void didLongPressFormattedDate(ChatMessageCell cell, CharacterStyle span, String originalText, TLRPC.TL_messageEntityFormattedDate entity) {
-@@ -45675,7 +45698,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -45743,7 +45766,7 @@ public class ChatActivity extends BaseFragment implements
  
          dialog.setItemOptions(options);
          dialog.setScrim(cell, span, s);
@@ -91,7 +91,7 @@ index 0000000..0000000 100644
      }
  
  
-@@ -45772,7 +45795,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -45840,7 +45863,7 @@ public class ChatActivity extends BaseFragment implements
  
              dialog.setItemOptions(options);
              dialog.setScrim(cell, link, null);
@@ -100,7 +100,7 @@ index 0000000..0000000 100644
          }), null, null, 0, getMessagesController().webFileDatacenterId, ConnectionsManager.ConnectionTypeGeneric, true);
          progress.onCancel(() -> getConnectionsManager().cancelRequest(reqId, true));
          progress.init();
-@@ -45825,7 +45848,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -45893,7 +45916,7 @@ public class ChatActivity extends BaseFragment implements
  
              dialog.setItemOptions(options);
              dialog.setScrim(cell, link, null);
@@ -109,7 +109,7 @@ index 0000000..0000000 100644
          };
          if (true || BuildVars.DEBUG_PRIVATE_VERSION) {
              TL_account.checkUsername req2 = new TL_account.checkUsername();
-@@ -46058,7 +46081,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -46126,7 +46149,7 @@ public class ChatActivity extends BaseFragment implements
              } else {
                  dialog.setScrim(cell, link, null);
              }

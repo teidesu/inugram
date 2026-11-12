@@ -283,7 +283,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -3434,6 +3434,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -3436,6 +3436,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              } else {
                  statusDrawable = new AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable(null, dp(26));
                  statusDrawable.center = true;
@@ -291,7 +291,7 @@ index 0000000..0000000 100644
                  logoDrawable = context.getResources().getDrawable(R.drawable.telegram_logo_2).mutate();
                  logoDrawable.setBounds(0, dp(2), logoDrawable.getIntrinsicWidth(), dp(2) + logoDrawable.getIntrinsicHeight());
                  // a new drawable (also when the view is recreated after a theme switch made elsewhere): remember its tint, the
-@@ -3442,6 +3443,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -3444,6 +3445,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                  SpannableStringBuilder ssb = new SpannableStringBuilder(getString(R.string.AppName));
                  ssb.setSpan(new ImageSpan(logoDrawable), 0, ssb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                  actionBar.setTitle(ssb, statusDrawable);
@@ -301,7 +301,7 @@ index 0000000..0000000 100644
                  updateStatus(UserConfig.getInstance(currentAccount).getCurrentUser(), false);
              }
              if (folderId == 0) {
-@@ -14386,4 +14390,4 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -14388,4 +14392,4 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          keys.add(Theme.key_actionBarDefaultSubmenuItem);
          keys.add(Theme.key_actionBarDefaultSubmenuBackground);
      }
@@ -706,7 +706,7 @@ index 0000000..0000000 100644
      <string name="LanguageName">English</string>
      <string name="English">English</string>
      <string name="LanguageNameInEnglish">English</string>
-@@ -2769,8 +2769,8 @@
+@@ -2770,8 +2770,8 @@
      <string name="AuthAnotherClientUrl">This code can be used to allow someone to log in to your Telegram account.\n\nTo confirm Telegram login, please go to Settings &gt; Devices &gt; Scan QR and scan the code.</string>
      <string name="QRCodePermissionNoCameraWithHint">**Telegram** needs camera access so that you can scan QR codes. Tap Settings -> Permissions, and turn **Camera** on.</string>
      <string name="SetProfilePhoto">Set Profile Photo</string>
@@ -717,7 +717,7 @@ index 0000000..0000000 100644
      <string name="AppUpdateVersionAndSize">Version %1$s • %2$s</string>
      <string name="AppBetaUpdateVersion">Version %1$s (%2$s)</string>
      <string name="AppUpdateDownloading">Downloading %1$d%%...</string>
-@@ -4212,7 +4212,7 @@
+@@ -4213,7 +4213,7 @@
      <string name="ViewMessageStatistic">Message Statistic</string>
      <string name="ViewMessage">Open Message</string>
      <!--Intro view-->

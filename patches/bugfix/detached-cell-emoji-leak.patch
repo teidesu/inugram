@@ -13,7 +13,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -992,6 +992,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -993,6 +993,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
              if (pollButtonDrawable != null) {
                  pollButtonDrawable.attach();
              }
@@ -22,7 +22,7 @@ index 0000000..0000000 100644
          }
  
          public void detach() {
-@@ -1001,6 +1003,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -1002,6 +1004,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
              if (pollButtonDrawable != null) {
                  pollButtonDrawable.detach();
              }
@@ -31,7 +31,7 @@ index 0000000..0000000 100644
          }
  
          public void destroy() {
-@@ -6117,6 +6121,12 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -6143,6 +6147,12 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                  }
                  animatedEmojiReplyStack = AnimatedEmojiSpan.update(AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES, this, false, animatedEmojiReplyStack, drawCompactReply && compactReplyRow != null ? compactReplyRow.text : replyTextLayout);
                  animatedEmojiDescriptionStack = AnimatedEmojiSpan.update(AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES, this, false, animatedEmojiDescriptionStack, descriptionLayout);
@@ -44,7 +44,7 @@ index 0000000..0000000 100644
                  updateAnimatedEmojis();
              } else {
                  radialProgress.onDetachedFromWindow();
-@@ -6150,6 +6160,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -6176,6 +6186,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                  AnimatedEmojiSpan.release(this, animatedEmojiDescriptionStack);
                  AnimatedEmojiSpan.release(this, animatedEmojiReplyStack);
                  AnimatedEmojiSpan.release(this, animatedEmojiStack);
@@ -53,7 +53,7 @@ index 0000000..0000000 100644
              }
          }
  
-@@ -6584,6 +6596,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -6610,6 +6622,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
              captionOffsetX = 0;
              currentCaption = null;
              explanationLayout = null;
@@ -62,7 +62,7 @@ index 0000000..0000000 100644
              if (poll != null) {
                  poll.explanationTitleLayout = null;
                  poll.currentExplanation = null;
-@@ -7695,7 +7709,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -7721,7 +7735,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                                  restLines = restLinesCount;
                                  descriptionLayout = generateStaticLayout(text, Theme.chat_replyTextPaint, linkPreviewMaxWidth - (isRTL ? smallImageSide + 2 * smallSideMargin : 0), linkPreviewMaxWidth - smallImageSide - 2 * smallSideMargin, restLinesCount, maxLines);
                              }
@@ -73,7 +73,7 @@ index 0000000..0000000 100644
  
                              int height = descriptionLayout.getLineBottom(descriptionLayout.getLineCount() - 1);
                              linkPreviewHeight += height;
-@@ -16893,7 +16909,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -16927,7 +16943,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                          if (hasReplyQuote || getMessageObject().replyMessageObject != null && !getMessageObject().replyMessageObject.isSpoilersRevealed) {
                              SpoilerEffect.addSpoilers(this, replyTextLayout, replyTextOffset, replyTextOffset + (inu_isCustomSpoiler ? replySpoilerTextWidth : replyTextWidth), replySpoilersPool, replySpoilers);
                          }

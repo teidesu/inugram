@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/RichWidgetBl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/RichWidgetBlock.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/RichWidgetBlock.java
-@@ -589,7 +589,7 @@ public final class RichWidgetBlock extends RichMessageLayout.RichBlock
+@@ -596,7 +596,7 @@ public final class RichWidgetBlock extends RichMessageLayout.RichBlock
          if (view != null && cell != null && delegate != null) {
              // Only a cell the chat's list shows has a top to keep (a preview's has none); one laid out off screen
              // changes height as any message does, and what is on screen stays.

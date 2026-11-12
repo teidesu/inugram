@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -25554,13 +25554,17 @@ public class ChatActivity extends BaseFragment implements
+@@ -25570,13 +25570,17 @@ public class ChatActivity extends BaseFragment implements
              if (dialog_id != arg.botUserId) return;
              if (getTopicId() != arg.botTopicId) return;
  
@@ -30,7 +30,7 @@ index 0000000..0000000 100644
                  if (updateStreamingTopic != null) {
                      AndroidUtilities.cancelRunOnUIThread(updateStreamingTopic);
                      updateStreamingTopic = null;
-@@ -25569,9 +25573,12 @@ public class ChatActivity extends BaseFragment implements
+@@ -25585,9 +25589,12 @@ public class ChatActivity extends BaseFragment implements
  
                  final int firstMessageGroupHeight = calculateHeightUntilOutOwner(startRow);
                  botDraftHeightController.setPreviousMessageHeight(firstMessageGroupHeight);
@@ -43,7 +43,7 @@ index 0000000..0000000 100644
              checkSendButtonBlockedByTyping(true);
          } else if (id == NotificationCenter.botForumDraftDelete) {
              final BotForumHelper.BotForumTextDraftDeleteNotification arg = (BotForumHelper.BotForumTextDraftDeleteNotification) args[0];
-@@ -26385,7 +26392,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -26401,7 +26408,7 @@ public class ChatActivity extends BaseFragment implements
  
          final boolean isBot = UserObject.isBot(currentUser);
          final boolean isStreamingTopic = isBot && BotForumHelper.getInstance(currentAccount).isStreamingTopic(getDialogId(), getTopicId());
@@ -52,7 +52,7 @@ index 0000000..0000000 100644
              MessageObject message = arr.get(0);
  
              final boolean isOutButWithHeight = !message.isBotPendingDraft && !message.isOutOwner()
-@@ -26590,7 +26597,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -26606,7 +26613,7 @@ public class ChatActivity extends BaseFragment implements
  
          checkSendButtonBlockedByTyping(true);
  
@@ -61,7 +61,7 @@ index 0000000..0000000 100644
  
          if (isBot && isStreamingTopic && !hasDraftsReplaces) {
              boolean hasMessageFromBot = false;
-@@ -27709,8 +27716,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -27725,8 +27732,10 @@ public class ChatActivity extends BaseFragment implements
              if (messageObject.getId() > 0 && old == null && UserObject.isBot(currentUser)) {
                  old = BotForumHelper.getInstance(currentAccount).onBotForumDraftCheckNewMessages(currentUser.id, (int) getTopicId(), messageObject.getId(), messageObject.messageText.toString());
                  if (old != null) {

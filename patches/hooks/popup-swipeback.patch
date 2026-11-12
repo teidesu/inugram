@@ -61,7 +61,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -33577,6 +33577,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -33626,6 +33626,9 @@ public class ChatActivity extends BaseFragment implements
              } else {
                  popupY = inBubbleMode ? 0 : AndroidUtilities.statusBarHeight;
              }

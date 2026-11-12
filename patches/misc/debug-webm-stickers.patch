@@ -109,7 +109,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -9083,6 +9083,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -9109,6 +9109,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                              if (!loopStickers()) {
                                  photoImage.animatedFileDrawableRepeatMaxCount = 1;
                              }

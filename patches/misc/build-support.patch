@@ -31,10 +31,10 @@ diff --git a/.gitmodules b/.gitmodules
 index 0000000..0000000 100644
 --- a/.gitmodules
 +++ b/.gitmodules
-@@ -55,3 +55,6 @@
- [submodule "TMessagesProj/jni/third_party/libprisma"]
- 	path = TMessagesProj/jni/third_party/libprisma
- 	url = https://github.com/TelegramMessenger/libprisma.git
+@@ -61,3 +61,6 @@
+ [submodule "TMessagesProj/jni/twidget/widget-sandbox"]
+ 	path = TMessagesProj/jni/twidget/widget-sandbox
+ 	url = https://github.com/TelegramMessenger/widget-sandbox.git
 +[submodule "TMessagesProj_App/jni/lsplant"]
 +	path = TMessagesProj_App/jni/lsplant
 +	url = https://github.com/LSPosed/LSPlant.git
@@ -168,7 +168,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -135,23 +214,34 @@ android {
+@@ -140,23 +219,34 @@ android {
      compileOptions {
          sourceCompatibility JavaVersion.VERSION_1_8
          targetCompatibility JavaVersion.VERSION_1_8
@@ -199,7 +199,7 @@ index 0000000..0000000 100644
                  version '3.22.1'
 -                arguments '-DANDROID_STL=c++_static', '-DANDROID_PLATFORM=android-23' //, '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
 +                arguments '-DANDROID_STL=c++_static', '-DANDROID_PLATFORM=android-26' //, '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
-                 targets 'tmessages.49'
+                 targets 'tmessages.49', 'twidget'
 +                if (!rootProject.ext.inuPluginless) {
 +                    arguments += ['-DINU_EXPORT_SQLITE=ON']
 +                }
@@ -209,7 +209,7 @@ index 0000000..0000000 100644
              }
          }
      }
-@@ -162,64 +252,13 @@ android {
+@@ -167,64 +257,13 @@ android {
              shrinkResources false
              multiDexEnabled true
              ndk.debugSymbolLevel = 'FULL'
@@ -278,7 +278,7 @@ index 0000000..0000000 100644
          }
  
          release {
-@@ -227,12 +266,13 @@ android {
+@@ -232,12 +271,13 @@ android {
              shrinkResources false
              multiDexEnabled true
              ndk.debugSymbolLevel = 'FULL'
@@ -295,7 +295,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -250,21 +290,21 @@ def getProps(String propName) {
+@@ -255,21 +295,21 @@ def getProps(String propName) {
          return "";
      }
  }
@@ -322,7 +322,7 @@ index 0000000..0000000 100644
              if (privateBuild.exists()) {
                  privateBuild.delete()
              }
-@@ -272,4 +312,16 @@ task checkVisibility {
+@@ -277,4 +317,16 @@ task checkVisibility {
      }
  }
  
@@ -484,7 +484,7 @@ diff --git a/TMessagesProj/proguard-rules.pro b/TMessagesProj/proguard-rules.pro
 index 0000000..0000000 100644
 --- a/TMessagesProj/proguard-rules.pro
 +++ b/TMessagesProj/proguard-rules.pro
-@@ -76,6 +76,21 @@
+@@ -82,6 +82,21 @@
  -keep class ru.noties.jlatexmath.** { *; }
  -dontwarn org.scilab.forge.jlatexmath.**
  
@@ -519,7 +519,7 @@ index 0000000..0000000 100644
      <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" />
      <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
  
-@@ -603,6 +604,12 @@
+@@ -610,6 +611,12 @@
  
          <receiver android:name=".NotificationDismissReceiver" android:exported="false"/>
  
@@ -879,7 +879,7 @@ index 0000000..0000000 100644
              cmake {
 -                version '3.22.1'
 -                arguments '-DANDROID_STL=c++_static', '-DANDROID_PLATFORM=android-23' // , '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
--                targets 'tmessages.49'
+-                targets 'tmessages.49', 'twidget'
 +                arguments '-DANDROID_STL=c++_static', '-DANDROID_PLATFORM=android-26' // , '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
 +                targets 'lsplant'
 +                if (rootProject.ext.ccachePath) {

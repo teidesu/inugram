@@ -46,7 +46,7 @@ index 0000000..0000000 100644
  import android.media.MediaExtractor;
  import android.media.MediaFormat;
  import android.media.MediaMuxer;
-@@ -1714,6 +1715,10 @@ public class MediaCodecVideoConvertor {
+@@ -1726,6 +1727,10 @@ public class MediaCodecVideoConvertor {
              try {
                  String mime = types.remove(0);
                  format.setString(MediaFormat.KEY_MIME, mime);

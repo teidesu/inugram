@@ -50,7 +50,7 @@ index 0000000..0000000 100644
              @Override
              public void onError(@NonNull CameraDevice camera, int error) {
                  Camera2Session.this.cameraDevice = camera;
-@@ -427,6 +439,12 @@ public class Camera2Session {
+@@ -456,6 +468,12 @@ public class Camera2Session {
              if (cameraDevice != null) {
                  cameraDevice.close();
                  cameraDevice = null;
@@ -269,7 +269,7 @@ index 0000000..0000000 100644
  import org.telegram.messenger.AndroidUtilities;
  import org.telegram.messenger.ApplicationLoader;
  import org.telegram.messenger.FileLog;
-@@ -128,6 +130,8 @@ public final class InstantCameraView2 extends InstantCameraViewBase {
+@@ -130,6 +132,8 @@ public final class InstantCameraView2 extends InstantCameraViewBase {
      private int zoomPointerId2 = -1;
  
      private boolean pinchZoomActive;
@@ -278,7 +278,7 @@ index 0000000..0000000 100644
      private boolean heavyOperationsStopped;
      private float previousWindowBrightness = Float.NaN;
      private int textureViewSize;
-@@ -243,6 +247,8 @@ public final class InstantCameraView2 extends InstantCameraViewBase {
+@@ -245,6 +249,8 @@ public final class InstantCameraView2 extends InstantCameraViewBase {
                  0
          ));
  
@@ -287,7 +287,7 @@ index 0000000..0000000 100644
          switchCameraButton = new FlashViews.ImageViewInvertable(context);
          switchCameraButton.setScaleType(ImageView.ScaleType.CENTER);
          switchCameraButton.setContentDescription(
-@@ -385,7 +391,7 @@ public final class InstantCameraView2 extends InstantCameraViewBase {
+@@ -392,7 +398,7 @@ public final class InstantCameraView2 extends InstantCameraViewBase {
          activeOutputResolution = SharedSettings.roundVideoOutputResolution.get();
          session = new RoundVideoSession.Builder(getContext(), textureView)
                  .setOutputDirectory(new File(ApplicationLoader.getFilesDirFixed(), "cache"))
@@ -296,7 +296,7 @@ index 0000000..0000000 100644
                  .setOutputResolution(activeOutputResolution)
                  .setVideoBitrate(SharedSettings.roundVideoVideoBitrate.get())
                  .setCameraResolution(SharedSettings.roundVideoCameraResolution.get())
-@@ -747,6 +753,9 @@ public final class InstantCameraView2 extends InstantCameraViewBase {
+@@ -763,6 +769,9 @@ public final class InstantCameraView2 extends InstantCameraViewBase {
              if (info.isPreviewPlaying() && getWindowVisibility() != VISIBLE) {
                  AndroidUtilities.runOnUIThread(InstantCameraView2.this::pauseForHiddenWindow);
              }
@@ -306,7 +306,7 @@ index 0000000..0000000 100644
          }
  
          @Override
-@@ -758,6 +767,7 @@ public final class InstantCameraView2 extends InstantCameraViewBase {
+@@ -774,6 +783,7 @@ public final class InstantCameraView2 extends InstantCameraViewBase {
                  SharedSettings.roundVideoLastCamera.set(cameraCapabilities.getActiveFacing());
              }
              updateButtons();
@@ -314,7 +314,7 @@ index 0000000..0000000 100644
          }
  
          @Override
-@@ -1051,7 +1061,7 @@ public final class InstantCameraView2 extends InstantCameraViewBase {
+@@ -1078,7 +1088,7 @@ public final class InstantCameraView2 extends InstantCameraViewBase {
              zoomPointerId2 = event.getPointerId(1);
              pinchStartDistance = pointerDistance(event, 0, 1);
              pinchZoomActive = pinchStartDistance > 0f;
@@ -323,7 +323,7 @@ index 0000000..0000000 100644
              return true;
          }
          if (event.getActionMasked() == MotionEvent.ACTION_MOVE && pinchZoomActive) {
-@@ -1062,19 +1072,7 @@ public final class InstantCameraView2 extends InstantCameraViewBase {
+@@ -1089,19 +1099,7 @@ public final class InstantCameraView2 extends InstantCameraViewBase {
                  return true;
              }
              float scale = pointerDistance(event, index1, index2) / pinchStartDistance;
@@ -344,7 +344,7 @@ index 0000000..0000000 100644
              return true;
          }
          if (event.getActionMasked() == MotionEvent.ACTION_POINTER_UP && pinchZoomActive) {
-@@ -1104,9 +1102,26 @@ public final class InstantCameraView2 extends InstantCameraViewBase {
+@@ -1131,9 +1129,26 @@ public final class InstantCameraView2 extends InstantCameraViewBase {
          pinchZoomActive = false;
          zoomPointerId1 = -1;
          zoomPointerId2 = -1;
@@ -371,7 +371,7 @@ index 0000000..0000000 100644
      private void animateZoomReset() {
          if (session == null) return;
          if (zoomResetAnimator != null) zoomResetAnimator.cancel();
-@@ -1115,6 +1130,7 @@ public final class InstantCameraView2 extends InstantCameraViewBase {
+@@ -1142,6 +1157,7 @@ public final class InstantCameraView2 extends InstantCameraViewBase {
          zoomResetAnimator.addUpdateListener(animation -> {
              zoomProgress = (float) animation.getAnimatedValue();
              if (session != null) session.setZoom(zoomProgress);
@@ -398,12 +398,12 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/utils/recorder/round/Round
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/utils/recorder/round/RoundVideoCameraController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/utils/recorder/round/RoundVideoCameraController.java
-@@ -2109,6 +2109,7 @@ final class RoundVideoCameraController {
+@@ -2074,6 +2074,7 @@ final class RoundVideoCameraController {
      }
  
-     private void prepareWarmSwitchSupport() {
-+        if (!desu.inugram.InuConfig.ROUND_RECORDER_DUAL_CAMERA.getValue()) warmSwitchDisabled = true;
-         if (warmSwitchDisabled) {
+     private void prepareDualActiveSupport() {
++        if (!desu.inugram.InuConfig.ROUND_RECORDER_DUAL_CAMERA.getValue()) dualDisabled = true;
+         if (dualDisabled) {
              return;
          }
 diff --git a/TMessagesProj/src/main/java/org/telegram/utils/settings/SharedSettings.java b/TMessagesProj/src/main/java/org/telegram/utils/settings/SharedSettings.java

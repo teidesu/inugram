@@ -59,7 +59,7 @@ index 0000000..0000000 100644
                  final int cardTop = Math.max(minTop, Math.min(maxTop,
                          (getHeight() - card.getMeasuredHeight()) / 2));
                  final int cardLeft = centerX - card.getMeasuredWidth() / 2;
-@@ -266,6 +273,29 @@ public class ProfileWalletCardDialog extends Dialog {
+@@ -272,6 +279,29 @@ public class ProfileWalletCardDialog extends Dialog {
          sendPill.setVisibility(showButton() ? View.VISIBLE : View.GONE);
          root.addView(sendPill, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, 60, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
  
@@ -89,7 +89,7 @@ index 0000000..0000000 100644
          publicNote = new TextView(getContext());
          publicNote.setTextSize(14);
          publicNote.setTypeface(AndroidUtilities.bold());
-@@ -304,6 +334,10 @@ public class ProfileWalletCardDialog extends Dialog {
+@@ -310,6 +340,10 @@ public class ProfileWalletCardDialog extends Dialog {
          return publicNote.getVisibility() == View.VISIBLE ? dp(12) + publicNote.getMeasuredHeight() : 0;
      }
  
@@ -100,7 +100,7 @@ index 0000000..0000000 100644
      private boolean showButton() {
          return showSendMoney || showHowItWorks || isSelf;
      }
-@@ -361,6 +395,10 @@ public class ProfileWalletCardDialog extends Dialog {
+@@ -367,6 +401,10 @@ public class ProfileWalletCardDialog extends Dialog {
          sendPill.setTranslationY(dp(16) * (1 - settle));
          sendPill.setScaleX(AndroidUtilities.lerp(.8f, 1f, settle));
          sendPill.setScaleY(AndroidUtilities.lerp(.8f, 1f, settle));
@@ -111,7 +111,7 @@ index 0000000..0000000 100644
          root.invalidate();
      }
  
-@@ -469,6 +507,7 @@ public class ProfileWalletCardDialog extends Dialog {
+@@ -475,6 +513,7 @@ public class ProfileWalletCardDialog extends Dialog {
          // Freeze the ramp; the closing animation fades the current tilt out with settle.
          if (gyroscopeAnimator != null) gyroscopeAnimator.cancel();
          sendPill.setEnabled(false);
@@ -134,7 +134,7 @@ index 0000000..0000000 100644
              .addGap()
              .add(R.drawable.wallet_help, LocaleController.getString(R.string.WalletWhatIsWallet), () -> {
                  o.dismiss();
-@@ -3326,16 +3330,17 @@ public class WalletActivity extends UniversalFragment implements NotificationCen
+@@ -3349,16 +3353,17 @@ public class WalletActivity extends UniversalFragment implements NotificationCen
          if (TextUtils.isEmpty(hash)) {
              return;
          }

@@ -48,7 +48,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -20699,6 +20699,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -20715,6 +20715,7 @@ public class ChatActivity extends BaseFragment implements
                  info.entities = entry.entities;
                  info.masks = entry.stickers;
                  info.ttl = entry.ttl;
@@ -68,7 +68,7 @@ index 0000000..0000000 100644
                      info.videoEditedInfo = videoEditedInfo;
                      info.canDeleteAfter = true;
                      photos.add(info);
-@@ -12487,7 +12488,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -12492,7 +12493,7 @@ public class ChatActivityEnterView extends FrameLayout implements
  
                                      SendMessagesHelper.prepareSendingMedia(AccountInstance.getInstance(currentAccount), photos, dialog_id, replyingMessageObject, getThreadMessage(), null, replyingQuote, false, false, editingMessageObject, notify, scheduleDate, scheduleRepeatPeriod, 0, false, null, parentFragment != null ? parentFragment.getMessageChatSendParams() : null, effectId, invertMedia, stars, getSendMonoForumPeerId(),  getSendMessageSuggestionParams());
                                  } else {

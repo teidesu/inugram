@@ -15,7 +15,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -1170,12 +1170,12 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -1171,12 +1171,12 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
      public boolean captionAbove;
      boolean isSmallImage;
      boolean drawImageButton;
@@ -31,7 +31,7 @@ index 0000000..0000000 100644
      private boolean animatingNoSoundPlaying;
      private int animatingNoSound;
      private float animatingNoSoundProgress;
-@@ -1429,7 +1429,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -1430,7 +1430,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
      private boolean drawContinueBotTopic;
      int pressedBotButton;
  
@@ -40,7 +40,7 @@ index 0000000..0000000 100644
      private boolean isSpoilerRevealing;
  
      private boolean checkFileLoad;
-@@ -1673,6 +1673,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -1674,6 +1674,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
      private float mediaSpoilerRevealMaxRadius;
      private SpoilerEffect2 mediaSpoilerEffect2;
      private Integer mediaSpoilerEffect2Index;
@@ -48,7 +48,7 @@ index 0000000..0000000 100644
  
  //    private Drawable startsAtDrawable;
  //    private Text startsAtText, startsAtTextShorter;
-@@ -3121,7 +3122,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -3147,7 +3148,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                  || hasGamePreview || hasInvoicePreview
              );
          }
@@ -57,7 +57,7 @@ index 0000000..0000000 100644
              return false;
          }
  
-@@ -3628,6 +3629,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -3654,6 +3655,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                          block.spoilers.clear();
                      }
                  }
@@ -65,7 +65,7 @@ index 0000000..0000000 100644
                  invalidate();
              }));
              if (explanationLayout != null) {
-@@ -3675,6 +3677,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -3701,6 +3703,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                  }
              }
  
@@ -73,7 +73,7 @@ index 0000000..0000000 100644
              spoilerPressed = null;
              return true;
          }
-@@ -5906,6 +5909,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -5932,6 +5935,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
          if (mediaSpoilerEffect2 != null) {
              mediaSpoilerEffect2.detach(this);
          }
@@ -81,7 +81,7 @@ index 0000000..0000000 100644
          if (channelRecommendationsCell != null) {
              channelRecommendationsCell.onDetachedFromWindow();
          }
-@@ -6048,6 +6052,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -6074,6 +6078,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                  mediaSpoilerEffect2.attach(this);
              }
          }
@@ -89,7 +89,7 @@ index 0000000..0000000 100644
          if (channelRecommendationsCell != null) {
              channelRecommendationsCell.onAttachedToWindow();
          }
-@@ -6224,7 +6229,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -6250,7 +6255,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
  
      public MultiLayoutTypingAnimator botDraftTypingAnimator;
  
@@ -98,7 +98,7 @@ index 0000000..0000000 100644
          if (messageObject.checkLayout() || currentPosition != null && lastHeight != AndroidUtilities.displaySize.y) {
              currentMessageObject = null;
          }
-@@ -8202,7 +8207,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -8228,7 +8233,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                              } else if (documentAttachType == DOCUMENT_ATTACH_TYPE_VIDEO) {
                                  photoImage.setNeedsQualityThumb(true);
                                  photoImage.setShouldGenerateQualityThumb(true);
@@ -107,7 +107,7 @@ index 0000000..0000000 100644
                                      (currentMessageObject.mediaExists || currentMessageObject.attachPathExists) ||
                                      messageObject.canStreamVideo() && DownloadController.getInstance(currentAccount).canDownloadMedia(currentMessageObject)
                                  )) {
-@@ -8232,7 +8237,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -8258,7 +8263,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                                      autoDownload = false;
                                  }
                                  String filter = currentPhotoObject instanceof TLRPC.TL_photoStrippedSize || "s".equals(currentPhotoObject.type) ? currentPhotoFilterThumb : currentPhotoFilter;
@@ -116,7 +116,7 @@ index 0000000..0000000 100644
                                      autoPlayingMedia = true;
                                      TLRPC.VideoSize videoSize = MessageObject.getDocumentVideoThumb(document);
                                      if (!messageObject.mediaExists && videoSize != null && (currentPhotoObject == null || currentPhotoObjectThumb == null)) {
-@@ -10413,7 +10418,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -10439,7 +10444,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
              }
              oldPollButtons.clear();
  
@@ -125,7 +125,7 @@ index 0000000..0000000 100644
                  mediaSpoilerEffect = null;
              }
              if (unlockSpoilerEffect != null && unlockLayout == null) {
-@@ -10493,6 +10498,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -10519,6 +10524,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
  
          highlightCaptionToSetStart = highlightCaptionToSetEnd = -1;
  
@@ -134,7 +134,7 @@ index 0000000..0000000 100644
          updateFlagSecure();
      }
  
-@@ -13037,7 +13044,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -13069,7 +13076,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
              }
          }
          if (documentAttachType == DOCUMENT_ATTACH_TYPE_GIF && !isCompactMode()) {
@@ -143,7 +143,7 @@ index 0000000..0000000 100644
                  int oldAlpha = ((BitmapDrawable) Theme.chat_msgMediaMenuDrawable).getPaint().getAlpha();
                  Theme.chat_msgMediaMenuDrawable.setAlpha((int) (oldAlpha * controlsAlpha));
                  setDrawableBounds(Theme.chat_msgMediaMenuDrawable, otherX = (int) (photoImage.getImageX() + photoImage.getImageWidth() - dp(14)), otherY = (int) (photoImage.getImageY() + dp(8.1f)));
-@@ -15254,7 +15261,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -15288,7 +15295,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
              } else {
                  radialProgress.setProgress(1, true);
              }
@@ -152,7 +152,7 @@ index 0000000..0000000 100644
                  if (documentAttachType == DOCUMENT_ATTACH_TYPE_ROUND) {
                      photoImage.setImage(ImageLocation.getForDocument(documentAttach), ImageLoader.AUTOPLAY_FILTER, ImageLocation.getForObject(currentPhotoObject, photoParentObject), currentPhotoObject instanceof TLRPC.TL_photoStrippedSize || currentPhotoObject != null && "s".equals(currentPhotoObject.type) ? currentPhotoFilterThumb : currentPhotoFilter, ImageLocation.getForObject(currentPhotoObjectThumb, photoParentObject), currentPhotoFilterThumb, currentPhotoObjectThumbStripped, documentAttach.size, null, currentMessageObject, 0);
                      photoImage.setAllowStartAnimation(true);
-@@ -16451,7 +16458,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -16485,7 +16492,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                      ImageLocation photoImageLocation = null;
                      Drawable photoImageThumb = null;
                      if (messageObject.replyMessageObject != null) {
@@ -161,7 +161,7 @@ index 0000000..0000000 100644
                          photoSize = FileLoader.getClosestPhotoSizeWithSize(messageObject.replyMessageObject.photoThumbs2, 320);
                          thumbPhotoSize = FileLoader.getClosestPhotoSizeWithSize(messageObject.replyMessageObject.photoThumbs2, 40);
                          photoObject = messageObject.replyMessageObject.photoThumbsObject2;
-@@ -17536,7 +17543,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -17570,7 +17577,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
              drawNamesLayout(canvas, 1f);
          }
  
@@ -170,7 +170,7 @@ index 0000000..0000000 100644
              drawOverlays(canvas);
          }
          if ((drawTime || !mediaBackground) && !forceNotDrawTime && !transitionParams.animateBackgroundBoundsInner && !(enterTransitionInProgress && !currentMessageObject.isVoice()) && (!currentMessageObject.isQuickReply() || currentMessageObject.isSendError())) {
-@@ -20130,7 +20137,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -20164,7 +20171,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                      replyImageReceiver.setImageCoords(replySelectorRect.left + dp(8), replySelectorRect.top + dp((isReplyQuote && replyTextLayout != null && replyTextLayout.getLineCount() <= 1 ? 2 : 0) + 5), replyImageSz, replyImageSz);
                      replyImageReceiver.draw(canvas);
  
@@ -179,7 +179,7 @@ index 0000000..0000000 100644
                          int[] rad = replyImageReceiver.getRoundRadius();
                          mediaSpoilerRadii[0] = mediaSpoilerRadii[1] = rad[0];
                          mediaSpoilerRadii[2] = mediaSpoilerRadii[3] = rad[1];
-@@ -21365,7 +21372,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -21399,7 +21406,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
              }
          }
  
@@ -274,7 +274,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -16314,7 +16314,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -16329,7 +16329,7 @@ public class ChatActivity extends BaseFragment implements
                  replyImageLocation = photoSize;
                  replyImageThumbLocation = thumbPhotoSize;
                  replyImageLocationObject = photoSizeObject;
@@ -283,7 +283,7 @@ index 0000000..0000000 100644
                  replyLayout.current().hasSpoiler = hasSpoiler;
                  replyImageView.setImage(ImageLocation.getForObject(replyImageLocation, photoSizeObject), hasSpoiler ? "5_5_b" : "50_50", ImageLocation.getForObject(thumbPhotoSize, photoSizeObject), hasSpoiler ? "5_5_b" : "50_50_b", null, size, cacheType, thumbMediaMessageObject);
                  replyImageView.setVisibility(View.VISIBLE);
-@@ -29613,7 +29613,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -29629,7 +29629,7 @@ public class ChatActivity extends BaseFragment implements
                      } else {
                          pinnedMessageImageView[1].setRoundRadius(AndroidUtilities.dp(2));
                      }

@@ -93,7 +93,7 @@ index 0000000..0000000 100644
              case VIEW_TYPE_DIALOG: {
                  TLRPC.Dialog dialog = (TLRPC.Dialog) getItem(i);
                  Object nextObject = getItem(i + 1);
-@@ -1546,7 +1574,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
+@@ -1549,7 +1577,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                  int cellHeight = AndroidUtilities.dp(SharedConfig.useThreeLinesLayout ? 76 : 70);
                  int dialogsHeight = 0;
                  for (int i = 0; i < size; i++) {
@@ -102,7 +102,7 @@ index 0000000..0000000 100644
                          if (itemInternals.get(i).isForumCell && !collapsedView) {
                              dialogsHeight += AndroidUtilities.dp(SharedConfig.useThreeLinesLayout ? 86 : 91);
                          } else {
-@@ -1853,10 +1881,49 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
+@@ -1857,10 +1885,49 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                  }
              }
          }
@@ -340,7 +340,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -724,6 +724,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -725,6 +725,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
      private final static int remove_from_folder = 110;
      private final static int community_ungroup = 111;
      private final static int inu_select_all = 900;
@@ -348,7 +348,7 @@ index 0000000..0000000 100644
  
      private final static int ARCHIVE_ITEM_STATE_PINNED = 0;
      private final static int ARCHIVE_ITEM_STATE_SHOWED = 1;
-@@ -2473,6 +2474,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -2474,6 +2475,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
  
          @Override
          public int getMovementFlags(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder viewHolder) {
@@ -358,7 +358,7 @@ index 0000000..0000000 100644
              if (waitingForDialogsAnimationEnd(parentPage) || parentLayout != null && parentLayout.isInPreviewMode() || rightSlidingDialogContainer.hasFragment() || communityId != 0) {
                  return 0;
              }
-@@ -2883,6 +2887,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -2885,6 +2889,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                  observersGroup.add(NotificationCenter.filterSettingsUpdated);
                  observersGroup.add(NotificationCenter.dialogsUnreadCounterChanged);
              }
@@ -366,7 +366,7 @@ index 0000000..0000000 100644
              observersGroup
                  .add(NotificationCenter.dialogsNeedReload)
                  .add(NotificationCenter.dialogFiltersUpdated)
-@@ -3059,6 +3064,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -3061,6 +3066,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              observersGroup.removeAllObservers();
              observersGroup = null;
          }
@@ -377,7 +377,7 @@ index 0000000..0000000 100644
  
          if (commentView != null) {
              commentView.onDestroy();
-@@ -8048,6 +8057,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8050,6 +8059,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          if (getParentActivity() == null) {
              return;
          }
@@ -387,7 +387,7 @@ index 0000000..0000000 100644
          long dialogId = 0;
          long topicId = 0;
          int message_id = 0;
-@@ -8474,6 +8486,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8476,6 +8488,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          if (adapter.getItemViewType(position) == DialogsAdapter.VIEW_TYPE_FORWARD_TO_STORIES_CELL) {
              return false;
          }
@@ -397,7 +397,7 @@ index 0000000..0000000 100644
  
          if (!actionBar.isActionModeShowed() && !AndroidUtilities.isTablet() && !onlySelect && view instanceof DialogCell && !getMessagesController().isForum(((DialogCell) view).getDialogId()) && !rightSlidingDialogContainer.hasFragment()) {
              DialogCell cell = (DialogCell) view;
-@@ -8798,6 +8813,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8800,6 +8815,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          if (hasFolders) {
              flags |= ActionBarPopupWindow.ActionBarPopupWindowLayout.FLAG_USE_SWIPEBACK;
          }
@@ -408,7 +408,7 @@ index 0000000..0000000 100644
  
          final BaseFragment[] previewActivity = new BaseFragment[1];
          previewMenu[0] = new ActionBarPopupWindow.ActionBarPopupWindowLayout(getParentActivity(), R.drawable.popup_fixed_alert4, getResourceProvider(), flags);
-@@ -8812,6 +8831,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8814,6 +8833,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              );
              previewMenu[0].addView(addToFolderItem);
              previewMenu[0].getSwipeBack().setOnHeightUpdateListener(height -> {
@@ -418,7 +418,7 @@ index 0000000..0000000 100644
                  if (previewActivity[0] == null || previewActivity[0].getFragmentView() == null || !previewActivity[0].isInPreviewMode()) {
                      return;
                  }
-@@ -8998,6 +9020,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9000,6 +9022,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              previewMenu[0].addView(muteItem);
          }
  

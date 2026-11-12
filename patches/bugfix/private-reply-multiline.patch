@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -16443,7 +16443,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -16477,7 +16477,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
  
                  CharSequence name = null;
                  hasReplyQuote = messageObject.messageOwner.reply_to != null && (messageObject.messageOwner.reply_to.flags & 64) != 0 && messageObject.messageOwner.reply_to.quote_text != null && !messageObject.inu_isReplyToDeletedMessage();

@@ -40,7 +40,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayou
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java
-@@ -10244,7 +10244,7 @@ public class RichMessageLayout {
+@@ -10258,7 +10258,7 @@ public class RichMessageLayout {
              @Override
              public PreviewView createView(Context context, RecyclerListView listView, int currentAccount, int classGuid, Theme.ResourcesProvider resourcesProvider) {
                  final PreviewView cell = new PreviewView(context, currentAccount, resourcesProvider);

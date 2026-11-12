@@ -111,7 +111,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -8997,6 +8997,16 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8999,6 +8999,16 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          if (blurredView == null) {
              return;
          }
@@ -128,7 +128,7 @@ index 0000000..0000000 100644
          int w = (int) (fragmentView.getMeasuredWidth() / 9.0f);
          int h = (int) (fragmentView.getMeasuredHeight() / 9.0f);
          Bitmap bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-@@ -14378,7 +14388,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -14380,7 +14390,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                          searchTabsAndFiltersLayout.updateColors();
                      }
                      if (blurredView != null) {
@@ -188,7 +188,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/TopicsFragment.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/TopicsFragment.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/TopicsFragment.java
-@@ -4052,6 +4052,18 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
+@@ -4056,6 +4056,18 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
          if (blurredView == null || parentLayout == null) {
              return;
          }

@@ -92,7 +92,7 @@ index 0000000..0000000 100644
      }
  
      /** Uses the message renderer for editable inline buttons without laying out a message. */
-@@ -378,6 +380,8 @@ public class RichMessageLayout {
+@@ -389,6 +391,8 @@ public class RichMessageLayout {
          density = AndroidUtilities.density;
          textPaint.setTextSize(dp(SharedConfig.fontSize));
          numTextPaint.setTextSize(dp(SharedConfig.fontSize));
@@ -101,7 +101,7 @@ index 0000000..0000000 100644
          isPart = false;
  
          richMessage = null;
-@@ -7625,6 +7629,7 @@ public class RichMessageLayout {
+@@ -7636,6 +7640,7 @@ public class RichMessageLayout {
              this.currentMessageObject = root.audioBlocks.get(block);
              this.currentDocument = currentMessageObject != null ? currentMessageObject.getDocument() : null;
              this.observerTag = DownloadController.getInstance(root.currentAccount).generateObserverTag();
@@ -109,7 +109,7 @@ index 0000000..0000000 100644
  
              radialProgress = new RadialProgress2(null);
              radialProgress.setCircleRadius(dp(24));
-@@ -8010,6 +8015,7 @@ public class RichMessageLayout {
+@@ -8021,6 +8026,7 @@ public class RichMessageLayout {
              this.previewX = root.padLeft + dp(10);
              this.hasPreview = MessageObject.isDocumentHasThumb(document);
              observerTag = DownloadController.getInstance(root.currentAccount).generateObserverTag();

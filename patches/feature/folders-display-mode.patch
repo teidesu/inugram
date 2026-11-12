@@ -461,7 +461,7 @@ index 0000000..0000000 100644
  import desu.inugram.helpers.dialogs.MainTabsHelper;
  import me.vkryl.android.animator.BoolAnimator;
  import me.vkryl.android.animator.FactorAnimator;
-@@ -3607,6 +3608,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -3609,6 +3610,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      if (initialDialogsType == DIALOGS_TYPE_FORWARD) {
                          return 0;
                      }
@@ -471,7 +471,7 @@ index 0000000..0000000 100644
                      if (tabId == filterTabsView.getDefaultTabId()) {
                          return getMessagesStorage().getMainUnreadCount();
                      }
-@@ -6810,12 +6814,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -6812,12 +6816,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      selectWithStableId = true;
                  }
                  filterTabsView.removeTabs();
@@ -489,7 +489,7 @@ index 0000000..0000000 100644
                      }
                  }
                  if (stableId >= 0) {
-@@ -6838,9 +6845,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -6840,9 +6847,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      if (viewPages[a].selectedType >= filters.size()) {
                          viewPages[a].selectedType = filters.size() - 1;
                      }

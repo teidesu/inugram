@@ -13,7 +13,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -1346,6 +1346,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -1349,6 +1349,7 @@ public class ChatActivity extends BaseFragment implements
          }
      };
      private int chatEmojiViewPadding;
@@ -21,7 +21,7 @@ index 0000000..0000000 100644
      private int fixedKeyboardHeight = -1;
      private Runnable cancelFixedPositionRunnable;
      private boolean invalidateMessagesVisiblePart;
-@@ -19281,8 +19282,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -19297,8 +19298,7 @@ public class ChatActivity extends BaseFragment implements
              if (actionBar.getVisibility() == VISIBLE) {
                  heightSize -= actionBarHeight;
              }
@@ -31,7 +31,7 @@ index 0000000..0000000 100644
              if (lastHeight != allHeight) {
                  measureKeyboardHeight();
              }
-@@ -19298,7 +19298,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -19314,7 +19314,11 @@ public class ChatActivity extends BaseFragment implements
              }
              setEmojiKeyboardHeight(chatEmojiViewPadding);
  
@@ -44,7 +44,7 @@ index 0000000..0000000 100644
              boolean waitingChatListItemAnimator = false;
              if (MediaController.getInstance().getPlayingMessageObject() != null && MediaController.getInstance().getPlayingMessageObject().isRoundVideo() && keyboardVisibleOld != keyboardVisible) {
                  for (int i = 0; i < chatListView.getChildCount(); i++) {
-@@ -19309,7 +19313,16 @@ public class ChatActivity extends BaseFragment implements
+@@ -19325,7 +19329,16 @@ public class ChatActivity extends BaseFragment implements
                          if (messageObject.isRoundVideo() && MediaController.getInstance().isPlayingMessage(messageObject)) {
                              int p = chatListView.getChildAdapterPosition(child);
                              if (p >= 0) {
@@ -62,7 +62,7 @@ index 0000000..0000000 100644
                                  chatAdapter.notifyItemChanged(p);
                                  adjustPanLayoutHelper.delayAnimation();
                                  waitingChatListItemAnimator = true;
-@@ -22418,6 +22431,26 @@ public class ChatActivity extends BaseFragment implements
+@@ -22434,6 +22447,26 @@ public class ChatActivity extends BaseFragment implements
                      createUnreadMessageAfterId = 0;
                      if (!universalNotify && !chatAdapter.isFiltered) {
                          chatAdapter.notifyItemRemoved(chatAdapter.loadingDownRow);
@@ -89,7 +89,7 @@ index 0000000..0000000 100644
                      }
                  }
                  startLoadFromMessageId = 0;
-@@ -23933,7 +23966,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -23949,7 +23982,7 @@ public class ChatActivity extends BaseFragment implements
                                  if (MediaController.getInstance().isPlayingMessage(messageObject1)) {
                                      boolean keyboardIsVisible = contentView.getKeyboardHeight() >= AndroidUtilities.dp(20);
                                      float topPadding = chatListViewPaddingTop - (contentPanTranslation);

@@ -62,7 +62,6 @@ feature/ios-menu-gesture.patch
 feature/old-mention-indicator.patch
 feature/dialogs-fab.patch
 feature/non-island-ui.patch
-bugfix/reaction-counter-jump.patch
 feature/customize-text-classifier.patch
 bugfix/message-send-ime-jump.patch
 hooks/popup-swipeback.patch
@@ -302,7 +301,6 @@ bugfix/group-call-record-timer.patch
 feature/download-stickers.patch
 bugfix/chat-preview-scroll-persist.patch
 bugfix/nomedia-media-cache.patch
-bugfix/profile-transition-from-topics.patch
 bugfix/reaction-tag-text-baseline.patch
 bugfix/image-cache-large-heap.patch
 bugfix/shared-media-photo-transition-offset.patch

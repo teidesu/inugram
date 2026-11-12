@@ -83,7 +83,7 @@ index 0000000..0000000 100644
  import org.telegram.ui.Cells.ActiveGiftAuctionsHintCell;
  import org.telegram.ui.Cells.AnimatedStatusView;
  import org.telegram.ui.Cells.ArchiveHintInnerCell;
-@@ -3859,6 +3860,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -3861,6 +3862,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              imageView.getImageReceiver().setCurrentAccount(currentAccount);
              Drawable thumb = user != null && user.photo != null && user.photo.strippedBitmap != null ? user.photo.strippedBitmap : avatarDrawable;
              imageView.setImage(ImageLocation.getForUserOrChat(currentAccount, user, ImageLocation.TYPE_SMALL), "50_50", ImageLocation.getForUserOrChat(user, ImageLocation.TYPE_STRIPPED), "50_50", thumb, user);
@@ -103,7 +103,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-@@ -1296,7 +1296,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -1310,7 +1310,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
      private void switchToAvailableAccountOrLogout() {
          int account = -1;
          for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
@@ -112,7 +112,7 @@ index 0000000..0000000 100644
                  account = a;
                  break;
              }
-@@ -1315,6 +1315,9 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -1329,6 +1329,9 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                  rightActionBarLayout.rebuildLogout();
              }
              presentFragment(new IntroActivity().setOnLogout());

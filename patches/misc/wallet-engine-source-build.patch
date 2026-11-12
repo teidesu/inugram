@@ -42,12 +42,12 @@ index 0000000..0000000 100644
  android {
      compileSdkVersion 36
      buildToolsVersion '36.0.0'
-@@ -232,6 +255,7 @@ android {
+@@ -237,6 +260,7 @@ android {
              cmake {
                  version '3.22.1'
                  arguments '-DANDROID_STL=c++_static', '-DANDROID_PLATFORM=android-26' //, '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
 +                arguments += ["-DINU_WALLET_ENGINE_DIR=${inuWalletEngineDir.absolutePath}"]
-                 targets 'tmessages.49'
+                 targets 'tmessages.49', 'twidget'
                  if (!rootProject.ext.inuPluginless) {
                      arguments += ['-DINU_EXPORT_SQLITE=ON']
 diff --git a/TMessagesProj/jni/CMakeLists.txt b/TMessagesProj/jni/CMakeLists.txt

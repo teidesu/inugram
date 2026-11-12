@@ -48,7 +48,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -9091,7 +9091,13 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -9117,7 +9117,13 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                          flipImage = true;
                      }
                      if (messageObject.getDocument() != null) {

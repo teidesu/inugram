@@ -217,7 +217,7 @@ index 0000000..0000000 100644
                          if (blockePeers.indexOfKey(id) < 0) {
                              blockePeers.put(id, 1);
                          }
-@@ -22286,6 +22294,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -22289,6 +22297,7 @@ public class MessagesController extends BaseController implements NotificationCe
          }
          for (int a = 0, N = allDialogs.size(); a < N; a++) {
              TLRPC.Dialog d = allDialogs.get(a);
@@ -225,7 +225,7 @@ index 0000000..0000000 100644
              final boolean isCommunity = d instanceof TLRPC.TL_dialogCommunity;
              if (d instanceof TLRPC.TL_dialog || isCommunity) {
                  long dialogId = d.id;
-@@ -22499,6 +22508,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -22502,6 +22511,7 @@ public class MessagesController extends BaseController implements NotificationCe
                  }
                  for (int a = 0, N = allDialogs.size(); a < N; a++) {
                      final TLRPC.Dialog d = allDialogs.get(a);
@@ -233,7 +233,7 @@ index 0000000..0000000 100644
                      final boolean isCommunity = d instanceof TLRPC.TL_dialogCommunity;
                      if (d instanceof TLRPC.TL_dialog || isCommunity) {
                          long dialogId = d.id;
-@@ -22538,6 +22548,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -22541,6 +22551,7 @@ public class MessagesController extends BaseController implements NotificationCe
          }
          for (int a = 0, N = allDialogs.size(); a < N; a++) {
              TLRPC.Dialog d = allDialogs.get(a);
@@ -464,7 +464,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaL
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
-@@ -1699,7 +1699,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -1701,7 +1701,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
              this.initialTab = TAB_BOT_PREVIEWS;
          } else if (userInfo != null && userInfo.bot_info != null && userInfo.bot_info.has_preview_medias) {
              this.initialTab = TAB_STORIES;
@@ -473,7 +473,7 @@ index 0000000..0000000 100644
              this.initialTab = TAB_STORIES;
          } else if (main_tab instanceof TLRPC.TL_profileTabGifts && (userInfo != null && userInfo.stargifts_count > 0 || chatInfo != null && chatInfo.stargifts_count > 0)) {
              this.initialTab = TAB_GIFTS;
-@@ -1713,7 +1713,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -1715,7 +1715,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
              this.initialTab = TAB_AUDIO;
          } else if (main_tab instanceof TLRPC.TL_profileTabVoice && (hasMedia[2] == -1 || hasMedia[2] > 0)) {
              this.initialTab = TAB_VOICE;
@@ -482,7 +482,7 @@ index 0000000..0000000 100644
              this.initialTab = getInitialTab();
          } else if (!inuPreferMediaTab && (userInfo != null && userInfo.stargifts_count > 0 || chatInfo != null && chatInfo.stargifts_count > 0)) {
              this.initialTab = TAB_GIFTS;
-@@ -6580,10 +6580,10 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -6620,10 +6620,10 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
      }
  
      public void setUserInfo(TLRPC.UserFull userInfo) {
@@ -495,7 +495,7 @@ index 0000000..0000000 100644
              scrollToPage(TAB_STORIES);
          }
      }
-@@ -6705,7 +6705,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -6745,7 +6745,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
          final TLRPC.User user = dialog_id <= 0 || profileActivity == null ? null : profileActivity.getMessagesController().getUser(dialog_id);
          boolean hasEditBotPreviews = user != null && user.bot && user.bot_has_main_app && user.bot_can_edit;
          boolean hasBotPreviews = user != null && user.bot && !user.bot_can_edit && (userInfo != null && userInfo.bot_info != null && userInfo.bot_info.has_preview_medias) && !hasEditBotPreviews;
@@ -504,7 +504,7 @@ index 0000000..0000000 100644
          boolean hasGifts = giftsContainer != null && (userInfo != null && userInfo.stargifts_count > 0 || info != null && info.stargifts_count > 0);
          final TLRPC.ProfileTab main_tab = info != null ? info.main_tab : userInfo != null ? userInfo.main_tab : null;
          int changed = 0;
-@@ -6819,7 +6819,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -6859,7 +6859,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
              }
              if (hasBotPreviews) {
                  tabs.add(new Pair(TAB_STORIES, getString(R.string.ProfileBotPreviewTab)));
@@ -517,7 +517,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -6921,7 +6921,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -6923,7 +6923,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              filterOptions = null;
          }
          final ArrayList<MessagesController.DialogFilter> filters = getMessagesController().getDialogFilters();
@@ -526,7 +526,7 @@ index 0000000..0000000 100644
              if (force || filterTabsView.getVisibility() != View.VISIBLE) {
                  boolean animatedUpdateItems = animated;
                  if (filterTabsView.getVisibility() != View.VISIBLE) {
-@@ -8590,7 +8590,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8592,7 +8592,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              getMessagesController().filtersEnabled &&
              getMessagesController().dialogFiltersLoaded &&
              getMessagesController().dialogFilters != null &&
@@ -618,7 +618,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -10923,7 +10923,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -11033,7 +11033,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              }
          }
          if (!hasMedia && userInfo != null) {

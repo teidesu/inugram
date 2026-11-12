@@ -377,7 +377,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -11817,7 +11817,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -11832,7 +11832,7 @@ public class ChatActivity extends BaseFragment implements
          String from = LocaleController.getString(R.string.SearchFrom);
          Spannable spannable = new SpannableString(from + " " + name);
          spannable.setSpan(new ForegroundColorSpanThemable(Theme.key_actionBarDefaultSubtitle, getResourceProvider()), from.length() + 1, spannable.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
@@ -386,7 +386,7 @@ index 0000000..0000000 100644
          mentionContainer.getAdapter().searchUsernameOrHashtag(null, 0, null, false, true);
          searchItem.setSearchFieldHint(null);
          searchItem.clearSearchText();
-@@ -16112,11 +16112,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -16127,11 +16127,11 @@ public class ChatActivity extends BaseFragment implements
                              }
                          }
                          if (userNamesCount == 1) {
@@ -400,7 +400,7 @@ index 0000000..0000000 100644
                      }
                  }
                  replyObjectHintTextView.setText(LocaleController.getString(R.string.TapForForwardingOptions));
-@@ -16148,20 +16148,20 @@ public class ChatActivity extends BaseFragment implements
+@@ -16163,20 +16163,20 @@ public class ChatActivity extends BaseFragment implements
                      replyObjectTextView.setText(pendingLinkSearchString);
                  } else {
                      if (webPage.site_name != null) {
@@ -427,7 +427,7 @@ index 0000000..0000000 100644
                      }
                      chatActivityEnterView.setWebPage(webPage, true);
                  }
-@@ -22847,6 +22847,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -22863,6 +22863,10 @@ public class ChatActivity extends BaseFragment implements
              if (chatListView != null) {
                  chatListView.invalidateViews();
              }
@@ -438,7 +438,7 @@ index 0000000..0000000 100644
              if (alertTextView != null) {
                  alertTextView.invalidate();
              }
-@@ -29650,6 +29654,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -29666,6 +29670,7 @@ public class ChatActivity extends BaseFragment implements
                  pinnedMessageObject.updateTranslation(false);
                  if (pinnedMessageObject.type == MessageObject.TYPE_MUSIC) {
                      pinnedText = String.format("%s - %s", pinnedMessageObject.getMusicAuthor(), pinnedMessageObject.getMusicTitle());
@@ -446,7 +446,7 @@ index 0000000..0000000 100644
                  } else if (pinnedMessageObject.type == MessageObject.TYPE_POLL) {
                      if (pinnedMessageObject.messageOwner.media instanceof TLRPC.TL_messageMediaPoll) {
                          TLRPC.TL_messageMediaPoll poll = (TLRPC.TL_messageMediaPoll) pinnedMessageObject.messageOwner.media;
-@@ -41563,15 +41568,16 @@ public class ChatActivity extends BaseFragment implements
+@@ -41630,15 +41635,16 @@ public class ChatActivity extends BaseFragment implements
                  userButton.addView(imageView, LayoutHelper.createFrame(34, 34, Gravity.LEFT | Gravity.CENTER_VERTICAL, 13, 0, 0, 0));
  
                  final TextView titleText = new TextView(getContext());
@@ -477,7 +477,7 @@ index 0000000..0000000 100644
  import org.telegram.messenger.FileLoader;
  import org.telegram.messenger.FileLog;
  import org.telegram.messenger.FileRefController;
-@@ -3330,6 +3331,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+@@ -3332,6 +3333,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
                      textViews[i].setAlpha(0f);
                      textViews[i].setVisibility(GONE);
                  }
@@ -485,7 +485,7 @@ index 0000000..0000000 100644
                  addView(textViews[i], LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.MATCH_PARENT));
              }
              gradientMatrix = new Matrix();
-@@ -3433,6 +3435,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+@@ -3435,6 +3437,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
          }
  
          public void setText(CharSequence text, boolean animated) {
@@ -657,7 +657,7 @@ index 0000000..0000000 100644
  import org.telegram.messenger.FileLog;
  import org.telegram.messenger.IMapsProvider;
  import org.telegram.messenger.ImageReceiver;
-@@ -703,6 +704,7 @@ public class LocationActivity extends BaseFragment implements NotificationCenter
+@@ -715,6 +716,7 @@ public class LocationActivity extends BaseFragment implements NotificationCenter
          }
  
          hintView = new HintView2(context, HintView2.DIRECTION_TOP);
@@ -665,7 +665,7 @@ index 0000000..0000000 100644
          hintView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
          hintView.setDuration(4000);
          // the arrow at the centre of the proximity button, the hint under its glass
-@@ -2236,7 +2238,7 @@ public class LocationActivity extends BaseFragment implements NotificationCenter
+@@ -2248,7 +2250,7 @@ public class LocationActivity extends BaseFragment implements NotificationCenter
              preferences.edit().putInt("proximityhint", ++val).commit();
              if (DialogObject.isUserDialog(dialogId)) {
                  TLRPC.User user = getMessagesController().getUser(dialogId);

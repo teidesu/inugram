@@ -81,7 +81,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LocationActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LocationActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LocationActivity.java
-@@ -452,7 +452,7 @@ public class LocationActivity extends BaseFragment implements NotificationCenter
+@@ -453,7 +453,7 @@ public class LocationActivity extends BaseFragment implements NotificationCenter
          mapTypeButton = menu.addItem(0, R.drawable.msg_map_type);
          mapTypeButton.addSubItem(map_list_menu_map, R.drawable.msg_map, getString(R.string.Map));
          mapTypeButton.addSubItem(map_list_menu_satellite, R.drawable.msg_satellite, getString(R.string.Satellite));

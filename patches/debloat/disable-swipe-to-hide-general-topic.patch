@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/TopicsFragment.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/TopicsFragment.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/TopicsFragment.java
-@@ -2459,6 +2459,9 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
+@@ -2463,6 +2463,9 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
                  return makeMovementFlags(0, 0);
              }
              TLRPC.TL_forumTopic topic = forumTopics.get(position).topic;

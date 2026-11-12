@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -24141,7 +24141,12 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -24175,7 +24175,12 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
      public void drawVideoTimestamps(Canvas canvas, int color) {
          if (currentMessageObject == null || currentMessageObject.isLivePhoto() || controlsAlpha <= 0 || !photoImage.getVisible()) return;
          float progress;

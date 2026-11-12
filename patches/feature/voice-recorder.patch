@@ -14,7 +14,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -13764,15 +13764,33 @@ public class ChatActivity extends BaseFragment implements
+@@ -13779,15 +13779,33 @@ public class ChatActivity extends BaseFragment implements
      }
  
      private void showMediaBannedHint() {
@@ -51,7 +51,7 @@ index 0000000..0000000 100644
          try {
              fragmentView.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
          } catch (Exception e) {
-@@ -13780,16 +13798,20 @@ public class ChatActivity extends BaseFragment implements
+@@ -13795,16 +13813,20 @@ public class ChatActivity extends BaseFragment implements
          }
  
          if (mediaBanTooltip == null) {
@@ -76,7 +76,7 @@ index 0000000..0000000 100644
                  mediaBanTooltip.setText(ChatObject.getRestrictedErrorText(currentChat, ChatObject.ACTION_SEND_ROUND));
              } else {
                  mediaBanTooltip.setText(ChatObject.getRestrictedErrorText(currentChat, ChatObject.ACTION_SEND_VOICE));
-@@ -13802,7 +13824,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -13817,7 +13839,7 @@ public class ChatActivity extends BaseFragment implements
              mediaBanTooltip.setText(LocaleController.getString(R.string.GlobalAttachMediaRestricted));
          } else {
              if (currentChat.banned_rights == null) {
@@ -85,7 +85,7 @@ index 0000000..0000000 100644
              }
              if (AndroidUtilities.isBannedForever(currentChat.banned_rights)) {
                  mediaBanTooltip.setText(LocaleController.getString(R.string.AttachMediaRestrictedForever));
-@@ -13810,14 +13832,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -13825,14 +13847,7 @@ public class ChatActivity extends BaseFragment implements
                  mediaBanTooltip.setText(LocaleController.formatString("AttachMediaRestricted", R.string.AttachMediaRestricted, LocaleController.formatDateForBan(currentChat.banned_rights.until_date)));
              }
          }
@@ -230,7 +230,7 @@ index 0000000..0000000 100644
          audioVideoSendButton.setTranslationX(offset);
          if (botButton != null) {
              botButton.setTranslationX(offset);
-@@ -6310,6 +6340,29 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -6315,6 +6345,29 @@ public class ChatActivityEnterView extends FrameLayout implements
          updateRecordInterface(RECORD_STATE_CANCEL, true);
      }
  
@@ -260,7 +260,7 @@ index 0000000..0000000 100644
      public void showContextProgress(boolean show) {
          if (progressDrawable == null) {
              return;
-@@ -8245,7 +8298,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -8250,7 +8303,7 @@ public class ChatActivityEnterView extends FrameLayout implements
              } else {
                  color = getThemedColor(Theme.key_chat_messagePanelSend);
              }
@@ -269,7 +269,7 @@ index 0000000..0000000 100644
              // a recording (paused too) has its own panel in the input: the attach button is neither in it nor over it
              final boolean recordShown = recordInterfaceState != 0 || audioToSend != null || videoToSendMessageObject != null;
              final boolean attachInInput = !captionNearAttach && !recordShown;
-@@ -8255,7 +8308,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -8260,7 +8313,7 @@ public class ChatActivityEnterView extends FrameLayout implements
                  Theme.setSelectorDrawableColor(sendButton.getBackground(), Color.argb(24, Color.red(color), Color.green(color), Color.blue(color)), true);
              }
  
@@ -278,7 +278,7 @@ index 0000000..0000000 100644
                  if (animated) {
                      if (runningAnimationType == 1 && caption == null || runningAnimationType == 3 && caption != null) {
                          return;
-@@ -15030,7 +15083,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -15035,7 +15088,7 @@ public class ChatActivityEnterView extends FrameLayout implements
      private void updateAttachLayoutParams() {
          updateAttachButtonTranslationX();
          if (attachLayout != null) {
@@ -287,7 +287,7 @@ index 0000000..0000000 100644
              attachLayout.setAlpha(attachLayoutAlpha * attachLayoutPaddingAlpha);
              attachLayout.setVisibility(attachLayout.getAlpha() > 0 ? View.VISIBLE : View.GONE);
              if (attachButton != null && isStories) {
-@@ -15047,8 +15100,8 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -15052,8 +15105,8 @@ public class ChatActivityEnterView extends FrameLayout implements
      }
  
      private void updateAttachButtonTranslationX() {

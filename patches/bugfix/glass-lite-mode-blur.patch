@@ -40,7 +40,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -6100,12 +6100,12 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -6105,12 +6105,12 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
  
          @Override
          public int getStrokeColorTop() {

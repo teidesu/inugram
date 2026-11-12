@@ -5,8 +5,8 @@ Subject: fix hashtag search layout, preview shifting and reaction long-tap
 
 ---
  .../main/java/org/telegram/ui/Cells/DialogCell.java | 13 +++++--------
- .../src/main/java/org/telegram/ui/ChatActivity.java |  8 ++++----
- 2 files changed, 9 insertions(+), 12 deletions(-)
+ .../src/main/java/org/telegram/ui/ChatActivity.java |  6 +++---
+ 2 files changed, 8 insertions(+), 11 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
 index 0000000..0000000 100644
@@ -54,7 +54,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -12747,7 +12747,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -12762,7 +12762,7 @@ public class ChatActivity extends BaseFragment implements
          }
  
          final float paddingBottom;
@@ -63,7 +63,7 @@ index 0000000..0000000 100644
              paddingBottom = AndroidUtilities.navigationBarHeight;
          } else {
              paddingBottom = blurredViewBottomOffset + dp(NonIslandHelper.chatElements() ? 3 : 9 + 7)
-@@ -46622,7 +46622,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -46690,7 +46690,7 @@ public class ChatActivity extends BaseFragment implements
                  removeTag.setColorKeys(Theme.key_color_red, Theme.key_color_red);
                  popupLayout.addView(removeTag);
                  scrimPopupContainerLayout.addView(popupLayout);
@@ -72,16 +72,7 @@ index 0000000..0000000 100644
                  final boolean canDeleteReactions = ChatObject.canUserDoAdminAction(currentChat, ChatObject.ACTION_DELETE_MESSAGES)
                      && (reaction.count > 1 || !reaction.chosen);
  
-@@ -47766,7 +47766,7 @@ public class ChatActivity extends BaseFragment implements
-             return;
-         }
- 
--        float fadeHeight = actionBar.getMeasuredHeight();
-+        float fadeHeight = actionBar.getVisibility() == View.VISIBLE || parentChatActivity != null ? actionBar.getMeasuredHeight() : 0;
-         fadeHeight += dp(7 - 6);
-         fadeHeight += getTopPanelHeightWithPadding(dp(7));
-         if (topicsTabs != null) {
-@@ -47785,7 +47785,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -47865,7 +47865,7 @@ public class ChatActivity extends BaseFragment implements
              parentChatActivity.checkUi_messagesSearchListPadding();
          }
  

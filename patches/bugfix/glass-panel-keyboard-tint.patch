@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -5829,7 +5829,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -5833,7 +5833,7 @@ public class ChatActivity extends BaseFragment implements
                                              backgroundPaint = Theme.chat_replyLinePaint;
                                              backgroundPaint.setColor(getThemedColor(Theme.key_chat_selectedBackground));
                                          } else {
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
                                              int backgroundHeight = contentView.getBackgroundSizeY();
                                              if (themeDelegate != null) {
                                                  themeDelegate.applyServiceShaderMatrix(getMeasuredWidth(), backgroundHeight, cell.getX(), viewTop);
-@@ -5881,7 +5881,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -5885,7 +5885,7 @@ public class ChatActivity extends BaseFragment implements
                                      Paint selectedBackgroundPaint = getThemedPaint(Theme.key_paint_chatMessageBackgroundSelected);
                                      if (themeDelegate != null && !themeDelegate.isDark && selectedBackgroundPaint != null) {
                                          backgroundDrawable.setCustomPaint(selectedBackgroundPaint);
@@ -29,7 +29,7 @@ index 0000000..0000000 100644
                                          int backgroundHeight = contentView.getBackgroundSizeY();
                                          if (themeDelegate != null) {
                                              themeDelegate.applyServiceShaderMatrix(getMeasuredWidth(), backgroundHeight, cell.getX(), viewTop);
-@@ -16891,7 +16891,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -16906,7 +16906,7 @@ public class ChatActivity extends BaseFragment implements
                      viewBottom - viewTop,
                      recyclerChatViewHeight,
                      0,

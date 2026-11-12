@@ -339,7 +339,6 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - context menus no longer let the list behind them scroll when a drag starts just before the menu window takes input
 - dialogs shown over a story (or another attached sheet) no longer lose their dismiss callback (stock bug: the fragment handed the dialog to the sheet and dropped the listener)
 - custom emoji reaction burst respects litemode (stock only gated the "around" animation of regular emoji)
-- reaction counter shift during long-tap menu
 - reactions with equal counts swapping places after sending one or reopening the chat; ties are now ordered by the reaction list position, like other clients
 - media caption hiding and then revealing top-down when reactions first appear on the message
 - reactions silently disappearing right after being sent (stale server read race); for a few seconds after a send, server answers that lose or undercount your own reaction are corrected from the local state

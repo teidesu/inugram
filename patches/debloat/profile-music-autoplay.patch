@@ -39,7 +39,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -3887,8 +3887,18 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -3893,8 +3893,18 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                      MediaController.getInstance().currentSavedMusicList = savedMusicList;
                      MediaController.getInstance().getPlaylist().clear();
                      MediaController.getInstance().getPlaylist().addAll(savedMusicList.list);

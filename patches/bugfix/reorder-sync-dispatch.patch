@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsAdapter
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsAdapter.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsAdapter.java
-@@ -1264,7 +1264,12 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
+@@ -1267,7 +1267,12 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
              toDialog.pinnedNum = oldNum;
          }
          Collections.swap(dialogs, fromIndex, toIndex);

@@ -194,7 +194,7 @@ index 0000000..0000000 100644
  import me.vkryl.android.animator.BoolAnimator;
  import me.vkryl.android.animator.FactorAnimator;
  import me.vkryl.android.util.ClickHelper;
-@@ -2785,7 +2787,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -2787,7 +2789,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              allowBots = arguments.getBoolean("allowBots", true);
              closeFragment = arguments.getBoolean("closeFragment", true);
              allowGlobalSearch = arguments.getBoolean("allowGlobalSearch", true);
@@ -203,7 +203,7 @@ index 0000000..0000000 100644
  
              byte[] requestPeerTypeBytes = arguments.getByteArray("requestPeerType");
              if (requestPeerTypeBytes != null) {
-@@ -2895,8 +2897,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -2897,8 +2899,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          }
  
          BirthdayController.getInstance(currentAccount).check();
@@ -214,7 +214,7 @@ index 0000000..0000000 100644
  
          return true;
      }
-@@ -3122,6 +3124,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -3124,6 +3126,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          wasDrawn = false;
          pacmanAnimation = null;
          filterTabsView = null;
@@ -226,7 +226,7 @@ index 0000000..0000000 100644
          selectedDialogs.clear();
  
          maximumVelocity = ViewConfiguration.get(context).getScaledMaximumFlingVelocity();
-@@ -13456,8 +13463,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13458,8 +13465,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              }
          }
  
@@ -237,7 +237,7 @@ index 0000000..0000000 100644
      }
  
      @Override
-@@ -13840,8 +13849,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -13842,8 +13851,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
  
          if (BitwiseUtils.hasFlag(flags, GlassEngine.FLAG_INVALIDATED_POSITIONS)) {
              final int additionalList = dp(48);
@@ -503,7 +503,7 @@ index 0000000..0000000 100644
  import me.vkryl.android.animator.BoolAnimator;
  import me.vkryl.core.reference.ReferenceList;
  
-@@ -2301,8 +2302,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -2302,8 +2303,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
  
          setActionsMode();
  
@@ -559,7 +559,7 @@ index 0000000..0000000 100644
  
          fragmentView = contentView = new SizeNotifierFrameLayout(context) {
              {
-@@ -4215,8 +4216,8 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
+@@ -4219,8 +4220,8 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
          final View actionBar = parentDialogsActivity != null ? parentDialogsActivity.getActionBar() : this.actionBar;
  
  

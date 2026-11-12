@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-@@ -1634,6 +1634,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -1648,6 +1648,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
              }
          }
          boolean pushOpened = false;
@@ -19,7 +19,7 @@ index 0000000..0000000 100644
          long push_user_id = 0;
          long push_chat_id = 0;
          long[] push_story_dids = null;
-@@ -2673,6 +2674,13 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -2687,6 +2688,13 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                                                  }
                                              } catch (NumberFormatException ignore) {}
                                          }
@@ -33,7 +33,7 @@ index 0000000..0000000 100644
                                      } else if (url.startsWith("tg:passport") || url.startsWith("tg://passport") || url.startsWith("tg:secureid")) {
                                          url = url.replace("tg:passport", "tg://telegram.org").replace("tg://passport", "tg://telegram.org").replace("tg:secureid", "tg://telegram.org");
                                          data = Uri.parse(url);
-@@ -3093,7 +3101,14 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -3107,7 +3115,14 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                  NotificationCenter.getInstance(intentAccount[0]).postNotificationName(NotificationCenter.closeChats);
                  openStories(push_story_dids, true);
              } else if (push_user_id != 0) {

@@ -118,7 +118,7 @@ index 0000000..0000000 100644
          return true;
      }
  
-@@ -23118,7 +23201,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -23121,7 +23204,7 @@ public class MessagesController extends BaseController implements NotificationCe
                          }
                      }
                      if (maxDate > Integer.MIN_VALUE) {
@@ -192,7 +192,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -9846,6 +9846,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9848,6 +9848,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          if (filter != null) {
              if (pin) {
                  filter.pinnedDialogs.put(selectedDialog, minPinnedNum);
@@ -202,7 +202,7 @@ index 0000000..0000000 100644
              } else {
                  filter.pinnedDialogs.delete(selectedDialog);
              }
-@@ -10180,6 +10183,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -10182,6 +10185,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
  
      private void showOrUpdateActionMode(long dialogId, View cell) {
          addOrRemoveSelectedDialog(dialogId, cell);

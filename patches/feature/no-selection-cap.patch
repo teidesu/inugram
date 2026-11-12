@@ -32,7 +32,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -1827,11 +1827,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -1830,11 +1830,7 @@ public class ChatActivity extends BaseFragment implements
                          return;
                      }
                      if (messageObject.contentType == 0) {
@@ -45,7 +45,7 @@ index 0000000..0000000 100644
                          RecyclerView.ViewHolder holder = chatListView.findViewHolderForAdapterPosition(position);
                          if (holder != null && holder.itemView instanceof ChatMessageCell) {
                              processRowSelect(holder.itemView, false, x, y);
-@@ -20098,14 +20094,6 @@ public class ChatActivity extends BaseFragment implements
+@@ -20114,14 +20110,6 @@ public class ChatActivity extends BaseFragment implements
                      }
                  }
              } else {

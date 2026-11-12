@@ -79,7 +79,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -1891,6 +1891,11 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -1892,6 +1892,11 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
          blurredPhotoImage = new ImageReceiver(this);
          blurredPhotoImage.setAllowLoadingOnAttachedOnly(true);
          blurredPhotoImage.setUseRoundForThumbDrawable(true);
@@ -91,7 +91,7 @@ index 0000000..0000000 100644
          radialProgress = new RadialProgress2(this, resourcesProvider);
          videoRadialProgress = new RadialProgress2(this, resourcesProvider);
          videoRadialProgress.setDrawBackground(false);
-@@ -1981,6 +1986,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -1982,6 +1987,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
          commentAvatarImagesVisible = new boolean[3];
          for (int a = 0; a < commentAvatarImages.length; a++) {
              commentAvatarImages[a] = new ImageReceiver(this);

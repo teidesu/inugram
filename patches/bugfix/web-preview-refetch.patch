@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -14676,6 +14676,15 @@ public class ChatActivity extends BaseFragment implements
+@@ -14691,6 +14691,15 @@ public class ChatActivity extends BaseFragment implements
          }
      }
  
@@ -28,7 +28,7 @@ index 0000000..0000000 100644
      private void editResetMediaManual() {
          if (editingMessageObject != null && editingMessageObject.messageOwner != null && editingMessageObject.messageOwner.media != null) {
              editingMessageObject.messageOwner.media.manual = false;
-@@ -14718,7 +14727,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -14733,7 +14742,7 @@ public class ChatActivity extends BaseFragment implements
              return;
          }
          checkEditLinkRemoved(charSequence);
@@ -37,7 +37,7 @@ index 0000000..0000000 100644
              if (foundWebPage.url != null) {
                  int index = TextUtils.indexOf(charSequence, foundWebPage.url);
                  char lastChar = 0;
-@@ -14751,12 +14760,6 @@ public class ChatActivity extends BaseFragment implements
+@@ -14766,12 +14775,6 @@ public class ChatActivity extends BaseFragment implements
          }
          final MessagesController messagesController = getMessagesController();
          Utilities.searchQueue.postRunnable(() -> {
@@ -50,7 +50,7 @@ index 0000000..0000000 100644
              ArrayList<CharSequence> urls = null;
              CharSequence textToCheck;
              try {
-@@ -14790,10 +14793,14 @@ public class ChatActivity extends BaseFragment implements
+@@ -14805,10 +14808,14 @@ public class ChatActivity extends BaseFragment implements
                              clear = false;
                          }
                      }
@@ -66,7 +66,7 @@ index 0000000..0000000 100644
                  foundUrls = urls;
                  if (urls == null) {
                      AndroidUtilities.runOnUIThread(() -> {
-@@ -14813,9 +14820,14 @@ public class ChatActivity extends BaseFragment implements
+@@ -14828,9 +14835,14 @@ public class ChatActivity extends BaseFragment implements
                      });
                      return;
                  }
@@ -81,7 +81,7 @@ index 0000000..0000000 100644
  
              if (currentEncryptedChat != null && messagesController.secretWebpagePreview == 2) {
                  AndroidUtilities.runOnUIThread(() -> {
-@@ -14851,6 +14863,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -14866,6 +14878,10 @@ public class ChatActivity extends BaseFragment implements
                  if (waitingForWebpageId != myId) {
                      return;
                  }
@@ -96,7 +96,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivity
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
-@@ -7984,7 +7984,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -7989,7 +7989,7 @@ public class ChatActivityEnterView extends FrameLayout implements
                  }
                  if (parentFragment != null) {
                      parentFragment.editingMessageObject = null;

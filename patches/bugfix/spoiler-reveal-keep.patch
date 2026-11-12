@@ -38,7 +38,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -21074,6 +21074,7 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -21077,6 +21077,7 @@ public class MessagesController extends BaseController implements NotificationCe
                                      updateDialogs = true;
                                      break;
                                  } else if (oldObject.getDialogId() == newMessage.getDialogId() && oldObject.messageOwner.action instanceof TLRPC.TL_messageActionPinMessage && oldObject.replyMessageObject != null && oldObject.replyMessageObject.getId() == newMessage.getId()) {
@@ -50,7 +50,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -26345,6 +26345,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -26361,6 +26361,7 @@ public class ChatActivity extends BaseFragment implements
                  if (update == null) {
                      object.replyMessageObject = emptyMessage;
                  } else {

@@ -224,7 +224,7 @@ index 0000000..0000000 100644
      private MessagesController.SavedMusicList savedMusicList;
      private ProfileMusicView musicView;
      private ProfileBalanceView balanceView;
-@@ -2557,6 +2559,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -2558,6 +2560,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
  
      @Override
      public View createView(Context context) {
@@ -233,7 +233,7 @@ index 0000000..0000000 100644
          Theme.createProfileResources(context);
          Theme.createChatResources(context, false);
          BaseFragment lastFragment = parentLayout.getLastFragment();
-@@ -3888,7 +3892,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -3894,7 +3898,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                  }
              });
  
@@ -242,7 +242,7 @@ index 0000000..0000000 100644
              setActionsMode();
              updateNotifications(false);
  
-@@ -5511,7 +5515,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -5517,7 +5521,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              avatarsViewPager.setChatInfo(chatInfo);
          }
          avatarContainer2.addView(avatarsViewPager);
@@ -251,7 +251,7 @@ index 0000000..0000000 100644
          avatarContainer2.addView(overlaysView);
          if (actionsView != null) {
              avatarContainer2.addView(actionsView, LayoutHelper.createFrame(-1, -1));
-@@ -6246,7 +6250,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -6252,7 +6256,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
      private int getActionsExtraHeight(boolean withPills) {
          if (userId != 0 && imageUpdater != null && !myProfile)
              return 0;
@@ -260,7 +260,7 @@ index 0000000..0000000 100644
      }
  
      private int getHeaderExtraHeight() {
-@@ -11603,17 +11607,18 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -11713,17 +11717,18 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              return;
          }
          final int newTop = ActionBar.getCurrentActionBarHeight() + (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0);
@@ -282,7 +282,7 @@ index 0000000..0000000 100644
              actionsView.updatePosition(bottom - height + ProfileHelper.expandedActionsOffset(playProfileAnimation, avatarAnimationProgress, currentExpandAnimatorValue, openAnimationInProgress), height);
          }
  
-@@ -11633,22 +11638,23 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -11743,22 +11748,23 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              return;
          }
          final int newTop = ActionBar.getCurrentActionBarHeight() + (actionBar.getOccupyStatusBar() ? AndroidUtilities.statusBarHeight : 0);

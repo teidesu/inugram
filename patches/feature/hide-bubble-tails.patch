@@ -126,7 +126,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -11956,7 +11956,12 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -11988,7 +11988,12 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                          path.addCircle(rect.centerX(), rect.centerY(), dp(selectorDrawableMaskType[num] == 3 ? 16 : 20), Path.Direction.CW);
                      } else if (selectorDrawableMaskType[num] == 2) {
                          boolean out = currentMessageObject != null && currentMessageObject.isOutOwner();
@@ -139,7 +139,7 @@ index 0000000..0000000 100644
                              if (!instantTextNewLine) {
                                  if (a == (out ? 3 : 2)) {
                                      radii[a * 2] = radii[a * 2 + 1] = dp(SharedConfig.bubbleRadius);
-@@ -11969,7 +11974,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -12001,7 +12006,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                              }
                              radii[a * 2] = radii[a * 2 + 1] = 0;
                          }
@@ -148,7 +148,7 @@ index 0000000..0000000 100644
                              path.moveTo(rect.left + dp(6), rect.top);
                              path.lineTo(rect.left + dp(6), rect.bottom - dp(6) - dp(2 + 3));
                              AndroidUtilities.rectTmp.set(
-@@ -20714,7 +20719,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -20748,7 +20753,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                  buttonX -= dp(10);
              }
              commentButtonRect.set(

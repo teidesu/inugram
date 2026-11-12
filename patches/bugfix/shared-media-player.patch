@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaL
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
-@@ -3496,10 +3496,17 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -3527,10 +3527,17 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
                              );
                              final int paddingTopNew = page.listView.getPaddingTop();
                              final int scroll = paddingTopOld - paddingTopNew;
@@ -30,7 +30,7 @@ index 0000000..0000000 100644
                  // SharedMediaLayout.this.setPadding(0, , 0, 0);
              });
              fragmentContextView = new FragmentContextView(context, parent, this, false, resourcesProvider) {
-@@ -7161,7 +7168,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -7201,7 +7208,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
                  if (savedMessagesContainer.getParent() != mediaPages[a]) {
                      AndroidUtilities.removeFromParent(savedMessagesContainer);
                      mediaPages[a].addView(savedMessagesContainer, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.FILL, 0, 48 + 8, 0, 0));
@@ -39,7 +39,7 @@ index 0000000..0000000 100644
                  }
              } else if (mediaPages[a].selectedType == TAB_BOT_PREVIEWS) {
                  if (currentAdapter != null) {
-@@ -11950,7 +11957,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -12045,7 +12052,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
      private void updateProgressViewLayout(MediaPage page) {
          final boolean photos = page.selectedType == TAB_PHOTOVIDEO || isAnyStoryPageType(page.selectedType);
          final FrameLayout.LayoutParams lp = LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.FILL, photos ? 0 : 12, 48 + (photos ? 8 : 12), photos ? 0 : 12, photos ? 0 : 12);

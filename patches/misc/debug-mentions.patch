@@ -227,7 +227,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -21747,6 +21747,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -21763,6 +21763,9 @@ public class ChatActivity extends BaseFragment implements
          } else if (first) {
              hasAllMentionsLocal = true;
          }
@@ -237,7 +237,7 @@ index 0000000..0000000 100644
          if (load_type == 4) {
              startLoadFromMessageId = loaded_max_id;
  
-@@ -24686,6 +24689,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -24702,6 +24705,9 @@ public class ChatActivity extends BaseFragment implements
                  MessageObject currentMessage = messagesDict[0].get(mid);
                  if (currentMessage != null) {
                      currentMessage.setContentIsRead();
@@ -247,7 +247,7 @@ index 0000000..0000000 100644
                      if (currentMessage.messageOwner.mentioned) {
                          newMentionsCount--;
                          if (newMentionsCount <= 0) {
-@@ -25167,6 +25173,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -25183,6 +25189,9 @@ public class ChatActivity extends BaseFragment implements
              long topicId = (Long) args[1];
              if (dialog_id == dialogId && this.getTopicId() == topicId) {
                  int count = (int) args[2];
@@ -257,7 +257,7 @@ index 0000000..0000000 100644
                  if (newMentionsCount > count) {
                      newMentionsCount = count;
                      if (newMentionsCount <= 0) {
-@@ -26783,6 +26792,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -26799,6 +26808,9 @@ public class ChatActivity extends BaseFragment implements
  
                  if (threadMessageId == 0 || isTopic) {
                      if (obj.messageOwner.mentioned && obj.isContentUnread()) {
@@ -267,7 +267,7 @@ index 0000000..0000000 100644
                          newMentionsCount++;
                      }
                  }
-@@ -27158,6 +27170,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -27174,6 +27186,9 @@ public class ChatActivity extends BaseFragment implements
                  }
                  if (threadMessageId == 0 || isTopic) {
                      if (!obj.isOut() && obj.messageOwner.mentioned && obj.isContentUnread()) {
@@ -277,7 +277,7 @@ index 0000000..0000000 100644
                          newMentionsCount++;
                      }
                  }
-@@ -30925,6 +30940,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -30941,6 +30956,9 @@ public class ChatActivity extends BaseFragment implements
                  }
                  if (message != null && message.messageOwner != null && message.messageOwner.media_unread && message.messageOwner.mentioned) {
                      if (!message.isVoice() && !message.isRoundVideo()) {
@@ -287,7 +287,7 @@ index 0000000..0000000 100644
                          newMentionsCount--;
                          if (newMentionsCount <= 0) {
                              newMentionsCount = 0;
-@@ -39404,6 +39422,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -39471,6 +39489,9 @@ public class ChatActivity extends BaseFragment implements
                  if (message != null && message.messageOwner != null && message.messageOwner.media_unread && message.messageOwner.mentioned) {
                      if (!inPreviewMode && chatMode == 0) {
                          if (!message.isVoice() && !message.isRoundVideo()) {
@@ -297,7 +297,7 @@ index 0000000..0000000 100644
                              newMentionsCount--;
                              if (newMentionsCount <= 0) {
                                  newMentionsCount = 0;
-@@ -47818,6 +47839,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -47898,6 +47919,9 @@ public class ChatActivity extends BaseFragment implements
  
      private void loadLastUnreadMention() {
          wasManualScroll = true;
@@ -307,7 +307,7 @@ index 0000000..0000000 100644
          if (hasAllMentionsLocal) {
              getMessagesStorage().getUnreadMention(dialog_id, getTopicId(), newMentionsCount, param -> {
                  if (param == 0) {
-@@ -47839,6 +47863,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -47919,6 +47943,9 @@ public class ChatActivity extends BaseFragment implements
              req.add_offset = newMentionsCount - 1;
              getConnectionsManager().sendRequest(req, (response, error) -> AndroidUtilities.runOnUIThread(() -> {
                  TLRPC.messages_Messages res = (TLRPC.messages_Messages) response;

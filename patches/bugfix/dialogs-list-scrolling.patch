@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -1698,10 +1698,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -1699,10 +1699,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          }
      }
  
@@ -23,7 +23,7 @@ index 0000000..0000000 100644
          public boolean updateDialogsOnNextDraw;
          private boolean firstLayout = true;
          private boolean ignoreLayout;
-@@ -1741,7 +1740,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -1742,7 +1741,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          }
  
          public void setViewsOffset(float viewOffset) {
@@ -32,7 +32,7 @@ index 0000000..0000000 100644
              int n = getChildCount();
              for (int i = 0; i < n; i++) {
                  getChildAt(i).setTranslationY(viewOffset);
-@@ -2052,7 +2051,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -2053,7 +2052,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                  RecyclerView.ViewHolder holder = parentPage.listView.findViewHolderForAdapterPosition(pos);
                  if (holder != null) {
                      int top = holder.itemView.getTop();
@@ -41,7 +41,7 @@ index 0000000..0000000 100644
                          pos = Math.max(1, pos);
                      }
                      ignoreLayout = true;
-@@ -9009,11 +9008,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9011,11 +9010,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              public void onAnimationEnd(Animator animation) {
                  super.onAnimationEnd(animation);
                  actionBarColorAnimator = null;
@@ -60,7 +60,7 @@ index 0000000..0000000 100644
                  viewPages[0].setTranslationY(0);
                  for (int i = 0; i < viewPages.length; i++) {
                      if (viewPages[i] != null) {
-@@ -10027,8 +10030,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -10029,8 +10032,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      super.onAnimationEnd(animation);
                      actionBarColorAnimator = null;
                      actionModeAdditionalHeight = 0;

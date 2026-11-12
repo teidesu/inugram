@@ -14,7 +14,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivity
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
-@@ -13140,7 +13140,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -13145,7 +13145,7 @@ public class ChatActivityEnterView extends FrameLayout implements
          if (emojiButton == null) {
              return;
          }

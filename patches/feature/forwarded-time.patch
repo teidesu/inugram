@@ -41,7 +41,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -16345,7 +16345,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -16379,7 +16379,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                      if (verified) {
                          stringBuilder.setSpan(getForwardVerifiedSpan(), verifiedIndex, verifiedIndex + 1, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
                      }
@@ -50,7 +50,7 @@ index 0000000..0000000 100644
                      if (currentForwardName == null || messageObject.messageOwner.fwd_from.from_id != null) {
                          stringBuilder.setSpan(new TypefaceSpan(AndroidUtilities.bold()), 0, stringBuilder.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
                      }
-@@ -16355,15 +16355,17 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -16389,15 +16389,17 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                      lastLine = Emoji.replaceEmoji(lastLine, Theme.chat_forwardNamePaint.getFontMetricsInt(), false);
                  } catch (Exception ignore) {
                  }
@@ -70,7 +70,7 @@ index 0000000..0000000 100644
                      forwardedNameWidth = Math.max((int) Math.ceil(forwardedNameLayout[0].getLineWidth(0)), (int) Math.ceil(forwardedNameLayout[1].getLineWidth(0)));
                      if (hasPsaHint) {
                          forwardedNameWidth += dp(36);
-@@ -16371,7 +16373,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -16405,7 +16407,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                      forwardNameOffsetX[0] = forwardedNameLayout[0].getLineLeft(0);
                      forwardNameOffsetX[1] = forwardedNameLayout[1].getLineLeft(0);
                      if (isSideMenued && !drawBackground || messageObject.type != MessageObject.TYPE_ROUND_VIDEO && !messageObject.isAnyKindOfSticker() || messageObject.type == MessageObject.TYPE_EMOJIS) {
@@ -79,7 +79,7 @@ index 0000000..0000000 100644
                          if (messageObject.type == MessageObject.TYPE_EMOJIS) {
                              namesOffset += dp(8);
                          }
-@@ -17469,7 +17471,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -17503,7 +17505,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                      replyStartX = backgroundDrawableLeft + backgroundDrawableRight + dp(17);
                  }
                  if (drawForwardedName) {
@@ -88,7 +88,7 @@ index 0000000..0000000 100644
                      replyStartY = forwardNameY + forwardHeight + dp(6);
                  } else {
                      replyStartY = dp(12);
-@@ -17490,7 +17492,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -17524,7 +17526,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                  if (currentMessageObject.type == MessageObject.TYPE_EMOJIS) {
                      replyStartX -= dp(7);
                  }
@@ -97,7 +97,7 @@ index 0000000..0000000 100644
                  replyStartY = dp(12) + (int) (drawNameLayout && nameLayout != null ? getNameHeightAnimated() + dp(1) : 0) + (drawForwardedName && forwardedNameLayout[0] != null ? dp(4) + forwardHeight : 0);
              }
              replyStartY += dp(.66f);
-@@ -19703,7 +19705,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -19737,7 +19739,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                      forwardNameXLocal -= dp(78) * (isPlayingRound ? transitionParams.animateChangeProgress : (1f - transitionParams.animateChangeProgress));
                  }
                  forwardNameY = dp(12);
@@ -106,7 +106,7 @@ index 0000000..0000000 100644
  
                  int backWidth = forwardedNameWidthLocal + dp(14);
                  if (hasReply) {
-@@ -19762,7 +19764,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -19796,7 +19798,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                  if (!drawNameLayout && currentMessageObject.type == MessageObject.TYPE_TEXT && !drawPinnedTop) {
                      forwardNameY += dp(2);
                  }

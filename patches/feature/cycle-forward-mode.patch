@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -8310,6 +8310,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -8314,6 +8314,8 @@ public class ChatActivity extends BaseFragment implements
                          scrollToMessageId(replyingMessageObject.getId(), 0, true, 0, true, 0);
                          return true;
                      }
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
                  }
              }
              return false;
-@@ -16100,11 +16102,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -16115,11 +16117,9 @@ public class ChatActivity extends BaseFragment implements
                          text = LocaleController.formatPluralString("Stories", messageObjectsToForward.size());
                      }
                  }

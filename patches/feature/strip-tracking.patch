@@ -73,7 +73,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -14801,6 +14801,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -14816,6 +14816,9 @@ public class ChatActivity extends BaseFragment implements
      }
  
      public void searchLinks(final CharSequence charSequence, final boolean force, final boolean inu_force) {
@@ -95,7 +95,7 @@ index 0000000..0000000 100644
          messageEditText.setDelegate(() -> {
              messageEditText.invalidateEffects();
              if (delegate != null) {
-@@ -7557,6 +7558,9 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -7562,6 +7563,9 @@ public class ChatActivityEnterView extends FrameLayout implements
                  sendRichDraft(notify, scheduleDate, scheduleRepeatPeriod, payStars);
                  return;
              }
@@ -105,7 +105,7 @@ index 0000000..0000000 100644
              CharSequence message = messageEditText == null ? "" : messageEditText.getTextToUse();
              if (parentFragment != null) {
                  TLRPC.Chat chat = parentFragment.getCurrentChat();
-@@ -7819,6 +7823,9 @@ public class ChatActivityEnterView extends FrameLayout implements
+@@ -7824,6 +7828,9 @@ public class ChatActivityEnterView extends FrameLayout implements
          if (editingMessageObject == null) {
              return;
          }
@@ -227,7 +227,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/T
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
-@@ -1731,7 +1731,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -1745,7 +1745,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                              if ((text.startsWith("http://") || text.startsWith("https://")) && !TextUtils.isEmpty(subject)) {
                                  text = subject + "\n" + text;
                              }

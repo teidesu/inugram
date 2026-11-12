@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -14600,7 +14600,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -14713,7 +14713,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          private static SearchResult[] onCreateSearchArray(final BaseFragment f) {
              final int currentAccount = f.getCurrentAccount();
              final Theme.ResourcesProvider resourcesProvider = f.getResourceProvider();
@@ -21,7 +21,7 @@ index 0000000..0000000 100644
                      new SearchResult(500, getString(R.string.EditName), 0, () -> f.presentFragment(new ChangeNameActivity(resourcesProvider))),
                      new SearchResult(501, getString(R.string.ChangePhoneNumber), 0, () -> f.presentFragment(new ActionIntroActivity(ActionIntroActivity.ACTION_TYPE_CHANGE_PHONE_NUMBER))).withLink("tg://settings/edit/change-number"),
                      new SearchResult(502, getString(R.string.AddAnotherAccount), 0, () -> {
-@@ -14862,7 +14862,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -14975,7 +14975,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                      new SearchResult(402, getString(R.string.AskAQuestion), getString(R.string.SettingsHelp), R.drawable.msg2_help, () -> f.showDialog(AlertsCreator.createSupportAlert(f, null))).withLink("tg://settings/ask-question"),
                      new SearchResult(403, getString(R.string.TelegramFAQ), getString(R.string.SettingsHelp), R.drawable.msg2_help, () -> Browser.openUrl(f.getParentActivity(), getString(R.string.TelegramFaqUrl))).withLink("tg://settings/faq"),
                      new SearchResult(404, getString(R.string.PrivacyPolicy), getString(R.string.SettingsHelp), R.drawable.msg2_help, () -> Browser.openUrl(f.getParentActivity(), getString(R.string.PrivacyPolicyUrl))).withLink("tg://settings/privacy-policy"),

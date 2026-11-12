@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -34571,6 +34571,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -34621,6 +34621,10 @@ public class ChatActivity extends BaseFragment implements
      }
  
      public void saveMessageToGallery(MessageObject messageObject) {
@@ -23,7 +23,7 @@ index 0000000..0000000 100644
          String path = messageObject.messageOwner.attachPath;
          if (!TextUtils.isEmpty(path)) {
              File temp = new File(path);
-@@ -34614,11 +34618,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -34664,11 +34668,11 @@ public class ChatActivity extends BaseFragment implements
                  }
              }
              if (!TextUtils.isEmpty(videoPath)) {
@@ -41,7 +41,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaL
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/SharedMediaLayout.java
-@@ -766,6 +766,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -768,6 +768,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
      private ActionBarMenuItem gotoItem;
      private ActionBarMenuItem pinItem;
      private ActionBarMenuItem unpinItem;
@@ -49,7 +49,7 @@ index 0000000..0000000 100644
      private int searchItemState;
      private Drawable pinnedHeaderShadowDrawable;
      private boolean ignoreSearchCollapse;
-@@ -2054,6 +2055,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -2056,6 +2057,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
              updateForwardItem();
          }
          deleteItem = createActionModeItem(context, delete, R.drawable.msg_delete, getString("Delete", R.string.Delete));
@@ -57,7 +57,7 @@ index 0000000..0000000 100644
  
          photoVideoAdapter = new SharedPhotoVideoAdapter(context) {
              @Override
-@@ -5123,6 +5125,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -5163,6 +5165,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
                  cantDeleteMessagesCount = 0;
              }, null, resourcesProvider);
          } else if (id == forward) {
@@ -65,7 +65,7 @@ index 0000000..0000000 100644
              if (userInfo != null) {
                  if (profileActivity.getMessagesController().isUserNoForwards(userInfo)) {
                      if (fwdRestrictedHint != null) {
-@@ -5184,8 +5187,9 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -5224,8 +5227,9 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
                          if (message != null) {
                              profileActivity.getSendMessagesHelper().sendMessage(SendMessagesHelper.SendMessageParams.of(message.toString(), did, null, null, null, true, null, null, null, true, 0, 0, null, false));
                          }
@@ -76,7 +76,7 @@ index 0000000..0000000 100644
                      fragment1.finishFragment();
                      UndoView undoView = null;
                      if (profileActivity instanceof ProfileActivity) {
-@@ -5947,6 +5951,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
+@@ -5987,6 +5991,7 @@ public class SharedMediaLayout extends FrameLayout implements Theme.Colorable, N
      }
  
      private void updateStoriesPinButton() {

@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/Re
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionsLayoutInBubble.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionsLayoutInBubble.java
-@@ -1626,7 +1626,7 @@ public class ReactionsLayoutInBubble {
+@@ -1627,7 +1627,7 @@ public class ReactionsLayoutInBubble {
                          return o1.choosenOrder - o2.choosenOrder;
                      }
                  }
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
              } else {
                  if (o1.paid != o2.paid) {
                      return o1.paid ? -1 : 1;
-@@ -1639,7 +1639,17 @@ public class ReactionsLayoutInBubble {
+@@ -1640,7 +1640,17 @@ public class ReactionsLayoutInBubble {
  //            if (availableReaction1 != null && availableReaction2 != null) {
  //                return availableReaction1.positionInList - availableReaction2.positionInList;
  //            }

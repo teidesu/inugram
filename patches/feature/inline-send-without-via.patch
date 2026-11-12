@@ -34,7 +34,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -383,6 +383,7 @@ import desu.inugram.InuConfig;
+@@ -385,6 +385,7 @@ import desu.inugram.InuConfig;
  import desu.inugram.helpers.chat.ChatHelper;
  import desu.inugram.helpers.chat.ChatActionsHelper;
  import desu.inugram.helpers.search.SearchFilterHelper;
@@ -42,7 +42,7 @@ index 0000000..0000000 100644
  
  @SuppressWarnings("unchecked")
  public class ChatActivity extends BaseFragment implements
-@@ -1677,7 +1678,22 @@ public class ChatActivity extends BaseFragment implements
+@@ -1680,7 +1681,22 @@ public class ChatActivity extends BaseFragment implements
              if (index < 0 || index >= botContextResults.size()) {
                  return;
              }
@@ -66,7 +66,7 @@ index 0000000..0000000 100644
          }
      };
  
-@@ -7566,6 +7582,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -7570,6 +7586,9 @@ public class ChatActivity extends BaseFragment implements
                      return;
                  }
                  TLRPC.BotInlineResult result = (TLRPC.BotInlineResult) object;
@@ -76,7 +76,7 @@ index 0000000..0000000 100644
                  if (currentEncryptedChat != null) {
                      int error = 0;
                      if (result.send_message instanceof TLRPC.TL_botInlineMessageMediaAuto && "game".equals(result.type)) {
-@@ -7650,6 +7669,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -7654,6 +7673,10 @@ public class ChatActivity extends BaseFragment implements
                  int len = mentionContainer.getAdapter().getResultLength();
                  return ChatHelper.maybeHandleMentionLongTap(this, chatActivityEnterView, (TLRPC.User) object, start, len);
              }
@@ -87,7 +87,7 @@ index 0000000..0000000 100644
              if (!mentionContainer.getAdapter().isLongClickEnabled()) {
                  return false;
              }
-@@ -13097,7 +13120,24 @@ public class ChatActivity extends BaseFragment implements
+@@ -13112,7 +13135,24 @@ public class ChatActivity extends BaseFragment implements
          }
      }
  
@@ -112,7 +112,7 @@ index 0000000..0000000 100644
          if (mentionContainer == null) {
              return;
          }
-@@ -13107,6 +13147,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -13122,6 +13162,10 @@ public class ChatActivity extends BaseFragment implements
          params.put("query_id", "" + result.query_id);
          params.put("bot", "" + uid);
          params.put("bot_name", mentionContainer.getAdapter().getContextBotName());

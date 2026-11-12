@@ -4,8 +4,8 @@ Date: Tue, 23 Jun 2026 17:51:26 +0400
 Subject: Fix comments/topic thread restored as plain discussion group/chat after recreation
 
 ---
- .../java/org/telegram/ui/LaunchActivity.java  | 25 +++++++++++++++++++
- 1 file changed, 25 insertions(+)
+ .../java/org/telegram/ui/LaunchActivity.java  | 22 ++++++++++++++++++-
+ 1 file changed, 21 insertions(+), 1 deletion(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 index 0000000..0000000 100644
@@ -34,19 +34,16 @@ index 0000000..0000000 100644
 +                                }
                                  if (args != null) {
                                      ChatActivity chat = new ChatActivity(args);
-                                     if (actionBarLayout.addFragmentToStack(chat)) {
-@@ -8575,6 +8592,14 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
-                 if (lastFragment instanceof ChatActivity && args != null) {
+                                     long topicId = savedInstanceState.getLong("topic_id");
+@@ -8590,7 +8607,10 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                      outState.putBundle("args", args);
                      outState.putString("fragment", "chat");
-+                    ChatActivity ca = (ChatActivity) lastFragment;
-+                    if (ca.isReplyChatComment()) {
-+                        outState.putLong("inu_thread_chat", ca.replyOriginalChat.id);
-+                        outState.putInt("inu_thread_msg", ca.replyOriginalMessageId);
-+                    } else if (ca.isTopic) {
-+                        outState.putLong("inu_thread_chat", -ca.getDialogId());
-+                        outState.putInt("inu_thread_msg", (int) ca.getTopicId());
-+                    }
+                     ChatActivity chatActivity = (ChatActivity) lastFragment;
+-                    if (chatActivity.isTopic && chatActivity.getChatMode() == 0) {
++                    if (chatActivity.isReplyChatComment()) {
++                        outState.putLong("inu_thread_chat", chatActivity.replyOriginalChat.id);
++                        outState.putInt("inu_thread_msg", chatActivity.replyOriginalMessageId);
++                    } else if (chatActivity.isTopic && chatActivity.getChatMode() == 0) {
+                         outState.putLong("topic_id", chatActivity.getTopicId());
+                     }
                  } else if (lastFragment instanceof GroupCreateFinalActivity && args != null) {
-                     outState.putBundle("args", args);
-                     outState.putString("fragment", "group");

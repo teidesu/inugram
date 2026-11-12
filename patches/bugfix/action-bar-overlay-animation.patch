@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.jav
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
-@@ -1940,8 +1940,23 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
+@@ -1942,8 +1942,23 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
              requestLayout();
              centerScale = true;
              animator.setDuration(220).setListener(new AnimatorListenerAdapter() {

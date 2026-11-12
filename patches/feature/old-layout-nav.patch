@@ -151,7 +151,7 @@ index 0000000..0000000 100644
      private boolean askingForPermissions;
      private int searchViewPagerIndex;
      @Nullable
-@@ -744,7 +744,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -745,7 +745,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
      private Bulletin topBulletin;
  
      private AnimationNotificationsLocker notificationsLocker = new AnimationNotificationsLocker();
@@ -160,7 +160,7 @@ index 0000000..0000000 100644
      private boolean searchWasFullyShowed;
      public boolean whiteActionBar;
      private boolean searchFiltersWasShowed;
-@@ -3421,7 +3421,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -3423,7 +3423,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          });
          fragmentSearchFieldWatcher.setDoNotCloseAfterFieldEmpty();
  
@@ -169,7 +169,7 @@ index 0000000..0000000 100644
              optionsItem = menu.addItem(4, R.drawable.ic_ab_other);
              optionsItem.setContentDescription(LocaleController.getString(R.string.AccDescrMoreOptions));
              optionsItem.setOnClickListener(v -> {
-@@ -3484,6 +3484,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -3486,6 +3486,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          } else {
              if (searchString != null || folderId != 0 || communityId != 0) {
                  actionBar.setBackButtonDrawable(backDrawable = new BackDrawable(false));
@@ -181,7 +181,7 @@ index 0000000..0000000 100644
              }
              if (folderId != 0) {
                  actionBar.setTitle(getString(R.string.ArchivedChats));
-@@ -3864,6 +3869,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -3866,6 +3871,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      return;
                  }
                  if (id == -1) {
@@ -193,7 +193,7 @@ index 0000000..0000000 100644
                      if (rightSlidingDialogContainer != null && rightSlidingDialogContainer.hasFragment()) {
                          if (actionBar.isActionModeShowed()) {
                              if (searchViewPager != null && searchViewPager.getVisibility() == View.VISIBLE && searchViewPager.actionModeShowing()) {
-@@ -5326,7 +5336,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -5328,7 +5338,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              }
          };
          dialogStoriesCell.setActionBar(actionBar);
@@ -202,7 +202,7 @@ index 0000000..0000000 100644
          dialogStoriesCell.allowGlobalUpdates = false;
          dialogStoriesCell.setVisibility(View.GONE);
          animateToHasStories = false;
-@@ -5356,7 +5366,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -5358,7 +5368,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          undoView[1] = null;
  
          if (hasMainTabs) {
@@ -211,7 +211,7 @@ index 0000000..0000000 100644
              ThemeBind.actionBarTitleColor(actionBar, Theme.key_telegram_color_dialogsLogo, getResourceProvider());
          }
  
-@@ -5895,6 +5905,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -5897,6 +5907,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              yoff = -(actionBar.getHeight() - AndroidUtilities.rectTmp2.centerY()) - dp(16);
              xoff = AndroidUtilities.rectTmp2.centerX() - dp(16);
              xoff += dp(4);
@@ -221,7 +221,7 @@ index 0000000..0000000 100644
              if (animatedStatusView != null) {
                  animatedStatusView.translate(AndroidUtilities.rectTmp2.centerX(), AndroidUtilities.rectTmp2.centerY());
              }
-@@ -6748,7 +6761,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -6750,7 +6763,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          // actionMode.setBackgroundColor(Color.TRANSPARENT);
          // actionMode.drawBlur = false;
  
@@ -231,7 +231,7 @@ index 0000000..0000000 100644
              actionModeCloseView = new ImageView(getContext());
              actionModeCloseView.setScaleType(ImageView.ScaleType.CENTER);
              actionModeCloseView.setImageDrawable(new BackDrawable(true));
-@@ -6763,7 +6777,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -6765,7 +6779,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          selectedDialogsCountTextView.setTextSize(18);
          selectedDialogsCountTextView.setTypeface(AndroidUtilities.bold());
          selectedDialogsCountTextView.setTextColor(getThemedColor(Theme.key_actionBarActionModeDefaultIcon));
@@ -240,7 +240,7 @@ index 0000000..0000000 100644
          selectedDialogsCountTextView.setOnTouchListener((v, event) -> true);
  
          pinItem = actionMode.addItemWithWidth(pin, R.drawable.msg_pin, dp(48));
-@@ -9117,6 +9131,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9119,6 +9133,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          selectedDialogs.clear();
          if (backDrawable != null) {
              backDrawable.setRotation(0, true);
@@ -249,7 +249,7 @@ index 0000000..0000000 100644
          }
          if (filterTabsView != null) {
              filterTabsView.animateColorsTo(Theme.key_actionBarTabLine, Theme.key_actionBarTabActiveText, Theme.key_actionBarTabUnactiveText, Theme.key_actionBarTabSelector, Theme.key_windowBackgroundWhite);
-@@ -10204,6 +10220,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -10206,6 +10222,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              }
              if (backDrawable != null) {
                  backDrawable.setRotation(1, true);
@@ -272,7 +272,7 @@ index 0000000..0000000 100644
              }
  
              try {
-@@ -740,7 +739,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -754,7 +753,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
          final int inuPredictiveMode = desu.inugram.InuConfig.PREDICTIVE_BACK_MODE.getValue();
          if (Build.VERSION.SDK_INT >= 34 && inuPredictiveMode == desu.inugram.InuConfig.PredictiveBackModeItem.MATERIAL3 && actionBarLayout != null) {
              if (onBackAnimationCallback == null) {
@@ -281,7 +281,7 @@ index 0000000..0000000 100644
                      this,
                      actionBarLayout,
                      () -> {
-@@ -751,7 +750,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -765,7 +764,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                          if (!onBackPressed(true)) return;
                          onBackPressed();
                      }
@@ -290,7 +290,7 @@ index 0000000..0000000 100644
              }
              getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
                  OnBackInvokedDispatcher.PRIORITY_DEFAULT,
-@@ -759,7 +758,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -773,7 +772,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
              );
          } else if (Build.VERSION.SDK_INT >= 34 && inuPredictiveMode == desu.inugram.InuConfig.PredictiveBackModeItem.STOCK) {
              if (onBackAnimationCallback == null) {
@@ -299,7 +299,7 @@ index 0000000..0000000 100644
                      private AnimationNotificationsLocker locker = new AnimationNotificationsLocker();
                      private boolean locked;
  
-@@ -842,7 +841,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -856,7 +855,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                              actionBarLayout.onBackCancelled();
                          }
                      }
@@ -308,7 +308,7 @@ index 0000000..0000000 100644
              }
              getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
                  OnBackInvokedDispatcher.PRIORITY_DEFAULT,
-@@ -1289,6 +1288,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -1303,6 +1302,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
              showTosActivity(account, UserConfig.getInstance(account).unacceptedTermsOfService);
          }
          updateCurrentConnectionState(currentAccount);
@@ -316,7 +316,7 @@ index 0000000..0000000 100644
  
          switchingAccount = false;
      }
-@@ -3393,6 +3393,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -3407,6 +3407,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                              dialogsActivity.setInitialSearchString(searchQuery);
                          }
                          actionBarLayout.addFragmentToStack(mainTabsActivity, INavigationLayout.FORCE_NOT_ATTACH_VIEW);
@@ -324,7 +324,7 @@ index 0000000..0000000 100644
                      }
                  }
              } else {
-@@ -3406,6 +3407,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -3420,6 +3421,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                              dialogsActivity.setInitialSearchString(searchQuery);
                          }
                          actionBarLayout.addFragmentToStack(mainTabsActivity, INavigationLayout.FORCE_NOT_ATTACH_VIEW);
@@ -332,7 +332,7 @@ index 0000000..0000000 100644
                      }
                  }
              }
-@@ -8643,6 +8645,9 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+@@ -8661,6 +8663,9 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
          } else if (ArticleViewer.hasInstance() && ArticleViewer.getInstance().isVisible()) {
              if (invoked) ArticleViewer.getInstance().close(true, false);
              return false;
@@ -371,7 +371,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
-@@ -3984,6 +3984,12 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -3990,6 +3990,12 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                      case ProfileActionsView.KEY_SETTINGS:
                          presentFragment(new SettingsActivity());
                          break;
@@ -384,7 +384,7 @@ index 0000000..0000000 100644
                  }
              });
          }
-@@ -5677,7 +5683,11 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -5683,7 +5689,11 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                      actionsView.beginApplyingActions();
                      actionsView.addCameraAction();
                      actionsView.addEditInfo();
