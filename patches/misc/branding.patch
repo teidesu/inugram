@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: alina sireneva <alina@tei.su>
-Date: Tue, 21 Apr 2026 09:21:29 +0300
+From: alina sireneva <alina@tei.pet>
+Date: Fri, 13 Nov 2026 23:41:28 +0400
 Subject: change app name to Inugram
 
 ---
@@ -30,7 +30,8 @@ Subject: change app name to Inugram
  TMessagesProj/src/main/res/values/strings.xml | 10 +++---
  TMessagesProj/src/main/res/xml/auth.xml       |  2 +-
  .../src/main/res/xml/sync_contacts.xml        |  2 +-
- 26 files changed, 142 insertions(+), 77 deletions(-)
+ .../org/telegram/tasks/TelegramStringsTask.kt |  8 +++--
+ 27 files changed, 148 insertions(+), 79 deletions(-)
  create mode 100644 TMessagesProj/src/main/res/mipmap-anydpi-v26/ic_launcher_stock.xml
  create mode 100644 TMessagesProj/src/main/res/mipmap-anydpi-v26/ic_launcher_stock_round.xml
 
@@ -750,3 +751,26 @@ index 0000000..0000000 100644
 \ No newline at end of file
 +    android:accountType="desu.inugram"/>
 \ No newline at end of file
+diff --git a/buildSrc/src/main/kotlin/org/telegram/tasks/TelegramStringsTask.kt b/buildSrc/src/main/kotlin/org/telegram/tasks/TelegramStringsTask.kt
+index 0000000..0000000 100644
+--- a/buildSrc/src/main/kotlin/org/telegram/tasks/TelegramStringsTask.kt
++++ b/buildSrc/src/main/kotlin/org/telegram/tasks/TelegramStringsTask.kt
+@@ -27,12 +27,16 @@ abstract class TelegramStringsTask : DefaultTask() {
+     companion object {
+         private val GENERATED_EXCLUSIONS = setOf(
+             "AppName",
+-            "AppNameBeta"
++            "AppNameBeta",
++            "AppUpdate",
++            "AppUpdateBeta"
+         )
+ 
+         private val STABLE_IDS_EXCLUSIONS = setOf(
+             "AppName",
+-            "AppNameBeta"
++            "AppNameBeta",
++            "AppUpdate",
++            "AppUpdateBeta"
+         )
+ 
+         private const val STRING_RESOURCE_ID_BASE = 0x7F0FFFFE
