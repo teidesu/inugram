@@ -244,9 +244,9 @@ object PluginXposed : SessionResource {
         /** hooking an undeclared method would rewrite the superclass's entry point, hitting every subclass */
         private fun overloads(cls: Class<*>, name: String): List<Member> {
             val found: List<Member> = if (name.isEmpty()) {
-                cls.declaredConstructors.toList()
+                cls.declaredConstructors.filter(PluginJvm::isLinkable)
             } else {
-                cls.declaredMethods.filter { it.name == name }
+                cls.declaredMethods.filter { it.name == name && PluginJvm.isLinkable(it) }
             }
             if (found.isEmpty()) {
                 refuse("not-found", "xposed: ${cls.name} declares no ${if (name.isEmpty()) "constructor" else name}")

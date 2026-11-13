@@ -187,11 +187,11 @@ internal object PluginJvmClass {
         val inherited = ArrayList<Method>()
         var current: Class<*>? = superclass
         while (current != null) {
-            inherited.addAll(current.declaredMethods.filter { Modifier.isPublic(it.modifiers) || Modifier.isProtected(it.modifiers) })
+            inherited.addAll(current.declaredMethods.filter { (Modifier.isPublic(it.modifiers) || Modifier.isProtected(it.modifiers)) && PluginJvm.isLinkable(it) })
             current = current.superclass
         }
-        inherited.addAll(superclass.methods)
-        interfaces.forEach { inherited.addAll(it.methods) }
+        inherited.addAll(superclass.methods.filter(PluginJvm::isLinkable))
+        interfaces.forEach { inherited.addAll(it.methods.filter(PluginJvm::isLinkable)) }
         val signatures = HashSet<String>()
         val methodSpecs = List(methods.length()) {
             val method = methods.getJSONObject(it)
@@ -234,7 +234,7 @@ internal object PluginJvmClass {
                     } else null to capture(arg.getInt("value"))
                 }
             }
-            val accessibleSuperConstructors = superclass.declaredConstructors.filter { Modifier.isPublic(it.modifiers) || Modifier.isProtected(it.modifiers) }
+            val accessibleSuperConstructors = superclass.declaredConstructors.filter { (Modifier.isPublic(it.modifiers) || Modifier.isProtected(it.modifiers)) && PluginJvm.isLinkable(it) }
             val superConstructor = if (!isConstructor) null else if (superBody != null) {
                 if (method.isNull("superParams")) {
                     require(accessibleSuperConstructors.size == 1) { "a super function needs superParams unless the superclass has exactly one constructor" }
