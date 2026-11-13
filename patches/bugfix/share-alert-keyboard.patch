@@ -1,0 +1,68 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Fri, 13 Nov 2026 04:01:07 +0400
+Subject: share alert: fix emoji panel stuck after switching to keyboard, caption lagging behind keyboard, chat behind moving with keyboard
+
+---
+ .../src/main/java/org/telegram/ui/ChatActivity.java  | 10 ++++++++--
+ .../java/org/telegram/ui/Components/ShareAlert.java  | 12 ++++++++++--
+ 2 files changed, 18 insertions(+), 4 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -9260,8 +9260,8 @@ public class ChatActivity extends BaseFragment implements
+ 
+     @Nullable
+     private WindowInsetsCompat getChatWindowInsets(@Nullable WindowInsetsCompat insets) {
+-        if (insets != null && chatAttachAlert != null
+-                && (chatAttachAlert.isShowing() && !chatAttachAlert.isDismissed() || chatAttachAlert.isGramSendDismissalInProgress())) {
++        if (insets != null && (chatAttachAlert != null
++                && (chatAttachAlert.isShowing() && !chatAttachAlert.isDismissed() || chatAttachAlert.isGramSendDismissalInProgress()) || inu_isImeOwnedByVisibleDialog())) {
+             // The attachment sheet owns this IME; it must not move the chat behind it.
+             return new WindowInsetsCompat.Builder(insets)
+                 .setInsets(WindowInsetsCompat.Type.ime(), Insets.NONE)
+@@ -9271,6 +9271,12 @@ public class ChatActivity extends BaseFragment implements
+         return insets;
+     }
+ 
++    private boolean inu_isImeOwnedByVisibleDialog() {
++        if (visibleDialog == null || !visibleDialog.isShowing() || visibleDialog.getWindow() == null) return false;
++        final int flags = visibleDialog.getWindow().getAttributes().flags;
++        return (flags & (WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM)) == 0;
++    }
++
+     @NonNull
+     private WindowInsetsCompat onApplyWindowInsets(@NonNull View v, @NonNull WindowInsetsCompat insets) {
+         insets = getChatWindowInsets(insets);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ShareAlert.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ShareAlert.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ShareAlert.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ShareAlert.java
+@@ -531,7 +531,15 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
+ 
+ 
+             {
+-                adjustPanLayoutHelper = new AdjustPanLayoutHelper(this) {
++                adjustPanLayoutHelper = new AdjustPanLayoutHelper(this, true) {
++
++                    @Override
++                    protected int startOffset() {
++                        if (keyboardVisible || measureKeyboardHeight() > dp(20) || AndroidUtilities.isInMultiwindow) {
++                            return 0;
++                        }
++                        return Math.max(systemInsets.bottom, commentTextView.getEmojiPadding());
++                    }
+ 
+                     @Override
+                     protected void onTransitionStart(boolean keyboardVisible, int contentHeight) {
+@@ -757,7 +765,7 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
+                         pickerBottomLayout.setVisibility(visibility);
+                     }
+                 } else {
+-                    if (!commentTextView.isPopupVisible()) {
++                    if (!commentTextView.isPopupShowing()) {
+                         commentTextView.hideEmojiView();
+                     }
+                     if (pickerBottomLayout != null) {
