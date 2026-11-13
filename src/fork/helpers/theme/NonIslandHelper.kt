@@ -289,6 +289,7 @@ object NonIslandHelper {
         }
 
         override fun onPreDraw(): Boolean {
+            val originY = top + translationY
             val visible = ArrayList<Pair<Float, Float>>(tracked.size)
             for (view in tracked) {
                 var y = if (view === caption) captionTopOffset() else 0f
@@ -300,7 +301,7 @@ object NonIslandHelper {
                     y += v.top + v.translationY
                     v = v.parent as? View ?: break
                 }
-                if (v === container && alpha > 0f) visible.add(y to alpha)
+                if (v === container && alpha > 0f) visible.add(y - originY to alpha)
             }
             visible.sortBy { it.first }
             val next = FloatArray(visible.size * 2) { if (it % 2 == 0) visible[it / 2].first else visible[it / 2].second }
@@ -314,13 +315,12 @@ object NonIslandHelper {
         override fun onDraw(canvas: Canvas) {
             val count = segments.size / 2
             if (count == 0) return
-            val originY = top + translationY
-            val bottom = ceil(container.height - originY).toInt()
+            val bottom = ceil(container.height - top - translationY).toInt()
             var alpha = 0f
             for (i in 0 until count) {
                 alpha = maxOf(alpha, segments[i * 2 + 1])
-                val bandTop = (segments[i * 2] - originY).toInt()
-                val bandBottom = if (i + 1 < count) (segments[i * 2 + 2] - originY).toInt() else bottom
+                val bandTop = segments[i * 2].toInt()
+                val bandBottom = if (i + 1 < count) segments[i * 2 + 2].toInt() else bottom
                 if (i == 0) {
                     drawWithAlpha(canvas, alpha, 0, bandTop - dp(ATTACH_TAB_SHADOW_DP), width, bandTop) {
                         shadow.setBounds(0, bandTop - dp(ATTACH_TAB_SHADOW_DP), width, bandTop)
