@@ -195,6 +195,7 @@ object ChatActionsHelper {
         var pinnedKeys = emptyList<ActionKey>()
         var submenu: ItemOptions? = null
         var swipeBackShown = false
+        var actionsItem: ActionBarMenuItem.Item? = null
         var generation = 0
         var pendingIconBinder: View.OnAttachStateChangeListener? = null
     }
@@ -372,23 +373,11 @@ object ChatActionsHelper {
             state.submenu = this
         }
         clearSubmenuRows(submenu)
-        for (row in rows) {
-            PluginIcons.addMenuItem(
-                submenu,
-                row.text,
-                row.icon,
-                row.owner,
-                R.drawable.msg_settings_old,
-            ) {
-                PluginActions.dispatch(row, state.surface)
-                headerItem.closeSubMenu()
-            }
-            submenu.last?.let { PluginActions.bindSecondaryCallback(it, row, state.surface) { headerItem.closeSubMenu() } }
-        }
+        addSubmenuRows(submenu, rows, state.surface, headerItem::closeSubMenu)
         if (headerItem.hasSubItem(ACTION_PLUGIN_ACTIONS)) {
             headerItem.showSubItem(ACTION_PLUGIN_ACTIONS)
         } else {
-            headerItem.inu_lazilyAddSwipeBackItem(
+            state.actionsItem = headerItem.inu_lazilyAddSwipeBackItem(
                 ACTION_PLUGIN_ACTIONS,
                 R.drawable.msg_settings_old,
                 null,
@@ -397,6 +386,31 @@ object ChatActionsHelper {
             )
         }
         state.swipeBackShown = true
+    }
+
+    private fun addSubmenuRows(submenu: ItemOptions, rows: List<ActionRow>, surface: ActionSurface, close: () -> Unit) {
+        for (row in rows) {
+            PluginIcons.addMenuItem(submenu, row.text, row.icon, row.owner, R.drawable.msg_settings_old) {
+                PluginActions.dispatch(row, surface)
+                close()
+            }
+            submenu.last?.let { PluginActions.bindSecondaryCallback(it, row, surface, close) }
+        }
+    }
+
+    /** the sidebar copies the header menu into its own popup, where the header's swipe-back cannot open */
+    @JvmStatic
+    fun addSidebarPluginActions(activity: ChatActivity, options: ItemOptions, subItem: ActionBarMenuSubItem): Boolean {
+        val state = pluginMenus[activity] ?: return false
+        if (state.actionsItem?.view !== subItem) return false
+        val enabled = state.rows.filter { PluginActions.isEnabled(it.key) }
+        val submenu = options.makeSwipeback()
+        submenu.add(R.drawable.ic_ab_back, LocaleController.getString(R.string.Back)) { options.closeSwipeback() }
+        submenu.addGap()
+        addSubmenuRows(submenu, PluginActions.getSubmenuRows(PluginActions.KIND_CHAT, enabled), state.surface, options::dismiss)
+        options.add(R.drawable.msg_settings_old, subItem.textView.text) { options.openSwipeback(submenu) }
+        options.last?.setRightIcon(R.drawable.msg_arrowright)
+        return true
     }
 
     // #endif
