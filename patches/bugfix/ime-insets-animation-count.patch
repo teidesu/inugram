@@ -1,0 +1,61 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Fri, 13 Nov 2026 23:24:30 +0400
+Subject: fix chat not following keyboard after a cancelled ime animation on android 17
+
+---
+ .../inset/WindowAnimatedInsetsProvider.java    | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/inset/WindowAnimatedInsetsProvider.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/inset/WindowAnimatedInsetsProvider.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/inset/WindowAnimatedInsetsProvider.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/inset/WindowAnimatedInsetsProvider.java
+@@ -17,6 +17,7 @@ import org.telegram.ui.Components.chat.ViewPositionWatcher;
+ 
+ import java.util.ArrayList;
+ import java.util.HashMap;
++import java.util.HashSet;
+ import java.util.List;
+ 
+ import me.vkryl.core.BitwiseUtils;
+@@ -63,6 +64,10 @@ public class WindowAnimatedInsetsProvider extends WindowInsetsAnimationCompat.Ca
+     // until its own first frame, so eviction requires missing several consecutive dispatches.
+     private static final int INU_ABSENT_DISPATCHES_TO_EVICT = 3;
+ 
++    // An animation cancelled before its start is dispatched still gets onEnd
++    private final HashSet<WindowInsetsAnimationCompat> inu_unstartedAnimations = new HashSet<>();
++    private int inu_startedAnimations;
++
+     public boolean hasActiveAnimations() {
+         return !inu_activeImeAnimations.isEmpty();
+     }
+@@ -114,8 +119,16 @@ public class WindowAnimatedInsetsProvider extends WindowInsetsAnimationCompat.Ca
+         }
+     }
+ 
++    @Override
++    public void onPrepare(@NonNull WindowInsetsAnimationCompat animation) {
++        inu_unstartedAnimations.add(animation);
++        super.onPrepare(animation);
++    }
++
+     @Override
+     public WindowInsetsAnimationCompat.@NonNull BoundsCompat onStart(@NonNull WindowInsetsAnimationCompat animation, WindowInsetsAnimationCompat.@NonNull BoundsCompat bounds) {
++        inu_unstartedAnimations.remove(animation);
++        inu_startedAnimations++;
+         if (BitwiseUtils.hasFlag(animation.getTypeMask(), WindowInsetsCompat.Type.ime())) {
+             inu_trackAnimation(animation);
+         }
+@@ -125,6 +138,11 @@ public class WindowAnimatedInsetsProvider extends WindowInsetsAnimationCompat.Ca
+     @Override
+     public void onEnd(@NonNull WindowInsetsAnimationCompat animation) {
+         super.onEnd(animation);
++        if (inu_unstartedAnimations.remove(animation)) {
++            desu.inugram.helpers.InuUtils.restoreWindowInsetsAnimationCount(root, inu_startedAnimations);
++        } else {
++            inu_startedAnimations = Math.max(0, inu_startedAnimations - 1);
++        }
+         inu_untrackAnimation(animation);
+     }
+ 
