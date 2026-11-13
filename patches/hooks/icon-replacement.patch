@@ -4,13 +4,54 @@ Date: Tue, 28 Apr 2026 15:27:42 +0300
 Subject: add custom resource loader for icon replacement
 
 ---
+ .../org/telegram/ui/ActionBar/ActionBar.java   |  8 +++++---
  .../telegram/ui/ActionBar/BackDrawable.java    |  6 ++++++
  .../ChatActivityEnterViewAnimatedIconView.java |  6 ++++++
  .../ui/Components/ProfileActionsView.java      | 11 +++++++++--
  .../ui/Components/RLottieDrawable.java         | 18 +++++++++++++++---
  .../java/org/telegram/ui/LaunchActivity.java   | 16 ++++++++++++++++
- 5 files changed, 52 insertions(+), 5 deletions(-)
+ 6 files changed, 57 insertions(+), 8 deletions(-)
 
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
+@@ -50,6 +50,8 @@ import android.view.animation.Interpolator;
+ import android.widget.FrameLayout;
+ import android.widget.ImageView;
+ 
++import desu.inugram.helpers.icons.IconPackDrawable;
++
+ import androidx.annotation.NonNull;
+ import androidx.core.graphics.ColorUtils;
+ import androidx.recyclerview.widget.RecyclerView;
+@@ -432,7 +434,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
+             MenuDrawable menuDrawable = (MenuDrawable) drawable;
+             menuDrawable.setBackColor(actionBarColor);
+             menuDrawable.setIconColor(itemsColor);
+-        } else if (drawable instanceof BitmapDrawable || drawable instanceof VectorDrawable) {
++        } else if (drawable instanceof BitmapDrawable || drawable instanceof VectorDrawable || drawable instanceof IconPackDrawable) {
+             backButtonImageView.setColorFilter(new PorterDuffColorFilter(itemsColor, PorterDuff.Mode.SRC_IN));
+         }
+         if (mAlwaysApplyColorFilterToBackButton) {
+@@ -2005,7 +2007,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
+                 Drawable drawable = backButtonImageView.getDrawable();
+                 if (drawable instanceof BackDrawable) {
+                     ((BackDrawable) drawable).setRotatedColor(color);
+-                } else if (drawable instanceof BitmapDrawable || drawable instanceof VectorDrawable) {
++                } else if (drawable instanceof BitmapDrawable || drawable instanceof VectorDrawable || drawable instanceof IconPackDrawable) {
+                     backButtonImageView.setColorFilter(new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN));
+                 }
+             }
+@@ -2018,7 +2020,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
+                         ((BackDrawable) drawable).setColor(color);
+                     } else if (drawable instanceof MenuDrawable) {
+                         ((MenuDrawable) drawable).setIconColor(color);
+-                    } else if (drawable instanceof BitmapDrawable || drawable instanceof VectorDrawable) {
++                    } else if (drawable instanceof BitmapDrawable || drawable instanceof VectorDrawable || drawable instanceof IconPackDrawable) {
+                         backButtonImageView.setColorFilter(new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN));
+                     }
+                 }
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BackDrawable.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BackDrawable.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BackDrawable.java
