@@ -19,6 +19,7 @@ import org.telegram.messenger.Utilities
 import org.telegram.tgnet.ConnectionsManager
 import org.telegram.tgnet.RequestDelegateTimestamp
 import org.telegram.tgnet.TLRPC
+import org.telegram.tgnet.tl.TL_iv
 
 class PluginRepo(val channelId: Long, val username: String, val title: String)
 
@@ -108,14 +109,13 @@ object PluginRepos {
         }
     }
 
-    /** newest first. [Page.nextOffsetId] is 0 once the channel has no older documents */
+    /** newest first. [Page.nextOffsetId] is 0 once the channel has no older messages */
     fun loadPage(account: Int, repo: PluginRepo, offsetId: Int, minId: Int = 0, callback: (Page?) -> Unit) {
         resolvePeer(account, repo) { peer ->
             if (peer == null) return@resolvePeer callback(null)
-            val req = TLRPC.TL_messages_search().apply {
+            // The document search filter omits files embedded in rich messages.
+            val req = TLRPC.TL_messages_getHistory().apply {
                 this.peer = peer
-                q = ""
-                filter = TLRPC.TL_inputMessagesFilterDocument()
                 offset_id = offsetId
                 min_id = minId
                 limit = PAGE_SIZE
@@ -126,16 +126,55 @@ object PluginRepos {
                     val mc = MessagesController.getInstance(account)
                     mc.putUsers(res.users, false)
                     mc.putChats(res.chats, false)
-                    val posts = res.messages.mapNotNull { msg ->
-                        val document = msg.media?.document ?: return@mapNotNull null
-                        val name = FileLoader.getDocumentFileName(document) ?: return@mapNotNull null
-                        if (name.endsWith(".inu.js", ignoreCase = true)) PluginRepoPost(repo, msg.id, document) else null
-                    }
                     val more = res.messages.size >= PAGE_SIZE
-                    callback(Page(posts, if (more) res.messages.last().id else 0))
+                    val nextOffset = if (more) res.messages.last().id else 0
+                    loadPosts(account, repo, peer, res.messages) { posts ->
+                        callback(posts?.let { Page(it, nextOffset) })
+                    }
                 }
             }
         }
+    }
+
+    private fun pluginDocuments(message: TLRPC.Message): List<TLRPC.Document> =
+        (listOfNotNull(message.media?.document) + message.rich_message?.documents.orEmpty())
+            .filter { FileLoader.getDocumentFileName(it)?.endsWith(".inu.js", ignoreCase = true) == true }
+            .distinctBy { it.id }
+
+    /** A partial rich message may omit the installer even when it contains other documents. */
+    private fun loadFullMessage(account: Int, peer: TLRPC.InputPeer, message: TLRPC.Message, callback: (TLRPC.Message?) -> Unit) {
+        if (message.rich_message?.part != true) return callback(message)
+        val req = TL_iv.getRichMessage().apply {
+            this.peer = peer
+            id = message.id
+        }
+        ConnectionsManager.getInstance(account).sendRequest(req) { response, _ ->
+            AndroidUtilities.runOnUIThread {
+                callback((response as? TLRPC.messages_Messages)?.messages?.firstOrNull {
+                    it.id == message.id && it.rich_message?.part == false
+                })
+            }
+        }
+    }
+
+    private fun loadPosts(
+        account: Int,
+        repo: PluginRepo,
+        peer: TLRPC.InputPeer,
+        messages: List<TLRPC.Message>,
+        callback: (List<PluginRepoPost>?) -> Unit,
+    ) {
+        val posts = ArrayList<PluginRepoPost>()
+        // Resolve partial messages one at a time, keeping channel order and bounding requests in flight.
+        fun next(index: Int) {
+            if (index == messages.size) return callback(posts)
+            loadFullMessage(account, peer, messages[index]) { full ->
+                if (full == null) return@loadFullMessage callback(null)
+                posts.addAll(pluginDocuments(full).map { PluginRepoPost(repo, full.id, it) })
+                next(index + 1)
+            }
+        }
+        next(0)
     }
 
     /** in [posts] order, without the posts that are not plugins; null when any header could not be read */
@@ -250,8 +289,18 @@ object PluginRepos {
             id.add(post.messageId)
         }
         ConnectionsManager.getInstance(account).sendRequest(req) { response, _ ->
-            val document = (response as? TLRPC.messages_Messages)?.messages?.firstOrNull()?.media?.document
-            Utilities.globalQueue.postRunnable { callback(document) }
+            AndroidUtilities.runOnUIThread {
+                val message = (response as? TLRPC.messages_Messages)?.messages?.firstOrNull { it.id == post.messageId }
+                if (message == null) {
+                    Utilities.globalQueue.postRunnable { callback(null) }
+                } else {
+                    val peer = MessagesController.getInstance(account).getInputPeer(-post.repo.channelId)
+                    loadFullMessage(account, peer, message) { full ->
+                        val document = full?.let(::pluginDocuments)?.firstOrNull { it.id == post.document.id }
+                        Utilities.globalQueue.postRunnable { callback(document) }
+                    }
+                }
+            }
         }
     }
 
