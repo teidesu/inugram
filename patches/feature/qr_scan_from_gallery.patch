@@ -1,0 +1,186 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Sat, 14 Nov 2026 23:39:08 +0400
+Subject: qr scanner: scan from gallery
+
+---
+ .../org/telegram/ui/CameraScanActivity.java   | 94 ++++++++++++++-----
+ 1 file changed, 71 insertions(+), 23 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/CameraScanActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/CameraScanActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/CameraScanActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/CameraScanActivity.java
+@@ -71,6 +71,7 @@ import org.telegram.messenger.FileLog;
+ import org.telegram.messenger.ImageLoader;
+ import org.telegram.messenger.LocaleController;
+ import org.telegram.messenger.MrzRecognizer;
++import org.telegram.messenger.NotificationCenter;
+ import org.telegram.messenger.R;
+ import org.telegram.messenger.SendMessagesHelper;
+ import org.telegram.messenger.SharedConfig;
+@@ -87,6 +88,7 @@ import org.telegram.ui.ActionBar.Theme;
+ import org.telegram.ui.ActionBar.ThemeBind;
+ import org.telegram.ui.ActionBar.ThemeDescription;
+ import org.telegram.ui.Components.AnimationProperties;
++import org.telegram.ui.Components.BulletinFactory;
+ import org.telegram.ui.Components.CubicBezierInterpolator;
+ import org.telegram.ui.Components.LayoutHelper;
+ import org.telegram.ui.Components.LinkPath;
+@@ -153,6 +155,21 @@ public class CameraScanActivity extends BaseFragment {
+     private BarcodeDetector visionQrReader = null;
+ 
+     private boolean needGalleryButton;
++    private static final int INU_GALLERY_REQUEST_CODE = 31003;
++    private volatile boolean inu_galleryQrFound;
++    private final NotificationCenter.NotificationCenterDelegate inu_activityResultObserver = new NotificationCenter.NotificationCenterDelegate() {
++        @Override
++        public void didReceivedNotification(int id, int account, Object... args) {
++            if ((int) args[0] != INU_GALLERY_REQUEST_CODE) {
++                return;
++            }
++            NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.onActivityResultReceived);
++            Intent data = (Intent) args[2];
++            if ((int) args[1] == Activity.RESULT_OK && data != null && data.getData() != null) {
++                inu_scanGalleryImage(null, data.getData());
++            }
++        }
++    };
+ 
+     private int currentType;
+ 
+@@ -282,8 +299,11 @@ public class CameraScanActivity extends BaseFragment {
+             portraitRequest.release();
+             portraitRequest = null;
+         }
++        NotificationCenter.getGlobalInstance().removeObserver(inu_activityResultObserver, NotificationCenter.onActivityResultReceived);
+         if (visionQrReader != null) {
+-            visionQrReader.release();
++            synchronized (this) {
++                visionQrReader.release();
++            }
+         }
+     }
+ 
+@@ -385,7 +405,7 @@ public class CameraScanActivity extends BaseFragment {
+                     recognizedMrzView.layout(0, getMeasuredHeight() - recognizedMrzView.getMeasuredHeight(), getMeasuredWidth(), getMeasuredHeight());
+ 
+                     int x;
+-                    if (needGalleryButton) {
++                    if (galleryButton != null) {
+                         x = width / 2 + dp(35);
+                     } else {
+                         x = width / 2 - flashButton.getMeasuredWidth() / 2;
+@@ -679,7 +699,7 @@ public class CameraScanActivity extends BaseFragment {
+             }
+             viewGroup.addView(recognizedMrzView);
+ 
+-            if (needGalleryButton) {
++            if (isQr()) {
+                 galleryButton = new ImageView(context);
+                 galleryButton.setScaleType(ImageView.ScaleType.CENTER);
+                 galleryButton.setImageResource(R.drawable.qr_gallery);
+@@ -707,23 +727,8 @@ public class CameraScanActivity extends BaseFragment {
+                     fragment.setDelegate(new PhotoAlbumPickerActivity.PhotoAlbumPickerActivityDelegate() {
+                         @Override
+                         public void didSelectPhotos(ArrayList<SendMessagesHelper.SendingMediaInfo> photos, boolean notify, int scheduleDate) {
+-                            try {
+-                                if (!photos.isEmpty()) {
+-                                    SendMessagesHelper.SendingMediaInfo info = photos.get(0);
+-                                    if (info.path != null) {
+-                                        Point screenSize = AndroidUtilities.getRealScreenSize();
+-                                        Bitmap bitmap = ImageLoader.loadBitmap(info.path, null, screenSize.x, screenSize.y, true);
+-                                        QrResult res = tryReadQr(null, null, 0, 0, 0, bitmap);
+-                                        if (res != null) {
+-                                            if (delegate != null) {
+-                                                delegate.didFindQr(res.text);
+-                                            }
+-                                            removeSelfFromStack();
+-                                        }
+-                                    }
+-                                }
+-                            } catch (Throwable e) {
+-                                FileLog.e(e);
++                            if (!photos.isEmpty() && photos.get(0).path != null) {
++                                inu_scanGalleryImage(photos.get(0).path, null);
+                             }
+                         }
+ 
+@@ -732,7 +737,8 @@ public class CameraScanActivity extends BaseFragment {
+                             try {
+                                 Intent photoPickerIntent = new Intent(Intent.ACTION_PICK);
+                                 photoPickerIntent.setType("image/*");
+-                                getParentActivity().startActivityForResult(photoPickerIntent, 11);
++                                NotificationCenter.getGlobalInstance().addObserver(inu_activityResultObserver, NotificationCenter.onActivityResultReceived);
++                                getParentActivity().startActivityForResult(photoPickerIntent, INU_GALLERY_REQUEST_CODE);
+                             } catch (Exception e) {
+                                 FileLog.e(e);
+                             }
+@@ -815,6 +821,9 @@ public class CameraScanActivity extends BaseFragment {
+                 descriptionText.setAlpha(1f - recognizedT);
+             }
+             flashButton.setAlpha(1f - recognizedT);
++            if (galleryButton != null) {
++                galleryButton.setAlpha(1f - recognizedT);
++            }
+             backShadowAlpha = .5f + recognizedT * .25f;
+             fragmentView.invalidate();
+         });
+@@ -1066,8 +1075,47 @@ public class CameraScanActivity extends BaseFragment {
+ 
+     private float averageProcessTime = 0;
+     private long processTimesCount = 0;
++    private void inu_scanGalleryImage(String path, Uri uri) {
++        Utilities.globalQueue.postRunnable(() -> {
++            QrResult res = null;
++            try {
++                Point screenSize = AndroidUtilities.getRealScreenSize();
++                Bitmap bitmap = ImageLoader.loadBitmap(path, uri, screenSize.x, screenSize.y, true);
++                if (bitmap != null) {
++                    res = tryReadQr(null, null, 0, 0, 0, bitmap);
++                }
++            } catch (Throwable e) {
++                FileLog.e(e);
++            }
++            if (res == null) {
++                AndroidUtilities.runOnUIThread(() -> {
++                    if (!isFinishing()) {
++                        BulletinFactory.of(this).createErrorBulletin(LocaleController.getString(currentType == TYPE_QR_LOGIN ? R.string.AuthAnotherClientNotFound : R.string.InuQrNotFoundInImage)).show();
++                    }
++                });
++                return;
++            }
++            final String text = res.text;
++            AndroidUtilities.runOnUIThread(() -> {
++                if (isFinishing() || recognized || inu_galleryQrFound) {
++                    return;
++                }
++                inu_galleryQrFound = true;
++                Runnable onFound = () -> {
++                    if (delegate != null) {
++                        delegate.didFindQr(text);
++                    }
++                    finishFragment();
++                };
++                if (delegate == null || !delegate.processQr(text, () -> AndroidUtilities.runOnUIThread(onFound))) {
++                    onFound.run();
++                }
++            });
++        });
++    }
++
+     public void processShot(Bitmap bitmap) {
+-        if (cameraView == null) {
++        if (cameraView == null || inu_galleryQrFound) {
+             return;
+         }
+         final long from = SystemClock.elapsedRealtime();
+@@ -1247,7 +1295,7 @@ public class CameraScanActivity extends BaseFragment {
+         return out;
+     }
+ 
+-    private QrResult tryReadQr(byte[] data, Size size, int x, int y, int side, Bitmap bitmap) {
++    private synchronized QrResult tryReadQr(byte[] data, Size size, int x, int y, int side, Bitmap bitmap) {
+         try {
+             String text;
+             RectF bounds = new RectF();

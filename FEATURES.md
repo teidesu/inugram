@@ -196,6 +196,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 
 - passkey login
 - qr login
+- scan qr codes from gallery (link desktop, web apps, contacts)
 - password autofill hints in login (for password managers)
 - account limit raised to 8 (premium gating disabled)
 - 🐶 customizable account order

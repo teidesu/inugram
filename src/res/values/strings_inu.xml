@@ -1050,4 +1050,5 @@
     <string name="InuLinkedChatsInfo">Add a chat to another account\'s chat list and use it from there without switching accounts.</string>
     <string name="InuLinkedChatsAdd">Add to account</string>
     <string name="InuLinkedChatsRemove">Remove from this account</string>
+    <string name="InuQrNotFoundInImage">No QR code found in this image</string>
 </resources>
