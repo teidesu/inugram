@@ -1,17 +1,17 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: alina sireneva <alina@tei.su>
-Date: Mon, 1 Jun 2026 16:20:23 +0400
+From: alina sireneva <alina@tei.pet>
+Date: Sat, 14 Nov 2026 18:31:03 +0400
 Subject: hiding messages from blocked users (with a spoiler or completely)
 
 ---
- .../messenger/MediaDataController.java        |  4 +-
- .../org/telegram/messenger/MessageObject.java |  5 +-
- .../messenger/MessagesController.java         |  3 ++
- .../messenger/NotificationsController.java    | 27 +++++++---
- .../telegram/ui/Cells/ChatMessageCell.java    |  4 +-
- .../org/telegram/ui/Cells/DialogCell.java     |  4 +-
- .../java/org/telegram/ui/ChatActivity.java    | 49 ++++++-------------
- 7 files changed, 47 insertions(+), 49 deletions(-)
+ .../messenger/MediaDataController.java        |  4 +--
+ .../org/telegram/messenger/MessageObject.java |  5 ++--
+ .../messenger/MessagesController.java         |  3 +++
+ .../messenger/NotificationsController.java    | 27 +++++++++++++------
+ .../telegram/ui/Cells/ChatMessageCell.java    |  4 +--
+ .../org/telegram/ui/Cells/DialogCell.java     |  4 +--
+ .../java/org/telegram/ui/ChatActivity.java    | 13 +++++++--
+ 7 files changed, 42 insertions(+), 18 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java
 index 0000000..0000000 100644
@@ -230,6 +230,15 @@ index 0000000..0000000 100644
                  }
  
                  @Override
+@@ -13035,7 +13038,7 @@ public class ChatActivity extends BaseFragment implements
+                 groupedMessages = null;
+             }
+         }
+-        return groupedMessages;
++        return desu.inugram.helpers.chat.BlockedMessagesHelper.filterGroup(groupedMessages);
+     }
+ 
+     public void jumpToDate(int date) {
 @@ -23825,6 +23828,7 @@ public class ChatActivity extends BaseFragment implements
          } else if (id == NotificationCenter.screenshotTook) {
              updateInformationForScreenshotDetector();
@@ -238,89 +247,38 @@ index 0000000..0000000 100644
              if (currentUser != null && !UserObject.isReplyUser(currentUser)) {
                  boolean oldValue = userBlocked;
                  userBlocked = getMessagesController().blockePeers.indexOfKey(currentUser.id) >= 0;
-@@ -38029,6 +38033,13 @@ public class ChatActivity extends BaseFragment implements
-         private int messagesEndRow;
+@@ -38038,6 +38042,8 @@ public class ChatActivity extends BaseFragment implements
+             }
+         }
  
-         public ArrayList<MessageObject> getMessages() {
-+            return inu_filtering ? inu_visibleMessages : inu_getSourceMessages();
-+        }
++        public final java.util.HashSet<MessageObject> inu_hiddenMessages = new java.util.HashSet<>();
 +
-+        public final ArrayList<MessageObject> inu_visibleMessages = new ArrayList<>();
-+        public boolean inu_filtering;
-+
-+        public ArrayList<MessageObject> inu_getSourceMessages() {
-             if (isFrozen) {
-                 return frozenMessages;
-             } else if (isFiltered) {
-@@ -38103,14 +38114,7 @@ public class ChatActivity extends BaseFragment implements
+         public boolean isFrozen;
+         public ArrayList<MessageObject> frozenMessages = new ArrayList<>();
  
-         private void updateRowsInternal() {
-             rowCount = 0;
--            final ArrayList<MessageObject> messages;
--            if (isFrozen) {
--                messages = frozenMessages;
--            } else if (isFiltered) {
--                messages = filteredMessages;
--            } else {
--                messages = ChatActivity.this.messages;
--            }
-+            final ArrayList<MessageObject> messages = desu.inugram.helpers.chat.BlockedMessagesHelper.refreshVisible(this);
+@@ -38111,6 +38117,7 @@ public class ChatActivity extends BaseFragment implements
+             } else {
+                 messages = ChatActivity.this.messages;
+             }
++            desu.inugram.helpers.chat.BlockedMessagesHelper.refreshHidden(this, messages);
              if (chatMode == MODE_SAVED && isInsideContainer) {
                  hintRow = rowCount++;
              } else {
-@@ -38207,14 +38211,7 @@ public class ChatActivity extends BaseFragment implements
-                     return 1;
+@@ -38634,6 +38641,8 @@ public class ChatActivity extends BaseFragment implements
+                 ChatMessageUnsupportedCell cell = new ChatMessageUnsupportedCell(mContext, themeDelegate);
+                 cell.setDelegate(getChatMessageCellDelegate());
+                 view = cell;
++            } else if (viewType == desu.inugram.helpers.chat.BlockedMessagesHelper.VIEW_TYPE_HIDDEN) {
++                view = desu.inugram.helpers.chat.BlockedMessagesHelper.createHiddenView(mContext);
+             }
+             view.setLayoutParams(new RecyclerView.LayoutParams(RecyclerView.LayoutParams.MATCH_PARENT, RecyclerView.LayoutParams.WRAP_CONTENT));
+             return new RecyclerListView.Holder(view);
+@@ -39265,7 +39274,7 @@ public class ChatActivity extends BaseFragment implements
+                 } else {
+                     messages = ChatActivity.this.messages;
                  }
-             }
--            final ArrayList<MessageObject> messages;
--            if (isFrozen) {
--                messages = frozenMessages;
--            } else if (isFiltered) {
--                messages = filteredMessages;
--            } else {
--                messages = ChatActivity.this.messages;
--            }
-+            final ArrayList<MessageObject> messages = getMessages();
- 
-             if (position >= messagesStartRow && position < messagesEndRow) {
-                 return messages.get(position - messagesStartRow).stableId;
-@@ -38701,21 +38698,14 @@ public class ChatActivity extends BaseFragment implements
-                 actionCell.setAlpha(1.0f);
-                 actionCell.setSpoilersSuppressed(chatListView.getScrollState() != RecyclerView.SCROLL_STATE_IDLE);
-             } else if (position >= messagesStartRow && position < messagesEndRow) {
--                final ArrayList<MessageObject> messages;
--                if (isFrozen) {
--                    messages = frozenMessages;
--                } else if (isFiltered) {
--                    messages = filteredMessages;
--                } else {
--                    messages = ChatActivity.this.messages;
--                }
-+                final ArrayList<MessageObject> messages = getMessages();
- 
-                 MessageObject message = messages.get(position - messagesStartRow);
-                 View view = holder.itemView;
- 
-                 if (view instanceof ChatMessageCell) {
-                     final ChatMessageCell messageCell = (ChatMessageCell) view;
--                    MessageObject.GroupedMessages groupedMessages = getValidGroupedMessage(message);
-+                    MessageObject.GroupedMessages groupedMessages = desu.inugram.helpers.chat.BlockedMessagesHelper.filterGroup(getValidGroupedMessage(message));
-                     messageCell.isChat = currentChat != null || UserObject.isUserSelf(currentUser) || UserObject.isReplyUser(currentUser) || (chatMode == MODE_SEARCH);
-                     messageCell.setSponsoredMessageVisible(true, false);
-                     messageCell.isBotForum = UserObject.isBotForum(currentUser);
-@@ -39257,14 +39247,7 @@ public class ChatActivity extends BaseFragment implements
-                 return 1;
-             }
-             if (position >= messagesStartRow && position < messagesEndRow) {
--                final ArrayList<MessageObject> messages;
--                if (isFrozen) {
--                    messages = frozenMessages;
--                } else if (isFiltered) {
--                    messages = filteredMessages;
--                } else {
--                    messages = ChatActivity.this.messages;
--                }
-+                final ArrayList<MessageObject> messages = getMessages();
-                 return messages.get(position - messagesStartRow).contentType;
+-                return messages.get(position - messagesStartRow).contentType;
++                return desu.inugram.helpers.chat.BlockedMessagesHelper.getViewType(this, messages.get(position - messagesStartRow));
              } else if (position == botInfoRow) {
                  return 3;
+             } else if (position == userInfoRow) {

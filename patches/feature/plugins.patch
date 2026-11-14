@@ -1099,7 +1099,7 @@ index 0000000..0000000 100644
          boolean noforwards = isPeerNoForwards() || (messageObject != null && messageObject.messageOwner != null && messageObject.messageOwner.noforwards);
          if (url instanceof URLSpanMono) {
              if (!noforwards || getDialogId() == UserObject.VERIFY) {
-@@ -38662,6 +38767,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -38672,6 +38777,9 @@ public class ChatActivity extends BaseFragment implements
  
                      @Override
                      public void didPressReplyMessage(ChatActionCell cell, int id) {
@@ -1109,16 +1109,16 @@ index 0000000..0000000 100644
                          Runnable scroll = () -> {
                              MessageObject messageObject = cell.getMessageObject();
                              scrollToMessageId(id, messageObject.getId(), true, messageObject.getDialogId() == mergeDialogId ? 1 : 0, true, 0);
-@@ -38832,7 +38940,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -38851,7 +38959,7 @@ public class ChatActivity extends BaseFragment implements
                  if (view instanceof ChatMessageCell) {
                      final ChatMessageCell messageCell = (ChatMessageCell) view;
-                     MessageObject.GroupedMessages groupedMessages = desu.inugram.helpers.chat.BlockedMessagesHelper.filterGroup(getValidGroupedMessage(message));
+                     MessageObject.GroupedMessages groupedMessages = getValidGroupedMessage(message);
 -                    messageCell.isChat = currentChat != null || UserObject.isUserSelf(currentUser) || UserObject.isReplyUser(currentUser) || (chatMode == MODE_SEARCH);
 +                    messageCell.isChat = currentChat != null || UserObject.isUserSelf(currentUser) || UserObject.isReplyUser(currentUser) || (chatMode == MODE_SEARCH) || desu.inugram.helpers.plugins.ui.PluginChatHistory.showsAvatars(ChatActivity.this);
                      messageCell.setSponsoredMessageVisible(true, false);
                      messageCell.isBotForum = UserObject.isBotForum(currentUser);
                      messageCell.isReportChat = isReport();
-@@ -42184,7 +42292,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -42210,7 +42318,7 @@ public class ChatActivity extends BaseFragment implements
  
          @Override
          public boolean shouldShowDialogButton(ChatMessageCell cell) {
@@ -1127,7 +1127,7 @@ index 0000000..0000000 100644
          }
  
          @Override
-@@ -42274,6 +42382,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -42300,6 +42408,9 @@ public class ChatActivity extends BaseFragment implements
                      getOrCreateStoryViewer().open(getContext(), storyItem, StoriesListPlaceProvider.of(chatListView));
                  }
              } else {
@@ -1137,7 +1137,7 @@ index 0000000..0000000 100644
                  String quote = null;
                  int quoteOffset = -1;
                  Integer task_id = null;
-@@ -45520,7 +45631,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -45546,7 +45657,7 @@ public class ChatActivity extends BaseFragment implements
  
      private boolean scrimOptionsShown;
  
@@ -1146,7 +1146,7 @@ index 0000000..0000000 100644
          if (chatListView == null) {
              showDialog(dialog);
              return;
-@@ -48086,7 +48197,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -48112,7 +48223,7 @@ public class ChatActivity extends BaseFragment implements
          return createMenuTextOption(context, resourcesProvider, text, 14);
      }
  

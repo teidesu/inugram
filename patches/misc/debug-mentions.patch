@@ -287,7 +287,7 @@ index 0000000..0000000 100644
                          newMentionsCount--;
                          if (newMentionsCount <= 0) {
                              newMentionsCount = 0;
-@@ -39471,6 +39489,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -39497,6 +39515,9 @@ public class ChatActivity extends BaseFragment implements
                  if (message != null && message.messageOwner != null && message.messageOwner.media_unread && message.messageOwner.mentioned) {
                      if (!inPreviewMode && chatMode == 0) {
                          if (!message.isVoice() && !message.isRoundVideo()) {
@@ -297,7 +297,7 @@ index 0000000..0000000 100644
                              newMentionsCount--;
                              if (newMentionsCount <= 0) {
                                  newMentionsCount = 0;
-@@ -47898,6 +47919,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -47924,6 +47945,9 @@ public class ChatActivity extends BaseFragment implements
  
      private void loadLastUnreadMention() {
          wasManualScroll = true;
@@ -307,7 +307,7 @@ index 0000000..0000000 100644
          if (hasAllMentionsLocal) {
              getMessagesStorage().getUnreadMention(dialog_id, getTopicId(), newMentionsCount, param -> {
                  if (param == 0) {
-@@ -47919,6 +47943,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -47945,6 +47969,9 @@ public class ChatActivity extends BaseFragment implements
              req.add_offset = newMentionsCount - 1;
              getConnectionsManager().sendRequest(req, (response, error) -> AndroidUtilities.runOnUIThread(() -> {
                  TLRPC.messages_Messages res = (TLRPC.messages_Messages) response;
