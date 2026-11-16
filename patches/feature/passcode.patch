@@ -4,17 +4,17 @@ Date: Sun, 17 May 2026 19:22:29 +0400
 Subject: passcode-related features (per-account pin, panic pin, hidden accounts)
 
 ---
- .../org/telegram/messenger/MessagesController.java     |  5 ++++-
- .../java/org/telegram/ui/Components/AlertsCreator.java |  2 +-
- .../java/org/telegram/ui/Components/PasscodeView.java  |  4 ++--
- .../src/main/java/org/telegram/ui/DialogsActivity.java | 10 ++++++++++
- .../src/main/java/org/telegram/ui/LaunchActivity.java  |  5 ++++-
- .../src/main/java/org/telegram/ui/LoginActivity.java   |  1 +
- .../main/java/org/telegram/ui/MainTabsActivity.java    |  2 +-
- .../main/java/org/telegram/ui/PasscodeActivity.java    |  6 +++++-
- .../main/java/org/telegram/ui/SettingsActivity.java    |  2 +-
- .../main/java/org/telegram/ui/UserInfoActivity.java    |  2 +-
- 10 files changed, 30 insertions(+), 9 deletions(-)
+ .../org/telegram/messenger/MessagesController.java   |  5 ++++-
+ .../org/telegram/ui/Components/AlertsCreator.java    |  2 +-
+ .../org/telegram/ui/Components/PasscodeView.java     |  4 ++--
+ .../main/java/org/telegram/ui/DialogsActivity.java   | 12 +++++++++++-
+ .../main/java/org/telegram/ui/LaunchActivity.java    |  5 ++++-
+ .../src/main/java/org/telegram/ui/LoginActivity.java |  1 +
+ .../main/java/org/telegram/ui/MainTabsActivity.java  |  2 +-
+ .../main/java/org/telegram/ui/PasscodeActivity.java  |  6 +++++-
+ .../main/java/org/telegram/ui/SettingsActivity.java  |  2 +-
+ .../main/java/org/telegram/ui/UserInfoActivity.java  |  2 +-
+ 10 files changed, 31 insertions(+), 10 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 index 0000000..0000000 100644
@@ -99,6 +99,15 @@ index 0000000..0000000 100644
          }
  
          actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
+@@ -14256,7 +14266,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+ 
+         accountNumbers.clear();
+         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
+-            if (UserConfig.getInstance(a).isClientActivated()) {
++            if (UserConfig.getInstance(a).isClientActivated() && !desu.inugram.helpers.security.PasscodeHelper.isAccountHidden(a)) {
+                 accountNumbers.add(a);
+             }
+         }
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java

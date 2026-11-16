@@ -1051,4 +1051,7 @@
     <string name="InuLinkedChatsAdd">Add to account</string>
     <string name="InuLinkedChatsRemove">Remove from this account</string>
     <string name="InuQrNotFoundInImage">No QR code found in this image</string>
+    <string name="InuCrossAccountForwardDone">Forwarded via %1$s</string>
+    <string name="InuCrossAccountForwardFailed">Couldn\'t forward via %1$s: %2$s</string>
+    <string name="InuCrossAccountForwardNotDelivered">messages didn\'t reach the other account</string>
 </resources>

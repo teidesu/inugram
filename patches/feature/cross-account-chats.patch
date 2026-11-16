@@ -157,7 +157,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchA
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java
-@@ -909,6 +909,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+@@ -913,6 +913,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
              filteredRecentSearchObjects.clear();
              recentSearchObjects.clear();
              recentSearchObjectsById.clear();
@@ -165,7 +165,7 @@ index 0000000..0000000 100644
              queryFilter = new StringBuilder("1");
          }
          final StringBuilder finalQueryFilter = queryFilter;
-@@ -952,6 +953,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+@@ -956,6 +957,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
      }
  
      private void setRecentSearch(ArrayList<RecentSearchObject> arrayList, LongSparseArray<RecentSearchObject> hashMap) {
@@ -173,7 +173,7 @@ index 0000000..0000000 100644
          recentSearchObjects = arrayList;
          recentSearchObjectsById = hashMap;
          for (int a = 0; a < recentSearchObjects.size(); a++) {
-@@ -1068,6 +1070,9 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+@@ -1072,6 +1074,9 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                  }
              }
              MessagesController.getInstance(currentAccount).putUsers(encUsers, true);
@@ -183,7 +183,7 @@ index 0000000..0000000 100644
              searchResult = result;
              searchResultNames = names;
           //   searchContacts = contacts;
-@@ -1761,6 +1766,11 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+@@ -1765,6 +1770,11 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                  String un = null;
                  ArrayList<TLRPC.TL_username> usernames = null;
                  Object obj = getItem(position);
@@ -195,7 +195,7 @@ index 0000000..0000000 100644
  
                  if (obj instanceof TLRPC.TL_sponsoredPeer) {
                      final TLRPC.TL_sponsoredPeer sponsoredPeer = (TLRPC.TL_sponsoredPeer) obj;
-@@ -1920,7 +1930,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+@@ -1924,7 +1934,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                  }
                  cell.setChecked(false, false);
                  boolean savedMessages = false;

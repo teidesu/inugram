@@ -1,22 +1,25 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: alina sireneva <alina@tei.pet>
 Date: Tue, 10 Nov 2026 20:20:09 +0400
-Subject: load media through the owning account in chats opened on a non-selected account
+Subject: load media and search through the owning account on a non-selected account
 
 ---
  .../org/telegram/messenger/AndroidUtilities.java |  2 +-
  .../java/org/telegram/messenger/FileLoader.java  |  2 +-
  .../org/telegram/messenger/ImageReceiver.java    |  3 +++
+ .../ui/Adapters/DialogsSearchAdapter.java        |  4 ++++
+ .../ui/Adapters/SearchAdapterHelper.java         |  2 +-
  .../org/telegram/ui/Cells/ChatActionCell.java    |  6 ++++++
  .../org/telegram/ui/Cells/ChatMessageCell.java   |  6 ++++++
  .../org/telegram/ui/Cells/SharedAudioCell.java   |  5 +++++
  .../telegram/ui/Cells/SharedDocumentCell.java    |  5 +++++
  .../telegram/ui/Cells/SharedPhotoVideoCell2.java |  2 ++
  .../ui/Components/ChatAvatarContainer.java       |  4 ++++
+ .../telegram/ui/Components/SearchViewPager.java  |  1 +
  .../main/java/org/telegram/ui/PhotoViewer.java   |  2 +-
  .../org/telegram/ui/Stories/PeerStoriesView.java |  3 +++
  .../org/telegram/ui/Stories/StoryViewer.java     | 16 ++++++++++------
- 12 files changed, 47 insertions(+), 9 deletions(-)
+ 15 files changed, 53 insertions(+), 10 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
 index 0000000..0000000 100644
@@ -58,6 +61,41 @@ index 0000000..0000000 100644
          if (allowLoadingOnAttachedOnly && !attachedToWindow) {
              if (setImageBackup == null) {
                  setImageBackup = new SetImageBackup();
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java
+@@ -313,6 +313,9 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+         this.itemAnimator = itemAnimator;
+         this.dialogsActivity = dialogsActivity;
+         this.resourcesProvider = resourcesProvider;
++        if (dialogsActivity != null) {
++            currentAccount = dialogsActivity.getCurrentAccount();
++        }
+         searchAdapterHelper = new SearchAdapterHelper(false) {
+             @Override
+             protected boolean filter(TLObject obj) {
+@@ -357,6 +360,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+             }
+         });
+         searchAdapterHelper.setAllowGlobalResults(allowGlobalSearch);
++        searchAdapterHelper.currentAccount = currentAccount;
+         mContext = context;
+         needMessagesSearch = messagesSearch;
+         dialogsType = type;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/SearchAdapterHelper.java b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/SearchAdapterHelper.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/SearchAdapterHelper.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/SearchAdapterHelper.java
+@@ -78,7 +78,7 @@ public class SearchAdapterHelper {
+     private ArrayList<Object> localSearchResults;
+     private ArrayList<DialogsSearchAdapter.RecentSearchObject> localRecentResults;
+ 
+-    private int currentAccount = UserConfig.selectedAccount;
++    public int currentAccount = UserConfig.selectedAccount;
+ 
+     private String lastFoundChannel;
+ 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatActionCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatActionCell.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatActionCell.java
@@ -166,6 +204,18 @@ index 0000000..0000000 100644
          addView(avatarImageView);
          if (avatarClickable) {
              final TLRPC.Chat chat = parentFragment != null ? parentFragment.getCurrentChat() : null;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SearchViewPager.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/SearchViewPager.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/SearchViewPager.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/SearchViewPager.java
+@@ -166,6 +166,7 @@ public class SearchViewPager extends ViewPagerFixed implements FilteredSearchVie
+         this.folderId = folderId;
+         this.communityId = communityId;
+         parent = fragment;
++        currentAccount = fragment.getCurrentAccount();
+         this.chatPreviewDelegate = chatPreviewDelegate;
+ 
+         itemAnimator = new DefaultItemAnimator();
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java

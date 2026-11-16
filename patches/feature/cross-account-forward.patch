@@ -1,0 +1,105 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Mon, 16 Nov 2026 20:41:54 +0400
+Subject: cross-account forwards: forward messages to another account's chat via the accounts' private chat
+
+---
+ .../main/java/org/telegram/ui/ChatActivity.java   | 15 ++++++++++-----
+ .../java/org/telegram/ui/DialogsActivity.java     | 15 +++++++++++++++
+ 2 files changed, 25 insertions(+), 5 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -13077,6 +13077,7 @@ public class ChatActivity extends BaseFragment implements
+         args.putInt("hasPoll", hasPoll);
+         args.putBoolean("hasInvoice", hasInvoice);
+         args.putBoolean("canSelectTopics", true);
++        args.putInt("inu_forwardSource", currentAccount);
+         DialogsActivity fragment = new DialogsActivity(args);
+         fragment.setDelegate(ChatActivity.this);
+         presentFragment(fragment);
+@@ -34902,6 +34903,7 @@ public class ChatActivity extends BaseFragment implements
+                 }
+                 args.putBoolean("hasInvoice", forwardingMessage.isInvoice());
+                 args.putBoolean("canSelectTopics", true);
++                args.putInt("inu_forwardSource", currentAccount);
+                 DialogsActivity fragment = new DialogsActivity(args);
+                 fragment.setDelegate(this);
+                 presentFragment(fragment);
+@@ -35976,8 +35978,9 @@ public class ChatActivity extends BaseFragment implements
+         if (chatMode == inu_MODE_PLUGIN_HISTORY) {
+             desu.inugram.helpers.plugins.ui.PluginChatHistory.realMessages(fmessages);
+         }
++        final boolean inuCrossAccount = fragment.getCurrentAccount() != currentAccount;
+         for (int j = 0; j < dids.size(); j++) {
+-            TLRPC.Chat chat = getMessagesController().getChat(-dids.get(j).dialogId);
++            TLRPC.Chat chat = MessagesController.getInstance(fragment.getCurrentAccount()).getChat(-dids.get(j).dialogId);
+             if (chat != null) {
+                 for (int i = 0; i < fmessages.size(); i++) {
+                     int sendError = SendMessagesHelper.canSendMessageToChat(chat, fmessages.get(i));
+@@ -35989,8 +35992,8 @@ public class ChatActivity extends BaseFragment implements
+             }
+         }
+ 
+-        if (!fragment.isQuote && (dids.size() > 1 || dids.get(0).dialogId == getUserConfig().getClientUserId() || message != null || scheduleDate != 0 || !notify)) {
+-            return !AlertsCreator.ensurePaidMessagesMultiConfirmationTopicKeys(currentAccount, dids, fmessages.size() + (TextUtils.isEmpty(message) ? 0 : 1), prices -> {
++        if (!fragment.isQuote && (inuCrossAccount || dids.size() > 1 || dids.get(0).dialogId == getUserConfig().getClientUserId() || message != null || scheduleDate != 0 || !notify)) {
++            return !AlertsCreator.ensurePaidMessagesMultiConfirmationTopicKeys(fragment.getCurrentAccount(), dids, fmessages.size() + (TextUtils.isEmpty(message) ? 0 : 1), prices -> {
+                 if (fragment.resetDelegate) {
+                     fragment.setDelegate(null);
+                 }
+@@ -36011,7 +36014,9 @@ public class ChatActivity extends BaseFragment implements
+ 
+                 messagePreviewParams = null;
+                 hideFieldPanel(false);
+-                for (int a = 0; a < dids.size(); a++) {
++                if (inuCrossAccount) {
++                    desu.inugram.helpers.chat.CrossAccountForwardHelper.forward(currentAccount, fragment.getCurrentAccount(), fmessages, dids, prices, message, ChatHelper.pendingHideAuthor, ChatHelper.pendingHideCaption, notify, scheduleDate, scheduleRepeatPeriod);
++                } else for (int a = 0; a < dids.size(); a++) {
+                     final long did = dids.get(a).dialogId;
+                     final Long price = prices == null ? (Long) 0L : prices.get(did);
+                     if (message != null) {
+@@ -36027,7 +36032,7 @@ public class ChatActivity extends BaseFragment implements
+                 ChatHelper.clearForwardFlags();
+                 fragment.finishFragment();
+                 createUndoView();
+-                if (undoView != null) {
++                if (undoView != null && !inuCrossAccount) {
+                     if (dids.size() == 1) {
+                         if (!BulletinFactory.of(ChatActivity.this).showForwardedBulletinWithTag(dids.get(0).dialogId, fmessages.size())) {
+                             undoView.showWithAction(dids.get(0).dialogId, UndoView.ACTION_FWD_MESSAGES, fmessages.size());
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+@@ -2836,6 +2836,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+             selectAlertStringGroup = arguments.getString("selectAlertStringGroup");
+             addToGroupAlertString = arguments.getString("addToGroupAlertString");
+             allowSwitchAccount = arguments.getBoolean("allowSwitchAccount");
++            if (arguments.containsKey("inu_forwardSource")) {
++                allowSwitchAccount = true;
++                currentAccount = arguments.getInt("inu_forwardAccount", currentAccount);
++                if (currentAccount != arguments.getInt("inu_forwardSource")) {
++                    forwardOriginalChannel = 0;
++                }
++            }
+             checkCanWrite = arguments.getBoolean("checkCanWrite", true);
+             afterSignup = arguments.getBoolean("afterSignup", false);
+             folderId = arguments.getInt("folderId", 0);
+@@ -14548,6 +14555,14 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+                     o.dismiss();
+ 
+                     if (getParentActivity() == null) return;
++                    if (arguments.containsKey("inu_forwardSource")) {
++                        final Bundle args = new Bundle(arguments);
++                        args.putInt("inu_forwardAccount", account);
++                        final DialogsActivity dialogsActivity = new DialogsActivity(args);
++                        dialogsActivity.setDelegate(delegate);
++                        presentFragment(dialogsActivity, true);
++                        return;
++                    }
+                     final DialogsActivityDelegate oldDelegate = delegate;
+                     final LaunchActivity launchActivity = (LaunchActivity) getParentActivity();
+                     final ArrayList<MediaController.PhotoEntry> carryEntries = sharedMediaEntries;
