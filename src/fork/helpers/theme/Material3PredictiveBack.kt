@@ -38,7 +38,6 @@ object Material3PredictiveBack {
     private const val COMMIT_DURATION = 450L
     private const val CANCEL_DURATION = 200L
 
-    private val GESTURE_INTERP: Interpolator = PathInterpolator(0.1f, 0.1f, 0f, 1f)
     private val VERTICAL_INTERP: Interpolator = DecelerateInterpolator()
     private val EMPHASIZED_DECELERATE: Interpolator = PathInterpolator(0.05f, 0.7f, 0.1f, 1f)
 
@@ -124,7 +123,7 @@ object Material3PredictiveBack {
                 layout.invalidate()
                 attachOverlays()
             }
-            val p = GESTURE_INTERP.getInterpolation(
+            val p = Material3BackMotion.GESTURE.getInterpolation(
                 ((rawP - LAZY_START) / (1f - LAZY_START)).coerceIn(0f, 1f)
             )
             applyFrame(p, backEvent.touchY)

@@ -6,13 +6,15 @@ import android.window.BackEvent
 import android.window.OnBackAnimationCallback
 import androidx.annotation.RequiresApi
 import desu.inugram.InuConfig
+import desu.inugram.helpers.theme.Material3BackMotion
 import desu.inugram.ui.drawer.DrawerSwipeController
 import org.telegram.ui.LaunchActivity
 
 /**
- * Turns a left-edge system back gesture into a drawer open, covering the part of
- * the edge that [DrawerSwipeController]'s gesture exclusion band can't reach —
- * the platform caps exclusion at 200dp per edge. The right edge keeps plain back.
+ * Drives the drawer from the system back gesture: an open drawer plays the M3
+ * side container back animation, and a left-edge swipe opens it, covering the part of the edge
+ * that [DrawerSwipeController]'s gesture exclusion band can't reach — the
+ * platform caps exclusion at 200dp per edge. The right edge keeps plain back.
  */
 @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
 object DrawerBackGesture {
@@ -23,49 +25,67 @@ object DrawerBackGesture {
     fun wrap(activity: LaunchActivity, inner: OnBackAnimationCallback): OnBackAnimationCallback =
         if (InuConfig.NAVIGATION_DRAWER.value) Callback(activity, inner) else inner
 
+    private enum class Mode { NONE, OPEN, CLOSE }
+
     private class Callback(
         private val activity: LaunchActivity,
         private val inner: OnBackAnimationCallback,
     ) : OnBackAnimationCallback {
 
-        private var latched = false
+        private var mode = Mode.NONE
+        private var lastProgress = 0f
 
         private fun getController(): DrawerSwipeController? =
             activity.drawerLayoutContainer?.inu_drawer
 
         override fun onBackStarted(backEvent: BackEvent) {
-            latched = InuConfig.DRAWER_BACK_GESTURE.value &&
-                backEvent.swipeEdge == BackEvent.EDGE_LEFT &&
-                getController()?.canOpenFromBackGesture == true
-            if (!latched) inner.onBackStarted(backEvent)
+            val controller = getController()
+            mode = when {
+                controller?.isDrawerOpened == true -> Mode.CLOSE
+                InuConfig.DRAWER_BACK_GESTURE.value &&
+                    backEvent.swipeEdge == BackEvent.EDGE_LEFT &&
+                    controller?.canOpenFromBackGesture == true -> Mode.OPEN
+                else -> Mode.NONE
+            }
+            lastProgress = 0f
+            if (mode == Mode.NONE) inner.onBackStarted(backEvent)
         }
 
         override fun onBackProgressed(backEvent: BackEvent) {
-            if (!latched) {
+            if (mode == Mode.NONE) {
                 inner.onBackProgressed(backEvent)
                 return
             }
             val controller = getController() ?: return
-            val progress = INTERPOLATOR.getInterpolation(backEvent.progress.coerceIn(0f, 1f))
-            controller.dragDrawerTo(progress * controller.drawerWidth)
+            lastProgress = backEvent.progress.coerceIn(0f, 1f)
+            if (mode == Mode.OPEN) {
+                controller.dragDrawerTo(INTERPOLATOR.getInterpolation(lastProgress) * controller.drawerWidth)
+            } else {
+controller.updateBackProgress(
+                    Material3BackMotion.GESTURE.getInterpolation(lastProgress),
+                    backEvent.swipeEdge == BackEvent.EDGE_LEFT,
+                )
+            }
         }
 
         override fun onBackInvoked() {
-            if (!latched) {
-                inner.onBackInvoked()
-                return
+            val m = mode
+            mode = Mode.NONE
+            when (m) {
+                Mode.NONE -> inner.onBackInvoked()
+                Mode.OPEN -> getController()?.openDrawer(false)
+                Mode.CLOSE -> getController()?.finishBackProgress(lastProgress)
             }
-            latched = false
-            getController()?.openDrawer(false)
         }
 
         override fun onBackCancelled() {
-            if (!latched) {
-                inner.onBackCancelled()
-                return
+            val m = mode
+            mode = Mode.NONE
+            when (m) {
+                Mode.NONE -> inner.onBackCancelled()
+                Mode.OPEN -> getController()?.closeDrawer(false)
+                Mode.CLOSE -> getController()?.cancelBackProgress()
             }
-            latched = false
-            getController()?.closeDrawer(false)
         }
     }
 }

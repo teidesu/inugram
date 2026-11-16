@@ -35,6 +35,8 @@ object Material3BackMotion {
     const val SCRIM_ALPHA_BYTE = 77 // ~0.3 * 255 (AOSP uses 0.2 light / 0.8 dark; fixed 0.3 reads better in-app)
     const val SCRIM_FADE = 0.5f // scrim lifts by this much of commit progress (AOSP fades it over the full duration, which lingers past the motion)
 
+    val GESTURE: Interpolator = PathInterpolator(0.1f, 0.1f, 0f, 1f)
+
     // AOSP fast_out_extra_slow_in (M3 "emphasized")
     val EMPHASIZED: Interpolator = PathInterpolator(
         Path().apply {

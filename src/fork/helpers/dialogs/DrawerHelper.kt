@@ -206,7 +206,7 @@ object DrawerHelper {
         fade.setupColorKey(Theme.key_chats_menuBackground)
         fade.setFadeHeightBottom(dp(24f))
         bottomFadeView = fade
-        container.addView(fade, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        container.addView(fade, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.BOTTOM))
         val button = DrawerThemeButton(context, drawerLayoutContainer)
         themeButton = button
         container.addView(

@@ -11,6 +11,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 
 - navigation drawer, like in older Telegram versions; can be used alongside or instead of the bottom tabs
   - 🐶 an option to (ab)use predictive back to open the drawer
+  - 🐶 predictive back closes an open drawer
   - customizable drawer items
   - 🐶 material 3 styling: pill rows, rounded edge, inline account list, floating theme toggle
 - monet (material you) theme support - *based on [NagramX](https://github.com/risin42/NagramX)*, 🐶 improved. plus a quick switcher in appearance settings (light/dark/amoled/auto)
