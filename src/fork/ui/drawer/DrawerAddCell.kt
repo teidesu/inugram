@@ -13,6 +13,7 @@ import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.MotionEvent
 import android.widget.FrameLayout
 import android.widget.TextView
 import org.telegram.messenger.AndroidUtilities
@@ -24,18 +25,20 @@ import org.telegram.ui.Components.LayoutHelper
 class DrawerAddCell(context: Context) : FrameLayout(context) {
 
     private val textView: TextView
+    val rowBackground = DrawerAccountRowBackground()
 
     init {
+        background = rowBackground
         textView = TextView(context)
         textView.setTextColor(Theme.getColor(Theme.key_chats_menuItemText))
-        textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15f)
+        textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14f)
         textView.typeface = AndroidUtilities.bold()
         textView.setLines(1)
         textView.maxLines = 1
         textView.isSingleLine = true
         textView.gravity = Gravity.LEFT or Gravity.CENTER_VERTICAL
-        textView.compoundDrawablePadding = AndroidUtilities.dp(29f)
-        addView(textView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT.toFloat(), Gravity.LEFT or Gravity.TOP, 19f, 0f, 16f, 0f))
+        textView.compoundDrawablePadding = AndroidUtilities.dp(20f)
+        addView(textView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT.toFloat(), Gravity.LEFT or Gravity.TOP, 16f, 0f, 24f, 0f))
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
@@ -45,8 +48,15 @@ class DrawerAddCell(context: Context) : FrameLayout(context) {
         )
     }
 
+    // the list presses rows without forwarding the touch point, so the ripple would start from the center
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        rowBackground.setHotspot(ev.x, ev.y)
+        return super.dispatchTouchEvent(ev)
+    }
+
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        rowBackground.updateColors(false)
         textView.setTextColor(Theme.getColor(Theme.key_chats_menuItemText))
         textView.text = LocaleController.getString(R.string.AddAccount)
         val drawable = resources.getDrawable(R.drawable.msg_add)

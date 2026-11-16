@@ -13,6 +13,7 @@ import android.graphics.Canvas
 import android.graphics.RectF
 import android.graphics.drawable.Drawable
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.FrameLayout
 import org.telegram.messenger.AndroidUtilities
@@ -49,23 +50,26 @@ class DrawerUserCell(context: Context) : FrameLayout(context), NotificationCente
         private set
     private val rect = RectF()
 
+    val rowBackground = DrawerAccountRowBackground()
+
     init {
+        background = rowBackground
         avatarDrawable = AvatarDrawable()
         avatarDrawable.setTextSize(dp(20f))
 
         imageView = BackupImageView(context)
-        imageView.setRoundRadius(dp(18f))
-        addView(imageView, LayoutHelper.createFrame(36, 36f, Gravity.LEFT or Gravity.TOP, 14f, 6f, 0f, 0f))
+        imageView.setRoundRadius(dp(16f))
+        addView(imageView, LayoutHelper.createFrame(32, 32f, Gravity.LEFT or Gravity.TOP, 12f, 8f, 0f, 0f))
 
         textView = SimpleTextView(context)
         textView.setPadding(0, dp(4f), 0, dp(4f))
         textView.setTextColor(Theme.getColor(Theme.key_chats_menuItemText))
-        textView.setTextSize(15)
+        textView.setTextSize(14)
         textView.setTypeface(AndroidUtilities.bold())
         textView.setMaxLines(1)
         textView.setGravity(Gravity.LEFT or Gravity.CENTER_VERTICAL)
         textView.setEllipsizeByGradient(24)
-        addView(textView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT.toFloat(), Gravity.LEFT or Gravity.CENTER_VERTICAL, 72f, 0f, 14f, 0f))
+        addView(textView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT.toFloat(), Gravity.LEFT or Gravity.CENTER_VERTICAL, 60f, 0f, 16f, 0f))
 
         botVerification = AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable(textView, dp(18f))
         status = AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable(textView, dp(20f))
@@ -76,9 +80,15 @@ class DrawerUserCell(context: Context) : FrameLayout(context), NotificationCente
         checkBox.setCheckScale(0.9f)
         checkBox.setInnerRadDiff(dp(1.5f))
         checkBox.setColorKeysOverrides(Theme.key_chats_unreadCounterText, Theme.key_chats_unreadCounter, Theme.key_chats_menuBackground)
-        addView(checkBox, LayoutHelper.createFrame(18, 18f, Gravity.LEFT or Gravity.TOP, 37f, 27f, 0f, 0f))
+        addView(checkBox, LayoutHelper.createFrame(18, 18f, Gravity.LEFT or Gravity.TOP, 32f, 26f, 0f, 0f))
 
         setWillNotDraw(false)
+    }
+
+    // the list presses rows without forwarding the touch point, so the ripple would start from the center
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        rowBackground.setHotspot(ev.x, ev.y)
+        return super.dispatchTouchEvent(ev)
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
@@ -135,7 +145,7 @@ class DrawerUserCell(context: Context) : FrameLayout(context), NotificationCente
 
     fun setAccount(account: Int) {
         accountNumber = account
-        setBackgroundColor(Theme.getColor(Theme.key_chats_menuBackground))
+        rowBackground.updateColors(account == UserConfig.selectedAccount)
         val user = UserConfig.getInstance(accountNumber).currentUser ?: return
         avatarDrawable.setInfo(account, user)
         var text: CharSequence = ContactsController.formatName(user.first_name, user.last_name)
@@ -189,7 +199,7 @@ class DrawerUserCell(context: Context) : FrameLayout(context), NotificationCente
         val countTop = dp(12.5f)
         val textWidth = Math.ceil(Theme.dialogs_countTextPaint.measureText(text).toDouble()).toInt()
         val countWidth = maxOf(dp(10f), textWidth)
-        val countLeft = measuredWidth - countWidth - dp(25f)
+        val countLeft = measuredWidth - countWidth - dp(24f)
 
         val x = countLeft - dp(5.5f)
         rect.set(x.toFloat(), countTop.toFloat(), (x + countWidth + dp(14f)).toFloat(), (countTop + dp(23f)).toFloat())

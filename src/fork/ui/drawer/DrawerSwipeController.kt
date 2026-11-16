@@ -5,14 +5,15 @@ import android.animation.AnimatorListenerAdapter
 import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.graphics.Canvas
+import android.graphics.Outline
 import android.graphics.Paint
 import android.graphics.Rect
-import android.graphics.drawable.Drawable
 import android.os.Build
 import android.util.Property
 import android.view.MotionEvent
 import android.view.VelocityTracker
 import android.view.View
+import android.view.ViewOutlineProvider
 import android.view.ViewTreeObserver
 import android.view.accessibility.AccessibilityEvent
 import android.view.animation.DecelerateInterpolator
@@ -21,7 +22,6 @@ import androidx.annotation.Keep
 import androidx.core.graphics.ColorUtils
 import desu.inugram.helpers.dialogs.DrawerHelper
 import org.telegram.messenger.AndroidUtilities
-import org.telegram.messenger.R
 import org.telegram.ui.ActionBar.BaseFragment
 import org.telegram.ui.ActionBar.DrawerLayoutContainer
 import org.telegram.ui.ActionBar.Theme
@@ -31,7 +31,7 @@ import org.telegram.ui.MainTabsActivity
 
 /**
  * Old Layout side drawer mechanics for [DrawerLayoutContainer]: swipe
- * tracking, open/close animation, scrim + edge-shadow rendering. Ported from
+ * tracking, open/close animation, scrim rendering. Ported from
  * 11.14.1's stock DrawerLayoutContainer so the stock patch stays a thin set of
  * delegating overrides instead of carrying the whole state machine.
  */
@@ -52,7 +52,12 @@ class DrawerSwipeController(private val host: DrawerLayoutContainer) {
     private var currentAnimation: AnimatorSet? = null
     private var scrimOpacity: Float = 0f
     private val scrimPaint = Paint()
-    private var shadowLeft: Drawable? = null
+    private val cornerOutlineProvider = object : ViewOutlineProvider() {
+        override fun getOutline(view: View, outline: Outline) {
+            val radius = AndroidUtilities.dpf2(CORNER_RADIUS_DP)
+            outline.setRoundRect(-radius.toInt(), 0, view.width, view.height, radius)
+        }
+    }
     private val exclusionRect = Rect()
     private val exclusionRects = listOf(exclusionRect)
 
@@ -93,12 +98,8 @@ class DrawerSwipeController(private val host: DrawerLayoutContainer) {
         drawerListView = listView
         host.addView(drawerLayout, lp)
         drawerLayout!!.visibility = View.INVISIBLE
-        if (shadowLeft == null) {
-            try {
-                shadowLeft = host.resources.getDrawable(R.drawable.header_shadow)
-            } catch (_: Exception) {
-            }
-        }
+        layout.outlineProvider = cornerOutlineProvider
+        layout.clipToOutline = true
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             host.addOnAttachStateChangeListener(attachListener)
             if (host.isAttachedToWindow) host.viewTreeObserver.addOnPreDrawListener(preDrawListener)
@@ -197,12 +198,9 @@ class DrawerSwipeController(private val host: DrawerLayoutContainer) {
     private fun syncStatusBar(opened: Boolean) {
         val activity = host.context as? LaunchActivity ?: return
         if (opened) {
-            val bgKey = if (Theme.hasThemeKey(Theme.key_chats_menuTopBackground) &&
-                Theme.getColor(Theme.key_chats_menuTopBackground) != 0
-            ) Theme.key_chats_menuTopBackground else Theme.key_chats_menuTopBackgroundCats
             AndroidUtilities.setLightStatusBar(
                 activity.window,
-                ColorUtils.calculateLuminance(Theme.getColor(bgKey)) > 0.7,
+                ColorUtils.calculateLuminance(Theme.getColor(Theme.key_chats_menuBackground)) > 0.7,
             )
         } else {
             activity.checkSystemBarColors(false, true, false)
@@ -416,7 +414,8 @@ class DrawerSwipeController(private val host: DrawerLayoutContainer) {
                 if (vright > clipLeft) clipLeft = vright
             }
             if (clipLeft != 0) {
-                canvas.clipRect(clipLeft - AndroidUtilities.dp(1f), 0, clipRight, host.height)
+                clipLeft -= AndroidUtilities.dp(CORNER_RADIUS_DP)
+                canvas.clipRect(clipLeft, 0, clipRight, host.height)
             }
         }
         val result = host.inu_superDrawChild(canvas, child, drawingTime)
@@ -427,13 +426,6 @@ class DrawerSwipeController(private val host: DrawerLayoutContainer) {
                 scrimPaint.color = (0x99 * scrimOpacity).toInt() shl 24
                 canvas.drawRect(clipLeft.toFloat(), 0f, clipRight.toFloat(), host.height.toFloat(), scrimPaint)
             }
-        } else if (shadowLeft != null && drawerPosition > 0) {
-            val alpha = maxOf(0f, minOf(drawerPosition / AndroidUtilities.dp(20f).toFloat(), 1f))
-            if (alpha != 0f) {
-                shadowLeft!!.setBounds(drawerPosition.toInt(), child.top, drawerPosition.toInt() + shadowLeft!!.intrinsicWidth, child.bottom)
-                shadowLeft!!.alpha = (0xff * alpha).toInt()
-                shadowLeft!!.draw(canvas)
-            }
         }
         return result
     }
@@ -441,6 +433,7 @@ class DrawerSwipeController(private val host: DrawerLayoutContainer) {
     companion object {
         private const val EDGE_SAFE_ZONE_DP = 25
         private const val EXCLUSION_HEIGHT_DP = 200
+        private const val CORNER_RADIUS_DP = 16f
 
         // ObjectAnimator with a string property name uses JavaBeans naming; an
         // explicit Property bypasses that.

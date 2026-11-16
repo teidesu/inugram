@@ -34,7 +34,7 @@ class DrawerProxyCell(context: Context) : FrameLayout(context) {
 
         textView = TextView(context)
         textView.setTextColor(Theme.getColor(Theme.key_chats_menuItemText))
-        textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15f)
+        textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14f)
         textView.typeface = AndroidUtilities.bold()
         textView.gravity = Gravity.CENTER_VERTICAL or (if (isRTL) Gravity.RIGHT else Gravity.LEFT)
 
@@ -45,9 +45,9 @@ class DrawerProxyCell(context: Context) : FrameLayout(context) {
 
         val startGravity = if (isRTL) Gravity.RIGHT else Gravity.LEFT
         val endGravity = if (isRTL) Gravity.LEFT else Gravity.RIGHT
-        addView(imageView, LayoutHelper.createFrame(24, 24f, startGravity or Gravity.TOP, if (isRTL) 0f else 19f, 12f, if (isRTL) 19f else 0f, 0f))
-        addView(textView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT.toFloat(), startGravity or Gravity.TOP, if (isRTL) 70f else 72f, 0f, if (isRTL) 72f else 70f, 0f))
-        addView(checkBox, LayoutHelper.createFrame(37, 24f, endGravity or Gravity.CENTER_VERTICAL, if (isRTL) 22f else 0f, 0f, if (isRTL) 0f else 22f, 0f))
+        addView(imageView, LayoutHelper.createFrame(24, 24f, startGravity or Gravity.TOP, if (isRTL) 0f else 16f, 12f, if (isRTL) 16f else 0f, 0f))
+        addView(textView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT.toFloat(), startGravity or Gravity.TOP, if (isRTL) 70f else 60f, 0f, if (isRTL) 60f else 70f, 0f))
+        addView(checkBox, LayoutHelper.createFrame(37, 24f, endGravity or Gravity.CENTER_VERTICAL, if (isRTL) 20f else 0f, 0f, if (isRTL) 0f else 20f, 0f))
 
         // Switch draws a larger thumb/ripple than its measured bounds — allow it to overdraw.
         setClipChildren(false)

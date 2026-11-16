@@ -49,11 +49,11 @@ class DrawerActionCell(context: Context) : FrameLayout(context) {
 
         textView = TextView(context)
         textView.setTextColor(Theme.getColor(Theme.key_chats_menuItemText))
-        textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15f)
+        textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14f)
         textView.typeface = AndroidUtilities.bold()
         textView.gravity = Gravity.CENTER_VERTICAL or Gravity.LEFT
-        addView(imageView, LayoutHelper.createFrame(24, 24f, Gravity.LEFT or Gravity.TOP, 19f, 12f, 0f, 0f))
-        addView(textView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT.toFloat(), Gravity.LEFT or Gravity.TOP, 72f, 0f, 16f, 0f))
+        addView(imageView, LayoutHelper.createFrame(24, 24f, Gravity.LEFT or Gravity.TOP, 16f, 12f, 0f, 0f))
+        addView(textView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT.toFloat(), Gravity.LEFT or Gravity.TOP, 60f, 0f, 24f, 0f))
 
         setWillNotDraw(false)
     }
@@ -67,7 +67,7 @@ class DrawerActionCell(context: Context) : FrameLayout(context) {
         if (error) {
             val countTop = AndroidUtilities.dp(12.5f)
             val countWidth = AndroidUtilities.dp(9f)
-            val countLeft = measuredWidth - countWidth - AndroidUtilities.dp(25f)
+            val countLeft = measuredWidth - countWidth - AndroidUtilities.dp(24f)
 
             val x = countLeft - AndroidUtilities.dp(5.5f)
             rect.set(x.toFloat(), countTop.toFloat(), (x + countWidth + AndroidUtilities.dp(14f)).toFloat(), (countTop + AndroidUtilities.dp(23f)).toFloat())
