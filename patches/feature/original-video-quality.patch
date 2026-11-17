@@ -280,7 +280,7 @@ index 0000000..0000000 100644
                          if (isDocumentsPicker) {
                              showVideoTimeline(false, animated);
                              videoAvatarTooltip.setVisibility(View.GONE);
-@@ -21187,6 +21195,24 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -21216,6 +21224,24 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
      private volatile int selectedCompression;
      private volatile int compressionsCount = -1;
      private int previousCompression;
@@ -305,7 +305,7 @@ index 0000000..0000000 100644
  
      private int rotationValue;
      private volatile int originalWidth;
-@@ -21199,6 +21225,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -21228,6 +21254,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
      private int videoFramerate;
      private volatile boolean videoConvertSupported;
      private volatile boolean isH264Video;
@@ -313,7 +313,7 @@ index 0000000..0000000 100644
      private long startTime;
      private long endTime;
      private float videoCutStart;
-@@ -21380,7 +21407,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -21409,7 +21436,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                      actionBarContainer.setSubtitle(getString("SoundMuted", R.string.SoundMuted));
                  }
                  muteDrawable.setMuted(true, true);
@@ -322,7 +322,7 @@ index 0000000..0000000 100644
                      compressItem.setAlpha(0.5f);
                      compressItem.setEnabled(false);
                  }
-@@ -21407,11 +21434,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -21436,11 +21463,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
          }
      }
  
@@ -336,7 +336,7 @@ index 0000000..0000000 100644
          updateWidthHeightBitrateForCompression();
          updateVideoInfo();
          if (request) {
-@@ -21435,7 +21463,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -21464,7 +21492,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                  ? (editState.croppedMediaEntities != null && !editState.croppedMediaEntities.isEmpty() ? editState.croppedMediaEntities : null)
                  : (editState.mediaEntities != null && !editState.mediaEntities.isEmpty() ? editState.mediaEntities : null);
          Object paintPath = editState.croppedPaintPath != null ? editState.croppedPaintPath : editState.paintPath;
@@ -345,7 +345,7 @@ index 0000000..0000000 100644
                  || editState.cropState != null || mediaEntities != null || paintPath != null || editState.savedFilterState != null || sendPhotoType == SELECT_TYPE_AVATAR;
      }
  
-@@ -21448,6 +21476,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -21477,6 +21505,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
              return;
          }
          if (!centerImageIsLivePhoto) {
@@ -353,7 +353,7 @@ index 0000000..0000000 100644
              compressItem.setState(videoConvertSupported && compressionsCount > 1, muteVideo, Math.min(resultWidth, resultHeight));
          }
          itemsLayout.requestLayout();
-@@ -21460,7 +21489,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -21489,7 +21518,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
          int height = rotationValue == 90 || rotationValue == 270 ? resultWidth : resultHeight;
  
          boolean needEncoding = needEncoding();
@@ -364,7 +364,7 @@ index 0000000..0000000 100644
              int bitrate;
              if (sendPhotoType == SELECT_TYPE_AVATAR) {
                  if (estimatedDuration <= 2000) {
-@@ -21499,7 +21530,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -21528,7 +21559,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
          }
      }
  
@@ -373,7 +373,7 @@ index 0000000..0000000 100644
          if (videoPreviewMessageObject != null) {
              MediaController.getInstance().cancelVideoConvert(videoPreviewMessageObject);
          }
-@@ -21578,7 +21609,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -21607,7 +21638,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
      }
  
      private Size calculateResultVideoSize() {
@@ -382,7 +382,7 @@ index 0000000..0000000 100644
              return new Size(originalWidth, originalHeight);
          }
          float maxSize;
-@@ -21618,10 +21649,10 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -21647,10 +21678,10 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
          if (bitrate != 0 && sendPhotoType != SELECT_TYPE_AVATAR) {
              Size resultSize = calculateResultVideoSize();
              if (resultSize.getWidth() == originalWidth && resultSize.getHeight() == originalHeight) {
@@ -395,7 +395,7 @@ index 0000000..0000000 100644
              }
          }
      }
-@@ -21651,10 +21682,10 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -21680,10 +21711,10 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                  encoderBitrate = bitrate;
              } else if (resultWidth == originalWidth && resultHeight == originalHeight) {
                  bitrate = originalBitrate;
@@ -408,7 +408,7 @@ index 0000000..0000000 100644
              }
              videoFramesSize = (long) (encoderBitrate / 8 * videoDuration / 1000);
          }
-@@ -21667,6 +21698,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -21696,6 +21727,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
  
          if (show) {
              previousCompression = selectedCompression;
@@ -416,7 +416,7 @@ index 0000000..0000000 100644
          }
          if (qualityChooseViewAnimation != null) {
              qualityChooseViewAnimation.cancel();
-@@ -21782,7 +21814,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -21811,7 +21843,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
          return new ByteArrayInputStream(output, 0, outPos);
      }
  
@@ -425,7 +425,7 @@ index 0000000..0000000 100644
          if (currentLoadingVideoRunnable != null) {
              Utilities.globalQueue.cancelRunnable(currentLoadingVideoRunnable);
              currentLoadingVideoRunnable = null;
-@@ -21790,6 +21822,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -21819,6 +21851,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
          videoTimelineView.setVideoPath(videoPath, videoPathOffset, start, end, livePhotoTimestampUs);
          videoPreviewMessageObject = null;
          muteVideo = muted || sendPhotoType == SELECT_TYPE_AVATAR;
@@ -434,7 +434,7 @@ index 0000000..0000000 100644
  
          compressionsCount = -1;
          rotationValue = 0;
-@@ -21816,6 +21850,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -21845,6 +21879,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                      resultHeight = originalHeight = params[AnimatedFileInfo.PARAM_NUM_HEIGHT];
                      updateCompressionsCount(originalWidth, originalHeight);
                      selectedCompression = compressQuality == -1 ? selectCompression() : compressQuality;
@@ -442,7 +442,7 @@ index 0000000..0000000 100644
                      prepareRealEncoderBitrate();
                      isH264Video = MediaController.isH264Video(videoPath);
                  }
-@@ -21843,6 +21878,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -21872,6 +21907,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                          }
  
                          if (!centerImageIsLivePhoto) {

@@ -21,7 +21,7 @@ index 0000000..0000000 100644
          seekBarView.setDelegate(new SeekBarView.SeekBarViewDelegate() {
              @Override
              public void onSeekBarDrag(boolean stop, float progress) {
-@@ -2367,6 +2368,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+@@ -2372,6 +2373,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
              updateProgress(messageObject, !sameMessageObject);
              updateCover(messageObject, !sameMessageObject);
  

@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiPacksAl
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiPacksAlert.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiPacksAlert.java
-@@ -1515,6 +1515,16 @@ public class EmojiPacksAlert extends BottomSheet implements NotificationCenter.N
+@@ -1520,6 +1520,16 @@ public class EmojiPacksAlert extends BottomSheet implements NotificationCenter.N
              } catch (Exception e) {
                  FileLog.e(e);
              }
@@ -29,7 +29,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -1730,6 +1740,7 @@ public class EmojiPacksAlert extends BottomSheet implements NotificationCenter.N
+@@ -1735,6 +1745,7 @@ public class EmojiPacksAlert extends BottomSheet implements NotificationCenter.N
                  addView(optionsButton, LayoutHelper.createFrame(40, 40, Gravity.TOP | Gravity.RIGHT, 0, 5, 5 - backgroundPaddingLeft / AndroidUtilities.density, 0));
                  optionsButton.addSubItem(1, R.drawable.msg_share, LocaleController.getString(R.string.StickersShare));
                  optionsButton.addSubItem(2, R.drawable.msg_link, LocaleController.getString(R.string.CopyLink));

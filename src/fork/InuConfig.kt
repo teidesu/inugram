@@ -179,7 +179,7 @@ object InuConfig {
     @JvmField
     val MONET_PREV = StringItem("monet_prev", "", exportable = false)
 
-    class PredictiveBackModeItem : IntItem("predictive_back_mode", OFF) {
+    class PredictiveBackModeItem : IntItem("predictive_back_mode", MATERIAL3) {
         companion object {
             const val OFF = 0
             const val STOCK = 1

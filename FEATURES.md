@@ -11,7 +11,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 
 - navigation drawer, like in older Telegram versions; can be used alongside or instead of the bottom tabs
   - 🐶 an option to (ab)use predictive back to open the drawer
-  - 🐶 predictive back closes an open drawer
+  - 🐶 md3 predictive back closes an open drawer
   - customizable drawer items
   - 🐶 material 3 styling: pill rows, rounded edge, inline account list, floating theme toggle
 - monet (material you) theme support - *based on [NagramX](https://github.com/risin42/NagramX)*, 🐶 improved. plus a quick switcher in appearance settings (light/dark/amoled/auto)
@@ -231,6 +231,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - support `tg://user?id=…` links (opens the profile; user must be known locally)
 - 🐶 disable swipe-down to minimize the in-app browser (only the minimize button collapses it)
 - predictive back mode selector
+  - 🐶 md3 predictive back for bottom sheets, the photo viewer and stories
 - disable pull-to-next-channel
 - disable swipe-to-unarchive
 - 🐶 disable swipe-to-hide the General topic in the forum topics list

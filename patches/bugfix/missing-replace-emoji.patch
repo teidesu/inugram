@@ -477,7 +477,7 @@ index 0000000..0000000 100644
  import org.telegram.messenger.FileLoader;
  import org.telegram.messenger.FileLog;
  import org.telegram.messenger.FileRefController;
-@@ -3332,6 +3333,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+@@ -3337,6 +3338,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
                      textViews[i].setAlpha(0f);
                      textViews[i].setVisibility(GONE);
                  }
@@ -485,7 +485,7 @@ index 0000000..0000000 100644
                  addView(textViews[i], LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.MATCH_PARENT));
              }
              gradientMatrix = new Matrix();
-@@ -3435,6 +3437,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+@@ -3440,6 +3442,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
          }
  
          public void setText(CharSequence text, boolean animated) {

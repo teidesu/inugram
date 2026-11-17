@@ -41,7 +41,8 @@ object DrawerBackGesture {
         override fun onBackStarted(backEvent: BackEvent) {
             val controller = getController()
             mode = when {
-                controller?.isDrawerOpened == true -> Mode.CLOSE
+                controller?.isDrawerOpened == true ->
+                    if (InuConfig.PREDICTIVE_BACK_MODE.value == InuConfig.PredictiveBackModeItem.MATERIAL3) Mode.CLOSE else Mode.NONE
                 InuConfig.DRAWER_BACK_GESTURE.value &&
                     backEvent.swipeEdge == BackEvent.EDGE_LEFT &&
                     controller?.canOpenFromBackGesture == true -> Mode.OPEN

@@ -95,7 +95,7 @@ index 0000000..0000000 100644
                  translationX = (pinchCenterX - getContainerViewWidth() / 2) - ((pinchCenterX - getContainerViewWidth() / 2) - pinchStartX) * (scale / pinchStartScale);
                  translationY = (pinchCenterY - getContainerViewHeight() / 2) - ((pinchCenterY - getContainerViewHeight() / 2) - pinchStartY) * (scale / pinchStartScale);
                  updateMinMax(scale);
-@@ -19606,6 +19621,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -19630,6 +19645,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
          if (scale == newScale && translationX == newTx && translationY == newTy) {
              return;
          }

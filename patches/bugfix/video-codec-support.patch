@@ -90,7 +90,7 @@ index 0000000..0000000 100644
                      if (object instanceof MediaController.PhotoEntry && !((MediaController.PhotoEntry) object).isVideo) {
                          final MediaController.PhotoEntry entry = (MediaController.PhotoEntry) object;
                          if (!entry.isVideo && sendPhotoType != SELECT_TYPE_STICKER && sendPhotoType != SELECT_TYPE_QR && (currentIndex == index ? getCurrentVideoEditedInfo() : entry.editedInfo) == null) {
-@@ -21409,10 +21410,6 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -21438,10 +21439,6 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
          return inu_originalQualitySelected && inu_originalVideoQualityAvailable();
      }
  
@@ -101,7 +101,7 @@ index 0000000..0000000 100644
      private boolean inu_encodesToHevc() {
          return inu_isOriginalVideoQuality() && desu.inugram.helpers.media.OriginalVideoQualityHelper.isHevc(inu_videoCodecMime);
      }
-@@ -21666,7 +21663,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -21695,7 +21692,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                  ? (editState.croppedMediaEntities != null && !editState.croppedMediaEntities.isEmpty() ? editState.croppedMediaEntities : null)
                  : (editState.mediaEntities != null && !editState.mediaEntities.isEmpty() ? editState.mediaEntities : null);
          Object paintPath = editState.croppedPaintPath != null ? editState.croppedPaintPath : editState.paintPath;
@@ -110,7 +110,7 @@ index 0000000..0000000 100644
                  || editState.cropState != null || mediaEntities != null || paintPath != null || editState.savedFilterState != null || sendPhotoType == SELECT_TYPE_AVATAR;
      }
  
-@@ -22096,6 +22093,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+@@ -22125,6 +22122,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                      }
  
                      updateVideoInfo();

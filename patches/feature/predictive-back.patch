@@ -4,9 +4,24 @@ Date: Thu, 9 Apr 2026 04:17:49 +0300
 Subject: disable predictive back, or opt into material3-style one
 
 ---
- .../ui/ActionBar/ActionBarLayout.java         | 27 ++++++++++++++-----
- .../java/org/telegram/ui/LaunchActivity.java  | 22 ++++++++++++++-
- 2 files changed, 42 insertions(+), 7 deletions(-)
+ .../ui/ActionBar/ActionBarLayout.java         | 27 ++++++--
+ .../telegram/ui/ActionBar/BottomSheet.java    | 63 ++++++++++++++++++-
+ .../ui/Components/AudioPlayerAlert.java       |  5 ++
+ .../ui/Components/ChatAttachAlert.java        |  7 +++
+ .../ui/Components/EmojiPacksAlert.java        |  5 ++
+ .../Premium/boosts/BoostPagerBottomSheet.java |  5 ++
+ .../telegram/ui/Components/ShareAlert.java    |  5 ++
+ .../telegram/ui/Components/StickersAlert.java |  5 ++
+ .../ui/Gifts/GiftMessageBottomSheet.java      |  5 ++
+ .../org/telegram/ui/Gifts/SendGiftSheet.java  |  5 ++
+ .../java/org/telegram/ui/LaunchActivity.java  | 24 ++++++-
+ .../java/org/telegram/ui/PhotoViewer.java     | 37 +++++++++--
+ .../org/telegram/ui/ReportBottomSheet.java    |  5 ++
+ .../org/telegram/ui/Stories/StoryViewer.java  | 46 +++++++++++++-
+ .../recorder/StoryPrivacyBottomSheet.java     |  5 ++
+ .../telegram/ui/Wallet/NavBottomSheet.java    |  5 ++
+ .../telegram/ui/community/CommunitySheet.java |  5 ++
+ 17 files changed, 241 insertions(+), 18 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBarLayout.java
 index 0000000..0000000 100644
@@ -121,6 +136,242 @@ index 0000000..0000000 100644
              endRunnable.run();
              checkNeedRebuild();
          }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BottomSheet.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BottomSheet.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BottomSheet.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/BottomSheet.java
+@@ -169,9 +169,11 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
+             if (boundsWithInsets.isEmpty() || getAlpha() == 0 || AndroidUtilities.makingGlobalBlurBitmap) {
+                 return;
+             }
+-            canvas.drawRect(boundsWithInsets, bgPaint);
++            canvas.drawRect(inu_ignoreInsets ? getBounds() : boundsWithInsets, bgPaint);
+         }
+ 
++        private boolean inu_ignoreInsets;
++
+         @Override
+         public void setAlpha(int alpha) {
+             bgPaint.setAlpha(alpha);
+@@ -952,8 +954,14 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
+             return super.drawChild(canvas, child, drawingTime);
+         }
+ 
++        private int inu_backScaleSaveCount = -1;
++
+         @Override
+         protected void onDraw(Canvas canvas) {
++            if (inu_backScale != 1f && containerView != null) {
++                inu_backScaleSaveCount = canvas.save();
++                canvas.scale(inu_backScale, inu_backScale, containerView.getLeft() + containerView.getWidth() / 2f, getHeight());
++            }
+             boolean restore = false;
+             if (backgroundPaint.getAlpha() < 255 && drawNavigationBar) {
+                 float translation = 0;
+@@ -977,6 +985,15 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
+             }
+         }
+ 
++        @Override
++        public void onDrawForeground(Canvas canvas) {
++            if (inu_backScaleSaveCount >= 0) {
++                canvas.restoreToCount(inu_backScaleSaveCount);
++                inu_backScaleSaveCount = -1;
++            }
++            super.onDrawForeground(canvas);
++        }
++
+         public void drawNavigationBar(Canvas canvas, float alpha) {
+             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                 if (navBarColorKey >= 0) {
+@@ -1684,6 +1701,46 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
+     @Override
+     protected void onStart() {
+         super.onStart();
++        if (Build.VERSION.SDK_INT >= 34 && inu_backCallback == null) {
++            inu_backCallback = desu.inugram.helpers.theme.BottomSheetPredictiveBack.register(this);
++        }
++    }
++
++    @Override
++    protected void onStop() {
++        super.onStop();
++        if (Build.VERSION.SDK_INT >= 34 && inu_backCallback != null) {
++            desu.inugram.helpers.theme.BottomSheetPredictiveBack.unregister(this, inu_backCallback);
++            inu_backCallback = null;
++        }
++    }
++
++    private Object inu_backCallback;
++    public long inu_backDismissDuration;
++    private boolean inu_cancelable = true;
++
++    @Override
++    public void setCancelable(boolean flag) {
++        super.setCancelable(flag);
++        inu_cancelable = flag;
++    }
++
++    private float inu_backScale = 1f;
++
++    public void inu_setBackScale(float scale) {
++        inu_backScale = scale;
++        backDrawable.inu_ignoreInsets = scale != 1f;
++        container.invalidate();
++    }
++
++    public boolean inu_canPredictiveBack() {
++        return inu_canPredictiveBack(BottomSheet.class);
++    }
++
++    protected boolean inu_canPredictiveBack(Class<?> onBackPressedOwner) {
++        return Build.VERSION.SDK_INT >= 34 && inu_cancelable && !dismissed && currentSheetAnimation == null && containerView != null && attachedFragment == null
++            && (simpleMenuOverlay == null || !simpleMenuOverlay.isOpened())
++            && desu.inugram.helpers.theme.BottomSheetPredictiveBack.isOnBackPressedOwnedBy(this, onBackPressedOwner);
+     }
+ 
+     public void setUseLightStatusBar(boolean value) {
+@@ -2249,8 +2306,8 @@ public class BottomSheet extends Dialog implements BaseFragment.AttachedSheet {
+                     currentSheetAnimation.setDuration(200);
+                     currentSheetAnimation.setInterpolator(CubicBezierInterpolator.DEFAULT);
+                 } else {
+-                    currentSheetAnimation.setDuration(duration = 250);
+-                    currentSheetAnimation.setInterpolator(CubicBezierInterpolator.EASE_OUT);
++                    currentSheetAnimation.setDuration(duration = inu_backDismissDuration > 0 ? inu_backDismissDuration : 250);
++                    currentSheetAnimation.setInterpolator(inu_backDismissDuration > 0 ? new androidx.interpolator.view.animation.FastOutSlowInInterpolator() : CubicBezierInterpolator.EASE_OUT);
+                 }
+                 currentSheetAnimation.addListener(new AnimatorListenerAdapter() {
+                     @Override
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerAlert.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerAlert.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerAlert.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerAlert.java
+@@ -2085,6 +2085,11 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+         }
+     }
+ 
++    @Override
++    public boolean inu_canPredictiveBack() {
++        return inu_canPredictiveBack(AudioPlayerAlert.class) && (actionBar == null || !actionBar.isSearchFieldVisible()) && blurredView.getTag() == null;
++    }
++
+     @Override
+     public void onBackPressed() {
+         if (actionBar != null && actionBar.isSearchFieldVisible()) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
+@@ -7021,6 +7021,13 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+         }
+     }
+ 
++    @Override
++    public boolean inu_canPredictiveBack() {
++        return inu_canPredictiveBack(ChatAttachAlert.class) && passcodeView.getVisibility() != View.VISIBLE && !actionBar.isSearchFieldVisible()
++            && (currentAttachLayout == photoLayout || currentAttachLayout == contactsLayout || currentAttachLayout == audioLayout || currentAttachLayout == locationLayout || currentAttachLayout == colorsLayout || currentAttachLayout == quickRepliesLayout)
++            && (getCommentView() == null || !getCommentView().isPopupShowing());
++    }
++
+     @Override
+     public void onBackPressed() {
+         if (passcodeView.getVisibility() == View.VISIBLE) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiPacksAlert.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiPacksAlert.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiPacksAlert.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiPacksAlert.java
+@@ -537,6 +537,11 @@ public class EmojiPacksAlert extends BottomSheet implements NotificationCenter.N
+         buttonsView.addView(premiumButtonView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48, Gravity.BOTTOM, 12, 10, 12, 10));
+     }
+ 
++    @Override
++    public boolean inu_canPredictiveBack() {
++        return inu_canPredictiveBack(EmojiPacksAlert.class) && !ContentPreviewViewer.getInstance().isVisible();
++    }
++
+     @Override
+     public void onBackPressed() {
+         if (ContentPreviewViewer.getInstance().isVisible()) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Premium/boosts/BoostPagerBottomSheet.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/Premium/boosts/BoostPagerBottomSheet.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Premium/boosts/BoostPagerBottomSheet.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Premium/boosts/BoostPagerBottomSheet.java
+@@ -270,6 +270,11 @@ public class BoostPagerBottomSheet extends BottomSheet {
+         }
+     }
+ 
++    @Override
++    public boolean inu_canPredictiveBack() {
++        return inu_canPredictiveBack(BoostPagerBottomSheet.class) && viewPager.getCurrentPosition() == 0;
++    }
++
+     @Override
+     public void onBackPressed() {
+         if (viewPager.getCurrentPosition() > 0) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ShareAlert.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ShareAlert.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ShareAlert.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ShareAlert.java
+@@ -2656,6 +2656,11 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
+         }
+     }
+ 
++    @Override
++    public boolean inu_canPredictiveBack() {
++        return inu_canPredictiveBack(ShareAlert.class) && selectedTopicDialog == null && (commentTextView == null || !commentTextView.isPopupShowing());
++    }
++
+     @Override
+     public void onBackPressed() {
+         if (selectedTopicDialog != null) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/StickersAlert.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/StickersAlert.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/StickersAlert.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/StickersAlert.java
+@@ -2423,6 +2423,11 @@ public class StickersAlert extends BottomSheet implements NotificationCenter.Not
+         pickerBottomLayout.setText(LocaleController.getString(R.string.EditStickers), true);
+     }
+ 
++    @Override
++    public boolean inu_canPredictiveBack() {
++        return inu_canPredictiveBack(StickersAlert.class) && !ContentPreviewViewer.getInstance().isVisible();
++    }
++
+     @Override
+     public void onBackPressed() {
+         if (ContentPreviewViewer.getInstance().isVisible()) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Gifts/GiftMessageBottomSheet.java b/TMessagesProj/src/main/java/org/telegram/ui/Gifts/GiftMessageBottomSheet.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Gifts/GiftMessageBottomSheet.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Gifts/GiftMessageBottomSheet.java
+@@ -512,6 +512,11 @@ public class GiftMessageBottomSheet extends BottomSheet {
+         return false;
+     }
+ 
++    @Override
++    public boolean inu_canPredictiveBack() {
++        return inu_canPredictiveBack(GiftMessageBottomSheet.class) && (commentView == null || !commentView.isPopupShowing());
++    }
++
+     @Override
+     public void onBackPressed() {
+         if (commentView != null && commentView.isPopupShowing()) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Gifts/SendGiftSheet.java b/TMessagesProj/src/main/java/org/telegram/ui/Gifts/SendGiftSheet.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Gifts/SendGiftSheet.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Gifts/SendGiftSheet.java
+@@ -1010,6 +1010,11 @@ public class SendGiftSheet extends BottomSheetWithRecyclerListView implements No
+         super.dismiss();
+     }
+ 
++    @Override
++    public boolean inu_canPredictiveBack() {
++        return inu_canPredictiveBack(SendGiftSheet.class) && messageEdit.editTextEmoji.getEmojiPadding() <= 0 && !messageEdit.editTextEmoji.isKeyboardVisible();
++    }
++
+     @Override
+     public void onBackPressed() {
+         if (messageEdit.editTextEmoji.getEmojiPadding() > 0) {
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
@@ -148,9 +399,235 @@ index 0000000..0000000 100644
 +            }
 +            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
 +                OnBackInvokedDispatcher.PRIORITY_DEFAULT,
-+                (OnBackAnimationCallback) onBackAnimationCallback
++                desu.inugram.helpers.theme.PredictiveBack.wrapAttachedSheets(this, (OnBackAnimationCallback) onBackAnimationCallback)
 +            );
 +        } else if (Build.VERSION.SDK_INT >= 34 && inuPredictiveMode == desu.inugram.InuConfig.PredictiveBackModeItem.STOCK) {
              if (onBackAnimationCallback == null) {
                  onBackAnimationCallback =  new OnBackAnimationCallback() {
                      private AnimationNotificationsLocker locker = new AnimationNotificationsLocker();
+@@ -824,7 +844,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+             }
+             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                 OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+-                (OnBackAnimationCallback) onBackAnimationCallback
++                desu.inugram.helpers.theme.PredictiveBack.wrapAttachedSheets(this, (OnBackAnimationCallback) onBackAnimationCallback)
+             );
+         } else if (Build.VERSION.SDK_INT >= 33) {
+             if (onBackInvokedCallback == null) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+@@ -347,7 +347,7 @@ import me.vkryl.core.reference.ReferenceList;
+ @SuppressLint("WrongConstant")
+ @SuppressWarnings("unchecked")
+ @OptIn(markerClass = UnstableApi.class)
+-public class PhotoViewer implements NotificationCenter.NotificationCenterDelegate, GestureDetector2.OnGestureListener, GestureDetector2.OnDoubleTapListener, FactorAnimator.Target {
++public class PhotoViewer implements NotificationCenter.NotificationCenterDelegate, GestureDetector2.OnGestureListener, GestureDetector2.OnDoubleTapListener, FactorAnimator.Target, desu.inugram.helpers.theme.PredictiveBackTarget {
+ 
+     private static final int ANIMATOR_ID_POLL_ATTACH_BUTTONS_VISIBLE = 0;
+     private final BoolAnimator animatorPollAttachButtonsVisibility = new BoolAnimator(ANIMATOR_ID_POLL_ATTACH_BUTTONS_VISIBLE, this, CubicBezierInterpolator.EASE_OUT_QUINT, 380);
+@@ -17541,7 +17541,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                 if (dispatcher != null) {
+                     dispatcher.registerOnBackInvokedCallback(
+                         OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+-                        () -> {
++                        desu.inugram.helpers.theme.PredictiveBack.createCallback(this, () -> {
+                             if (parentActivity instanceof LaunchActivity) {
+                                 ((LaunchActivity) parentActivity).onBackPressed();
+                             } else {
+@@ -17549,7 +17549,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                                     closePhoto(true, false);
+                                 }
+                             }
+-                        }
++                        })
+                     );
+                 }
+             }
+@@ -19452,6 +19452,30 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         animateTo(newScale, newTx, newTy, isZoom, 250);
+     }
+ 
++    @Override
++    public boolean inu_canPredictiveBack() {
++        return isVisibleOrAnimating && isVisible() && !isInline && animationInProgress == 0 && imageMoveAnimation == null
++            && currentEditMode == EDIT_MODE_NONE && !isCaptionOpen() && (qualityChooseView == null || qualityChooseView.getTag() == null)
++            && placeProvider.canScrollAway() && sendPhotoType != SELECT_TYPE_AVATAR && sendPhotoType != SELECT_TYPE_STICKER
++            && scale == 1 && !draggingDown && !moving && !zooming;
++    }
++
++    private static final float INU_PREDICTIVE_BACK_SCALE = 0.1f;
++    private boolean inu_predictiveBackActive;
++
++    @Override
++    public void inu_setPredictiveBackProgress(float progress) {
++        inu_predictiveBackActive = true;
++        scale = 1f - progress * INU_PREDICTIVE_BACK_SCALE;
++        containerView.invalidate();
++    }
++
++    @Override
++    public void inu_settlePredictiveBack() {
++        if (!isVisibleOrAnimating) return;
++        animateTo(1, 0, 0, false);
++    }
++
+     private void animateTo(float newScale, float newTx, float newTy, boolean isZoom, int duration) {
+         if (scale == newScale && translationX == newTx && translationY == newTy) {
+             return;
+@@ -19813,8 +19837,13 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         if (videoSizeSet && aspectRatioFrameLayout != null && aspectRatioFrameLayout.getVisibility() == View.VISIBLE) {
+             containerHeight = getVideoFitHeight();
+         }
++        if (inu_predictiveBackActive && scale >= 1f) {
++            inu_predictiveBackActive = false;
++        }
+         if (animationInProgress != 2 && animationInProgress != 4 && !pipAnimationInProgress && !isInline) {
+-            if (currentEditMode == EDIT_MODE_NONE && sendPhotoType != SELECT_TYPE_AVATAR && sendPhotoType != SELECT_TYPE_STICKER && scale == 1 && aty != -1 && !zoomAnimation) {
++            if (inu_predictiveBackActive) {
++                backgroundDrawable.setAlpha((int) (255 * (1f - 0.5f * (1f - scale) / INU_PREDICTIVE_BACK_SCALE)));
++            } else if (currentEditMode == EDIT_MODE_NONE && sendPhotoType != SELECT_TYPE_AVATAR && sendPhotoType != SELECT_TYPE_STICKER && scale == 1 && aty != -1 && !zoomAnimation) {
+                 float maxValue = containerWidth / 4.0f;
+                 backgroundDrawable.setAlpha((int) Math.max(127, 255 * (1.0f - (Math.min(Math.abs(aty), maxValue) / maxValue))));
+             } else {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ReportBottomSheet.java b/TMessagesProj/src/main/java/org/telegram/ui/ReportBottomSheet.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ReportBottomSheet.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ReportBottomSheet.java
+@@ -246,6 +246,11 @@ public class ReportBottomSheet extends BottomSheet {
+         return this;
+     }
+ 
++    @Override
++    public boolean inu_canPredictiveBack() {
++        return inu_canPredictiveBack(ReportBottomSheet.class) && viewPager.getCurrentPosition() == 0;
++    }
++
+     @Override
+     public void onBackPressed() {
+         if (viewPager.getCurrentView() instanceof Page) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoryViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoryViewer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoryViewer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoryViewer.java
+@@ -89,7 +89,7 @@ import org.telegram.ui.Stories.recorder.LivePlayerView;
+ 
+ import java.util.ArrayList;
+ 
+-public class StoryViewer implements NotificationCenter.NotificationCenterDelegate, BaseFragment.AttachedSheet {
++public class StoryViewer implements NotificationCenter.NotificationCenterDelegate, BaseFragment.AttachedSheet, desu.inugram.helpers.theme.PredictiveBackTarget {
+ 
+     public static boolean animationInProgress;
+ 
+@@ -1785,13 +1785,13 @@ public class StoryViewer implements NotificationCenter.NotificationCenterDelegat
+                 if (dispatcher != null) {
+                     dispatcher.registerOnBackInvokedCallback(
+                         OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+-                        () -> {
++                        desu.inugram.helpers.theme.PredictiveBack.createCallback(this, () -> {
+                             if (LaunchActivity.instance != null) {
+                                 LaunchActivity.instance.onBackPressed();
+                             } else {
+                                 onAttachedBackPressed();
+                             }
+-                        }
++                        })
+                     );
+                 }
+             }
+@@ -2327,6 +2327,46 @@ public class StoryViewer implements NotificationCenter.NotificationCenterDelegat
+         return false;
+     }
+ 
++    @Override
++    public boolean inu_canPredictiveBack() {
++        if (swipeToDissmissBackAnimator != null && swipeToDissmissBackAnimator.isRunning()) {
++            swipeToDissmissBackAnimator.end();
++        }
++        return !animationInProgress && !inSwipeToDissmissMode && !isPaused();
++    }
++
++    @Override
++    public void inu_setPredictiveBackProgress(float progress) {
++        final boolean wasPaused = progressToDismiss != 0;
++        swipeToDismissOffset = progress * dp(80);
++        updateProgressToDismiss();
++        if (wasPaused != (progressToDismiss != 0)) {
++            updatePlayingMode();
++        }
++    }
++
++    @Override
++    public void inu_settlePredictiveBack() {
++        if (isClosed) return;
++        swipeToDissmissBackAnimator = ValueAnimator.ofFloat(swipeToDismissOffset, 0);
++        swipeToDissmissBackAnimator.addUpdateListener(animation -> {
++            swipeToDismissOffset = (float) animation.getAnimatedValue();
++            updateProgressToDismiss();
++        });
++        swipeToDissmissBackAnimator.addListener(new AnimatorListenerAdapter() {
++            @Override
++            public void onAnimationEnd(Animator animation) {
++                swipeToDissmissBackAnimator = null;
++                swipeToDismissOffset = 0;
++                updateProgressToDismiss();
++                updatePlayingMode();
++            }
++        });
++        swipeToDissmissBackAnimator.setDuration(150);
++        swipeToDissmissBackAnimator.setInterpolator(CubicBezierInterpolator.DEFAULT);
++        swipeToDissmissBackAnimator.start();
++    }
++
+     private void updateProgressToDismiss() {
+         float newProgress = Utilities.clamp01(Math.abs(Math.max(swipeToDismissHorizontalOffset, swipeToDismissOffset) / dp(80)));
+         if (progressToDismiss != newProgress) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stories/recorder/StoryPrivacyBottomSheet.java b/TMessagesProj/src/main/java/org/telegram/ui/Stories/recorder/StoryPrivacyBottomSheet.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Stories/recorder/StoryPrivacyBottomSheet.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Stories/recorder/StoryPrivacyBottomSheet.java
+@@ -2483,6 +2483,11 @@ public class StoryPrivacyBottomSheet extends BottomSheet implements Notification
+         }
+     }
+ 
++    @Override
++    public boolean inu_canPredictiveBack() {
++        return inu_canPredictiveBack(StoryPrivacyBottomSheet.class) && viewPager.getCurrentPosition() == 0;
++    }
++
+     @Override
+     public void onBackPressed() {
+         if (viewPager.getCurrentPosition() > 0) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Wallet/NavBottomSheet.java b/TMessagesProj/src/main/java/org/telegram/ui/Wallet/NavBottomSheet.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Wallet/NavBottomSheet.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Wallet/NavBottomSheet.java
+@@ -180,6 +180,11 @@ public class NavBottomSheet extends BottomSheet {
+         }
+     }
+ 
++    @Override
++    public boolean inu_canPredictiveBack() {
++        return inu_canPredictiveBack(NavBottomSheet.class) && viewPager.getCurrentPosition() <= 0;
++    }
++
+     @Override
+     public void onBackPressed() {
+         if (goBack()) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/community/CommunitySheet.java b/TMessagesProj/src/main/java/org/telegram/ui/community/CommunitySheet.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/community/CommunitySheet.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/community/CommunitySheet.java
+@@ -629,6 +629,11 @@ public class CommunitySheet extends BottomSheet implements NotificationCenter.No
+ 
+ 
+ 
++    @Override
++    public boolean inu_canPredictiveBack() {
++        return inu_canPredictiveBack(CommunitySheet.class) && viewPager.getCurrentPosition() == 0;
++    }
++
+     @Override
+     public void onBackPressed() {
+         if (viewPager.getCurrentPosition() > 0) {
