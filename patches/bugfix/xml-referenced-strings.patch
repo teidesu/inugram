@@ -1,0 +1,26 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Tue, 17 Nov 2026 21:00:07 +0400
+Subject: keep stock strings referenced from resource xml (widget descriptions, account settings) in release builds
+
+---
+ .../main/kotlin/org/telegram/tasks/TelegramStringsTask.kt   | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/buildSrc/src/main/kotlin/org/telegram/tasks/TelegramStringsTask.kt b/buildSrc/src/main/kotlin/org/telegram/tasks/TelegramStringsTask.kt
+index 0000000..0000000 100644
+--- a/buildSrc/src/main/kotlin/org/telegram/tasks/TelegramStringsTask.kt
++++ b/buildSrc/src/main/kotlin/org/telegram/tasks/TelegramStringsTask.kt
+@@ -29,7 +29,11 @@ abstract class TelegramStringsTask : DefaultTask() {
+             "AppName",
+             "AppNameBeta",
+             "AppUpdate",
+-            "AppUpdateBeta"
++            "AppUpdateBeta",
++            "EditWidgetChatsInfo",
++            "EditWidgetContactsInfo",
++            "Settings",
++            "AccountSettings"
+         )
+ 
+         private val STABLE_IDS_EXCLUSIONS = setOf(

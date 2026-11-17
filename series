@@ -450,3 +450,4 @@ bugfix/ime-insets-animation-count.patch
 feature/qr_scan_from_gallery.patch
 feature/cross-account-forward.patch
 bugfix/webm-stream-lost-wakeup.patch
+bugfix/xml-referenced-strings.patch
