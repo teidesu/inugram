@@ -110,7 +110,7 @@ index 0000000..0000000 100644
      public void putChannelViews(LongSparseArray<SparseIntArray> channelViews, LongSparseArray<SparseIntArray> channelForwards, LongSparseArray<SparseArray<TLRPC.MessageReplies>> channelReplies, boolean addReply) {
          if (isEmpty(channelViews) && isEmpty(channelForwards) && isEmpty(channelReplies)) {
              return;
-@@ -16600,8 +16653,9 @@ public class MessagesStorage extends BaseController {
+@@ -16605,8 +16658,9 @@ public class MessagesStorage extends BaseController {
  
                      if (load_type == LOAD_BACKWARD) {
                          int minId = messages.messages.get(messages.messages.size() - 1).id;

@@ -4,9 +4,9 @@ Date: Fri, 6 Nov 2026 22:06:02 +0400
 Subject: fix stale unread mention from breaking "jump to mention" button
 
 ---
- .../telegram/messenger/MessagesStorage.java   | 116 +++++++++++++++++-
+ .../telegram/messenger/MessagesStorage.java   | 123 +++++++++++++++++-
  .../java/org/telegram/ui/ChatActivity.java    |   2 +-
- 2 files changed, 111 insertions(+), 7 deletions(-)
+ 2 files changed, 117 insertions(+), 8 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
 index 0000000..0000000 100644
@@ -173,7 +173,21 @@ index 0000000..0000000 100644
                  if (!messageIdsMap.isEmpty()) {
                      for (int b = 0, N2 = messageIdsMap.size(); b < N2; b++) {
                          long dialogId = messageIdsMap.keyAt(b);
-@@ -16554,6 +16643,21 @@ public class MessagesStorage extends BaseController {
+@@ -12880,7 +12969,12 @@ public class MessagesStorage extends BaseController {
+                         if (isTopic) {
+                             statement.bindLong(pointer++, topicId);
+                         }
+-                        statement.bindInteger(pointer++, MessageObject.getUnreadFlags(message));
++                        int inu_unreadFlags = MessageObject.getUnreadFlags(message);
++                        ArrayList<Integer> inu_countedMentions = isTopic ? topicMentionsIdsMap.get(TopicKey.of(dialogId, topicId)) : dialogMentionsIdsMap.get(dialogId);
++                        if (inu_countedMentions != null && inu_countedMentions.contains(message.id)) {
++                            inu_unreadFlags &= ~2;
++                        }
++                        statement.bindInteger(pointer++, inu_unreadFlags);
+                         statement.bindInteger(pointer++, message.send_state);
+                         statement.bindInteger(pointer++, message.date);
+                         statement.bindByteBuffer(pointer++, data);
+@@ -16554,6 +16648,21 @@ public class MessagesStorage extends BaseController {
                                          }
                                      }
                                  }

@@ -269,7 +269,7 @@ index 0000000..0000000 100644
                      if (add) {
                          dids.add(dialogId);
                      }
-@@ -18574,6 +18577,7 @@ public class MessagesStorage extends BaseController {
+@@ -18579,6 +18582,7 @@ public class MessagesStorage extends BaseController {
              }
              while (cursor.next()) {
                  long id = cursor.longValue(0);
@@ -277,7 +277,7 @@ index 0000000..0000000 100644
                  DialogsSearchAdapter.DialogSearchResult dialogSearchResult = new DialogsSearchAdapter.DialogSearchResult();
                  dialogSearchResult.date = cursor.intValue(1);
                  dialogsResult.put(id, dialogSearchResult);
-@@ -18849,6 +18853,9 @@ public class MessagesStorage extends BaseController {
+@@ -18854,6 +18858,9 @@ public class MessagesStorage extends BaseController {
                  cursor = getDatabase().queryFinalized("SELECT u.data, u.status, u.name, u.uid FROM users as u INNER JOIN contacts as c ON u.uid = c.uid");
                  while (cursor.next()) {
                      long uid = cursor.longValue(3);
