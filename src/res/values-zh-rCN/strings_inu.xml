@@ -1045,4 +1045,8 @@
     <string name="InuLinkedChatsInfo">将聊天添加到另一个账号的聊天列表中，无需切换账号即可在那里使用。</string>
     <string name="InuLinkedChatsAdd">添加到账号</string>
     <string name="InuLinkedChatsRemove">从此账号中移除</string>
+    <string name="InuQrNotFoundInImage">此图片中未找到二维码</string>
+    <string name="InuCrossAccountForwardDone">已通过 %1$s 转发</string>
+    <string name="InuCrossAccountForwardFailed">无法通过 %1$s 转发：%2$s</string>
+    <string name="InuCrossAccountForwardNotDelivered">消息未送达另一个账号</string>
 </resources>

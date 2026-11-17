@@ -1051,4 +1051,8 @@
     <string name="InuLinkedChatsInfo">Bir sohbeti başka bir hesabın sohbet listesine ekleyin ve hesap değiştirmeden oradan kullanın.</string>
     <string name="InuLinkedChatsAdd">Hesaba ekle</string>
     <string name="InuLinkedChatsRemove">Bu hesaptan kaldır</string>
+    <string name="InuQrNotFoundInImage">Bu görselde QR kodu bulunamadı</string>
+    <string name="InuCrossAccountForwardDone">%1$s üzerinden iletildi</string>
+    <string name="InuCrossAccountForwardFailed">%1$s üzerinden iletilemedi: %2$s</string>
+    <string name="InuCrossAccountForwardNotDelivered">mesajlar diğer hesaba ulaşmadı</string>
 </resources>

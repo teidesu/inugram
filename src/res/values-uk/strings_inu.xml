@@ -1041,4 +1041,8 @@
     <string name="InuLinkedChatsInfo">Додайте чат до списку чатів іншого акаунта й користуйтеся ним звідти без перемикання акаунтів.</string>
     <string name="InuLinkedChatsAdd">Додати до акаунта</string>
     <string name="InuLinkedChatsRemove">Прибрати з цього акаунта</string>
+    <string name="InuQrNotFoundInImage">На цьому зображенні немає QR-коду</string>
+    <string name="InuCrossAccountForwardDone">Переслано через %1$s</string>
+    <string name="InuCrossAccountForwardFailed">Не вдалося переслати через %1$s: %2$s</string>
+    <string name="InuCrossAccountForwardNotDelivered">повідомлення не дійшли до іншого акаунта</string>
 </resources>

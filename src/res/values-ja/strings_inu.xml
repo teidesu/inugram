@@ -1045,4 +1045,8 @@
     <string name="InuLinkedChatsInfo">チャットを別のアカウントのチャットリストに追加し、アカウントを切り替えずにそこから利用できます。</string>
     <string name="InuLinkedChatsAdd">アカウントに追加</string>
     <string name="InuLinkedChatsRemove">このアカウントから削除</string>
+    <string name="InuQrNotFoundInImage">この画像に QR コードが見つかりません</string>
+    <string name="InuCrossAccountForwardDone">%1$s 経由で転送しました</string>
+    <string name="InuCrossAccountForwardFailed">%1$s 経由で転送できませんでした: %2$s</string>
+    <string name="InuCrossAccountForwardNotDelivered">メッセージがもう一方のアカウントに届きませんでした</string>
 </resources>
