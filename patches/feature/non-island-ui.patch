@@ -7,16 +7,16 @@ Subject: non-island ui in various parts of the app
  .../org/telegram/ui/ActionBar/ActionBar.java  |  53 +++--
  .../ui/ActionBar/ActionBarLayout.java         |   2 +-
  .../telegram/ui/ActionBar/BaseFragment.java   |   6 +-
- .../ui/ActionBar/SimpleActionBar.java         |  81 ++++++--
+ .../ui/ActionBar/SimpleActionBar.java         |  81 +++++--
  .../ui/ActionBar/SimpleActionBarMenu.java     |  14 +-
  .../java/org/telegram/ui/CallLogActivity.java |  20 +-
- .../telegram/ui/ChannelAdminLogActivity.java  |  21 +-
- .../java/org/telegram/ui/ChatActivity.java    | 193 ++++++++++++------
+ .../telegram/ui/ChannelAdminLogActivity.java  |  25 ++-
+ .../java/org/telegram/ui/ChatActivity.java    | 197 ++++++++++++------
  .../BitmapSectionsItemDecoration.java         |   3 +
  .../ui/Components/ChatActivityEnterView.java  |  75 ++++---
  ...ChatActivityEnterViewAnimatedIconView.java |  17 +-
  .../ChatActivityTopPanelLayout.java           |  27 ++-
- .../ui/Components/ChatAttachAlert.java        |  38 +++-
+ .../ui/Components/ChatAttachAlert.java        |  41 +++-
  .../ui/Components/ChatAvatarContainer.java    |   1 +
  .../ui/Components/ChatSearchTabs.java         |   2 +-
  .../DialogsActivityTopPanelLayout.java        |  20 +-
@@ -37,12 +37,12 @@ Subject: non-island ui in various parts of the app
  .../ui/Components/ViewPagerFixed.java         |  12 +-
  .../blur3/drawable/GlassRimRenderer.java      |   4 +-
  .../impl/BlurredBackgroundProviderImpl.java   |  13 +-
- .../chat/ChatInputViewsContainer.java         |  30 ++-
+ .../chat/ChatInputViewsContainer.java         |  31 ++-
  .../ChatActivityBlurredRoundButton.java       |   6 +-
  .../ChatActivityActionsButtonsLayout.java     |  19 ++
  .../ChatActivityChannelButtonsLayout.java     |  33 ++-
  .../ui/Components/glass/GlassTabView.java     |   5 +-
- .../java/org/telegram/ui/DialogsActivity.java | 173 +++++++++++-----
+ .../java/org/telegram/ui/DialogsActivity.java | 173 ++++++++++-----
  .../java/org/telegram/ui/ProfileActivity.java |  61 ++++--
  .../java/org/telegram/ui/QrShare/QrGlass.java |   3 +
  .../org/telegram/ui/QrShare/QrShareView.java  |   1 +
@@ -56,7 +56,7 @@ Subject: non-island ui in various parts of the app
  .../java/org/telegram/ui/iv/RichEditor.java   |   4 +-
  .../utils/glass/BaseFragmentSimpleGlass.java  |   6 +-
  .../utils/glass/GlassCaptureSourceCanvas.java |  52 +++--
- 52 files changed, 1109 insertions(+), 365 deletions(-)
+ 52 files changed, 1116 insertions(+), 370 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -549,6 +549,18 @@ index 0000000..0000000 100644
          actionBar.setupGlass(glassBackgroundDrawableFactory, BlurredBackgroundProviderImpl.topPanelChatActivity(resourceProvider));
          emptyViewContainer = new FrameLayout(context);
          emptyViewContainer.setVisibility(View.INVISIBLE);
+@@ -1453,9 +1455,9 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
+ 
+         chatActivityFadeView = new ChatActivityFadeView(context);
+         chatActivityFadeView.setup(navbarContentDrawableFactory);
+-        chatActivityFadeView.setFadeZoneTop(AndroidUtilities.statusBarHeight + ActionBar.getCurrentActionBarHeight() + dp(2));
++        chatActivityFadeView.setFadeZoneTop(nonIsland ? 0 : AndroidUtilities.statusBarHeight + ActionBar.getCurrentActionBarHeight() + dp(2));
+         chatActivityFadeView.setFadeHeightTop(dp(60));
+-        chatActivityFadeView.setFadeZoneBottom(AndroidUtilities.navigationBarHeight + dp(9) + dp(44) + dp(7));
++        chatActivityFadeView.setFadeZoneBottom(nonIsland ? 0 : AndroidUtilities.navigationBarHeight + dp(9) + dp(44) + dp(7));
+         chatActivityFadeView.setFadeHeightBottom(dp(60));
+         contentView.addView(chatActivityFadeView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+ 
 @@ -1482,10 +1484,16 @@ public class ChannelAdminLogActivity extends BaseFragment implements Notificatio
          bottomOverlayChat2 = new ChatActivityChannelButtonsLayout(context, resourceProvider,
              BlurredBackgroundProviderImpl.bottomPanelChatActivity(resourceProvider), glassBackgroundDrawableFactory);
@@ -1198,6 +1210,15 @@ index 0000000..0000000 100644
          updatePagedownButtonsPosition();
          updateBotforumTabsBottomMargin();
          checkUi_botMenuPosition();
+@@ -47437,7 +47488,7 @@ public class ChatActivity extends BaseFragment implements
+             + dp(9) + chatInputViewsContainer.getInputBubbleHeight() + dp(7)
+             + getTopicTabsSideSize(TopicsTabsView.Position.BOTTOM);
+ 
+-        chatActivityFadeView.setFadeZoneBottom((int) inputHeight);
++        chatActivityFadeView.setFadeZoneBottom(NonIslandHelper.chatElements() ? 0 : (int) inputHeight);
+ 
+         int clipBound = contentView.getMeasuredHeight() - (int) inputHeight + dp(36);
+         clipBound = androidx.core.math.MathUtils.clamp(clipBound, 0, contentView.getMeasuredHeight());
 @@ -47463,6 +47514,10 @@ public class ChatActivity extends BaseFragment implements
          if (parentChatActivity != null) {
              parentChatActivity.checkUi_topFade();
@@ -1209,6 +1230,15 @@ index 0000000..0000000 100644
  
          float fadeHeight = 0;
          if (!isInsideContainer) {
+@@ -47498,7 +47553,7 @@ public class ChatActivity extends BaseFragment implements
+         if (hashtagHistoryView != null) {
+             hashtagHistoryView.setTopBottomPadding(top, bottom);
+         }
+-        if (messagesSearchListContainer != null) {
++        if (messagesSearchListContainer != null && !NonIslandHelper.chatElements()) {
+             messagesSearchListContainer.setFade(top, bottom);
+         }
+         if (hashtagLoadingView != null) {
 @@ -47527,6 +47582,10 @@ public class ChatActivity extends BaseFragment implements
                  * (1f - animatorSearchResultAsListVisibility.getFloatValue())
                  * (1f - getHashtagTabsShownT());
@@ -1763,7 +1793,15 @@ index 0000000..0000000 100644
                  final float left = child.getX();
                  final float right = left + child.getWidth();
                  final boolean isFadedLeft = left < dp(10);
-@@ -2743,6 +2753,8 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -2720,6 +2730,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+             @Override
+             public void draw(@NonNull Canvas canvas) {
+                 if (desu.inugram.helpers.chat.ChatHelper.shouldHideFadeView()) return;
++                if (NonIslandHelper.chatElements()) return;
+                 super.draw(canvas);
+                 bottomFadeDrawable.draw(canvas);
+             }
+@@ -2743,6 +2754,8 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
          buttonsRecyclerView.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
          buttonsRecyclerViewWrapper.addView(buttonsRecyclerView, LayoutHelper.createFrameMatchParent());
          containerView.addView(buttonsRecyclerViewWrapper, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 70, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
@@ -1772,7 +1810,7 @@ index 0000000..0000000 100644
          buttonsRecyclerView.setOnItemClickListener((view, position) -> {
              BaseFragment lastFragment = baseFragment;
              if (lastFragment == null) {
-@@ -3017,14 +3029,14 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -3017,14 +3030,14 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
  
              @Override
              protected void dispatchDraw(@NonNull Canvas canvas) {
@@ -1790,7 +1828,7 @@ index 0000000..0000000 100644
  
                  AndroidUtilities.rectTmp.set(getPaddingLeft(), pt, getWidth() - getPaddingRight(), getHeight() - pb);
                  path.rewind();
-@@ -3584,6 +3596,9 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -3584,6 +3597,9 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
          writeButton.setCircleSize(dp(52), dp(38));
          writeButton.setCirclePadding(dp(7), dp(6));
          writeButton.newCounterPos = true;
@@ -1800,7 +1838,7 @@ index 0000000..0000000 100644
          writeButton.setOnClickListener(v -> {
              onWriteButtonPressed();
          });
-@@ -4122,7 +4137,8 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -4122,7 +4138,8 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
              .setStrokeWidth(dpf2(1), dpf2(2 / 3f))
              .build();
  
@@ -1810,7 +1848,16 @@ index 0000000..0000000 100644
          animatorCurrentVisibleLayout.replace((long) LAYOUT_TYPE_PHOTO, false);
  
          glassEngine.setRoot(containerView);
-@@ -7417,7 +7433,13 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -7404,7 +7421,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+     private void checkUi_fadeTopAlpha() {
+         if (fadeView != null && actionBar != null) {
+             final AttachAlertLayout layout = nextAttachLayout != null ? nextAttachLayout : currentAttachLayout;
+-            final boolean disableFade = layout != null && layout.disableTopFade();
++            final boolean disableFade = layout != null && layout.disableTopFade() || NonIslandHelper.chatElements();
+             final boolean isDark = resourcesProvider != null ? resourcesProvider.isDark() : Theme.isCurrentThemeDark();
+             fadeView.setFadeTopAlpha(!disableFade && actionBar.getVisibility() == View.VISIBLE ? (int) ((isDark ? 255 : 160) * actionBar.getAlpha()) : 0);
+         }
+@@ -7417,7 +7434,13 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
  
          if (BitwiseUtils.hasFlag(flags, GlassEngine.FLAG_INVALIDATED_POSITIONS)) {
              GlassPositionsArray glassPositionsArray = glassEngine.getAllVisibleDrawablesWithDisplayListPositionsMerged();
@@ -3100,7 +3147,15 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatInp
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatInputViewsContainer.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/ChatInputViewsContainer.java
-@@ -80,6 +80,10 @@ public class ChatInputViewsContainer extends FrameLayout implements Theme.Colora
+@@ -57,6 +57,7 @@ public class ChatInputViewsContainer extends FrameLayout implements Theme.Colora
+             @Override
+             protected void dispatchDraw(@NonNull Canvas canvas) {
+                 if (desu.inugram.helpers.chat.ChatHelper.shouldHideFadeView()) return;
++                if (desu.inugram.helpers.theme.NonIslandHelper.chatElements()) return;
+                 if (backgroundWithFadeDrawable != null) {
+                     backgroundWithFadeDrawable.draw(canvas);
+                 }
+@@ -80,6 +81,10 @@ public class ChatInputViewsContainer extends FrameLayout implements Theme.Colora
      private BlurredBackgroundDrawable underKeyboardBackgroundDrawable;
      public void setInputIslandBubbleDrawable(BlurredBackgroundDrawable drawable) {
          blurredBackgroundDrawable = drawable;
@@ -3111,7 +3166,7 @@ index 0000000..0000000 100644
          blurredBackgroundDrawable.setPadding(dp(7));
          blurredBackgroundDrawable.setRadius(dp(INPUT_BUBBLE_RADIUS));
      }
-@@ -87,7 +91,8 @@ public class ChatInputViewsContainer extends FrameLayout implements Theme.Colora
+@@ -87,7 +92,8 @@ public class ChatInputViewsContainer extends FrameLayout implements Theme.Colora
      public void setUnderKeyboardBackgroundDrawable(BlurredBackgroundDrawable drawable) {
          underKeyboardBackgroundDrawable = drawable;
          underKeyboardBackgroundDrawable.enableInAppKeyboardOptimization();
@@ -3121,7 +3176,7 @@ index 0000000..0000000 100644
          underKeyboardBackgroundDrawable.setThickness(dp(32));
          underKeyboardBackgroundDrawable.setIntensity(0.4f);
      }
-@@ -185,7 +190,8 @@ public class ChatInputViewsContainer extends FrameLayout implements Theme.Colora
+@@ -185,7 +191,8 @@ public class ChatInputViewsContainer extends FrameLayout implements Theme.Colora
                      rightBottomRadius = bottomRight == null ? 0 : bottomRight.getRadius();
                  }
              }
@@ -3131,7 +3186,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -275,12 +281,24 @@ public class ChatInputViewsContainer extends FrameLayout implements Theme.Colora
+@@ -275,12 +282,24 @@ public class ChatInputViewsContainer extends FrameLayout implements Theme.Colora
          );
          tmpRect.inset(0, -dp(7));
          tmpRect.offset(0, blurTop + (int) bubbleInputTranlationY);
