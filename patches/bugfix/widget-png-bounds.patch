@@ -1,0 +1,103 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Sam Sepi0l <sepiol026@gmail.com>
+Date: Tue, 17 Nov 2026 08:50:26 +0300
+Subject: bound widget PNG decoding against hostile chunk lengths and deflate bombs
+
+---
+ .../org/telegram/utils/twidget/WidgetPng.java | 26 ++++++++++++++++++--
+ .../utils/twidget/WidgetSandboxBackend.java   |  6 ++++-
+ 2 files changed, 27 insertions(+), 5 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/utils/twidget/WidgetPng.java b/TMessagesProj/src/main/java/org/telegram/utils/twidget/WidgetPng.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/utils/twidget/WidgetPng.java
++++ b/TMessagesProj/src/main/java/org/telegram/utils/twidget/WidgetPng.java
+@@ -52,7 +52,8 @@ final class WidgetPng {
+ 
+         // The rows the stream gives whole, each led by a valid filter byte (0-4).
+         final int stride = (int) ((width * channels * depth + 7) / 8 + 1);
+-        ByteArrayOutputStream raw = new ByteArrayOutputStream();
++        final long limit = (long) stride * height;
++        RawRows raw = new RawRows();
+         ByteArrayOutputStream ancillary = new ByteArrayOutputStream();
+         // Raw deflate past the 2-byte zlib header: a bad Adler-32 at the end must not take the rows with it.
+         Inflater inflater = new Inflater(true);
+@@ -61,8 +62,9 @@ final class WidgetPng {
+         long intact = 0;
+         try {
+             for (int at = 8; at + 12 <= length && intact < height; ) {
+-                final int size = (int) be32(bytes, at);
+-                if (size > length - at - 12 || type(bytes, at + 4, "IEND")) break;
++                final long declared = be32(bytes, at);
++                if (declared > length - at - 12 || type(bytes, at + 4, "IEND")) break;
++                final int size = (int) declared;
+                 if (type(bytes, at + 4, "IDAT")) {
+                     final int skip = header ? Math.min(2, size) : 0;
+                     header = false;
+@@ -77,18 +79,23 @@ final class WidgetPng {
+                             break;
+                         }
+                         if (produced == 0 && inflater.needsDictionary()) break;
+-                        raw.write(chunk, 0, produced);
+-                        final byte[] data = raw.toByteArray();
++                        raw.write(chunk, 0, (int) Math.min(produced, limit - raw.size()));
++                        final byte[] data = raw.buffer();
++                        final int available = raw.size();
+                         while (intact < height) {
+                             final long row = intact * stride;
+-                            if (row >= data.length) break;
++                            if (row >= available) break;
+                             if ((data[(int) row] & 0xFF) > 4) {
+                                 broken = true;
+                                 break;
+                             }
+-                            if (row + stride > data.length) break;
++                            if (row + stride > available) break;
+                             intact++;
+                         }
++                        if (available >= limit) {
++                            broken = true;
++                            break;
++                        }
+                         if (produced == 0) break;
+                     }
+                     if (broken) break;
+@@ -107,7 +114,7 @@ final class WidgetPng {
+         if (intact == 0) return image;
+         // The intact rows as a whole PNG of their own, decoded by BitmapFactory onto the transparent image.
+         byte[] rows = new byte[(int) (intact * stride)];
+-        System.arraycopy(raw.toByteArray(), 0, rows, 0, rows.length);
++        System.arraycopy(raw.buffer(), 0, rows, 0, rows.length);
+         ByteArrayOutputStream png = new ByteArrayOutputStream();
+         png.write(SIGNATURE, 0, SIGNATURE.length);
+         byte[] ihdr = new byte[13];
+@@ -126,6 +133,12 @@ final class WidgetPng {
+         return image;
+     }
+ 
++    private static final class RawRows extends ByteArrayOutputStream {
++        byte[] buffer() {
++            return buf;
++        }
++    }
++
+     private static byte[] deflate(byte[] data) {
+         Deflater deflater = new Deflater();
+         deflater.setInput(data);
+diff --git a/TMessagesProj/src/main/java/org/telegram/utils/twidget/WidgetSandboxBackend.java b/TMessagesProj/src/main/java/org/telegram/utils/twidget/WidgetSandboxBackend.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/utils/twidget/WidgetSandboxBackend.java
++++ b/TMessagesProj/src/main/java/org/telegram/utils/twidget/WidgetSandboxBackend.java
+@@ -193,7 +193,11 @@ final class WidgetSandboxBackend implements WidgetSandboxPainter.Resources, Widg
+         long decodedBytes = (long) options.outWidth * options.outHeight * 4;
+         if (imageBytes + decodedBytes > MAX_IMAGE_BYTES) return null;
+         options.inJustDecodeBounds = false;
+-        Bitmap image = WidgetPng.decodeBroken(bytes);
++        Bitmap image = null;
++        try {
++            image = WidgetPng.decodeBroken(bytes);
++        } catch (RuntimeException | OutOfMemoryError ignored) {
++        }
+         if (image == null) image = BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
+         return image;
+     }
