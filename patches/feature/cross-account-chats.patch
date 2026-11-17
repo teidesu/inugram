@@ -367,7 +367,7 @@ index 0000000..0000000 100644
              if (waitingForDialogsAnimationEnd(parentPage) || parentLayout != null && parentLayout.isInPreviewMode() || rightSlidingDialogContainer.hasFragment() || communityId != 0) {
                  return 0;
              }
-@@ -2885,6 +2889,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -2892,6 +2896,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                  observersGroup.add(NotificationCenter.filterSettingsUpdated);
                  observersGroup.add(NotificationCenter.dialogsUnreadCounterChanged);
              }
@@ -375,7 +375,7 @@ index 0000000..0000000 100644
              observersGroup
                  .add(NotificationCenter.dialogsNeedReload)
                  .add(NotificationCenter.dialogFiltersUpdated)
-@@ -3061,6 +3066,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -3068,6 +3073,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              observersGroup.removeAllObservers();
              observersGroup = null;
          }
@@ -386,7 +386,7 @@ index 0000000..0000000 100644
  
          if (commentView != null) {
              commentView.onDestroy();
-@@ -8050,6 +8059,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8057,6 +8066,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          if (getParentActivity() == null) {
              return;
          }
@@ -396,7 +396,7 @@ index 0000000..0000000 100644
          long dialogId = 0;
          long topicId = 0;
          int message_id = 0;
-@@ -8476,6 +8488,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8483,6 +8495,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          if (adapter.getItemViewType(position) == DialogsAdapter.VIEW_TYPE_FORWARD_TO_STORIES_CELL) {
              return false;
          }
@@ -406,7 +406,7 @@ index 0000000..0000000 100644
  
          if (!actionBar.isActionModeShowed() && !AndroidUtilities.isTablet() && !onlySelect && view instanceof DialogCell && !getMessagesController().isForum(((DialogCell) view).getDialogId()) && !rightSlidingDialogContainer.hasFragment()) {
              DialogCell cell = (DialogCell) view;
-@@ -8800,6 +8815,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8807,6 +8822,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          if (hasFolders) {
              flags |= ActionBarPopupWindow.ActionBarPopupWindowLayout.FLAG_USE_SWIPEBACK;
          }
@@ -417,7 +417,7 @@ index 0000000..0000000 100644
  
          final BaseFragment[] previewActivity = new BaseFragment[1];
          previewMenu[0] = new ActionBarPopupWindow.ActionBarPopupWindowLayout(getParentActivity(), R.drawable.popup_fixed_alert4, getResourceProvider(), flags);
-@@ -8814,6 +8833,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -8821,6 +8840,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              );
              previewMenu[0].addView(addToFolderItem);
              previewMenu[0].getSwipeBack().setOnHeightUpdateListener(height -> {
@@ -427,7 +427,7 @@ index 0000000..0000000 100644
                  if (previewActivity[0] == null || previewActivity[0].getFragmentView() == null || !previewActivity[0].isInPreviewMode()) {
                      return;
                  }
-@@ -9000,6 +9022,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -9007,6 +9029,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              previewMenu[0].addView(muteItem);
          }
  

@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -13077,6 +13077,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -12945,6 +12945,7 @@ public class ChatActivity extends BaseFragment implements
          args.putInt("hasPoll", hasPoll);
          args.putBoolean("hasInvoice", hasInvoice);
          args.putBoolean("canSelectTopics", true);
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
          DialogsActivity fragment = new DialogsActivity(args);
          fragment.setDelegate(ChatActivity.this);
          presentFragment(fragment);
-@@ -34902,6 +34903,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -34641,6 +34642,7 @@ public class ChatActivity extends BaseFragment implements
                  }
                  args.putBoolean("hasInvoice", forwardingMessage.isInvoice());
                  args.putBoolean("canSelectTopics", true);
@@ -28,9 +28,9 @@ index 0000000..0000000 100644
                  DialogsActivity fragment = new DialogsActivity(args);
                  fragment.setDelegate(this);
                  presentFragment(fragment);
-@@ -35976,8 +35978,9 @@ public class ChatActivity extends BaseFragment implements
-         if (chatMode == inu_MODE_PLUGIN_HISTORY) {
-             desu.inugram.helpers.plugins.ui.PluginChatHistory.realMessages(fmessages);
+@@ -35707,8 +35709,9 @@ public class ChatActivity extends BaseFragment implements
+                 }
+             }
          }
 +        final boolean inuCrossAccount = fragment.getCurrentAccount() != currentAccount;
          for (int j = 0; j < dids.size(); j++) {
@@ -39,7 +39,7 @@ index 0000000..0000000 100644
              if (chat != null) {
                  for (int i = 0; i < fmessages.size(); i++) {
                      int sendError = SendMessagesHelper.canSendMessageToChat(chat, fmessages.get(i));
-@@ -35989,8 +35992,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -35720,8 +35723,8 @@ public class ChatActivity extends BaseFragment implements
              }
          }
  
@@ -50,7 +50,7 @@ index 0000000..0000000 100644
                  if (fragment.resetDelegate) {
                      fragment.setDelegate(null);
                  }
-@@ -36011,7 +36014,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -35742,7 +35745,9 @@ public class ChatActivity extends BaseFragment implements
  
                  messagePreviewParams = null;
                  hideFieldPanel(false);
@@ -61,7 +61,7 @@ index 0000000..0000000 100644
                      final long did = dids.get(a).dialogId;
                      final Long price = prices == null ? (Long) 0L : prices.get(did);
                      if (message != null) {
-@@ -36027,7 +36032,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -35758,7 +35763,7 @@ public class ChatActivity extends BaseFragment implements
                  ChatHelper.clearForwardFlags();
                  fragment.finishFragment();
                  createUndoView();
@@ -74,7 +74,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -2836,6 +2836,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -2825,6 +2825,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              selectAlertStringGroup = arguments.getString("selectAlertStringGroup");
              addToGroupAlertString = arguments.getString("addToGroupAlertString");
              allowSwitchAccount = arguments.getBoolean("allowSwitchAccount");
@@ -88,7 +88,7 @@ index 0000000..0000000 100644
              checkCanWrite = arguments.getBoolean("checkCanWrite", true);
              afterSignup = arguments.getBoolean("afterSignup", false);
              folderId = arguments.getInt("folderId", 0);
-@@ -14548,6 +14555,14 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -14322,6 +14329,14 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                      o.dismiss();
  
                      if (getParentActivity() == null) return;

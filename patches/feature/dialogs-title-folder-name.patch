@@ -20,7 +20,7 @@ index 0000000..0000000 100644
                                      viewPages[0].dialogsAdapter.resume();
                                      viewPages[1].dialogsAdapter.pause();
                                  }
-@@ -3521,7 +3522,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -3528,7 +3529,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                  ssb.setSpan(new ImageSpan(logoDrawable), 0, ssb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                  actionBar.setTitle(ssb, statusDrawable);
                  } else {
@@ -29,7 +29,7 @@ index 0000000..0000000 100644
                  }
                  updateStatus(UserConfig.getInstance(currentAccount).getCurrentUser(), false);
              }
-@@ -3663,6 +3664,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -3670,6 +3671,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                          viewPages[1].setVisibility(View.GONE);
                          showScrollbars(true);
                          updateCounters(false);
@@ -37,7 +37,7 @@ index 0000000..0000000 100644
                          filterTabsView.stopAnimatingIndicator();
                          checkListLoad(viewPages[0]);
                          viewPages[0].dialogsAdapter.resume();
-@@ -6874,6 +6876,30 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -6881,6 +6883,30 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          }
      }
  
@@ -68,7 +68,7 @@ index 0000000..0000000 100644
      public void inu_setActiveFilter(int filterIndex) {
          if (filterTabsView == null || viewPages == null) return;
          if (filterIndex < 0 || filterIndex >= getMessagesController().getDialogFilters().size()) return;
-@@ -6910,6 +6936,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -6917,6 +6943,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
          }
  
          viewPages[a].dialogsAdapter.setDialogsType(viewPages[a].dialogsType);
@@ -78,7 +78,7 @@ index 0000000..0000000 100644
          viewPages[a].layoutManager.scrollToPositionWithOffset(viewPages[a].dialogsType == DIALOGS_TYPE_DEFAULT && hasHiddenArchive() && viewPages[a].archivePullViewState == ARCHIVE_ITEM_STATE_HIDDEN ? 1 : 0, (int) scrollYOffset);
          checkListLoad(viewPages[a]);
      }
-@@ -7045,6 +7074,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -7052,6 +7081,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
              }
          }
          updateCounters(false);
