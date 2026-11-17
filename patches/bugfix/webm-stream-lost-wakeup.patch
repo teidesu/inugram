@@ -1,0 +1,78 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Tue, 17 Nov 2026 20:01:58 +0400
+Subject: fix animated sticker stream hanging forever when download finishes during read
+
+---
+ .../messenger/AnimatedFileDrawableStream.java | 25 ++++++++++---------
+ 1 file changed, 13 insertions(+), 12 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/AnimatedFileDrawableStream.java b/TMessagesProj/src/main/java/org/telegram/messenger/AnimatedFileDrawableStream.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/AnimatedFileDrawableStream.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/AnimatedFileDrawableStream.java
+@@ -10,7 +10,7 @@ import java.util.concurrent.CountDownLatch;
+ public class AnimatedFileDrawableStream implements FileLoadOperationStream {
+ 
+     public FileLoadOperation loadOperation;
+-    private CountDownLatch countDownLatch;
++    private volatile CountDownLatch countDownLatch;
+     private TLRPC.Document document;
+     private ImageLocation location;
+     private Object parentObject;
+@@ -63,6 +63,8 @@ public class AnimatedFileDrawableStream implements FileLoadOperationStream {
+             long availableLength = 0;
+             try {
+                 while (availableLength == 0) {
++                    CountDownLatch latch = new CountDownLatch(1);
++                    countDownLatch = latch;
+                     long[] result = loadOperation.getDownloadedLengthFromOffset(offset, readLength);
+                     availableLength = result[0];
+                     if (!finishedLoadingFile && result[1] != 0) {
+@@ -76,7 +78,6 @@ public class AnimatedFileDrawableStream implements FileLoadOperationStream {
+                                 return 0;
+                             }
+                         }
+-                        countDownLatch = new CountDownLatch(1);
+                         if (loadOperation.isPaused() || lastOffset != offset || preview) {
+                             FileLoadOperation loadOperation = FileLoader.getInstance(currentAccount).loadStreamFile(this, document, location, parentObject, offset, preview, loadingPriority);
+                             if (this.loadOperation != loadOperation) {
+@@ -95,18 +96,18 @@ public class AnimatedFileDrawableStream implements FileLoadOperationStream {
+                         if (!preview) {
+                             FileLoader.getInstance(currentAccount).setLoadingVideo(document, false, true);
+                         }
+-                        if (countDownLatch != null) {
+-                            waitingForLoad = true;
+-                            desu.inugram.helpers.media.WebmStickerDebugHelper.onReadWaitBegin(this, offset, readLength);
+-                            countDownLatch.await();
+-                            waitingForLoad = false;
+-                            desu.inugram.helpers.media.WebmStickerDebugHelper.onReadWaitEnd(this);
+-                        }
++                        waitingForLoad = true;
++                        desu.inugram.helpers.media.WebmStickerDebugHelper.onReadWaitBegin(this, offset, readLength);
++                        latch.await();
++                        waitingForLoad = false;
++                        desu.inugram.helpers.media.WebmStickerDebugHelper.onReadWaitEnd(this);
+                     }
+                 }
+                 lastOffset = offset + availableLength;
+             } catch (Exception e) {
+                 FileLog.e(e, false);
++            } finally {
++                countDownLatch = null;
+             }
+             return (int) availableLength;
+         }
+@@ -181,9 +182,9 @@ public class AnimatedFileDrawableStream implements FileLoadOperationStream {
+ 
+     @Override
+     public void newDataAvailable() {
+-        if (countDownLatch != null) {
+-            countDownLatch.countDown();
+-            countDownLatch = null;
++        CountDownLatch latch = countDownLatch;
++        if (latch != null) {
++            latch.countDown();
+         }
+     }
+ 
