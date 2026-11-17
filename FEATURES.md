@@ -159,6 +159,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - hide messages from blocked users: with a spoiler or completely - *partially ported from [Nekogram](https://github.com/Nekogram/Nekogram)*
   - "show hidden messages" in the chat menu, to see a chat as sent until it is closed
   - also hide messages from a custom list of users/channels without blocking them (via settings picker or profile menu)
+  - never applied inside the peer's own chat (their DM, or the hidden channel itself)
   - optionally also hide replies to those users
 
 ## message input / formatting
