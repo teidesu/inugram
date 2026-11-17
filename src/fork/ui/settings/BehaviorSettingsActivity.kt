@@ -55,6 +55,14 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
                 InuConfig.DISABLE_ROUNDING.value
             )
         )
+        items.add(
+            mkTwoLineCheckItem(
+                TOGGLE_RENDER_ZALGO,
+                R.string.InuRenderZalgo,
+                R.string.InuRenderZalgoInfo,
+                InuConfig.RENDER_ZALGO.value
+            )
+        )
         items.add(UItem.asShadow(null))
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.InuChatActions)))
@@ -332,6 +340,11 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
                 (view as? NotificationsCheckCell)?.isChecked = new
             }
 
+            TOGGLE_RENDER_ZALGO -> {
+                val new = InuConfig.RENDER_ZALGO.toggle()
+                (view as? NotificationsCheckCell)?.isChecked = new
+            }
+
             BUTTON_MAP_PROVIDER -> RadioItemOptions.show(
                 this, view,
                 listOf(
@@ -445,6 +458,7 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
         private val BUTTON_MAP_PREVIEW_PROVIDER = InuUtils.generateId()
         private val TOGGLE_SHOW_SECONDS = InuUtils.generateId()
         private val TOGGLE_DISABLE_ROUNDING = InuUtils.generateId()
+        private val TOGGLE_RENDER_ZALGO = InuUtils.generateId()
         private val TOGGLE_ACCOUNT_SWITCH_SHORTCUT = InuUtils.generateId()
 
         private fun performanceClassLabel(value: Int): String = when (value) {
@@ -486,6 +500,7 @@ class BehaviorSettingsActivity : SettingsPageActivity() {
                 SearchRegistry.Entry("map-preview-provider", R.string.InuMapPreviewProvider, BUTTON_MAP_PREVIEW_PROVIDER),
                 SearchRegistry.Entry("show-seconds", R.string.InuShowSeconds, TOGGLE_SHOW_SECONDS),
                 SearchRegistry.Entry("disable-rounding", R.string.InuDisableRounding, TOGGLE_DISABLE_ROUNDING),
+                SearchRegistry.Entry("render-zalgo", R.string.InuRenderZalgo, TOGGLE_RENDER_ZALGO),
                 SearchRegistry.Entry("account-switch-shortcut", R.string.InuAccountSwitchShortcut, TOGGLE_ACCOUNT_SWITCH_SHORTCUT),
             ),
         )

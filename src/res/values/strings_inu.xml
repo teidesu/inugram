@@ -56,6 +56,8 @@
     <string name="InuShowSeconds">Show seconds</string>
     <string name="InuDisableRounding">Disable number rounding</string>
     <string name="InuDisableRoundingInfo">1.2K -> 1,234</string>
+    <string name="InuRenderZalgo">Render zalgo text</string>
+    <string name="InuRenderZalgoInfo">Draws stacked combining marks in long messages instead of replacing them. Only absurd stacks (over 512 marks on one character) are cut</string>
     <string name="InuMaterial3">Material Design 3</string>
     <string name="InuMaterial3Switches">Switches</string>
     <string name="InuMaterial3Sliders">Sliders</string>

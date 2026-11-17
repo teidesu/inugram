@@ -1,0 +1,24 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Sam Sepi0l <sepiol026@gmail.com>
+Date: Tue, 17 Nov 2026 08:50:26 +0300
+Subject: render zalgo text in long messages when enabled
+
+---
+ .../src/main/java/org/telegram/messenger/MessageObject.java   | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
+@@ -6364,7 +6364,9 @@ public class MessageObject {
+             } else {
+                 if (messageOwner.message != null) {
+                     try {
+-                        if (messageOwner.message.length() > 200) {
++                        if (desu.inugram.InuConfig.RENDER_ZALGO.getValue()) {
++                            messageText = desu.inugram.core.text.CombiningMarkGuard.prepare(messageOwner.message);
++                        } else if (messageOwner.message.length() > 200) {
+                             messageText = AndroidUtilities.BAD_CHARS_MESSAGE_LONG_PATTERN.matcher(messageOwner.message).replaceAll("\u200C");
+                         } else {
+                             messageText = AndroidUtilities.BAD_CHARS_MESSAGE_PATTERN.matcher(messageOwner.message).replaceAll("\u200C");

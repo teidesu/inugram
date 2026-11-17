@@ -56,6 +56,8 @@
     <string name="InuShowSeconds">Saniyeleri göster</string>
     <string name="InuDisableRounding">Sayı yuvarlamayı devre dışı bırak</string>
     <string name="InuDisableRoundingInfo">1.2K -> 1.234</string>
+    <string name="InuRenderZalgo">Zalgo metnini göster</string>
+    <string name="InuRenderZalgoInfo">Uzun mesajlardaki birleştirme işaretlerini değiştirmek yerine çizer. Yalnızca aşırı yığınlar (karakter başına 512\'den fazla işaret) kesilir</string>
     <string name="InuMaterial3">Material Design 3</string>
     <string name="InuMaterial3Switches">Anahtarlar</string>
     <string name="InuMaterial3Sliders">Kaydırıcılar</string>

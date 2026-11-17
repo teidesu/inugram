@@ -47,6 +47,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
   - profile action buttons
 - 🐶 toggle to replace profile photo bottom blur with a plain gradient fade
 - disable number rounding
+- 🐶 render zalgo text: keeps stacked combining marks in long messages instead of replacing them (stock strips them past 200 characters); only a run of over 512 marks on one character is cut, length-preserving so entities stay valid
 - export/import settings to/from json file
 - cloud sync of settings via web app storage api
 - search and deeplinks for fork settings

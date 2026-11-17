@@ -49,6 +49,8 @@
     <string name="InuShowSeconds">Показывать секунды</string>
     <string name="InuDisableRounding">Отключить округление чисел</string>
     <string name="InuDisableRoundingInfo">1,2K → 1 234</string>
+    <string name="InuRenderZalgo">Отображать zalgo-текст</string>
+    <string name="InuRenderZalgoInfo">Отображает наложенные комбинируемые символы в длинных сообщениях вместо их замены. Обрезаются только нагромождения более 512 символов на знак</string>
     <string name="InuShowAllRecentStickers">Показывать все недавние стикеры</string>
     <string name="InuHideKeyboardOnScroll">Скрывать клавиатуру при прокрутке</string>
     <string name="InuDisablePullToNext">Отключить переход к следующему каналу</string>
