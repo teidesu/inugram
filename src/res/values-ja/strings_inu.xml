@@ -49,6 +49,8 @@
     <string name="InuShowSeconds">秒を表示</string>
     <string name="InuDisableRounding">数値の丸めを無効化</string>
     <string name="InuDisableRoundingInfo">1.2K → 1,234</string>
+    <string name="InuRenderZalgo">Zalgoテキストを描画</string>
+    <string name="InuRenderZalgoInfo">長いメッセージでも結合文字を置換せずそのまま表示します。1文字あたり512個を超える極端な結合のみ制限されます</string>
     <string name="InuShowAllRecentStickers">最近のスタンプをすべて表示</string>
     <string name="InuHideKeyboardOnScroll">スクロール時にキーボードを隠す</string>
     <string name="InuDisablePullToNext">次のチャンネルへの引き下げを無効化</string>

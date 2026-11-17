@@ -126,6 +126,9 @@ object InuConfig {
     val DISABLE_ROUNDING = BoolItem("disable_rounding", false)
 
     @JvmField
+    val RENDER_ZALGO = BoolItem("render_zalgo", false)
+
+    @JvmField
     val MATERIAL3_SWITCHES = BoolItem("material3_switches", false)
 
     @JvmField

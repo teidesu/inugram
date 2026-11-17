@@ -56,6 +56,8 @@
     <string name="InuShowSeconds">Показувати секунди</string>
     <string name="InuDisableRounding">Вимкнути округлення чисел</string>
     <string name="InuDisableRoundingInfo">1,2K -&gt; 1 234</string>
+    <string name="InuRenderZalgo">Відображати zalgo-текст</string>
+    <string name="InuRenderZalgoInfo">Відображає накладені комбіновані символи в довгих повідомленнях замість їх заміни. Обрізаються лише нагромадження понад 512 символів на знак</string>
     <string name="InuMaterial3">Material Design 3</string>
     <string name="InuMaterial3Switches">Перемикачі</string>
     <string name="InuMaterial3Sliders">Повзунки</string>

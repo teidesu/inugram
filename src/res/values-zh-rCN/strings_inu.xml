@@ -49,6 +49,8 @@
     <string name="InuShowSeconds">显示秒数</string>
     <string name="InuDisableRounding">禁用数字取整</string>
     <string name="InuDisableRoundingInfo">1.2K → 1,234</string>
+    <string name="InuRenderZalgo">渲染 Zalgo 文本</string>
+    <string name="InuRenderZalgoInfo">在长消息中绘制叠加的组合字符而不是替换它们。仅裁剪单个字符超过 512 个标记的异常堆叠</string>
     <string name="InuShowAllRecentStickers">显示全部最近贴纸</string>
     <string name="InuHideKeyboardOnScroll">滚动时隐藏键盘</string>
     <string name="InuDisablePullToNext">禁用下拉到下一个频道</string>
