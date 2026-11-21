@@ -23,7 +23,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - override Telegram's detected device performance class
 - 🐶 disable animated avatars in chats independently of video autoplay from Power Saving → Effects in chats
 - 🐶 customizable animation speed multiplier (incl. instant)
-- estimated registration date in profile - *ported & datapoints from [NagramX](https://github.com/risin42/NagramX)*
+- estimated registration date in profile - *ported from [NagramX](https://github.com/risin42/NagramX), datapoints from [telegram-id-age-research](https://github.com/sepiol026-wq/telegram-id-age-research)*
 - join/creation date in group & channel profiles
 - show linked channel in discussion group profile similar to personal channel
 - hide own phone number from ui
