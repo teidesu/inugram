@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Sun, 22 Nov 2026 01:14:48 +0400
+Subject: fix dialogs list not scrolling when dragging right after long-tap select
+
+---
+ .../java/org/telegram/ui/Components/RecyclerListView.java   | 6 +++++-
+ .../src/main/java/org/telegram/ui/DialogsActivity.java      | 5 +++++
+ 2 files changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java
+@@ -278,6 +278,10 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+ 
+         default void onLongClickRelease() {
+         }
++
++        default boolean inu_consumeScroll() {
++            return true;
++        }
+     }
+ 
+     public interface OnInterceptTouchListener {
+@@ -2682,7 +2686,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+ 
+     @Override
+     public boolean dispatchNestedPreScroll(int dx, int dy, int[] consumed, int[] offsetInWindow, int type) {
+-        if (longPressCalled) {
++        if (longPressCalled && (onItemLongClickListenerExtended == null || onItemLongClickListenerExtended.inu_consumeScroll())) {
+             if (onItemLongClickListenerExtended != null) {
+                 onItemLongClickListenerExtended.onMove(dx, dy);
+             }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+@@ -4522,6 +4522,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+                         finishPreviewFragment();
+                     }
+                 }
++
++                @Override
++                public boolean inu_consumeScroll() {
++                    return parentLayout != null && parentLayout.isInPreviewMode();
++                }
+             });
+             viewPage.swipeController = new SwipeController(viewPage);
+             viewPage.recyclerItemsEnterAnimator = new RecyclerItemsEnterAnimator(viewPage.listView, false);
