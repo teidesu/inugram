@@ -21,7 +21,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/CalendarActivity.java b
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/CalendarActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/CalendarActivity.java
-@@ -439,6 +439,7 @@ public class CalendarActivity extends BaseFragment implements NotificationCenter
+@@ -438,6 +438,7 @@ public class CalendarActivity extends BaseFragment implements NotificationCenter
                  AlertsCreator.createClearDaysDialogAlert(this, lastDaysSelected, getMessagesController().getUser(dialogId), null, false, new MessagesStorage.BooleanCallback() {
                      @Override
                      public void run(boolean forAll) {
@@ -29,7 +29,7 @@ index 0000000..0000000 100644
                          finishFragment();
                          if (parentLayout != null && parentLayout.getFragmentStack().size() >= 2) {
                              BaseFragment fragment = parentLayout.getFragmentStack().get(parentLayout.getFragmentStack().size() - 2);
-@@ -448,6 +449,7 @@ public class CalendarActivity extends BaseFragment implements NotificationCenter
+@@ -447,6 +448,7 @@ public class CalendarActivity extends BaseFragment implements NotificationCenter
                          } else if (chatActivity != null) {
                              chatActivity.deleteHistory(dateSelectedStart, dateSelectedEnd + 86400, forAll);
                          }
@@ -37,7 +37,7 @@ index 0000000..0000000 100644
                      }
                  }, null);
              });
-@@ -1073,8 +1075,10 @@ public class CalendarActivity extends BaseFragment implements NotificationCenter
+@@ -1077,8 +1079,10 @@ public class CalendarActivity extends BaseFragment implements NotificationCenter
                                          AlertsCreator.createClearDaysDialogAlert(CalendarActivity.this, 1, getMessagesController().getUser(dialogId), null, false, new MessagesStorage.BooleanCallback() {
                                              @Override
                                              public void run(boolean forAll) {

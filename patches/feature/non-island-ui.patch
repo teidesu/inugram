@@ -9,6 +9,7 @@ Subject: non-island ui in various parts of the app
  .../telegram/ui/ActionBar/BaseFragment.java   |   6 +-
  .../ui/ActionBar/SimpleActionBar.java         |  81 +++++--
  .../ui/ActionBar/SimpleActionBarMenu.java     |  14 +-
+ .../org/telegram/ui/CalendarActivity.java     |  14 +-
  .../java/org/telegram/ui/CallLogActivity.java |  20 +-
  .../telegram/ui/ChannelAdminLogActivity.java  |  25 ++-
  .../java/org/telegram/ui/ChatActivity.java    | 197 ++++++++++++------
@@ -56,7 +57,7 @@ Subject: non-island ui in various parts of the app
  .../java/org/telegram/ui/iv/RichEditor.java   |   4 +-
  .../utils/glass/BaseFragmentSimpleGlass.java  |   6 +-
  .../utils/glass/GlassCaptureSourceCanvas.java |  52 +++--
- 52 files changed, 1116 insertions(+), 370 deletions(-)
+ 53 files changed, 1127 insertions(+), 373 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -474,6 +475,59 @@ index 0000000..0000000 100644
          }
          addView(item, index, lp);
          item.setOnClickListener(v -> {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/CalendarActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/CalendarActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/CalendarActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/CalendarActivity.java
+@@ -354,7 +354,6 @@ public class CalendarActivity extends BaseFragment implements NotificationCenter
+             .setColorProvider(BlurredBackgroundProviderImpl.simpleActionBar(resourceProvider))
+             .setPadding(dp(9.66f))
+             .setRadius(dp(18)));
+-        calendarSignatureView.setTranslationY(BaseFragmentSimpleGlass.getPillGlassTop(0) - dp(9.66f));
+ 
+         simpleActionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
+             @Override
+@@ -477,7 +476,11 @@ public class CalendarActivity extends BaseFragment implements NotificationCenter
+     @Override
+     protected void onViewCreated(View view) {
+         super.onViewCreated(view);
+-        listTopOverlay.setBackground(simpleActionBar.getBackground());
++        if (desu.inugram.helpers.theme.NonIslandHelper.applyClassicHeaderBackground(listTopOverlay, listView, resourceProvider, getBaseSimpleGlass())) {
++            calendarSignatureView.setBackground(null);
++        } else {
++            listTopOverlay.setBackground(simpleActionBar.getBackground());
++        }
+         simpleActionBar.setBackground(null);
+ 
+         checkUi_insets(mSystemInsets.top, mSystemInsets.bottom);
+@@ -555,6 +558,7 @@ public class CalendarActivity extends BaseFragment implements NotificationCenter
+     private void checkUi_insets(int top, int bottom) {
+         final int buttonSpace = bottomBar != null ? dp(BOTTOM_BUTTON_HEIGHT + BOTTOM_BUTTON_MARGIN) : 0;
+         BaseFragmentSimpleGlass.setListViewParams(listView, top, bottom, ActionBar.getCurrentActionBarHeight() + dp(42), buttonSpace);
++        calendarSignatureView.setTranslationY(desu.inugram.helpers.theme.NonIslandHelper.headers() ? top + ActionBar.getCurrentActionBarHeight() - dp(6) : BaseFragmentSimpleGlass.getPillGlassTop(top) - dp(9.66f));
+         if (bottomBar != null) {
+             bottomBar.setTranslationY(-bottom - dp(BOTTOM_BUTTON_MARGIN - BOTTOM_BUTTON_GLASS_PADDING));
+         }
+@@ -1781,7 +1785,6 @@ public class CalendarActivity extends BaseFragment implements NotificationCenter
+         ViewGroup.LayoutParams layoutParams = listTopOverlay.getLayoutParams();
+         layoutParams.height = top + ActionBar.getCurrentActionBarHeight() + dp(44);
+ 
+-        calendarSignatureView.setTranslationY(BaseFragmentSimpleGlass.getPillGlassTop(top) - dp(9.66f));
+         checkUi_insets(top, bottom);
+     }
+ 
+@@ -1790,6 +1793,11 @@ public class CalendarActivity extends BaseFragment implements NotificationCenter
+         return true;
+     }
+ 
++    @Override
++    protected boolean useFadeDrawableForActionBar() {
++        return !desu.inugram.helpers.theme.NonIslandHelper.headers();
++    }
++
+     @Nullable
+     @Override
+     protected RecyclerListView getListViewForSimpleGlass() {
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/CallLogActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/CallLogActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/CallLogActivity.java
