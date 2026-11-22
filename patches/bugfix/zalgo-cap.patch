@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Mon, 23 Nov 2026 03:39:25 +0400
+Subject: cap combining marks at 2 per character like desktop
+
+---
+ .../main/java/org/telegram/messenger/MessageObject.java   | 8 ++------
+ 1 file changed, 2 insertions(+), 6 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
+@@ -6364,11 +6364,7 @@ public class MessageObject {
+             } else {
+                 if (messageOwner.message != null) {
+                     try {
+-                        if (messageOwner.message.length() > 200) {
+-                            messageText = AndroidUtilities.BAD_CHARS_MESSAGE_LONG_PATTERN.matcher(messageOwner.message).replaceAll("\u200C");
+-                        } else {
+-                            messageText = AndroidUtilities.BAD_CHARS_MESSAGE_PATTERN.matcher(messageOwner.message).replaceAll("\u200C");
+-                        }
++                        messageText = desu.inugram.helpers.chat.ChatHelper.sanitizeMessageText(messageOwner.message);
+                     } catch (Throwable e) {
+                         messageText = messageOwner.message;
+                     }
+@@ -7965,7 +7961,7 @@ public class MessageObject {
+             captionTranslated = false;
+         }
+         if (!isMediaEmpty() && !(getMedia(messageOwner) instanceof TLRPC.TL_messageMediaGame) && !TextUtils.isEmpty(text)) {
+-            caption = Emoji.replaceEmoji(text, Theme.chat_msgTextPaint.getFontMetricsInt(), false);
++            caption = Emoji.replaceEmoji(desu.inugram.helpers.chat.ChatHelper.sanitizeMessageText(text), Theme.chat_msgTextPaint.getFontMetricsInt(), false);
+             caption = replaceAnimatedEmoji(caption, entities, Theme.chat_msgTextPaint.getFontMetricsInt(), false);
+ 
+             boolean hasEntities;

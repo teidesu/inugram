@@ -2103,6 +2103,30 @@ object ChatHelper {
     fun overridesStoriesTitle(): Boolean =
         InuConfig.DIALOGS_TITLE_TEXT.value != InuConfig.DialogsTitleTextItem.INUGRAM && !ParanoiaHelper.isDisguised()
 
+    @JvmStatic
+    fun sanitizeMessageText(text: String): String {
+        var out: CharArray? = null
+        var allowMarks = false
+        var marks = 0
+        var i = 0
+        while (i < text.length) {
+            val cp = text.codePointAt(i)
+            val width = Character.charCount(cp)
+            val type = Character.getType(cp).toByte()
+            val isMark = type == Character.NON_SPACING_MARK || cp == 0x0674 || cp in 0xFC5E..0xFC63
+            val drop = if (isMark) !allowMarks || ++marks > 2 else cp == 0x2066 || cp == 0x2067
+            if (!isMark) marks = 0
+            allowMarks = !drop && (isMark || cp > 32 && !Character.isWhitespace(cp) && type != Character.CONTROL &&
+                type != Character.FORMAT && type != Character.PRIVATE_USE && type != Character.SURROGATE && type != Character.UNASSIGNED)
+            if (drop) {
+                if (out == null) out = text.toCharArray()
+                out.fill('\u200C', i, i + width)
+            }
+            i += width
+        }
+        return if (out == null) text else String(out)
+    }
+
     private fun getFirstNameOrDefault(user: TLRPC.User?): String {
         if (user == null) return LocaleController.getString(R.string.AppName)
         val name = UserObject.getFirstName(user)

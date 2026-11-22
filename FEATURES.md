@@ -467,3 +467,4 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - inline bot restriction checked against the stickers permission instead of the inline one: inline results were blocked in chats that only banned stickers, and offered (then failed with `CHAT_SEND_INLINE_FORBIDDEN`) in chats that only banned inline bots
 - album caption quotes: wrong width and clipped expand/collapse in compact mode, dead tap zone on the right, missing press animation when tapped right of the first image (stock bug: each album cell keeps its own caption copy, only the left one draws it)
 - widget images: hostile PNG chunk lengths no longer crash or hang the app, and deflate bombs are capped at the declared image size
+- zalgo capped at 2 combining marks per character in messages and captions, like desktop (stock stripped every accent from messages over 200 chars and left captions uncapped)
