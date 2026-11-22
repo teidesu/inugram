@@ -41,7 +41,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesControll
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
-@@ -23274,7 +23274,11 @@ public class MessagesController extends BaseController implements NotificationCe
+@@ -23277,7 +23277,11 @@ public class MessagesController extends BaseController implements NotificationCe
              loadMessagesInternal(dialogId, 0, true, count, finalMessageId, 0, true, 0, classGuid, 2, 0, 0, 0, -1, 0, 0, 0, false, 0, true, false, false, null, 0L);
          }
  

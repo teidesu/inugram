@@ -7,7 +7,7 @@ Subject: paranoia mode (hide chats, accounts, disguise as stock app)
  .../telegram/messenger/AppGlobalConfig.java   | 14 +++++++-
  .../messenger/ContactsController.java         |  3 ++
  .../messenger/MediaDataController.java        |  3 ++
- .../messenger/MessagesController.java         | 29 +++++++++++-----
+ .../messenger/MessagesController.java         | 34 +++++++++++++------
  .../telegram/messenger/MessagesStorage.java   |  7 ++++
  .../messenger/NotificationsController.java    |  3 ++
  .../ui/Adapters/DialogsSearchAdapter.java     |  7 +++-
@@ -25,9 +25,9 @@ Subject: paranoia mode (hide chats, accounts, disguise as stock app)
  .../telegram/ui/Stars/BotStarsActivity.java   |  1 +
  .../telegram/ui/Stars/BotStarsController.java |  4 +--
  .../telegram/ui/Stars/StarsController.java    |  3 ++
- .../ui/Stories/StoriesController.java         | 33 +++++++++++++++++++
+ .../ui/Stories/StoriesController.java         | 33 ++++++++++++++++++
  .../org/telegram/ui/Wallet/GramWallet.java    |  2 +-
- 23 files changed, 129 insertions(+), 29 deletions(-)
+ 23 files changed, 133 insertions(+), 30 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/AppGlobalConfig.java b/TMessagesProj/src/main/java/org/telegram/messenger/AppGlobalConfig.java
 index 0000000..0000000 100644
@@ -199,6 +199,15 @@ index 0000000..0000000 100644
      }
  
      public void putDialogsEndReachedAfterRegistration() {
+@@ -9695,7 +9703,7 @@ public class MessagesController extends BaseController implements NotificationCe
+     }
+ 
+     public boolean hasHiddenArchive() {
+-        return SharedConfig.archiveHidden && dialogs_dict.get(DialogObject.makeFolderDialogId(1)) != null;
++        return SharedConfig.archiveHidden && dialogs_dict.get(DialogObject.makeFolderDialogId(1)) != null && !desu.inugram.helpers.security.ParanoiaHelper.hidesArchiveFolder(currentAccount, hasArchivedChats);
+     }
+ 
+ 
 @@ -10516,7 +10524,7 @@ public class MessagesController extends BaseController implements NotificationCe
                      StarsController.getInstance(currentAccount).invalidateProfileGifts(info);
  
@@ -241,6 +250,16 @@ index 0000000..0000000 100644
              if (d instanceof TLRPC.TL_dialog) {
                  ArrayList<MessageObject> messageObjects = dialogMessage.get(d.id);
                  if (messageObjects != null) {
+@@ -22671,6 +22682,9 @@ public class MessagesController extends BaseController implements NotificationCe
+         }
+ 
+         hasArchivedChats = dialogsByFolder.get(1, null) != null;
++        if (desu.inugram.helpers.security.ParanoiaHelper.hidesArchiveFolder(currentAccount, hasArchivedChats)) {
++            getDialogs(0).remove(dialogs_dict.get(DialogObject.makeFolderDialogId(1)));
++        }
+     }
+ 
+     private boolean addDialogToItsCommunity(TLRPC.Dialog dialog) {
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
