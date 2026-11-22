@@ -265,7 +265,7 @@ index 0000000..0000000 100644
              @Override
              public int getStartForFixGap() {
                  int padding = (int) chatListViewPaddingTop;
-@@ -13035,7 +13043,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -13042,7 +13050,7 @@ public class ChatActivity extends BaseFragment implements
                  groupedMessages = null;
              }
          }
@@ -274,7 +274,7 @@ index 0000000..0000000 100644
      }
  
      public void jumpToDate(int date) {
-@@ -16869,7 +16877,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -16876,7 +16884,7 @@ public class ChatActivity extends BaseFragment implements
                  keyboardOffset = chatActivityEnterView.getEmojiPadding();
              }
  
@@ -283,7 +283,7 @@ index 0000000..0000000 100644
  
              final float visibleTop = getServiceTop(view);
              final int visibleBackgroundHeight = getServiceHeight(view);
-@@ -17016,6 +17024,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -17023,6 +17031,8 @@ public class ChatActivity extends BaseFragment implements
                  }
              } else if (view instanceof BotHelpCell) {
                  view.invalidate();
@@ -292,7 +292,7 @@ index 0000000..0000000 100644
              } else if (view instanceof ChatLoadingCell) {
                  ((ChatLoadingCell) view).setVisiblePart(visibleTop, visibleBackgroundHeight);
              } else if (view instanceof UserInfoCell) {
-@@ -23825,6 +23835,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -23834,6 +23844,7 @@ public class ChatActivity extends BaseFragment implements
          } else if (id == NotificationCenter.screenshotTook) {
              updateInformationForScreenshotDetector();
          } else if (id == NotificationCenter.blockedUsersDidLoad) {
@@ -300,7 +300,7 @@ index 0000000..0000000 100644
              if (currentUser != null && !UserObject.isReplyUser(currentUser)) {
                  boolean oldValue = userBlocked;
                  userBlocked = getMessagesController().blockePeers.indexOfKey(currentUser.id) >= 0;
-@@ -26718,7 +26729,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -26727,7 +26738,7 @@ public class ChatActivity extends BaseFragment implements
                          newMentionsCount++;
                      }
                  }
@@ -309,7 +309,7 @@ index 0000000..0000000 100644
                      newUnreadMessageCount++;
                  }
                  if (obj.type == 10 || obj.type == MessageObject.TYPE_ACTION_PHOTO) {
-@@ -27093,7 +27104,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -27102,7 +27113,7 @@ public class ChatActivity extends BaseFragment implements
                          newMentionsCount++;
                      }
                  }
@@ -318,7 +318,7 @@ index 0000000..0000000 100644
                      newUnreadMessageCount++;
                  }
                  if (obj.type == 10 || obj.type == MessageObject.TYPE_ACTION_PHOTO) {
-@@ -38038,6 +38049,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -38047,6 +38058,8 @@ public class ChatActivity extends BaseFragment implements
              }
          }
  
@@ -327,7 +327,7 @@ index 0000000..0000000 100644
          public boolean isFrozen;
          public ArrayList<MessageObject> frozenMessages = new ArrayList<>();
  
-@@ -38111,6 +38124,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -38120,6 +38133,7 @@ public class ChatActivity extends BaseFragment implements
              } else {
                  messages = ChatActivity.this.messages;
              }
@@ -335,7 +335,7 @@ index 0000000..0000000 100644
              if (chatMode == MODE_SAVED && isInsideContainer) {
                  hintRow = rowCount++;
              } else {
-@@ -38634,6 +38648,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -38643,6 +38657,8 @@ public class ChatActivity extends BaseFragment implements
                  ChatMessageUnsupportedCell cell = new ChatMessageUnsupportedCell(mContext, themeDelegate);
                  cell.setDelegate(getChatMessageCellDelegate());
                  view = cell;
@@ -344,7 +344,7 @@ index 0000000..0000000 100644
              }
              view.setLayoutParams(new RecyclerView.LayoutParams(RecyclerView.LayoutParams.MATCH_PARENT, RecyclerView.LayoutParams.WRAP_CONTENT));
              return new RecyclerListView.Holder(view);
-@@ -38713,7 +38729,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -38722,7 +38738,9 @@ public class ChatActivity extends BaseFragment implements
                  MessageObject message = messages.get(position - messagesStartRow);
                  View view = holder.itemView;
  
@@ -355,7 +355,7 @@ index 0000000..0000000 100644
                      final ChatMessageCell messageCell = (ChatMessageCell) view;
                      MessageObject.GroupedMessages groupedMessages = getValidGroupedMessage(message);
                      messageCell.isChat = currentChat != null || UserObject.isUserSelf(currentUser) || UserObject.isReplyUser(currentUser) || (chatMode == MODE_SEARCH);
-@@ -39265,7 +39283,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -39274,7 +39292,7 @@ public class ChatActivity extends BaseFragment implements
                  } else {
                      messages = ChatActivity.this.messages;
                  }

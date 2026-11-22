@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -12950,6 +12950,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -12957,6 +12957,7 @@ public class ChatActivity extends BaseFragment implements
          args.putInt("hasPoll", hasPoll);
          args.putBoolean("hasInvoice", hasInvoice);
          args.putBoolean("canSelectTopics", true);
@@ -20,7 +20,7 @@ index 0000000..0000000 100644
          DialogsActivity fragment = new DialogsActivity(args);
          fragment.setDelegate(ChatActivity.this);
          presentFragment(fragment);
-@@ -34648,6 +34649,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -34657,6 +34658,7 @@ public class ChatActivity extends BaseFragment implements
                  }
                  args.putBoolean("hasInvoice", forwardingMessage.isInvoice());
                  args.putBoolean("canSelectTopics", true);
@@ -28,7 +28,7 @@ index 0000000..0000000 100644
                  DialogsActivity fragment = new DialogsActivity(args);
                  fragment.setDelegate(this);
                  presentFragment(fragment);
-@@ -35714,8 +35716,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -35723,8 +35725,9 @@ public class ChatActivity extends BaseFragment implements
                  }
              }
          }
@@ -39,7 +39,7 @@ index 0000000..0000000 100644
              if (chat != null) {
                  for (int i = 0; i < fmessages.size(); i++) {
                      int sendError = SendMessagesHelper.canSendMessageToChat(chat, fmessages.get(i));
-@@ -35727,8 +35730,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -35736,8 +35739,8 @@ public class ChatActivity extends BaseFragment implements
              }
          }
  
@@ -50,7 +50,7 @@ index 0000000..0000000 100644
                  if (fragment.resetDelegate) {
                      fragment.setDelegate(null);
                  }
-@@ -35749,7 +35752,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -35758,7 +35761,9 @@ public class ChatActivity extends BaseFragment implements
  
                  messagePreviewParams = null;
                  hideFieldPanel(false);
@@ -61,7 +61,7 @@ index 0000000..0000000 100644
                      final long did = dids.get(a).dialogId;
                      final Long price = prices == null ? (Long) 0L : prices.get(did);
                      if (message != null) {
-@@ -35765,7 +35770,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -35774,7 +35779,7 @@ public class ChatActivity extends BaseFragment implements
                  ChatHelper.clearForwardFlags();
                  fragment.finishFragment();
                  createUndoView();

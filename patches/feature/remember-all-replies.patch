@@ -4,8 +4,11 @@ Date: Fri, 10 Apr 2026 05:17:27 +0300
 Subject: remember all clicked replies when jumping back via the down button in chat
 
 ---
- .../java/org/telegram/ui/ChatActivity.java     | 18 ++++++++++++++++++
- 1 file changed, 18 insertions(+)
+ .../java/org/telegram/ui/ChatActivity.java    | 29 +++++++++++++++++++
+ .../ChatActivityBlurredRoundButton.java       |  8 +++++
+ ...hatActivityBlurredRoundPageDownButton.java |  4 +++
+ ...ChatActivitySideControlsButtonsLayout.java | 15 +++++++++-
+ 4 files changed, 55 insertions(+), 1 deletion(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 index 0000000..0000000 100644
@@ -27,50 +30,68 @@ index 0000000..0000000 100644
      private int createUnreadMessageAfterId;
      private boolean createUnreadMessageAfterIdLoading;
      private boolean loadingFromOldPosition;
-@@ -11172,6 +11174,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -11172,6 +11174,12 @@ public class ChatActivity extends BaseFragment implements
          final Runnable inCaseLoading = () -> {
              sideControlsButtonsLayout.setButtonLoading(ChatActivitySideControlsButtonsLayout.BUTTON_PAGE_DOWN, true, true);
          };
 +        if (desu.inugram.InuConfig.CHAT_REMEMBER_ALL_REPLIES.getValue() && !inu_replyStack.isEmpty()) {
 +            int[] top = inu_replyStack.pop();
++            inu_updatePageDownIcon();
 +            scrollToMessageId(top[0], 0, true, top[1], true, 0, null, inCaseLoading);
 +            return;
 +        }
          if (createUnreadMessageAfterId != 0) {
              scrollToMessageId(createUnreadMessageAfterId, 0, false, returnToLoadIndex, true, 0, null, inCaseLoading);
          } else if (returnToMessageId > 0) {
-@@ -17830,6 +17837,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -11186,6 +11194,12 @@ public class ChatActivity extends BaseFragment implements
+         }
+     }
+ 
++    private void inu_updatePageDownIcon() {
++        if (sideControlsButtonsLayout != null) {
++            sideControlsButtonsLayout.inu_setButtonIcon(ChatActivitySideControlsButtonsLayout.BUTTON_PAGE_DOWN, inu_replyStack.isEmpty() ? R.drawable.pagedown : R.drawable.inu_tabler_corner_down_left);
++        }
++    }
++
+     public ActionBarMenuItem getHeaderItem() {
+         return headerItem;
+     }
+@@ -17830,6 +17844,10 @@ public class ChatActivity extends BaseFragment implements
                  showFloatingTopicView(false);
              }
          }
 +        if (desu.inugram.InuConfig.CHAT_REMEMBER_ALL_REPLIES.getValue() && fromMessageId != 0 && (inu_replyStack.isEmpty() || inu_replyStack.peek()[0] != fromMessageId)) {
 +            inu_replyStack.push(new int[]{fromMessageId, loadIndex});
++            inu_updatePageDownIcon();
 +        }
          returnToMessageId = fromMessageId;
          returnToLoadIndex = loadIndex;
          needSelectFromMessageId = select;
-@@ -17867,6 +17877,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -17867,6 +17885,8 @@ public class ChatActivity extends BaseFragment implements
          } else {
              returnToMessageId = 0;
              newUnreadMessageCount = 0;
 +            inu_replyStack.clear();
++            inu_updatePageDownIcon();
          }
  
          sideControlsButtonsLayout.showButton(ChatActivitySideControlsButtonsLayout.BUTTON_PAGE_DOWN, show, animated);
-@@ -47800,6 +47811,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -47800,6 +47820,8 @@ public class ChatActivity extends BaseFragment implements
      }
  
      private void goToNextOrPrevSearchMessage(boolean searchUp) {
 +        inu_replyStack.clear();
++        inu_updatePageDownIcon();
          if (chatMode == MODE_SEARCH) {
              HashtagSearchController.getInstance(currentAccount).jumpToMessage(classGuid, hashtagSearchSelectedIndex + (searchUp ? 1 : -1), searchType);
          } else {
-@@ -47860,6 +47872,12 @@ public class ChatActivity extends BaseFragment implements
+@@ -47860,6 +47882,13 @@ public class ChatActivity extends BaseFragment implements
      }
  
      private boolean onSideControlButtonOnLongClick(int buttonId, View view) {
 +        if (buttonId == ChatActivitySideControlsButtonsLayout.BUTTON_PAGE_DOWN && desu.inugram.InuConfig.CHAT_REMEMBER_ALL_REPLIES.getValue()) {
 +            inu_replyStack.clear();
++            inu_updatePageDownIcon();
 +            returnToMessageId = 0;
 +            scrollToLastMessage(true, true, null);
 +            return true;
@@ -78,3 +99,77 @@ index 0000000..0000000 100644
          final Runnable onRead;
          final int type;
          if (buttonId == ChatActivitySideControlsButtonsLayout.BUTTON_MENTION) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/buttons/ChatActivityBlurredRoundButton.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/buttons/ChatActivityBlurredRoundButton.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/buttons/ChatActivityBlurredRoundButton.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/buttons/ChatActivityBlurredRoundButton.java
+@@ -86,6 +86,14 @@ public class ChatActivityBlurredRoundButton extends FrameLayout implements Facto
+         imageView.setImageResource(resId);
+     }
+ 
++    public void inu_setIconAnimated(@DrawableRes int resId) {
++        if (imageView == null) {
++            setIcon(resId);
++        } else {
++            desu.inugram.ui.CrossfadeScaleDrawable.swap(imageView, resId);
++        }
++    }
++
+     public void setIconPadding(int paddingTop) {
+         if (imageView != null) {
+             imageView.setPadding(0, paddingTop, 0, 0);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/buttons/ChatActivityBlurredRoundPageDownButton.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/buttons/ChatActivityBlurredRoundPageDownButton.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/buttons/ChatActivityBlurredRoundPageDownButton.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/buttons/ChatActivityBlurredRoundPageDownButton.java
+@@ -75,6 +75,10 @@ public class ChatActivityBlurredRoundPageDownButton extends FrameLayout {
+         buttonView.setEnabled(enabled, animated);
+     }
+ 
++    public void inu_setIconAnimated(@DrawableRes int resId) {
++        buttonView.inu_setIconAnimated(resId);
++    }
++
+     public void reverseIconByY() {
+         buttonView.reverseIconByY();
+     }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/layouts/ChatActivitySideControlsButtonsLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/layouts/ChatActivitySideControlsButtonsLayout.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/layouts/ChatActivitySideControlsButtonsLayout.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/chat/layouts/ChatActivitySideControlsButtonsLayout.java
+@@ -127,6 +127,18 @@ public class ChatActivitySideControlsButtonsLayout extends FrameLayout implement
+         }
+     }
+ 
++    public void inu_setButtonIcon(final int buttonId, @DrawableRes int icon) {
++        final ButtonPendingState pending = getOrCreatePendingState(buttonId);
++        if ((pending.inu_icon != 0 ? pending.inu_icon : buttonIcons[buttonId]) == icon) {
++            return;
++        }
++        pending.inu_icon = icon;
++        final ButtonHolder holder = buttonHolders[buttonId];
++        if (holder != null) {
++            holder.button.inu_setIconAnimated(icon);
++        }
++    }
++
+     public void setButtonLoading(final int buttonId, boolean loading, boolean animated) {
+         getOrCreatePendingState(buttonId).loading = loading;
+         final ButtonHolder holder = buttonHolders[buttonId];
+@@ -234,7 +246,7 @@ public class ChatActivitySideControlsButtonsLayout extends FrameLayout implement
+                 resourcesProvider,
+                 blurredBackgroundDrawableViewFactory,
+                 colorProvider,
+-                buttonIcons[buttonId]
++                pendingStates[buttonId] != null && pendingStates[buttonId].inu_icon != 0 ? pendingStates[buttonId].inu_icon : buttonIcons[buttonId]
+             );
+ 
+             button.setPivotX(dp(size / 2f));
+@@ -300,5 +312,6 @@ public class ChatActivitySideControlsButtonsLayout extends FrameLayout implement
+         public int count = 0;
+         public boolean loading = false;
+         public boolean enabled = true;
++        public int inu_icon = 0;
+     }
+ }
+\ No newline at end of file

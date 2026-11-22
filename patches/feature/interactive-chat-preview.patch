@@ -32,7 +32,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -18389,8 +18389,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -18398,8 +18398,9 @@ public class ChatActivity extends BaseFragment implements
                  return true;
              }
  
@@ -43,7 +43,7 @@ index 0000000..0000000 100644
                      boolean pressedOnPageDownButtons = false, pressedOnAction = false;
                      int[] off = new int[2];
                      getLocationInWindow(off);
-@@ -18420,7 +18421,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -18429,7 +18430,7 @@ public class ChatActivity extends BaseFragment implements
                              pressedOnAction = true;
                          }
                      }
@@ -52,7 +52,7 @@ index 0000000..0000000 100644
                          x = ev.getX();
                          y = ev.getY();
                          pressTime = SystemClock.elapsedRealtime();
-@@ -18446,8 +18447,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -18455,8 +18456,10 @@ public class ChatActivity extends BaseFragment implements
                          }
                          ev.setAction(MotionEvent.ACTION_CANCEL);
                      }
@@ -63,7 +63,7 @@ index 0000000..0000000 100644
                      pressTime = -1;
                  }
              }
-@@ -41978,12 +41981,12 @@ public class ChatActivity extends BaseFragment implements
+@@ -41987,12 +41990,12 @@ public class ChatActivity extends BaseFragment implements
  
          @Override
          public boolean canPerformActions() {

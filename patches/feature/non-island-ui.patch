@@ -966,7 +966,7 @@ index 0000000..0000000 100644
              searchCalendarButton.setOnClickListener(view -> {
                  if (getParentActivity() == null) {
                      return;
-@@ -11394,8 +11421,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -11401,8 +11428,11 @@ public class ChatActivity extends BaseFragment implements
              setLines(1);
              setMaxLines(1);
              setEllipsize(TextUtils.TruncateAt.END);
@@ -979,7 +979,7 @@ index 0000000..0000000 100644
              setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
              setTypeface(AndroidUtilities.bold());
              setGravity(Gravity.CENTER);
-@@ -11443,13 +11473,13 @@ public class ChatActivity extends BaseFragment implements
+@@ -11450,13 +11480,13 @@ public class ChatActivity extends BaseFragment implements
              float baseTranslationY2 = -windowInsetsStateHolder.getAnimatedMaxBottomInset()
                  - chatInputViewsContainer.getInputBubbleHeight()
                  - getTopicTabsSideSize(TopicsTabsView.Position.BOTTOM)
@@ -995,7 +995,7 @@ index 0000000..0000000 100644
              suggestEmojiPanel.setTranslationY(baseTranslationY2);
          }
      }
-@@ -12492,7 +12522,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -12499,7 +12529,7 @@ public class ChatActivity extends BaseFragment implements
          if (!invalidateChatListViewTopPadding || chatListView == null || (fixedKeyboardHeight > 0 && searchExpandProgress == 0)) {
              return;
          }
@@ -1004,7 +1004,7 @@ index 0000000..0000000 100644
              + (actionBarSearchTags != null ? dp((28 + 7) * actionBarSearchTags.shownT) : 0)
              + (dp(36 + 7) * getHashtagTabsShownT());
  
-@@ -12594,7 +12624,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -12601,7 +12631,7 @@ public class ChatActivity extends BaseFragment implements
          if (isInsideContainer && parentChatActivity == null) {
              paddingBottom = AndroidUtilities.navigationBarHeight;
          } else {
@@ -1013,7 +1013,7 @@ index 0000000..0000000 100644
                  + inputIslandHeightCurrent
                  + getTopicTabsSideSize(TopicsTabsView.Position.BOTTOM)
                  + windowInsetsStateHolder.getAnimatedMaxBottomInset();
-@@ -12629,7 +12659,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -12636,7 +12666,7 @@ public class ChatActivity extends BaseFragment implements
  
          if (undoView != null) {
              undoView.setAdditionalTranslationY(
@@ -1022,7 +1022,7 @@ index 0000000..0000000 100644
                      + chatInputViewsContainer.getInputBubbleHeight() + getTopicTabsSideSize(TopicsTabsView.Position.BOTTOM));
          }
  
-@@ -12658,7 +12688,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -12665,7 +12695,7 @@ public class ChatActivity extends BaseFragment implements
          }
  
          if (topPanelLayout != null) {
@@ -1031,7 +1031,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -17457,7 +17487,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -17464,7 +17494,7 @@ public class ChatActivity extends BaseFragment implements
          return getScrollOffsetForMessage(getHeightForMessage(object, !TextUtils.isEmpty(highlightMessageQuote))) - scrollOffsetForQuote(object);
      }
      private int getScrollOffsetForMessage(int messageHeight) {
@@ -1040,7 +1040,7 @@ index 0000000..0000000 100644
      }
  
      private int scrollOffsetForQuote(MessageObject object) {
-@@ -17917,6 +17947,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -17926,6 +17956,10 @@ public class ChatActivity extends BaseFragment implements
      private boolean shouldHaveLightNavigationBarIcons;
  
      public boolean isShouldHaveLightNavigationBarIcons() {
@@ -1051,7 +1051,7 @@ index 0000000..0000000 100644
          return shouldHaveLightNavigationBarIcons && (!windowInsetsStateHolder.inAppViewIsVisible() || themeDelegate != null && themeDelegate.isDark);
      }
  
-@@ -18122,7 +18156,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -18131,7 +18165,7 @@ public class ChatActivity extends BaseFragment implements
              final long drawingTime = SystemClock.uptimeMillis();
  
              // with OVER_SCROLL_NEVER capture() only queues cells in drawReactionsAfter etc. and they get drawn again in the next frame
@@ -1060,7 +1060,7 @@ index 0000000..0000000 100644
                  chatListView.capture(blurCanvas, position);
              } else {
                  chatListView.drawChatBackgroundElements(blurCanvas, position);
-@@ -18185,7 +18219,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -18194,7 +18228,10 @@ public class ChatActivity extends BaseFragment implements
                  blurCanvas.drawRect(tmpRectF2, Theme.fillingPaint(Theme.multAlpha(getThemedColor(Theme.key_windowBackgroundWhite), searchListVisibilityFactor * 0.85f)));
              }
  
@@ -1071,7 +1071,7 @@ index 0000000..0000000 100644
  
              if (messagesSearchListView != null) {
                  Blur3Utils.captureRelativeParent(messagesSearchListView, blurCanvas, position, messagesSearchListView, this, searchListAlpha);
-@@ -18525,6 +18562,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -18534,6 +18571,9 @@ public class ChatActivity extends BaseFragment implements
                      canvas.restore();
                  }
              }
@@ -1081,7 +1081,7 @@ index 0000000..0000000 100644
              return result;
          }
  
-@@ -18543,7 +18583,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -18552,7 +18592,7 @@ public class ChatActivity extends BaseFragment implements
              float canvasOffsetX = chatListView.getLeft() + cell.getX();
              float canvasOffsetY = chatListView.getY() + cell.getY() + cell.getPaddingTop();
              float alpha = cell.shouldDrawAlphaLayer() ? cell.getAlpha() : 1f;
@@ -1090,7 +1090,7 @@ index 0000000..0000000 100644
              canvas.translate(canvasOffsetX, canvasOffsetY);
              cell.setInvalidatesParent(true);
              if (type == 0) {
-@@ -18766,7 +18806,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -18775,7 +18815,7 @@ public class ChatActivity extends BaseFragment implements
                              float viewClipBottom2 = getMeasuredHeight()
                                      - windowInsetsStateHolder.getCurrentMaxBottomInset()
                                      - inputIslandHeightCurrent
@@ -1099,7 +1099,7 @@ index 0000000..0000000 100644
                                      - (mentionContainer != null ? mentionContainer.clipBottom() : 0);
  
                              canvas.clipRect(0, listTop + (mentionContainer != null ? mentionContainer.clipTop() : 0), getMeasuredWidth(), viewClipBottom2);
-@@ -18787,7 +18827,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -18796,7 +18836,7 @@ public class ChatActivity extends BaseFragment implements
                              - windowInsetsStateHolder.getCurrentMaxBottomInset()
                              - inputIslandHeightCurrent
                              - getTopicTabsSideSize(TopicsTabsView.Position.BOTTOM)
@@ -1108,7 +1108,7 @@ index 0000000..0000000 100644
  
                          float clipTop = 0, clipBottom = 0;
                          if (mentionContainer != null) {
-@@ -19079,6 +19119,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -19088,6 +19128,10 @@ public class ChatActivity extends BaseFragment implements
                  int top, bottom;
                  top = (int) chatInputViewsContainer.getInputBubbleTop();
                  bottom = (int) chatInputViewsContainer.getInputBubbleBottom();
@@ -1119,7 +1119,7 @@ index 0000000..0000000 100644
  
                  top -= (int) ((pullingDownAnimateToActivity == null ? 0 : pullingDownAnimateToActivity.pullingBottomOffset) * pullingDownAnimateProgress);
                  pullingDownDrawable.drawBottomPanel(canvas, top, bottom, getMeasuredWidth());
-@@ -19459,12 +19503,12 @@ public class ChatActivity extends BaseFragment implements
+@@ -19468,12 +19512,12 @@ public class ChatActivity extends BaseFragment implements
                          childTop = chatActivityEnterView.getBottom();
                      }
                  } else if (chatActivityEnterView != null && chatActivityEnterView.isRecordCircleOrControlsView(child)) {
@@ -1136,7 +1136,7 @@ index 0000000..0000000 100644
                  } else if (child == chatListView || child == chatListThanosEffect || child == floatingDateView || child == floatingTopicSeparator || child == infoTopView) {
                      childTop = -blurredViewTopOffset;
                  } else if (child == progressView) {
-@@ -19473,7 +19517,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -19482,7 +19526,7 @@ public class ChatActivity extends BaseFragment implements
                      }
                  } else if (child == actionBar) {
                      childTop -= getPaddingTop();
@@ -1145,7 +1145,7 @@ index 0000000..0000000 100644
                          childTop += dp(1);
                      }
                  } else if (child == videoPlayerContainer) {
-@@ -20320,7 +20364,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -20329,7 +20373,7 @@ public class ChatActivity extends BaseFragment implements
                  return;
              }
              if (selectedMessagesCountTextView != null && (selectedMessagesIds[0].size() != 0 || selectedMessagesIds[1].size() != 0)) {
@@ -1154,7 +1154,7 @@ index 0000000..0000000 100644
              }
          } else {
              int size = selectedMessagesIds[0].size() + selectedMessagesIds[1].size();
-@@ -20914,7 +20958,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -20923,7 +20967,7 @@ public class ChatActivity extends BaseFragment implements
                  }
                  object.clipTopAddition = (int) (chatListViewPaddingTop - chatListViewPaddingVisibleOffset - AndroidUtilities.dp(4));
                  object.clipBottomAddition = (int) (blurredViewBottomOffset
@@ -1163,7 +1163,7 @@ index 0000000..0000000 100644
                      + windowInsetsStateHolder.getAnimatedMaxBottomInset()
                      + getTopicTabsSideSize(TopicsTabsView.Position.BOTTOM)
                      + inputIslandHeightCurrent);
-@@ -29030,9 +29074,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -29039,9 +29083,9 @@ public class ChatActivity extends BaseFragment implements
  
  
  
@@ -1175,7 +1175,7 @@ index 0000000..0000000 100644
          bottomChannelButtonsLayout.updateWrappingVisible(animated);
          bottomChannelButtonsLayout.showButton(ChatActivityChannelButtonsLayout.BUTTON_SEARCH, showSearchButton && bottomChannelButtonsLayout.getVisibility() == View.VISIBLE, animated);
          bottomChannelButtonsLayout.showButton(ChatActivityChannelButtonsLayout.BUTTON_DIRECT, showSuggestButton && bottomChannelButtonsLayout.getVisibility() == View.VISIBLE, animated);
-@@ -30805,7 +30849,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -30814,7 +30858,7 @@ public class ChatActivity extends BaseFragment implements
  
                  return Math.round(windowInsetsStateHolder.getAnimatedMaxBottomInset()
                      + getTopicTabsSideSize(TopicsTabsView.Position.BOTTOM)
@@ -1184,7 +1184,7 @@ index 0000000..0000000 100644
              }
  
              @Override
-@@ -33682,7 +33726,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -33691,7 +33735,7 @@ public class ChatActivity extends BaseFragment implements
          }
  
          if (selectedMessagesCountTextView != null) {
@@ -1193,7 +1193,7 @@ index 0000000..0000000 100644
          }
          updateVisibleRows();
          if (chatActivityEnterView != null) {
-@@ -45186,6 +45230,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -45195,6 +45239,8 @@ public class ChatActivity extends BaseFragment implements
              }
              return ColorUtils.calculateLuminance(color) > 0.7f;
          }
@@ -1202,7 +1202,7 @@ index 0000000..0000000 100644
          if (actionBar == null) {
              return !Theme.isCurrentThemeDark();
          }
-@@ -47345,7 +47391,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -47354,7 +47400,7 @@ public class ChatActivity extends BaseFragment implements
          }
  
          final float margin = windowInsetsStateHolder.getAnimatedMaxBottomInset() +
@@ -1211,7 +1211,7 @@ index 0000000..0000000 100644
  
          topicsTabs.setSideMenuBackgroundMarginBottom(margin);
      }
-@@ -47353,13 +47399,13 @@ public class ChatActivity extends BaseFragment implements
+@@ -47362,13 +47408,13 @@ public class ChatActivity extends BaseFragment implements
      private void checkUi_botMenuPosition() {
          final float margin = windowInsetsStateHolder.getAnimatedMaxBottomInset()
              + getTopicTabsSideSize(TopicsTabsView.Position.BOTTOM)
@@ -1227,7 +1227,7 @@ index 0000000..0000000 100644
          }
      }
  
-@@ -47383,9 +47429,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -47392,9 +47438,9 @@ public class ChatActivity extends BaseFragment implements
  
      private float calculateInputIslandHeight(boolean target) {
          final float enterViewIslandHeight = Math.max(
@@ -1239,7 +1239,7 @@ index 0000000..0000000 100644
          final float enterViewFactor;
          float visibility;
          float pollAddVisibility;
-@@ -47401,7 +47447,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -47410,7 +47456,7 @@ public class ChatActivity extends BaseFragment implements
          }
  
          if (!isInsideContainer && !isInPreviewMode()) {
@@ -1248,7 +1248,7 @@ index 0000000..0000000 100644
          } else {
              return lerp(defaultIslandHeight, enterViewIslandHeight, enterViewFactor) * visibility;
          }
-@@ -47419,10 +47465,15 @@ public class ChatActivity extends BaseFragment implements
+@@ -47428,10 +47474,15 @@ public class ChatActivity extends BaseFragment implements
              return;
          }
  
@@ -1264,7 +1264,7 @@ index 0000000..0000000 100644
          updatePagedownButtonsPosition();
          updateBotforumTabsBottomMargin();
          checkUi_botMenuPosition();
-@@ -47437,7 +47488,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -47446,7 +47497,7 @@ public class ChatActivity extends BaseFragment implements
              + dp(9) + chatInputViewsContainer.getInputBubbleHeight() + dp(7)
              + getTopicTabsSideSize(TopicsTabsView.Position.BOTTOM);
  
@@ -1273,7 +1273,7 @@ index 0000000..0000000 100644
  
          int clipBound = contentView.getMeasuredHeight() - (int) inputHeight + dp(36);
          clipBound = androidx.core.math.MathUtils.clamp(clipBound, 0, contentView.getMeasuredHeight());
-@@ -47463,6 +47514,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -47472,6 +47523,10 @@ public class ChatActivity extends BaseFragment implements
          if (parentChatActivity != null) {
              parentChatActivity.checkUi_topFade();
          }
@@ -1284,7 +1284,7 @@ index 0000000..0000000 100644
  
          float fadeHeight = 0;
          if (!isInsideContainer) {
-@@ -47498,7 +47553,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -47507,7 +47562,7 @@ public class ChatActivity extends BaseFragment implements
          if (hashtagHistoryView != null) {
              hashtagHistoryView.setTopBottomPadding(top, bottom);
          }
@@ -1293,7 +1293,7 @@ index 0000000..0000000 100644
              messagesSearchListContainer.setFade(top, bottom);
          }
          if (hashtagLoadingView != null) {
-@@ -47527,6 +47582,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -47536,6 +47591,10 @@ public class ChatActivity extends BaseFragment implements
                  * (1f - animatorSearchResultAsListVisibility.getFloatValue())
                  * (1f - getHashtagTabsShownT());
  
@@ -1304,7 +1304,7 @@ index 0000000..0000000 100644
              topPanelLayout.setPadding(dp(7) + (int) sideMenu, dp(7), dp(7), dp(7));
          }
      }
-@@ -47704,25 +47763,27 @@ public class ChatActivity extends BaseFragment implements
+@@ -47713,25 +47772,27 @@ public class ChatActivity extends BaseFragment implements
          final float actionFactor = bottomViewsVisibilityController.getVisibility(MESSAGE_ACTION_CONTAINER);
  
          final float hideFactor = 1f - ((1f - actionFactor) * (1f - pollAddOptionVisibility));
@@ -1338,7 +1338,7 @@ index 0000000..0000000 100644
          }
  
  
-@@ -48139,7 +48200,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -48150,7 +48211,7 @@ public class ChatActivity extends BaseFragment implements
      }
  
      private float getTopicTabsSideSize(TopicsTabsView.Position position) {
@@ -1347,7 +1347,7 @@ index 0000000..0000000 100644
      }
  
      private void invalidateBlurCaptures(int flags) {
-@@ -48236,7 +48297,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -48247,7 +48308,7 @@ public class ChatActivity extends BaseFragment implements
              if (bottomChannelButtonsLayout != null) {
                  bottomChannelButtonsLayout.setAccentColor(getThemedColor(Theme.key_featuredStickers_addButton));
              }
@@ -3288,7 +3288,7 @@ index 0000000..0000000 100644
          super.draw(canvas);
      }
  
-@@ -126,8 +126,10 @@ public class ChatActivityBlurredRoundButton extends FrameLayout implements Facto
+@@ -134,8 +134,10 @@ public class ChatActivityBlurredRoundButton extends FrameLayout implements Facto
      private BlurredBackgroundDrawable backgroundDrawable;
      public void setBlurredBackgroundDrawable(BlurredBackgroundDrawable drawable) {
          backgroundDrawable = drawable;

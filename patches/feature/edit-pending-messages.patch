@@ -224,7 +224,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -34636,7 +34636,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -34645,7 +34645,7 @@ public class ChatActivity extends BaseFragment implements
          updatePinnedMessageView(true);
          updateVisibleRows();
  
@@ -233,7 +233,7 @@ index 0000000..0000000 100644
              TLRPC.TL_messages_getMessageEditData req = new TLRPC.TL_messages_getMessageEditData();
              req.peer = getMessagesController().getInputPeer(dialog_id);
              req.id = messageObject.getId();
-@@ -47247,6 +47247,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -47256,6 +47256,11 @@ public class ChatActivity extends BaseFragment implements
                  options.add(OPTION_COPY);
                  icons.add(R.drawable.msg_copy);
              }
