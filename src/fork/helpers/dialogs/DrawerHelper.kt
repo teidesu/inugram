@@ -214,6 +214,10 @@ object DrawerHelper {
             FrameLayout.LayoutParams(dp(DrawerThemeButton.SIZE_DP.toFloat()), dp(DrawerThemeButton.SIZE_DP.toFloat()), Gravity.LEFT or Gravity.BOTTOM),
         )
         applySideMenuBottomPadding(sm)
+        container.setOnApplyWindowInsetsListener { _, insets ->
+            applySideMenuBottomPadding(sm)
+            insets
+        }
 
         val width = minOf(
             dp(320f),
