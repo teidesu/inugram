@@ -9,9 +9,12 @@ Subject: improvements to the round recorder
  .../ui/Components/InstantCameraView.java      | 41 +++++++++++++----
  .../ui/Components/InstantCameraView2.java     | 46 +++++++++++++------
  .../ui/Components/InstantCameraViewBase.java  |  4 +-
- .../round/RoundVideoCameraController.java     |  1 +
+ .../ui/RoundVideoSettingsActivity.java        | 12 ++---
+ .../round/RoundVideoCameraController.java     |  4 ++
+ .../round/RoundVideoOverlayRenderer.java      |  5 +-
+ .../recorder/round/RoundVideoSession.java     |  1 +
  .../utils/settings/SharedSettings.java        |  2 +-
- 7 files changed, 84 insertions(+), 30 deletions(-)
+ 10 files changed, 98 insertions(+), 37 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/camera/Camera2Session.java b/TMessagesProj/src/main/java/org/telegram/messenger/camera/Camera2Session.java
 index 0000000..0000000 100644
@@ -394,6 +397,43 @@ index 0000000..0000000 100644
      }
  
      /** Sets the host animation callback. */
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/RoundVideoSettingsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/RoundVideoSettingsActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/RoundVideoSettingsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/RoundVideoSettingsActivity.java
+@@ -51,7 +51,9 @@ public class RoundVideoSettingsActivity extends BaseFragment {
+             750_000,
+             1_000_000,
+             1_200_000,
+-            2_000_000
++            2_000_000,
++            3_000_000,
++            4_000_000
+     };
+ 
+     private RecyclerListView listView;
+@@ -116,10 +118,8 @@ public class RoundVideoSettingsActivity extends BaseFragment {
+         if (position == ROW_OUTPUT_RESOLUTION) {
+             showChoice(
+                     R.string.RoundVideoOutputResolution,
+-                    new CharSequence[]{"480p", "360p"},
+-                    index -> SharedSettings.roundVideoOutputResolution.set(index == 0
+-                            ? RoundVideoSession.OutputResolution.P480
+-                            : RoundVideoSession.OutputResolution.P360)
++                    new CharSequence[]{"640p", "480p", "360p"},
++                    index -> SharedSettings.roundVideoOutputResolution.set(RoundVideoSession.OutputResolution.values()[index])
+             );
+         } else if (position == ROW_CAMERA_RESOLUTION) {
+             showChoice(
+@@ -143,7 +143,7 @@ public class RoundVideoSettingsActivity extends BaseFragment {
+             );
+         } else if (position == ROW_BITRATE) {
+             CharSequence[] labels = new CharSequence[BITRATES.length];
+-            for (int i = 0; i < (BITRATES.length - (BuildConfig.DEBUG_PRIVATE_VERSION ? 0 : 1)); i++) {
++            for (int i = 0; i < BITRATES.length; i++) {
+                 labels[i] = formatBitrate(BITRATES[i]);
+             }
+             showChoice(
 diff --git a/TMessagesProj/src/main/java/org/telegram/utils/recorder/round/RoundVideoCameraController.java b/TMessagesProj/src/main/java/org/telegram/utils/recorder/round/RoundVideoCameraController.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/utils/recorder/round/RoundVideoCameraController.java
@@ -406,6 +446,58 @@ index 0000000..0000000 100644
          if (dualDisabled) {
              return;
          }
+@@ -2793,6 +2794,9 @@ final class RoundVideoCameraController {
+         if (cameraResolution == RoundVideoSession.CameraResolution.LOW) {
+             return outputResolution.getSize();
+         }
++        if (outputResolution == RoundVideoSession.OutputResolution.inu_P640) {
++            return cameraResolution == RoundVideoSession.CameraResolution.HIGH ? 1080 : 960;
++        }
+         if (outputResolution == RoundVideoSession.OutputResolution.P480) {
+             return cameraResolution == RoundVideoSession.CameraResolution.HIGH ? 960 : 720;
+         }
+diff --git a/TMessagesProj/src/main/java/org/telegram/utils/recorder/round/RoundVideoOverlayRenderer.java b/TMessagesProj/src/main/java/org/telegram/utils/recorder/round/RoundVideoOverlayRenderer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/utils/recorder/round/RoundVideoOverlayRenderer.java
++++ b/TMessagesProj/src/main/java/org/telegram/utils/recorder/round/RoundVideoOverlayRenderer.java
+@@ -59,6 +59,7 @@ final class RoundVideoOverlayRenderer {
+ 
+     private static WatermarkAtlas cachedWatermark360;
+     private static WatermarkAtlas cachedWatermark480;
++    private static WatermarkAtlas inu_cachedWatermark640;
+ 
+     private static final String TEXTURE_VERTEX_SHADER =
+             "attribute vec4 aPosition;\n" +
+@@ -973,7 +974,8 @@ final class RoundVideoOverlayRenderer {
+     private static synchronized WatermarkAtlas getWatermarkAtlas(int outputSize) {
+         WatermarkAtlas cached = outputSize == 360
+                 ? cachedWatermark360
+-                : outputSize == 480 ? cachedWatermark480 : null;
++                : outputSize == 480 ? cachedWatermark480
++                : outputSize == 640 ? inu_cachedWatermark640 : null;
+         if (cached != null) return cached;
+ 
+         int textSize = Math.round(outputSize * 372f / 1536f);
+@@ -1031,6 +1033,7 @@ final class RoundVideoOverlayRenderer {
+         lottie.recycle();
+         if (outputSize == 360) cachedWatermark360 = result;
+         else if (outputSize == 480) cachedWatermark480 = result;
++        else if (outputSize == 640) inu_cachedWatermark640 = result;
+         return result;
+     }
+ 
+diff --git a/TMessagesProj/src/main/java/org/telegram/utils/recorder/round/RoundVideoSession.java b/TMessagesProj/src/main/java/org/telegram/utils/recorder/round/RoundVideoSession.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/utils/recorder/round/RoundVideoSession.java
++++ b/TMessagesProj/src/main/java/org/telegram/utils/recorder/round/RoundVideoSession.java
+@@ -33,6 +33,7 @@ public final class RoundVideoSession {
+ 
+     /** Square resolution written by the video encoder. */
+     public enum OutputResolution {
++        inu_P640(640),
+         /** 480 x 480 output. */
+         P480(480),
+         /** 360 x 360 output. */
 diff --git a/TMessagesProj/src/main/java/org/telegram/utils/settings/SharedSettings.java b/TMessagesProj/src/main/java/org/telegram/utils/settings/SharedSettings.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/utils/settings/SharedSettings.java

@@ -179,6 +179,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
   - gentler exponential zoom curve (like in normal camera apps)
   - toggle to disable dual-camera mode
   - new experimental (stock) Camera2 recorder, enabled by default
+  - 640p output and up to 4 Mbps bitrate in Camera2 recorder settings
 - stock experimental voice/round recorder settings visible in release builds
 
 ## photo viewer
