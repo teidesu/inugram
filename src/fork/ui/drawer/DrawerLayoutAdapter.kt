@@ -104,7 +104,7 @@ class DrawerLayoutAdapter(
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
         val view: View = when (viewType) {
             0 -> DrawerProfileCell(mContext, mDrawerLayoutContainer, ::toggleAccountsShown).also { profileCell = it }
-            2 -> DividerCell(mContext).apply { setPadding(AndroidUtilities.dp(16f), AndroidUtilities.dp(8f), AndroidUtilities.dp(16f), AndroidUtilities.dp(8f)) }
+            2 -> DividerCell(mContext) { Theme.getColor(if (it == Theme.key_divider) Theme.key_dialogGrayLine else it) }.apply { setPadding(AndroidUtilities.dp(16f), AndroidUtilities.dp(8f), AndroidUtilities.dp(16f), AndroidUtilities.dp(8f)) }
             3 -> DrawerActionCell(mContext)
             TYPE_ACCOUNT -> DrawerUserCell(mContext)
             TYPE_ADD_ACCOUNT -> DrawerAddCell(mContext)
