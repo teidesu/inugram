@@ -1,0 +1,23 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Sun, 22 Nov 2026 19:20:40 +0400
+Subject: show account switcher again after closing dialogs search
+
+---
+ .../src/main/java/org/telegram/ui/DialogsActivity.java         | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+@@ -3398,6 +3398,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+ 
+                 searching = false;
+                 searchWas = false;
++                if (switchItem != null) {
++                    switchItem.setVisibility(View.VISIBLE);
++                }
+                 if (viewPages[0] != null) {
+                     viewPages[0].listView.setEmptyView(folderId == 0 ? viewPages[0].progressView : null);
+                     showSearch(false, false, true);
