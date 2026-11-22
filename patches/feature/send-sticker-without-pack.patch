@@ -27,7 +27,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelp
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
-@@ -2212,7 +2212,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -2213,7 +2213,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
              } else {
                  params = null;
              }
@@ -36,7 +36,7 @@ index 0000000..0000000 100644
              sendMessageParams.replyToStoryItem = storyItem;
              sendMessageParams.replyQuote = quote;
              sendMessageParams.sendMessageChatArguments = sendMessageChatArguments;
-@@ -9113,6 +9113,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -9118,6 +9118,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
              newMedia.document.size = sentMedia.document.size;
              newMedia.document.mime_type = sentMedia.document.mime_type;
  

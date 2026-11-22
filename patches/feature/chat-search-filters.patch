@@ -527,7 +527,7 @@ index 0000000..0000000 100644
          public RecyclerListViewInternal(Context context, ThemeDelegate themeDelegate) {
              super(context, themeDelegate);
          }
-@@ -48567,7 +48643,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -48572,7 +48648,7 @@ public class ChatActivity extends BaseFragment implements
          );
      }
  

@@ -14,7 +14,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelp
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
-@@ -11417,6 +11417,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -11422,6 +11422,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                                  }
                                  if (videoEditedInfo.inu_originalQuality) {
                                      originalPath += "_oq";
@@ -24,7 +24,7 @@ index 0000000..0000000 100644
                                  }
                                  startTime = videoEditedInfo.startTime >= 0 ? videoEditedInfo.startTime : 0;
                              }
-@@ -12261,6 +12264,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -12266,6 +12269,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                          }
                          if (videoEditedInfo.inu_originalQuality) {
                              originalPath += "_oq";

@@ -92,7 +92,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
 +++ b/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
-@@ -1197,7 +1197,6 @@ public class ConnectionsManager extends BaseController {
+@@ -1224,7 +1224,6 @@ public class ConnectionsManager extends BaseController {
          protected ResolvedDomain doInBackground(Void... voids) {
              ByteArrayOutputStream outbuf = null;
              InputStream httpConnectionStream = null;
@@ -100,7 +100,7 @@ index 0000000..0000000 100644
              try {
                  URL downloadUrl = new URL("https://www.google.com/resolve?name=" + currentHostName + "&type=A");
                  URLConnection httpConnection = downloadUrl.openConnection();
-@@ -1234,7 +1233,6 @@ public class ConnectionsManager extends BaseController {
+@@ -1261,7 +1260,6 @@ public class ConnectionsManager extends BaseController {
                          return new ResolvedDomain(addresses, SystemClock.elapsedRealtime());
                      }
                  }
@@ -108,7 +108,7 @@ index 0000000..0000000 100644
              } catch (Throwable e) {
                  FileLog.e(e, false);
              } finally {
-@@ -1253,15 +1251,13 @@ public class ConnectionsManager extends BaseController {
+@@ -1280,15 +1278,13 @@ public class ConnectionsManager extends BaseController {
  
                  }
              }

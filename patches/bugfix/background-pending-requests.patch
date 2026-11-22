@@ -44,7 +44,7 @@ index 0000000..0000000 100644
          }
      }
      if (networkPaused) {
-@@ -3907,6 +3908,7 @@ void ConnectionsManager::resumeNetwork(bool partial) {
+@@ -3930,6 +3931,7 @@ void ConnectionsManager::resumeNetwork(bool partial) {
          } else {
              lastPauseTime = 0;
              lastMonotonicPauseTime = 0;
@@ -52,7 +52,7 @@ index 0000000..0000000 100644
              lastSystemPauseTime = 0;
              networkPaused = false;
              if (LOGS_ENABLED) DEBUG_D("wakeup network account%u", instanceNum);
-@@ -3927,7 +3929,7 @@ void ConnectionsManager::pauseNetwork() {
+@@ -3950,7 +3952,7 @@ void ConnectionsManager::pauseNetwork() {
      if (lastPauseTime != 0) {
          return;
      }
@@ -65,7 +65,7 @@ diff --git a/TMessagesProj/jni/tgnet/ConnectionsManager.h b/TMessagesProj/jni/tg
 index 0000000..0000000 100644
 --- a/TMessagesProj/jni/tgnet/ConnectionsManager.h
 +++ b/TMessagesProj/jni/tgnet/ConnectionsManager.h
-@@ -176,6 +176,7 @@ private:
+@@ -177,6 +177,7 @@ private:
      int32_t nextSleepTimeout = CONNECTION_BACKGROUND_KEEP_TIME;
      int64_t lastPauseTime = 0;
      int64_t lastMonotonicPauseTime = 0;

@@ -14,7 +14,7 @@ diff --git a/TMessagesProj/jni/TgNetWrapper.cpp b/TMessagesProj/jni/TgNetWrapper
 index 0000000..0000000 100644
 --- a/TMessagesProj/jni/TgNetWrapper.cpp
 +++ b/TMessagesProj/jni/TgNetWrapper.cpp
-@@ -37,6 +37,7 @@ jmethodID jclass_ConnectionsManager_onProxyError;
+@@ -38,6 +38,7 @@ jmethodID jclass_ConnectionsManager_onProxyError;
  jmethodID jclass_ConnectionsManager_getHostByName;
  jmethodID jclass_ConnectionsManager_getInitFlags;
  jmethodID jclass_ConnectionsManager_onPremiumFloodWait;
@@ -22,7 +22,7 @@ index 0000000..0000000 100644
  jmethodID jclass_ConnectionsManager_onIntegrityCheckClassic;
  jmethodID jclass_ConnectionsManager_onCaptchaCheck;
  
-@@ -394,6 +395,12 @@ class Delegate : public ConnectiosManagerDelegate {
+@@ -401,6 +402,12 @@ class Delegate : public ConnectiosManagerDelegate {
          jniEnv[instanceNum]->CallStaticVoidMethod(jclass_ConnectionsManager, jclass_ConnectionsManager_onPremiumFloodWait, instanceNum, requestToken, isUpload);
      }
  
@@ -35,7 +35,7 @@ index 0000000..0000000 100644
      void onIntegrityCheckClassic(int32_t instanceNum, int32_t requestToken, std::string project, std::string nonce) {
          jstring projectStr = jniEnv[instanceNum]->NewStringUTF(project.c_str());
          jstring nonceStr = jniEnv[instanceNum]->NewStringUTF(nonce.c_str());
-@@ -681,6 +688,10 @@ extern "C" int registerNativeTgNetFunctions(JavaVM *vm, JNIEnv *env) {
+@@ -693,6 +700,10 @@ extern "C" int registerNativeTgNetFunctions(JavaVM *vm, JNIEnv *env) {
      if (jclass_ConnectionsManager_onPremiumFloodWait == 0) {
          return JNI_FALSE;
      }
@@ -76,7 +76,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.j
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
 +++ b/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
-@@ -1521,6 +1521,11 @@ public class ConnectionsManager extends BaseController {
+@@ -1548,6 +1548,11 @@ public class ConnectionsManager extends BaseController {
          }
      }
  

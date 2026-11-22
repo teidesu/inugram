@@ -861,7 +861,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelp
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
-@@ -4058,10 +4058,12 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -4062,10 +4062,12 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
              FileLog.d("InuRx send reaction did=" + messageObject.getDialogId() + " mid=" + messageObject.getId() + " thread=" + (req.msg_id != messageObject.getId()) + " reqMid=" + req.msg_id + " reactions=" + req.reaction.size() + " big=" + big + " local=" + desu.inugram.helpers.chat.ReactionDebugHelper.describe(messageObject));
          }
          final long inu_sendStart = System.currentTimeMillis();
@@ -1066,7 +1066,7 @@ index 0000000..0000000 100644
                  }
                  updateReactionsMentionButton(true);
              }
-@@ -48074,18 +48085,33 @@ public class ChatActivity extends BaseFragment implements
+@@ -48079,18 +48090,33 @@ public class ChatActivity extends BaseFragment implements
              loadLastUnreadMention();
          } else if (buttonId == ChatActivitySideControlsButtonsLayout.BUTTON_REACTIONS) {
              if (desu.inugram.helpers.chat.ReactionDebugHelper.isEnabled()) {

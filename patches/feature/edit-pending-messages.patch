@@ -26,7 +26,7 @@ index 0000000..0000000 100644
  jmethodID jclass_ConnectionsManager_onUnparsedMessageReceived;
  jmethodID jclass_ConnectionsManager_onUpdate;
  jmethodID jclass_ConnectionsManager_onSessionCreated;
-@@ -151,6 +152,12 @@ void failNotRunningRequest(JNIEnv *env, jclass c, jint instanceNum, jint token)
+@@ -150,6 +151,12 @@ void failNotRunningRequest(JNIEnv *env, jclass c, jint instanceNum, jint token)
      return ConnectionsManager::getInstance(instanceNum).failNotRunningRequest(token);
  }
  
@@ -39,7 +39,7 @@ index 0000000..0000000 100644
  void receivedIntegrityCheckClassic(JNIEnv *env, jclass c, jint instanceNum, jint requestToken, jstring nonce, jstring token) {
      const char* nonceStr = env->GetStringUTFChars(nonce, 0);
      const char* tokenStr = env->GetStringUTFChars(token, 0);
-@@ -561,6 +568,7 @@ static JNINativeMethod ConnectionsManagerMethods[] = {
+@@ -554,6 +561,7 @@ static JNINativeMethod ConnectionsManagerMethods[] = {
          {"native_onHostNameResolved", "(Ljava/lang/String;JLjava/lang/String;)V", (void *) onHostNameResolved},
          {"native_discardConnection", "(III)V", (void *) discardConnection},
          {"native_failNotRunningRequest", "(II)V", (void *) failNotRunningRequest},
@@ -47,7 +47,7 @@ index 0000000..0000000 100644
          {"native_receivedIntegrityCheckClassic", "(IILjava/lang/String;Ljava/lang/String;)V", (void *) receivedIntegrityCheckClassic},
          {"native_receivedCaptchaResult", "(IIILjava/lang/String;)V", (void *) receivedCaptchaResult},
          {"native_isGoodPrime", "([BI)Z", (void *) isGoodPrime},
-@@ -628,6 +636,10 @@ extern "C" int registerNativeTgNetFunctions(JavaVM *vm, JNIEnv *env) {
+@@ -621,6 +629,10 @@ extern "C" int registerNativeTgNetFunctions(JavaVM *vm, JNIEnv *env) {
      if (jclass_ConnectionsManager_onRequestWriteToSocket == 0) {
          return JNI_FALSE;
      }
@@ -62,7 +62,7 @@ diff --git a/TMessagesProj/jni/tgnet/ConnectionsManager.cpp b/TMessagesProj/jni/
 index 0000000..0000000 100644
 --- a/TMessagesProj/jni/tgnet/ConnectionsManager.cpp
 +++ b/TMessagesProj/jni/tgnet/ConnectionsManager.cpp
-@@ -2255,6 +2255,28 @@ void ConnectionsManager::failNotRunningRequest(int32_t token) {
+@@ -2237,6 +2237,28 @@ void ConnectionsManager::failNotRunningRequest(int32_t token) {
      });
  }
  
@@ -91,7 +91,7 @@ index 0000000..0000000 100644
  void ConnectionsManager::receivedIntegrityCheckClassic(int32_t requestToken, std::string nonce, std::string token) {
      scheduleTask([&, requestToken, nonce, token] {
          for (auto iter = runningRequests.begin(); iter != runningRequests.end(); iter++) {
-@@ -3038,6 +3060,7 @@ void ConnectionsManager::processRequestQueue(uint32_t connectionTypes, uint32_t
+@@ -3020,6 +3042,7 @@ void ConnectionsManager::processRequestQueue(uint32_t connectionTypes, uint32_t
          if (!hasPendingRequestsForConnection(connection)) {
              connection->resetLastEventTime();
          }
@@ -127,7 +127,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.ja
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
-@@ -12098,7 +12098,7 @@ public class MessageObject {
+@@ -12071,7 +12071,7 @@ public class MessageObject {
          if (chat != null && (chat.left || chat.kicked) && (!chat.megagroup || !chat.has_link)) {
              return false;
          }
@@ -152,12 +152,12 @@ index 0000000..0000000 100644
 @@ -1781,6 +1781,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
      }
  
-     public void processSentMessage(int id) {
+     protected void processSentMessage(int id) {
 +        desu.inugram.helpers.chat.PendingEditHelper.onMessageProcessed(currentAccount, id);
          int prevSize = unsentMessages.size();
          unsentMessages.remove(id);
          if (prevSize != 0 && unsentMessages.size() == 0) {
-@@ -3079,6 +3080,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -3075,6 +3076,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
          if (messageObject == null) {
              return;
          }
@@ -167,10 +167,10 @@ index 0000000..0000000 100644
          if (params == null) {
              params = new HashMap<>();
          }
-@@ -8638,6 +8642,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
-                 });
-             }
-         }, null, ConnectionsManager.RequestFlagCanCompress | ConnectionsManager.RequestFlagInvokeAfter);
+@@ -8624,6 +8628,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+                 getNotificationCenter().postNotificationName(NotificationCenter.messageReceivedByAck, msg_id);
+             });
+         }, ConnectionsManager.RequestFlagCanCompress | ConnectionsManager.RequestFlagInvokeAfter | (req instanceof TLRPC.TL_messages_sendMessage ? ConnectionsManager.RequestFlagNeedQuickAck : 0));
 +        desu.inugram.helpers.chat.PendingEditHelper.trackRequest(newMsgObj, req);
          if (parentMessage != null) {
              parentMessage.sendDelayedRequests();
@@ -212,7 +212,7 @@ index 0000000..0000000 100644
      private static class ResolvedDomain {
  
          public ArrayList<String> addresses;
-@@ -1062,6 +1088,7 @@ public class ConnectionsManager extends BaseController {
+@@ -1059,6 +1085,7 @@ public class ConnectionsManager extends BaseController {
      public static native void native_onHostNameResolved(String host, long address, String ip);
      public static native void native_discardConnection(int currentAccount, int datacenterId, int connectionType);
      public static native void native_failNotRunningRequest(int currentAccount, int token);
@@ -224,7 +224,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -34645,7 +34645,7 @@ public class ChatActivity extends BaseFragment implements
+@@ -34388,7 +34388,7 @@ public class ChatActivity extends BaseFragment implements
          updatePinnedMessageView(true);
          updateVisibleRows();
  
@@ -233,7 +233,7 @@ index 0000000..0000000 100644
              TLRPC.TL_messages_getMessageEditData req = new TLRPC.TL_messages_getMessageEditData();
              req.peer = getMessagesController().getInputPeer(dialog_id);
              req.id = messageObject.getId();
-@@ -47256,6 +47256,11 @@ public class ChatActivity extends BaseFragment implements
+@@ -46938,6 +46938,11 @@ public class ChatActivity extends BaseFragment implements
                  options.add(OPTION_COPY);
                  icons.add(R.drawable.msg_copy);
              }

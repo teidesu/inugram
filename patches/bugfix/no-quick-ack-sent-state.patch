@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelp
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
-@@ -8636,13 +8636,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -8640,13 +8640,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                      }
                  });
              }
@@ -23,6 +23,6 @@ index 0000000..0000000 100644
 -            });
 -        }, ConnectionsManager.RequestFlagCanCompress | ConnectionsManager.RequestFlagInvokeAfter | (req instanceof TLRPC.TL_messages_sendMessage ? ConnectionsManager.RequestFlagNeedQuickAck : 0));
 +        }, null, ConnectionsManager.RequestFlagCanCompress | ConnectionsManager.RequestFlagInvokeAfter);
+         desu.inugram.helpers.chat.PendingEditHelper.trackRequest(newMsgObj, req);
          if (parentMessage != null) {
              parentMessage.sendDelayedRequests();
-         }
