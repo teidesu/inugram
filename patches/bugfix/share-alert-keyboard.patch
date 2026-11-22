@@ -12,7 +12,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMe
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -9260,8 +9260,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -9265,8 +9265,8 @@ public class ChatActivity extends BaseFragment implements
  
      @Nullable
      private WindowInsetsCompat getChatWindowInsets(@Nullable WindowInsetsCompat insets) {
@@ -23,7 +23,7 @@ index 0000000..0000000 100644
              // The attachment sheet owns this IME; it must not move the chat behind it.
              return new WindowInsetsCompat.Builder(insets)
                  .setInsets(WindowInsetsCompat.Type.ime(), Insets.NONE)
-@@ -9271,6 +9271,12 @@ public class ChatActivity extends BaseFragment implements
+@@ -9276,6 +9276,12 @@ public class ChatActivity extends BaseFragment implements
          return insets;
      }
  

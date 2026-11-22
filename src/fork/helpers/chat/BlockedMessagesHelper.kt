@@ -3,6 +3,7 @@ package desu.inugram.helpers.chat
 import android.content.Context
 import android.view.View
 import androidx.core.content.edit
+import androidx.recyclerview.widget.LinearLayoutManager
 import desu.inugram.InuConfig
 // #if PLUGINS
 import desu.inugram.helpers.plugins.telegram.PluginMessageFilters
@@ -224,11 +225,26 @@ object BlockedMessagesHelper {
     fun getViewType(adapter: ChatActivity.ChatActivityAdapter, msg: MessageObject): Int =
         if (msg in adapter.inu_hiddenMessages) VIEW_TYPE_HIDDEN else msg.contentType
 
-    @JvmStatic
-    fun createHiddenView(context: Context): View = object : View(context) {
+    class HiddenMessageView(context: Context) : View(context) {
+        @JvmField var messageObject: MessageObject? = null
+
         override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
             setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), 0)
         }
+    }
+
+    // recyclerview never reports a 0-height child lying exactly on the viewport edge as visible
+    @JvmStatic
+    fun findHiddenAtEdge(layoutManager: LinearLayoutManager, found: View?, fromIndex: Int, toIndex: Int, parentStart: Int, parentEnd: Int): View? {
+        val step = if (toIndex > fromIndex) 1 else -1
+        var i = fromIndex
+        while (i != toIndex) {
+            val child = layoutManager.getChildAt(i)
+            if (child === found) return found
+            if (child is HiddenMessageView && layoutManager.getDecoratedTop(child) in parentStart..parentEnd) return child
+            i += step
+        }
+        return found
     }
 
     @JvmStatic

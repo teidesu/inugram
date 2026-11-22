@@ -66,7 +66,7 @@ index 0000000..0000000 100644
          }
      };
  
-@@ -7570,6 +7586,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -7575,6 +7591,9 @@ public class ChatActivity extends BaseFragment implements
                      return;
                  }
                  TLRPC.BotInlineResult result = (TLRPC.BotInlineResult) object;
@@ -76,7 +76,7 @@ index 0000000..0000000 100644
                  if (currentEncryptedChat != null) {
                      int error = 0;
                      if (result.send_message instanceof TLRPC.TL_botInlineMessageMediaAuto && "game".equals(result.type)) {
-@@ -7654,6 +7673,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -7659,6 +7678,10 @@ public class ChatActivity extends BaseFragment implements
                  int len = mentionContainer.getAdapter().getResultLength();
                  return ChatHelper.maybeHandleMentionLongTap(this, chatActivityEnterView, (TLRPC.User) object, start, len);
              }
@@ -87,7 +87,7 @@ index 0000000..0000000 100644
              if (!mentionContainer.getAdapter().isLongClickEnabled()) {
                  return false;
              }
-@@ -13122,7 +13145,24 @@ public class ChatActivity extends BaseFragment implements
+@@ -13127,7 +13150,24 @@ public class ChatActivity extends BaseFragment implements
          }
      }
  
@@ -112,7 +112,7 @@ index 0000000..0000000 100644
          if (mentionContainer == null) {
              return;
          }
-@@ -13132,6 +13172,10 @@ public class ChatActivity extends BaseFragment implements
+@@ -13137,6 +13177,10 @@ public class ChatActivity extends BaseFragment implements
          params.put("query_id", "" + result.query_id);
          params.put("bot", "" + uid);
          params.put("bot_name", mentionContainer.getAdapter().getContextBotName());

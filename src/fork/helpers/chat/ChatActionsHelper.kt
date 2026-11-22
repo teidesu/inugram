@@ -1232,6 +1232,7 @@ object ChatActionsHelper {
             val id = msg.id
             if (id <= info.minId || id >= info.maxId) continue
             if (arr.indexOfKey(id) >= 0) continue
+            if (BlockedMessagesHelper.shouldHide(msg)) continue
             if (!action(msg)) return
         }
     }
