@@ -2,7 +2,6 @@ package desu.inugram.helpers.dialogs
 
 import android.content.SharedPreferences
 import android.graphics.Canvas
-import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -21,8 +20,10 @@ import org.telegram.messenger.LocaleController
 import org.telegram.messenger.MessagesController
 import org.telegram.messenger.MessagesStorage
 import org.telegram.messenger.NotificationCenter
+import org.telegram.messenger.NotificationsController
 import org.telegram.messenger.R
 import org.telegram.messenger.UserConfig
+import org.telegram.messenger.UserObject
 import org.telegram.tgnet.ConnectionsManager
 import org.telegram.tgnet.TLObject
 import org.telegram.tgnet.TLRPC
@@ -33,8 +34,10 @@ import org.telegram.ui.ActionBar.BaseFragment
 import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Adapters.DialogsAdapter
 import org.telegram.ui.Adapters.DialogsSearchAdapter
+import org.telegram.ui.Cells.DialogCell
 import org.telegram.ui.ChatActivity
 import org.telegram.ui.Components.AvatarDrawable
+import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.Forum.ForumUtilities
 import org.telegram.ui.Components.ItemOptions
 import org.telegram.ui.DialogsActivity
@@ -252,10 +255,7 @@ object LinkedChatsHelper {
         else -> null
     } as? LinkedDialog
 
-    @JvmStatic
-    fun onItemClick(fragment: DialogsActivity, adapter: RecyclerView.Adapter<*>, position: Int): Boolean {
-        val dialog = getLinkedItem(adapter, position) ?: return false
-        if (fragment.actionBar.isActionModeShowed) return true
+    private fun createChatActivity(fragment: BaseFragment, dialog: LinkedDialog): ChatActivity? {
         val controller = MessagesController.getInstance(dialog.account)
         val args = Bundle()
         if (DialogObject.isUserDialog(dialog.id)) {
@@ -263,7 +263,7 @@ object LinkedChatsHelper {
         } else {
             args.putLong("chat_id", -dialog.id)
         }
-        if (!controller.checkCanOpenChat(args, fragment)) return true
+        if (!controller.checkCanOpenChat(args, fragment)) return null
         val chat = controller.getChat(-dialog.id)
         if (chat != null && chat.monoforum) {
             args.putInt("chatMode", ChatActivity.MODE_SUGGESTIONS)
@@ -274,6 +274,14 @@ object LinkedChatsHelper {
         if (chat != null && chat.forum && ChatObject.areTabsEnabled(chat)) {
             ForumUtilities.applyTopic(chatActivity, MessagesStorage.TopicKey.of(dialog.id, controller.getForumLastTopicId(chat.id)))
         }
+        return chatActivity
+    }
+
+    @JvmStatic
+    fun onItemClick(fragment: DialogsActivity, adapter: RecyclerView.Adapter<*>, position: Int): Boolean {
+        val dialog = getLinkedItem(adapter, position) ?: return false
+        if (fragment.actionBar.isActionModeShowed) return true
+        val chatActivity = createChatActivity(fragment, dialog) ?: return true
         if (adapter is DialogsSearchAdapter) {
             setSearchDate(adapter, dialog, (System.currentTimeMillis() / 1000).toInt())
         }
@@ -299,26 +307,96 @@ object LinkedChatsHelper {
             )
             return true
         }
-        fragment.filterOptions = ItemOptions.makeOptions(fragment, view)
-            .setScrimViewBackground(ColorDrawable(fragment.getThemedColor(Theme.key_windowBackgroundWhite)))
-            .add(
-                if (dialog.pinned) R.drawable.msg_unpin else R.drawable.msg_pin,
-                LocaleController.getString(if (dialog.pinned) R.string.UnpinMessage else R.string.PinMessage),
-            ) {
-                if (dialog.pinned) {
-                    dialog.link.pins.remove(dialog.scope)
-                } else {
-                    dialog.link.pins[dialog.scope] = (System.currentTimeMillis() / 1000).toInt()
-                }
-                InuConfig.LINKED_CHATS_LIST.save()
-                fragment.didReceivedNotification(NotificationCenter.dialogsNeedReload, fragment.currentAccount)
-            }
-            .add(R.drawable.msg_delete, LocaleController.getString(R.string.InuLinkedChatsRemove), true) {
-                links = links - dialog.link
-                fragment.didReceivedNotification(NotificationCenter.dialogsNeedReload, fragment.currentAccount)
-            }
-            .show()
+        if (view !is DialogCell) return true
+        showChatPreview(fragment, view, dialog)
         return true
+    }
+
+    private fun showChatPreview(fragment: DialogsActivity, cell: DialogCell, dialog: LinkedDialog) {
+        val chatActivity = createChatActivity(fragment, dialog) ?: return
+        val controller = MessagesController.getInstance(dialog.account)
+        val interactive = InuConfig.INTERACTIVE_CHAT_PREVIEW.value
+        val menu = ActionBarPopupWindow.ActionBarPopupWindowLayout(
+            fragment.parentActivity, R.drawable.popup_fixed_alert4, fragment.resourceProvider,
+            ActionBarPopupWindow.ActionBarPopupWindowLayout.FLAG_SHOWN_FROM_BOTTOM,
+        )
+        fun addItem(icon: Int, text: String, finish: Boolean = true, action: () -> Unit) = ActionBarMenuSubItem(fragment.parentActivity, false, false).apply {
+            setTextAndIcon(text, icon)
+            minimumWidth = 160
+            setOnClickListener {
+                action()
+                if (finish) fragment.finishPreviewFragment()
+            }
+            menu.addView(this)
+        }
+        fun reloadDialogs() = fragment.didReceivedNotification(NotificationCenter.dialogsNeedReload, fragment.currentAccount)
+
+        if (interactive) {
+            addItem(R.drawable.msg_discussion, LocaleController.getString(R.string.SavedOpenChatNoCaps), finish = false) {
+                chatActivity.parentLayout?.expandPreviewFragment()
+            }
+        }
+        val hasUnread = cell.hasUnread
+        addItem(
+            if (hasUnread) R.drawable.msg_markread else R.drawable.msg_markunread,
+            LocaleController.getString(if (hasUnread) R.string.MarkAsRead else R.string.MarkAsUnread),
+        ) {
+            if (!hasUnread) {
+                controller.markDialogAsUnread(dialog.id, null, 0)
+                return@addItem
+            }
+            val source = controller.dialogs_dict.get(dialog.id) ?: return@addItem
+            if (controller.isForum(dialog.id) || controller.isMonoForumWithManageRights(dialog.id)) {
+                controller.markAllTopicsAsRead(dialog.id)
+            }
+            controller.markMentionsAsRead(dialog.id, 0)
+            controller.markDialogAsRead(dialog.id, source.top_message, source.top_message, source.last_message_date, false, 0, 0, true, 0)
+        }
+        addItem(
+            if (dialog.pinned) R.drawable.msg_unpin else R.drawable.msg_pin,
+            LocaleController.getString(if (dialog.pinned) R.string.UnpinFromTop else R.string.PinToTop),
+        ) {
+            if (dialog.pinned) {
+                dialog.link.pins.remove(dialog.scope)
+            } else {
+                dialog.link.pins[dialog.scope] = (System.currentTimeMillis() / 1000).toInt()
+            }
+            InuConfig.LINKED_CHATS_LIST.save()
+            reloadDialogs()
+        }
+        if (!DialogObject.isUserDialog(dialog.id) || !UserObject.isUserSelf(controller.getUser(dialog.id))) {
+            val muted = controller.isDialogMuted(dialog.id, 0)
+            addItem(
+                if (muted) R.drawable.msg_unmute else R.drawable.msg_mute,
+                LocaleController.getString(if (muted) R.string.Unmute else R.string.Mute),
+            ) {
+                NotificationsController.getInstance(dialog.account).setDialogNotificationsSettings(
+                    dialog.id, 0,
+                    if (muted) NotificationsController.SETTING_MUTE_UNMUTE else NotificationsController.SETTING_MUTE_FOREVER,
+                )
+                BulletinFactory.createMuteBulletin(fragment, !muted, null).show()
+            }
+        }
+        addItem(R.drawable.msg_delete, LocaleController.getString(R.string.InuLinkedChatsRemove)) {
+            links = links - dialog.link
+            reloadDialogs()
+        }.apply {
+            setIconColor(fragment.getThemedColor(Theme.key_text_RedRegular))
+            setTextColor(fragment.getThemedColor(Theme.key_text_RedBold))
+            setSelectorColorKey(Theme.key_text_RedBold, .12f)
+        }
+        for (i in 0 until menu.itemsCount) {
+            (menu.getItemAt(i) as ActionBarMenuSubItem).updateSelectorBackground(i == 0, i == menu.itemsCount - 1)
+        }
+
+        fragment.prepareBlurBitmap()
+        fragment.parentLayout.setHighlightActionButtons(true)
+        if (AndroidUtilities.displaySize.x > AndroidUtilities.displaySize.y) {
+            fragment.presentFragmentAsPreview(chatActivity)
+        } else {
+            fragment.presentFragmentAsPreviewWithMenu(chatActivity, menu)
+            chatActivity.allowExpandPreviewByClick = !interactive
+        }
     }
 
     @JvmStatic

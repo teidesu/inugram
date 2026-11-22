@@ -362,15 +362,6 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -547,7 +547,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
- 
-     private View blurredView;
- 
--    private ItemOptions filterOptions;
-+    public ItemOptions filterOptions;
- 
-     private SelectAnimatedEmojiDialog.SelectAnimatedEmojiDialogWindow selectAnimatedEmojiDialog;
- 
 @@ -725,6 +725,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
      private final static int remove_from_folder = 110;
      private final static int community_ungroup = 111;
@@ -469,3 +460,12 @@ index 0000000..0000000 100644
          if (!isCommunityCell) {
              ActionBarMenuSubItem deleteItem = new ActionBarMenuSubItem(getParentActivity(), false, true);
              deleteItem.setIconColor(getThemedColor(Theme.key_text_RedRegular));
+@@ -9171,7 +9197,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+         fragmentView.invalidate();
+     }
+ 
+-    private void prepareBlurBitmap() {
++    public void prepareBlurBitmap() {
+         if (blurredView == null) {
+             return;
+         }
