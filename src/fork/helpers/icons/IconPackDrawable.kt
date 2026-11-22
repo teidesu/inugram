@@ -74,8 +74,15 @@ abstract class IconPackDrawable(private val width: Int, private val height: Int)
 
     override fun getConstantState(): ConstantState = State(this)
 
+    // BitmapDrawable keeps paint alpha, color filter and tint in its ConstantState; stock clones themed drawables relying on that
     private class State(private val source: IconPackDrawable) : ConstantState() {
-        override fun newDrawable() = source.copy()
+        override fun newDrawable() = source.copy().also {
+            it.paint.alpha = source.paint.alpha
+            it.colorFilter = source.colorFilter
+            it.tint = source.tint
+            it.tintMode = source.tintMode
+            it.updateTintFilter()
+        }
         override fun getChangingConfigurations() = 0
     }
 }
