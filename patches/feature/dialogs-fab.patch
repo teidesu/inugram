@@ -117,7 +117,7 @@ index 0000000..0000000 100644
              Bundle args = new Bundle();
              presentFragment(new GroupCreateActivity(args));
          });
-+        io.addIf(inu_needNewMessage, R.drawable.menu_topic_add, getString(R.string.NewMessageTitle), this::openWriteContacts);
++        io.addIf(inu_needNewMessage, R.drawable.msg_topic_create, getString(R.string.NewMessageTitle), this::openWriteContacts);
          io.add(R.drawable.outline_saved_24, getString(R.string.SavedMessages), () -> {
              Bundle args = new Bundle();
              args.putLong("user_id", UserConfig.getInstance(currentAccount).getClientUserId());

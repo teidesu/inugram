@@ -301,7 +301,7 @@ class DrawerMenuConfig(key: String) : MenuOrderConfig<DrawerMenuConfig.Item>(key
         DIVIDER("divider", R.string.InuDrawerMenuDivider, R.drawable.iv_divider),
         NEW_GROUP("new_group", R.string.NewGroup, R.drawable.msg_groups) {
             override val labelRes get() = if (!DialogsFabHelper.hasNewMessage()) R.string.NewMessageTitle else R.string.NewGroup
-            override val iconRes get() = if (!DialogsFabHelper.hasNewMessage()) R.drawable.menu_topic_add else R.drawable.msg_groups
+            override val iconRes get() = if (!DialogsFabHelper.hasNewMessage()) R.drawable.msg_topic_create else R.drawable.msg_groups
         },
         NEW_CHANNEL("new_channel", R.string.NewChannel, R.drawable.msg_channel),
         CONTACTS("contacts", R.string.Contacts, R.drawable.msg_contacts),
