@@ -3335,11 +3335,11 @@ index 0000000..0000000 100644
 +            for (ButtonHolder holder : new ButtonHolder[] {replyButton, forwardButton}) {
 +                holder.button.setBlurredBackgroundDrawable(null);
 +                ScaleStateListAnimator.reset(holder.button);
-+                ThemeBind.selectorBackground(holder.button, Theme.createSelectorDrawable(Theme.multAlpha(Theme.getColor(Theme.key_glass_defaultIcon, resourcesProvider), .15f), Theme.RIPPLE_MASK_CIRCLE_TO_BOUND_EDGE), null, ThemeBind.multAlpha(Theme.key_glass_defaultIcon, .15f), resourcesProvider);
++                ThemeBind.selectorBackground(holder.button, Theme.createSimpleSelectorRoundRectDrawable(AndroidUtilities.dp(100), 0, Theme.multAlpha(Theme.getColor(Theme.key_glass_defaultIcon, resourcesProvider), .15f)), null, ThemeBind.multAlpha(Theme.key_glass_defaultIcon, .15f), resourcesProvider);
 +            }
-+            addView(replyButton.button, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.MATCH_PARENT));
++            addView(replyButton.button, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.MATCH_PARENT, 6f, 4f, 0f, 4f));
 +            addView(new Space(context), LayoutHelper.createLinear(0, 0, 1f));
-+            addView(forwardButton.button, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.MATCH_PARENT));
++            addView(forwardButton.button, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.MATCH_PARENT, 0f, 4f, 6f, 4f));
 +            return;
 +        }
          addView(replyButton.button, LayoutHelper.createLinear(0, 56, 1f, 1, 0, -1, 0));
