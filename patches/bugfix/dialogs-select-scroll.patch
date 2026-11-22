@@ -43,7 +43,7 @@ index 0000000..0000000 100644
 +
 +                @Override
 +                public boolean inu_consumeScroll() {
-+                    return parentLayout != null && parentLayout.isInPreviewMode();
++                    return parentLayout != null && parentLayout.isInPreviewMode() || filterOptions != null && filterOptions.isShown();
 +                }
              });
              viewPage.swipeController = new SwipeController(viewPage);

@@ -40,31 +40,43 @@ import org.telegram.ui.Components.ItemOptions
 import org.telegram.ui.DialogsActivity
 
 object LinkedChatsHelper {
-    class LinkedDialog(@JvmField val account: Int, val link: Link, dialog: TLRPC.Dialog) : TLRPC.TL_dialog() {
+    class LinkedDialog(@JvmField val account: Int, val link: Link, val scope: Int, dialog: TLRPC.Dialog) : TLRPC.TL_dialog() {
         @JvmField
         val key = "$account:${dialog.id}"
 
         init {
             id = dialog.id
             last_message_date = dialog.last_message_date
+            pinned = scope in link.pins
         }
     }
 
     data class Link(val hostUserId: Long, val sourceUserId: Long, val dialogId: Long) {
         var searchDate = 0
+        val pins = HashMap<Int, Int>()
     }
 
     class LinksItem : InuConfig.Item<List<Link>>("linked_chats_list", emptyList(), false) {
         override val prefType = InuConfig.PrefType.STRING
 
         override fun read(prefs: SharedPreferences): List<Link> = prefs.getString(key, "")!!.split(',').mapNotNull {
-            val parts = it.split(':').mapNotNull(String::toLongOrNull)
-            if (parts.size < 3) return@mapNotNull null
-            Link(parts[0], parts[1], parts[2]).apply { searchDate = parts.getOrNull(3)?.toInt() ?: 0 }
+            val parts = it.split(':')
+            val ids = parts.take(3).mapNotNull(String::toLongOrNull)
+            if (ids.size < 3) return@mapNotNull null
+            Link(ids[0], ids[1], ids[2]).apply {
+                searchDate = parts.getOrNull(3)?.toIntOrNull() ?: 0
+                parts.getOrNull(4)?.split(';')?.forEach { pin ->
+                    val (scope, date) = pin.split('=').mapNotNull(String::toIntOrNull).takeIf { it.size == 2 } ?: return@forEach
+                    pins[scope] = date
+                }
+            }
         }
 
         override fun SharedPreferences.Editor.write() {
-            putString(key, value.joinToString(",") { "${it.hostUserId}:${it.sourceUserId}:${it.dialogId}:${it.searchDate}" })
+            putString(key, value.joinToString(",") { link ->
+                val pins = link.pins.entries.joinToString(";") { "${it.key}=${it.value}" }
+                "${link.hostUserId}:${link.sourceUserId}:${link.dialogId}:${link.searchDate}:$pins"
+            })
         }
     }
 
@@ -105,15 +117,21 @@ object LinkedChatsHelper {
     @JvmStatic
     fun getDialogs(account: Int, dialogsType: Int, folderId: Int, onlySelect: Boolean): List<LinkedDialog> {
         if (!InuConfig.LINKED_CHATS.value || folderId != 0 || onlySelect) return emptyList()
-        if (!MessagesController.getInstance(account).dialogsLoaded) return emptyList()
+        val controller = MessagesController.getInstance(account)
+        if (!controller.dialogsLoaded) return emptyList()
         val filter = when (dialogsType) {
             DialogsActivity.DIALOGS_TYPE_DEFAULT -> null
-            DialogsActivity.DIALOGS_TYPE_FOLDER1 -> MessagesController.getInstance(account).selectedDialogFilter[0] ?: return emptyList()
-            DialogsActivity.DIALOGS_TYPE_FOLDER2 -> MessagesController.getInstance(account).selectedDialogFilter[1] ?: return emptyList()
+            DialogsActivity.DIALOGS_TYPE_FOLDER1 -> controller.selectedDialogFilter[0] ?: return emptyList()
+            DialogsActivity.DIALOGS_TYPE_FOLDER2 -> controller.selectedDialogFilter[1] ?: return emptyList()
             else -> return emptyList()
         }
+        val scope = filter?.id ?: 0
         val result = ArrayList<LinkedDialog>()
+        var pinsPruned = false
         for (link in getLinks(account)) {
+            if (controller.dialogFiltersLoaded) {
+                pinsPruned = link.pins.keys.removeAll { it != 0 && controller.dialogFiltersById.get(it) == null } || pinsPruned
+            }
             val source = findAccount(link.sourceUserId) ?: continue
             val dialog = MessagesController.getInstance(source).dialogs_dict.get(link.dialogId)
             if (dialog == null) {
@@ -121,9 +139,10 @@ object LinkedChatsHelper {
                 continue
             }
             if (filter != null && !filter.includesDialog(AccountInstance.getInstance(source), link.dialogId, dialog)) continue
-            result.add(LinkedDialog(source, link, dialog))
+            result.add(LinkedDialog(source, link, scope, dialog))
         }
-        result.sortByDescending { it.last_message_date }
+        if (pinsPruned) InuConfig.LINKED_CHATS_LIST.save()
+        result.sortWith(compareByDescending<LinkedDialog> { it.link.pins[scope] ?: Int.MIN_VALUE }.thenByDescending { it.last_message_date })
         return result
     }
 
@@ -280,8 +299,20 @@ object LinkedChatsHelper {
             )
             return true
         }
-        ItemOptions.makeOptions(fragment, view)
+        fragment.filterOptions = ItemOptions.makeOptions(fragment, view)
             .setScrimViewBackground(ColorDrawable(fragment.getThemedColor(Theme.key_windowBackgroundWhite)))
+            .add(
+                if (dialog.pinned) R.drawable.msg_unpin else R.drawable.msg_pin,
+                LocaleController.getString(if (dialog.pinned) R.string.UnpinMessage else R.string.PinMessage),
+            ) {
+                if (dialog.pinned) {
+                    dialog.link.pins.remove(dialog.scope)
+                } else {
+                    dialog.link.pins[dialog.scope] = (System.currentTimeMillis() / 1000).toInt()
+                }
+                InuConfig.LINKED_CHATS_LIST.save()
+                fragment.didReceivedNotification(NotificationCenter.dialogsNeedReload, fragment.currentAccount)
+            }
             .add(R.drawable.msg_delete, LocaleController.getString(R.string.InuLinkedChatsRemove), true) {
                 links = links - dialog.link
                 fragment.didReceivedNotification(NotificationCenter.dialogsNeedReload, fragment.currentAccount)
