@@ -5,9 +5,10 @@ Subject: click to open photos in webpage preview
 
 ---
  .../src/main/java/org/telegram/messenger/FileLoader.java      | 4 ++--
+ .../src/main/java/org/telegram/messenger/MessageObject.java   | 2 +-
  .../src/main/java/org/telegram/ui/Cells/ChatMessageCell.java  | 2 +-
  .../java/org/telegram/ui/Cells/ChatMessageLinkPreview.java    | 4 ++++
- 3 files changed, 7 insertions(+), 3 deletions(-)
+ 4 files changed, 8 insertions(+), 4 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/FileLoader.java b/TMessagesProj/src/main/java/org/telegram/messenger/FileLoader.java
 index 0000000..0000000 100644
@@ -31,6 +32,19 @@ index 0000000..0000000 100644
                          if (sizeFull != null) {
                              return getPathToAttach(sizeFull, null, forceCache, useFileDatabaseQueue);
                          }
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
+@@ -7176,7 +7176,7 @@ public class MessageObject {
+     public static boolean canPreviewDocument(TLRPC.Document document) {
+         if (document != null && document.mime_type != null) {
+             String mime = document.mime_type;
+-            if (isDocumentHasThumb(document) && (mime.equalsIgnoreCase("image/png") || mime.equalsIgnoreCase("image/jpg") || mime.equalsIgnoreCase("image/jpeg")) || (Build.VERSION.SDK_INT >= 26 && (mime.equalsIgnoreCase("image/heic")))) {
++            if (isDocumentHasThumb(document) && (mime.equalsIgnoreCase("image/png") || mime.equalsIgnoreCase("image/jpg") || mime.equalsIgnoreCase("image/jpeg") || mime.equalsIgnoreCase("image/webp")) || (Build.VERSION.SDK_INT >= 26 && (mime.equalsIgnoreCase("image/heic")))) {
+                 for (int a = 0; a < document.attributes.size(); a++) {
+                     TLRPC.DocumentAttribute attribute = document.attributes.get(a);
+                     if (attribute instanceof TLRPC.TL_documentAttributeImageSize) {
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
@@ -52,7 +66,7 @@ index 0000000..0000000 100644
                          } else {
                              MediaController.getInstance().pauseMessage(cell.currentMessageObject);
                          }
-+                    } else if (cell.drawPhotoImage && (cell.documentAttachType == cell.DOCUMENT_ATTACH_TYPE_NONE || cell.documentAttachType == cell.DOCUMENT_ATTACH_TYPE_GIF) && cell.photoImage.isInsideImage(cell.lastTouchX, cell.lastTouchY) && cell.currentMessageObject != null && !cell.currentMessageObject.preview && MessageObject.getMedia(cell.currentMessageObject.messageOwner).webpage != null && TextUtils.isEmpty(MessageObject.getMedia(cell.currentMessageObject.messageOwner).webpage.embed_url)) {
++                    } else if (cell.drawPhotoImage && (cell.documentAttachType == cell.DOCUMENT_ATTACH_TYPE_NONE || cell.documentAttachType == cell.DOCUMENT_ATTACH_TYPE_GIF || cell.currentMessageObject != null && cell.currentMessageObject.canPreviewDocument()) && cell.photoImage.isInsideImage(cell.lastTouchX, cell.lastTouchY) && cell.currentMessageObject != null && !cell.currentMessageObject.preview && MessageObject.getMedia(cell.currentMessageObject.messageOwner).webpage != null && TextUtils.isEmpty(MessageObject.getMedia(cell.currentMessageObject.messageOwner).webpage.embed_url)) {
 +                        if (cell.delegate != null) {
 +                            cell.delegate.didPressImage(cell, cell.lastTouchX, cell.lastTouchY, false);
 +                        }
