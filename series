@@ -452,3 +452,4 @@ feature/qr_scan_from_gallery.patch
 bugfix/webm-stream-lost-wakeup.patch
 bugfix/xml-referenced-strings.patch
 bugfix/dialogs-select-scroll.patch
+bugfix/lottie-aspect-fit.patch

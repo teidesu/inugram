@@ -315,6 +315,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - sticker creator output sent as photo when high-quality default is on
 - sticker-pack Edit button no longer ignores slower taps or inherits the recent-stickers Create button's long-press action
 - sticker editor send/favorites menu uses the editor's dark background instead of the app's light theme; other scrim menus also respect their local theme
+- non-square lottie animations (QR login, folder in/out, 2FA, calls log, voice mic icons, ...) no longer stretched to their square-ish target size (stock's new tlottie renderer scales axes independently; rlottie fitted and centered them)
 - non-square webm stickers rendered off-center in the emoji panel (precached frames were blitted top-left and scaled by width only)
 - webm sticker permanently stuck blank until the app is restarted (an image load cancelled mid-flight published a decoder-less drawable into the animation cache, whose stream stayed cancelled and which never retried decoding)
 - webm sticker stuck blank when its download finished between the stream's availability check and its wait (the finish notification was lost and the decoder thread blocked forever)

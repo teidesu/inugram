@@ -1,0 +1,139 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Sun, 22 Nov 2026 19:00:38 +0400
+Subject: fit non-square lottie animations instead of stretching them
+
+---
+ TMessagesProj/jni/lottie.cpp | 109 ++++++++++++++++++-----------------
+ 1 file changed, 56 insertions(+), 53 deletions(-)
+
+diff --git a/TMessagesProj/jni/lottie.cpp b/TMessagesProj/jni/lottie.cpp
+index 0000000..0000000 100644
+--- a/TMessagesProj/jni/lottie.cpp
++++ b/TMessagesProj/jni/lottie.cpp
+@@ -134,6 +134,52 @@ static bool writeMetadata(JNIEnv *env, jintArray data, TLottieInstance *instance
+     return true;
+ }
+ 
++// tlottie stretches the composition to the target size, rlottie fitted it preserving aspect ratio
++template<typename Pixel, typename Render>
++static int32_t renderFitted(const TLottieInstance *instance, const AndroidBitmapInfo &info,
++                            void *rawPixels, bool clear, Render render) {
++    const uint32_t contentWidth = tlottie_width(instance);
++    const uint32_t contentHeight = tlottie_height(instance);
++    uint32_t width = info.width;
++    uint32_t height = info.height;
++    if (contentWidth != 0 && contentHeight != 0) {
++        const uint64_t widthByContentHeight = static_cast<uint64_t>(info.width) * contentHeight;
++        const uint64_t heightByContentWidth = static_cast<uint64_t>(info.height) * contentWidth;
++        if (widthByContentHeight > heightByContentWidth) {
++            width = std::max<uint32_t>(1, static_cast<uint32_t>((heightByContentWidth + contentHeight / 2) / contentHeight));
++        } else if (widthByContentHeight < heightByContentWidth) {
++            height = std::max<uint32_t>(1, static_cast<uint32_t>((widthByContentHeight + contentWidth / 2) / contentWidth));
++        }
++    }
++    auto *bytes = static_cast<uint8_t *>(rawPixels);
++    const size_t count = static_cast<size_t>(width) * height;
++    if (width == info.width && height == info.height && info.stride == width * sizeof(Pixel)) {
++        return render(width, height, reinterpret_cast<Pixel *>(bytes), count);
++    }
++    const uint32_t left = (info.width - width) / 2;
++    const uint32_t top = (info.height - height) / 2;
++    auto *region = bytes + static_cast<size_t>(top) * info.stride + left * sizeof(Pixel);
++    std::vector<Pixel> temporary(count);
++    if (!clear) {
++        for (uint32_t y = 0; y < height; ++y) {
++            std::copy_n(reinterpret_cast<const Pixel *>(region + static_cast<size_t>(y) * info.stride),
++                        width, temporary.data() + static_cast<size_t>(y) * width);
++        }
++    }
++    const int32_t result = render(width, height, temporary.data(), count);
++    if (result != TLOTTIE_OK) return result;
++    if (clear) {
++        for (uint32_t y = 0; y < info.height; ++y) {
++            std::fill_n(reinterpret_cast<Pixel *>(bytes + static_cast<size_t>(y) * info.stride), info.width, Pixel{});
++        }
++    }
++    for (uint32_t y = 0; y < height; ++y) {
++        std::copy_n(temporary.data() + static_cast<size_t>(y) * width, width,
++                    reinterpret_cast<Pixel *>(region + static_cast<size_t>(y) * info.stride));
++    }
++    return result;
++}
++
+ } // namespace
+ 
+ extern "C" {
+@@ -197,62 +243,19 @@ JNIEXPORT jint JNICALL Java_org_telegram_ui_Components_RLottieNative_nGetFrame(
+          bitmapInfo.format != ANDROID_BITMAP_FORMAT_A_8)) return 0;
+     void *rawPixels = nullptr;
+     if (AndroidBitmap_lockPixels(env, bitmap, &rawPixels) < 0) return 0;
+-    const size_t count = static_cast<size_t>(bitmapInfo.width) * bitmapInfo.height;
+     int32_t result;
+     if (bitmapInfo.format == ANDROID_BITMAP_FORMAT_A_8) {
+-        std::vector<uint8_t> temporary;
+-        auto *alpha = static_cast<uint8_t *>(rawPixels);
+-        if (bitmapInfo.stride != bitmapInfo.width) {
+-            temporary.resize(count);
+-            alpha = temporary.data();
+-            if (!clear) {
+-                const auto *source = static_cast<const uint8_t *>(rawPixels);
+-                for (uint32_t y = 0; y < bitmapInfo.height; ++y) {
+-                    std::copy_n(source + static_cast<size_t>(y) * bitmapInfo.stride,
+-                                bitmapInfo.width,
+-                                alpha + static_cast<size_t>(y) * bitmapInfo.width);
+-                }
+-            }
+-        }
+-        result = tlottie_render_alpha8_with_options(instance, static_cast<float>(frame),
+-                bitmapInfo.width, bitmapInfo.height, alpha, count, 1,
+-                kDefaultCurveTolerance, clear ? 1 : 0);
+-        if (result == TLOTTIE_OK && !temporary.empty()) {
+-            auto *destination = static_cast<uint8_t *>(rawPixels);
+-            for (uint32_t y = 0; y < bitmapInfo.height; ++y) {
+-                std::copy_n(alpha + static_cast<size_t>(y) * bitmapInfo.width, bitmapInfo.width,
+-                            destination + static_cast<size_t>(y) * bitmapInfo.stride);
+-            }
+-        }
++        result = renderFitted<uint8_t>(instance, bitmapInfo, rawPixels, clear,
++                [&](uint32_t width, uint32_t height, uint8_t *pixels, size_t count) {
++                    return tlottie_render_alpha8_with_options(instance, static_cast<float>(frame),
++                            width, height, pixels, count, 1, kDefaultCurveTolerance, clear ? 1 : 0);
++                });
+     } else {
+-        std::vector<uint32_t> temporary;
+-        auto *pixels = static_cast<uint32_t *>(rawPixels);
+-        if (bitmapInfo.stride != bitmapInfo.width * sizeof(uint32_t)) {
+-            temporary.resize(count);
+-            pixels = temporary.data();
+-            if (!clear) {
+-                const auto *source = static_cast<const uint8_t *>(rawPixels);
+-                for (uint32_t y = 0; y < bitmapInfo.height; ++y) {
+-                    std::copy_n(
+-                            reinterpret_cast<const uint32_t *>(
+-                                    source + static_cast<size_t>(y) * bitmapInfo.stride),
+-                            bitmapInfo.width,
+-                            pixels + static_cast<size_t>(y) * bitmapInfo.width);
+-                }
+-            }
+-        }
+-        result = tlottie_render_with_options(instance, static_cast<float>(frame),
+-                bitmapInfo.width, bitmapInfo.height, pixels, count, 1,
+-                kDefaultCurveTolerance, clear ? 1 : 0);
+-        if (result == TLOTTIE_OK) {
+-            if (!temporary.empty()) {
+-                auto *destination = static_cast<uint8_t *>(rawPixels);
+-                for (uint32_t y = 0; y < bitmapInfo.height; ++y) {
+-                    std::copy_n(pixels + static_cast<size_t>(y) * bitmapInfo.width, bitmapInfo.width,
+-                                reinterpret_cast<uint32_t *>(destination + static_cast<size_t>(y) * bitmapInfo.stride));
+-                }
+-            }
+-        }
++        result = renderFitted<uint32_t>(instance, bitmapInfo, rawPixels, clear,
++                [&](uint32_t width, uint32_t height, uint32_t *pixels, size_t count) {
++                    return tlottie_render_with_options(instance, static_cast<float>(frame),
++                            width, height, pixels, count, 1, kDefaultCurveTolerance, clear ? 1 : 0);
++                });
+     }
+     AndroidBitmap_unlockPixels(env, bitmap);
+     return result == TLOTTIE_OK ? frame : -5;
