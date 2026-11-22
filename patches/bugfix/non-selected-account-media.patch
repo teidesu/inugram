@@ -15,11 +15,12 @@ Subject: load media and search through the owning account on a non-selected acco
  .../telegram/ui/Cells/SharedDocumentCell.java    |  5 +++++
  .../telegram/ui/Cells/SharedPhotoVideoCell2.java |  2 ++
  .../ui/Components/ChatAvatarContainer.java       |  4 ++++
+ .../Reactions/ReactionsLayoutInBubble.java       |  1 +
  .../telegram/ui/Components/SearchViewPager.java  |  1 +
  .../main/java/org/telegram/ui/PhotoViewer.java   |  2 +-
  .../org/telegram/ui/Stories/PeerStoriesView.java |  3 +++
  .../org/telegram/ui/Stories/StoryViewer.java     | 16 ++++++++++------
- 15 files changed, 53 insertions(+), 10 deletions(-)
+ 16 files changed, 54 insertions(+), 10 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
 index 0000000..0000000 100644
@@ -204,6 +205,18 @@ index 0000000..0000000 100644
          addView(avatarImageView);
          if (avatarClickable) {
              final TLRPC.Chat chat = parentFragment != null ? parentFragment.getCurrentChat() : null;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionsLayoutInBubble.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionsLayoutInBubble.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionsLayoutInBubble.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionsLayoutInBubble.java
+@@ -173,6 +173,7 @@ public class ReactionsLayoutInBubble {
+         hasPaidReaction = false;
+         reactionButtons.clear();
+         if (messageObject != null) {
++            currentAccount = messageObject.currentAccount;
+             boolean forceLikeDislikeReactions = false; /*!messageObject.isOutOwner()
+                     && !messageObject.isBotPendingDraft
+                     && BotForumHelper.isBotForum(currentAccount, messageObject.getDialogId())
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/SearchViewPager.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/SearchViewPager.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/SearchViewPager.java
