@@ -171,6 +171,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - 🐶 customizable text classifier (native / improved / off) - reduces false positive expansions
 - show custom emoji *after* regular ones in `:smile` emoji suggestion popup
 - "delete for both/all" default checkbox state
+- 🐶 edit text messages that are still sending: the queued request is rewritten in place (keeps order), or the edit is applied right after the send lands
 - hide "send as" picker (long-tap stickers button to reveal)
 - round recorder:
   - zoom slider below the video feed

@@ -454,3 +454,4 @@ bugfix/xml-referenced-strings.patch
 bugfix/dialogs-select-scroll.patch
 bugfix/lottie-aspect-fit.patch
 bugfix/dialogs-switch-account-after-search.patch
+feature/edit-pending-messages.patch

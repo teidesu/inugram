@@ -1,0 +1,247 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Sun, 22 Nov 2026 21:38:34 +0400
+Subject: edit text messages that are still sending
+
+---
+ TMessagesProj/jni/TgNetWrapper.cpp            | 12 +++++++++
+ .../jni/tgnet/ConnectionsManager.cpp          | 23 ++++++++++++++++
+ TMessagesProj/jni/tgnet/ConnectionsManager.h  |  1 +
+ TMessagesProj/jni/tgnet/Request.h             |  1 +
+ .../org/telegram/messenger/MessageObject.java |  2 +-
+ .../messenger/SendMessagesHelper.java         |  7 ++++-
+ .../telegram/tgnet/ConnectionsManager.java    | 27 +++++++++++++++++++
+ .../java/org/telegram/ui/ChatActivity.java    |  7 ++++-
+ 8 files changed, 77 insertions(+), 3 deletions(-)
+
+diff --git a/TMessagesProj/jni/TgNetWrapper.cpp b/TMessagesProj/jni/TgNetWrapper.cpp
+index 0000000..0000000 100644
+--- a/TMessagesProj/jni/TgNetWrapper.cpp
++++ b/TMessagesProj/jni/TgNetWrapper.cpp
+@@ -23,6 +23,7 @@ jmethodID jclass_ConnectionsManager_onRequestClear;
+ jmethodID jclass_ConnectionsManager_onRequestComplete;
+ jmethodID jclass_ConnectionsManager_onRequestQuickAck;
+ jmethodID jclass_ConnectionsManager_onRequestWriteToSocket;
++jmethodID jclass_ConnectionsManager_inu_onRequestReplaced;
+ jmethodID jclass_ConnectionsManager_onUnparsedMessageReceived;
+ jmethodID jclass_ConnectionsManager_onUpdate;
+ jmethodID jclass_ConnectionsManager_onSessionCreated;
+@@ -151,6 +152,12 @@ void failNotRunningRequest(JNIEnv *env, jclass c, jint instanceNum, jint token)
+     return ConnectionsManager::getInstance(instanceNum).failNotRunningRequest(token);
+ }
+ 
++void inu_replaceNotSentRequest(JNIEnv *env, jclass c, jint instanceNum, jint token, jlong object, jint callbackId) {
++    ConnectionsManager::getInstance(instanceNum).inu_replaceNotSentRequest(token, (NativeByteBuffer *) (intptr_t) object, [instanceNum, callbackId](bool replaced) {
++        jniEnv[instanceNum]->CallStaticVoidMethod(jclass_ConnectionsManager, jclass_ConnectionsManager_inu_onRequestReplaced, instanceNum, callbackId, (jboolean) replaced);
++    });
++}
++
+ void receivedIntegrityCheckClassic(JNIEnv *env, jclass c, jint instanceNum, jint requestToken, jstring nonce, jstring token) {
+     const char* nonceStr = env->GetStringUTFChars(nonce, 0);
+     const char* tokenStr = env->GetStringUTFChars(token, 0);
+@@ -561,6 +568,7 @@ static JNINativeMethod ConnectionsManagerMethods[] = {
+         {"native_onHostNameResolved", "(Ljava/lang/String;JLjava/lang/String;)V", (void *) onHostNameResolved},
+         {"native_discardConnection", "(III)V", (void *) discardConnection},
+         {"native_failNotRunningRequest", "(II)V", (void *) failNotRunningRequest},
++        {"native_inu_replaceNotSentRequest", "(IIJI)V", (void *) inu_replaceNotSentRequest},
+         {"native_receivedIntegrityCheckClassic", "(IILjava/lang/String;Ljava/lang/String;)V", (void *) receivedIntegrityCheckClassic},
+         {"native_receivedCaptchaResult", "(IIILjava/lang/String;)V", (void *) receivedCaptchaResult},
+         {"native_isGoodPrime", "([BI)Z", (void *) isGoodPrime},
+@@ -628,6 +636,10 @@ extern "C" int registerNativeTgNetFunctions(JavaVM *vm, JNIEnv *env) {
+     if (jclass_ConnectionsManager_onRequestWriteToSocket == 0) {
+         return JNI_FALSE;
+     }
++    jclass_ConnectionsManager_inu_onRequestReplaced = env->GetStaticMethodID(jclass_ConnectionsManager, "inu_onRequestReplaced", "(IIZ)V");
++    if (jclass_ConnectionsManager_inu_onRequestReplaced == 0) {
++        return JNI_FALSE;
++    }
+     jclass_ConnectionsManager_onRequestQuickAck = env->GetStaticMethodID(jclass_ConnectionsManager, "onRequestQuickAck", "(II)V");
+     if (jclass_ConnectionsManager_onRequestQuickAck == 0) {
+         return JNI_FALSE;
+diff --git a/TMessagesProj/jni/tgnet/ConnectionsManager.cpp b/TMessagesProj/jni/tgnet/ConnectionsManager.cpp
+index 0000000..0000000 100644
+--- a/TMessagesProj/jni/tgnet/ConnectionsManager.cpp
++++ b/TMessagesProj/jni/tgnet/ConnectionsManager.cpp
+@@ -2255,6 +2255,28 @@ void ConnectionsManager::failNotRunningRequest(int32_t token) {
+     });
+ }
+ 
++void ConnectionsManager::inu_replaceNotSentRequest(int32_t token, NativeByteBuffer *data, std::function<void(bool)> onDone) {
++    scheduleTask([&, token, data, onDone] {
++        for (auto queue : {&requestsQueue, &waitingLoginRequests}) {
++            for (auto &request : *queue) {
++                if (request->requestToken != token) {
++                    continue;
++                }
++                auto apiRequest = dynamic_cast<TL_api_request *>(request->rawRequest);
++                if (request->cancelled || request->inu_sent || apiRequest == nullptr) {
++                    break;
++                }
++                apiRequest->request->reuse();
++                apiRequest->request = data;
++                onDone(true);
++                return;
++            }
++        }
++        data->reuse();
++        onDone(false);
++    });
++}
++
+ void ConnectionsManager::receivedIntegrityCheckClassic(int32_t requestToken, std::string nonce, std::string token) {
+     scheduleTask([&, requestToken, nonce, token] {
+         for (auto iter = runningRequests.begin(); iter != runningRequests.end(); iter++) {
+@@ -3038,6 +3060,7 @@ void ConnectionsManager::processRequestQueue(uint32_t connectionTypes, uint32_t
+         if (!hasPendingRequestsForConnection(connection)) {
+             connection->resetLastEventTime();
+         }
++        request->inu_sent = true;
+         runningRequests.push_back(std::move(*iter));
+ 
+         switch (request->connectionType & 0x0000ffff) {
+diff --git a/TMessagesProj/jni/tgnet/ConnectionsManager.h b/TMessagesProj/jni/tgnet/ConnectionsManager.h
+index 0000000..0000000 100644
+--- a/TMessagesProj/jni/tgnet/ConnectionsManager.h
++++ b/TMessagesProj/jni/tgnet/ConnectionsManager.h
+@@ -84,6 +84,7 @@ public:
+ 
+     void reconnect(int32_t datacentrId, int32_t connectionType);
+     void failNotRunningRequest(int32_t token);
++    void inu_replaceNotSentRequest(int32_t token, NativeByteBuffer *data, std::function<void(bool)> onDone);
+     void receivedIntegrityCheckClassic(int32_t requestToken, std::string nonce, std::string token);
+     void receivedCaptchaResult(int32_t requestToken, int32_t generation, std::string token);
+     void moveToDatacenter(uint32_t datacenterId);
+diff --git a/TMessagesProj/jni/tgnet/Request.h b/TMessagesProj/jni/tgnet/Request.h
+index 0000000..0000000 100644
+--- a/TMessagesProj/jni/tgnet/Request.h
++++ b/TMessagesProj/jni/tgnet/Request.h
+@@ -53,6 +53,7 @@ public:
+     int32_t minStartTime = 0;
+     int32_t lastResendTime = 0;
+     bool isResending = false;
++    bool inu_sent = false;
+     int32_t instanceNum = 0;
+     uint32_t serverFailureCount = 0;
+     TLObject *rawRequest;
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
+@@ -12098,7 +12098,7 @@ public class MessageObject {
+         if (chat != null && (chat.left || chat.kicked) && (!chat.megagroup || !chat.has_link)) {
+             return false;
+         }
+-        if (message == null || message.peer_id == null || message.action != null && !(message.action instanceof TLRPC.TL_messageActionEmpty) || isForwardedMessage(message) || message.via_bot_id != 0 || message.id < 0) {
++        if (message == null || message.peer_id == null || message.action != null && !(message.action instanceof TLRPC.TL_messageActionEmpty) || isForwardedMessage(message) || message.via_bot_id != 0 || message.id < 0 && !desu.inugram.helpers.chat.PendingEditHelper.canEditPendingMessage(currentAccount, message, scheduled)) {
+             return false;
+         }
+         final TLRPC.MessageMedia media = getMedia(message);
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
+@@ -137,7 +137,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+     public static final int MEDIA_TYPE_RICH = 13;
+     private final HashMap<String, ArrayList<DelayedMessage>> delayedMessages = new HashMap<>();
+     private final SparseArray<MessageObject> unsentMessages = new SparseArray<>();
+-    private final SparseArray<TLRPC.Message> sendingMessages = new SparseArray<>();
++    public final SparseArray<TLRPC.Message> sendingMessages = new SparseArray<>();
+     private final SparseArray<TLRPC.Message> editingMessages = new SparseArray<>();
+     private final SparseArray<TLRPC.Message> uploadMessages = new SparseArray<>();
+     private final LongSparseArray<Integer> sendingMessagesIdDialogs = new LongSparseArray<>();
+@@ -1781,6 +1781,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+     }
+ 
+     public void processSentMessage(int id) {
++        desu.inugram.helpers.chat.PendingEditHelper.onMessageProcessed(currentAccount, id);
+         int prevSize = unsentMessages.size();
+         unsentMessages.remove(id);
+         if (prevSize != 0 && unsentMessages.size() == 0) {
+@@ -3079,6 +3080,9 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+         if (messageObject == null) {
+             return;
+         }
++        if (messageObject.getId() < 0 && desu.inugram.helpers.chat.PendingEditHelper.editPendingMessage(currentAccount, messageObject)) {
++            return;
++        }
+         if (params == null) {
+             params = new HashMap<>();
+         }
+@@ -8638,6 +8642,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+                 });
+             }
+         }, null, ConnectionsManager.RequestFlagCanCompress | ConnectionsManager.RequestFlagInvokeAfter);
++        desu.inugram.helpers.chat.PendingEditHelper.trackRequest(newMsgObj, req);
+         if (parentMessage != null) {
+             parentMessage.sendDelayedRequests();
+         }
+diff --git a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java b/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
++++ b/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
+@@ -171,6 +171,32 @@ public class ConnectionsManager extends BaseController {
+         });
+     }
+ 
++    private final ConcurrentHashMap<Integer, Utilities.Callback<Boolean>> inu_replaceCallbacks = new ConcurrentHashMap<>();
++
++    public void inu_replaceNotSentRequest(int requestToken, TLObject object, Utilities.Callback<Boolean> onDone) {
++        Utilities.stageQueue.postRunnable(() -> {
++            NativeByteBuffer buffer;
++            try {
++                buffer = new NativeByteBuffer(object.getObjectSize());
++                object.serializeToStream(buffer);
++            } catch (Exception e) {
++                FileLog.e(e);
++                onDone.run(false);
++                return;
++            }
++            int callbackId = lastRequestToken.getAndIncrement();
++            inu_replaceCallbacks.put(callbackId, onDone);
++            native_inu_replaceNotSentRequest(currentAccount, requestToken, buffer.address, callbackId);
++        });
++    }
++
++    public static void inu_onRequestReplaced(int currentAccount, int callbackId, boolean replaced) {
++        Utilities.Callback<Boolean> onDone = getInstance(currentAccount).inu_replaceCallbacks.remove(callbackId);
++        if (onDone != null) {
++            onDone.run(replaced);
++        }
++    }
++
+     private static class ResolvedDomain {
+ 
+         public ArrayList<String> addresses;
+@@ -1062,6 +1088,7 @@ public class ConnectionsManager extends BaseController {
+     public static native void native_onHostNameResolved(String host, long address, String ip);
+     public static native void native_discardConnection(int currentAccount, int datacenterId, int connectionType);
+     public static native void native_failNotRunningRequest(int currentAccount, int token);
++    public static native void native_inu_replaceNotSentRequest(int currentAccount, int token, long object, int callbackId);
+     public static native void native_receivedIntegrityCheckClassic(int currentAccount, int requestToken, String nonce, String token);
+     public static native void native_receivedCaptchaResult(int currentAccount, int requestToken, int generation, String token);
+     public static native boolean native_isGoodPrime(byte[] prime, int g);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -34636,7 +34636,7 @@ public class ChatActivity extends BaseFragment implements
+         updatePinnedMessageView(true);
+         updateVisibleRows();
+ 
+-        if (!asSuggestion && !messageObject.scheduled && !messageObject.isQuickReply() && chatMode != MODE_WELCOME_MESSAGES) {
++        if (!asSuggestion && !messageObject.scheduled && !messageObject.isQuickReply() && chatMode != MODE_WELCOME_MESSAGES && messageObject.getId() > 0) {
+             TLRPC.TL_messages_getMessageEditData req = new TLRPC.TL_messages_getMessageEditData();
+             req.peer = getMessagesController().getInputPeer(dialog_id);
+             req.id = messageObject.getId();
+@@ -47247,6 +47247,11 @@ public class ChatActivity extends BaseFragment implements
+                 options.add(OPTION_COPY);
+                 icons.add(R.drawable.msg_copy);
+             }
++            if (allowEdit && message.getId() < 0) {
++                items.add(LocaleController.getString(R.string.Edit));
++                options.add(OPTION_EDIT);
++                icons.add(R.drawable.msg_edit);
++            }
+             items.add(LocaleController.getString(R.string.CancelSending));
+             options.add(OPTION_CANCEL_SENDING);
+             icons.add(R.drawable.msg_delete);
