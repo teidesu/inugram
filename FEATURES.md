@@ -465,3 +465,4 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - hashtag search in another channel (`#tag@channel`): no more huge empty gap above the results, last message in "show as chat" no longer hidden under the bottom bar, long-tapping a reaction on a channel post shows the reaction instead of failing to load reactors
 - search result previews with a media thumbnail no longer drift to the right while scrolling
 - inline bot restriction checked against the stickers permission instead of the inline one: inline results were blocked in chats that only banned stickers, and offered (then failed with `CHAT_SEND_INLINE_FORBIDDEN`) in chats that only banned inline bots
+- album caption quotes: wrong width and clipped expand/collapse in compact mode, dead tap zone on the right, missing press animation when tapped right of the first image (stock bug: each album cell keeps its own caption copy, only the left one draws it)
