@@ -1370,6 +1370,102 @@ declare namespace inu {
     }): ChatHistory
 
     /**
+     * Content of a {@link DialogEntry}. Can be either:
+     *
+     * - `{ peer }` - shown as if it's a real chat, and the rest of the data comes from the app's cache
+     * - a custom row defined by the given fields
+     *
+     * @experimental Subject to breaking changes between releases.
+     */
+    type DialogEntryContent
+      = | {
+        /** Marked peer ID */
+        peer: number
+        /**
+         * Whether this chat should appear pinned to the top of the list
+         *
+         * @default false
+         */
+        pinned?: boolean
+      }
+      | {
+        peer?: never
+        title: string
+        /** Message preview line */
+        text?: string
+        /**
+         * Avatar of the row.
+         *
+         * Animated, emoji and sticker icons are currently not supported
+         */
+        icon?: UIIcon
+        /**
+         * Unix time in seconds of "Last updated" for the row,
+         * used for sorting the row in the dialogs list.
+         *
+         * When omitted, the row has no time defined, and is shown at the very bottom
+         */
+        date?: number
+        /**
+         * Number of unread messages in the chat
+         *
+         * @default 0
+         */
+        unreadCount?: number
+        /**
+         * Whether this chat should appear pinned to the top of the list
+         *
+         * @default false
+         */
+        pinned?: boolean
+        /**
+         * Whether this chat should show up as "muted"
+         * @default false
+         */
+        muted?: boolean
+        /**
+         * Whether to show the verification checkmark for the chat
+         * @default false
+         */
+        verified?: boolean
+      }
+
+    /** @experimental Subject to breaking changes between releases. */
+    interface DialogEntry extends Disposable {
+      /** Replace the content of the row */
+      update(content: DialogEntryContent): void
+      /** Remove the row */
+      dispose(): void
+    }
+
+    /**
+     * Add a custom row to the dialogs list
+     *
+     * **Limits: 20 entries per plugin.**
+     *
+     * @throws `not-found` when `account` is not logged in.
+     * @experimental Subject to breaking changes between releases.
+     */
+    function addDialogEntry(options: DialogEntryContent & {
+      /**
+       * Account slot where the row should be shown
+       *
+       * @default every account
+       */
+      account?: number
+      /**
+       * Chat folders ({@link ChatFolder.id}) where the row should be shown
+       *
+       * @default [0]
+       */
+      chatFolders?: number[]
+      /** Click handler for the row */
+      onClick(anchor: UIAnchor): void
+      /** Secondary click (long tap) handler */
+      onSecondaryClick?(anchor: UIAnchor): void
+    }): DialogEntry
+
+    /**
      * Displays a stack of peer avatars in place of a bulletin's icon.
      * Skips peers unknown to the app.
      */

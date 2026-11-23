@@ -23,7 +23,7 @@ index 0000000..0000000 100644
      }
  
      public interface OnInterceptTouchListener {
-@@ -2682,7 +2686,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -2686,7 +2690,7 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
  
      @Override
      public boolean dispatchNestedPreScroll(int dx, int dy, int[] consumed, int[] offsetInWindow, int type) {
@@ -36,7 +36,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
-@@ -4522,6 +4522,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+@@ -4527,6 +4527,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                          finishPreviewFragment();
                      }
                  }

@@ -46,6 +46,7 @@ pub trait UiHost {
   fn ui_invalidate(&self, page_id: i64);
   fn ui_open_menu(&self, menu_id: i64, page_id: i64, anchor_key: &str, items_json: &str) -> Option<String>;
   fn ui_open_text_entity_menu(&self, menu_id: i64, tap_id: i64, items_json: &str) -> Option<String>;
+  fn ui_open_dialog_entry_menu(&self, menu_id: i64, tap_id: i64, items_json: &str) -> Option<String>;
 }
 
 /// a menu entry that is the `'separator'` string, written as `{ separator: true }`
@@ -67,6 +68,8 @@ pub(crate) enum MenuAnchor {
   Row { page_id: i64, row: Rc<str> },
   /// the link of a `registerTextEntity` tap
   TextEntityTap(i64),
+  /// the tapped `addDialogEntry` row
+  DialogEntryTap(i64),
 }
 
 struct CallbackEntry {
@@ -760,6 +763,7 @@ impl UiState {
     let refused = match anchor {
       MenuAnchor::Row { page_id, row } => self.host.ui_open_menu(menu_id, *page_id, row, &json),
       MenuAnchor::TextEntityTap(tap_id) => self.host.ui_open_text_entity_menu(menu_id, *tap_id, &json),
+      MenuAnchor::DialogEntryTap(tap_id) => self.host.ui_open_dialog_entry_menu(menu_id, *tap_id, &json),
     };
     if let Some(err) = refused {
       return Err(ctx.throw(host_error_to_js(ctx, &err)?));

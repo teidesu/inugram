@@ -65,6 +65,13 @@ interface UiListener {
     /** answers [QuickJs.chatHistoryMenu]: `S` + items json or `E` + message */
     fun uiChatHistoryMenu(requestId: Long, wire: String)
 
+    /** adds the entry, or replaces the content of the one under [token] */
+    fun uiDialogEntrySet(token: Int, json: String): String?
+
+    fun uiDialogEntryRemove(token: Int)
+
+    fun uiOpenDialogEntryMenu(menuId: Long, tapId: Long, itemsJson: String): String?
+
     /** [kind] keeps in sync with rust `icons::KIND_*` */
     fun iconResolves(kind: Int, value: String): Boolean
 

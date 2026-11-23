@@ -421,7 +421,7 @@ object PluginChatHistory : SessionResource {
     }
 
     /** a 24dp glyph tinted white on the saved-messages blue disc, like stock's own placeholder avatars */
-    private class DiscIconDrawable(private val glyph: Drawable) : Drawable() {
+    internal class DiscIconDrawable(private val glyph: Drawable) : Drawable() {
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Theme.getColor(Theme.key_avatar_backgroundSaved) }
 
         init {

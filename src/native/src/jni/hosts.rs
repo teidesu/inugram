@@ -21,6 +21,7 @@ use crate::api::translation::TranslationHost;
 use crate::api::ui::actions::ActionHost;
 use crate::api::ui::dialogs::DialogHost;
 use crate::api::ui::files::FilesHost;
+use crate::api::ui::dialog_entries::DialogEntryHost;
 use crate::api::ui::history::HistoryHost;
 use crate::api::ui::icons::IconHost;
 use crate::api::ui::pages::UiHost;
@@ -401,12 +402,30 @@ impl UiHost for JniBridge {
     )
   }
 
+  fn ui_open_dialog_entry_menu(&self, menu_id: i64, tap_id: i64, items_json: &str) -> Option<String> {
+    self.call_refusal(
+      "openMenu",
+      self.on_ui_open_dialog_entry_menu,
+      &[Arg::Long(menu_id), Arg::Long(tap_id), Arg::Str(items_json)],
+    )
+  }
+
   fn ui_open_text_entity_menu(&self, menu_id: i64, tap_id: i64, items_json: &str) -> Option<String> {
     self.call_refusal(
       "openMenu",
       self.on_ui_open_text_entity_menu,
       &[Arg::Long(menu_id), Arg::Long(tap_id), Arg::Str(items_json)],
     )
+  }
+}
+
+impl DialogEntryHost for JniBridge {
+  fn dialog_entry_set(&self, token: u32, json: &str) -> Option<String> {
+    self.call_refusal("addDialogEntry", self.on_ui_dialog_entry_set, &[Arg::Int(token as i32), Arg::Str(json)])
+  }
+
+  fn dialog_entry_remove(&self, token: u32) {
+    self.call_void("addDialogEntry", self.on_ui_dialog_entry_remove, &[Arg::Int(token as i32)]);
   }
 }
 

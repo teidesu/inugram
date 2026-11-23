@@ -213,6 +213,10 @@ impl crate::api::ui::pages::UiHost for SilentUiHost {
   fn ui_open_menu(&self, _: i64, _: i64, _: &str, _: &str) -> Option<String> {
     None
   }
+  fn ui_open_dialog_entry_menu(&self, _: i64, _: i64, _: &str) -> Option<String> {
+    None
+  }
+
   fn ui_open_text_entity_menu(&self, _: i64, _: i64, _: &str) -> Option<String> {
     None
   }

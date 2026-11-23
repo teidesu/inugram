@@ -7,6 +7,7 @@ pub(crate) const OP_SAVE_FILE: i32 = 5;
 pub(crate) const OP_SELECT_PEERS: i32 = 6;
 
 pub(crate) mod actions;
+pub(crate) mod dialog_entries;
 pub(crate) mod dialogs;
 pub(crate) mod files;
 pub(crate) mod history;

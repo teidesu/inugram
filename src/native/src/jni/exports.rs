@@ -48,6 +48,7 @@ use crate::api::translation::{install_translation, TranslationHost};
 use crate::api::ui::actions::{install_actions, ActionHost};
 use crate::api::ui::dialogs::install_dialogs;
 use crate::api::ui::files::{install_files, FilesHost};
+use crate::api::ui::dialog_entries::{install_dialog_entries, DialogEntryHost};
 use crate::api::ui::history::{install_history, HistoryHost};
 use crate::api::ui::icons::{install_icons, IconHost};
 use crate::api::ui::pages::{install_ui, UiHost};
@@ -193,6 +194,10 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
       let history_host: Rc<dyn HistoryHost> = bridge.clone();
       let history = install_part(&ctx, "inu.ui.openChatHistory", log.as_ref(), |ctx, globals| {
         install_history(&ctx, history_host, jvm.clone(), lifecycle.clone(), log.clone(), &globals)
+      })?;
+      let dialog_entry_host: Rc<dyn DialogEntryHost> = bridge.clone();
+      let dialog_entries = install_part(&ctx, "inu.ui.addDialogEntry", log.as_ref(), |ctx, globals| {
+        install_dialog_entries(&ctx, dialog_entry_host, ui.clone(), jvm.clone(), lifecycle.clone(), log.clone(), &globals)
       })?;
       let notification_host: Rc<dyn NotificationHost> = bridge.clone();
       let notifications =
@@ -340,6 +345,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeCreate(
         ui,
         screens,
         history,
+        dialog_entries,
         actions,
         translation,
         filters,
@@ -1005,6 +1011,18 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeChatHisto
   index: jint,
 ) {
   with_engine(ptr, (), |engine| engine.history.dispatch_menu_click(&engine.ctx, history_id, request_id, index));
+}
+
+#[no_mangle]
+pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeDialogEntryClick(
+  _env: EnvUnowned,
+  _this: JObject,
+  ptr: jlong,
+  token: jint,
+  tap_id: jlong,
+  secondary: jboolean,
+) {
+  with_engine(ptr, (), |engine| engine.dialog_entries.dispatch_click(&engine.ctx, token as u32, tap_id, secondary));
 }
 
 #[no_mangle]

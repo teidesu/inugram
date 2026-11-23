@@ -197,6 +197,8 @@ open class QuickJs {
     fun chatHistoryMenuClick(historyId: Long, requestId: Long, index: Int) =
         requireLive { nativeChatHistoryMenuClick(it, historyId, requestId, index) }
 
+    fun dialogEntryClick(token: Int, tapId: Long, secondary: Boolean) = ifLive { nativeDialogEntryClick(it, token, tapId, secondary) }
+
     /** never call it off [EngineDispatch.scheduler]. Answered once through [UiListener.actionsRendered] unless abandoned; false when closed */
     open fun renderActions(renderId: Long, kind: Int, surfaceJson: String): Boolean = ifLiveOr(false) {
         nativeRenderActions(it, renderId, kind, surfaceJson)
@@ -356,6 +358,7 @@ open class QuickJs {
     private external fun nativeChatHistoryHeaderTap(ptr: Long, historyId: Long)
     private external fun nativeChatHistoryMenu(ptr: Long, historyId: Long, requestId: Long)
     private external fun nativeChatHistoryMenuClick(ptr: Long, historyId: Long, requestId: Long, index: Int)
+    private external fun nativeDialogEntryClick(ptr: Long, token: Int, tapId: Long, secondary: Boolean)
     private external fun nativeRenderActions(ptr: Long, renderId: Long, kind: Int, surfaceJson: String)
     private external fun nativeAbandonActionRender(ptr: Long, renderId: Long): String?
     private external fun nativeDispatchAction(ptr: Long, kind: Int, token: Int, secondary: Boolean, surfaceJson: String)

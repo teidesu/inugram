@@ -57,7 +57,7 @@ fn req_field<'js, T>(
     .ok_or_else(|| Exception::throw_type(ctx, &format!("{what}: '{key}' must be {expected}")))
 }
 
-fn to_int(v: &Value<'_>) -> Option<i32> {
+pub fn to_int(v: &Value<'_>) -> Option<i32> {
   v.as_int().or_else(|| v.as_float().filter(|f| f.fract() == 0.0).map(|f| f as i32))
 }
 

@@ -137,6 +137,13 @@ object PluginUi : SessionResource {
 
         override fun uiChatHistoryMenu(requestId: Long, wire: String) = PluginChatHistory.menu(requestId, wire)
 
+        override fun uiDialogEntrySet(token: Int, json: String): String? = PluginDialogEntries.set(session, token, json)
+
+        override fun uiDialogEntryRemove(token: Int) = PluginDialogEntries.remove(session, token)
+
+        override fun uiOpenDialogEntryMenu(menuId: Long, tapId: Long, itemsJson: String): String? =
+            PluginDialogEntries.openMenu(session, menuId, tapId, itemsJson)
+
         override fun iconResolves(kind: Int, value: String): Boolean = PluginIcons.iconResolves(kind, value)
 
         override fun commonIcon(name: String): String? = PluginIcons.commonIconName(name)

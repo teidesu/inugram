@@ -4,9 +4,9 @@ Date: Sun, 5 Jul 2026 01:44:58 +0400
 Subject: improved ripple handling in RecyclerListView
 
 ---
- .../ui/Components/RecyclerListView.java       | 114 ++++++++++++++++--
+ .../ui/Components/RecyclerListView.java       | 118 ++++++++++++++++--
  .../java/org/telegram/ui/DialogsActivity.java |   1 +
- 2 files changed, 108 insertions(+), 7 deletions(-)
+ 2 files changed, 112 insertions(+), 7 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/RecyclerListView.java
 index 0000000..0000000 100644
@@ -16,7 +16,7 @@ index 0000000..0000000 100644
                  if (!interceptedByChild && currentChildView != null) {
                      float x = event.getX();
                      float y = event.getY();
-+                    inu_selectorPressed = !inu_delayPressedState;
++                    inu_selectorPressed = !inu_delaysPressedState(currentChildView);
                      selectChildRunnable = () -> {
                          if (selectChildRunnable != null && currentChildView != null) {
                              onChildPressed(currentChildView, x, y, true);
@@ -45,7 +45,7 @@ index 0000000..0000000 100644
                          selectChildRunnable = null;
                      }
                      View pressedChild = currentChildView;
-+                    if (inu_delayPressedState && inu_prepressed && action == MotionEvent.ACTION_UP && pressedChild.isEnabled()) {
++                    if (inu_delaysPressedState(pressedChild) && inu_prepressed && action == MotionEvent.ACTION_UP && pressedChild.isEnabled()) {
 +                        inu_selectorPressed = true;
 +                        updateSelectorState();
 +                    }
@@ -164,12 +164,16 @@ index 0000000..0000000 100644
          if (selectorType == 8) {
              Theme.setMaskDrawableRad(selectorDrawable, selectorRadius, 0);
          } else if (selectorType == 42) {
-@@ -2490,9 +2555,12 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -2490,9 +2555,16 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
          }
      }
  
 +    public boolean inu_delayPressedState;
 +    private boolean inu_selectorPressed;
++
++    protected boolean inu_delaysPressedState(View child) {
++        return inu_delayPressedState;
++    }
 +
      private void updateSelectorState() {
          if (selectorDrawable != null && selectorDrawable.isStateful()) {
@@ -178,7 +182,7 @@ index 0000000..0000000 100644
                  if (selectorDrawable.setState(getDrawableStateForSelector())) {
                      invalidateDrawable(selectorDrawable);
                  }
-@@ -2533,7 +2601,15 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -2533,7 +2605,15 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
  
      @Override
      public boolean verifyDrawable(Drawable drawable) {
@@ -195,7 +199,7 @@ index 0000000..0000000 100644
      }
  
      @Override
-@@ -2682,9 +2758,33 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
+@@ -2682,9 +2762,33 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
      }
  
      private void drawSelectors2(Canvas canvas) {

@@ -32,7 +32,6 @@ import org.telegram.ui.ActionBar.ActionBarPopupWindow
 import org.telegram.ui.ActionBar.AlertDialog
 import org.telegram.ui.ActionBar.BaseFragment
 import org.telegram.ui.ActionBar.Theme
-import org.telegram.ui.Adapters.DialogsAdapter
 import org.telegram.ui.Adapters.DialogsSearchAdapter
 import org.telegram.ui.Cells.DialogCell
 import org.telegram.ui.ChatActivity
@@ -43,14 +42,44 @@ import org.telegram.ui.Components.ItemOptions
 import org.telegram.ui.DialogsActivity
 
 object LinkedChatsHelper {
-    class LinkedDialog(@JvmField val account: Int, val link: Link, val scope: Int, dialog: TLRPC.Dialog) : TLRPC.TL_dialog() {
-        @JvmField
-        val key = "$account:${dialog.id}"
-
+    class LinkedDialog(account: Int, val link: Link, val scope: Int, dialog: TLRPC.Dialog) : DialogEntriesHelper.Entry(account, "$account:${dialog.id}") {
         init {
             id = dialog.id
             last_message_date = dialog.last_message_date
             pinned = scope in link.pins
+        }
+
+        override fun isForum(): Boolean = MessagesController.getInstance(account).isForum(id)
+
+        override fun bind(cell: DialogCell, dialogsType: Int, folderId: Int) {
+            cell.inu_setEntry(this, true)
+            cell.setDialog(this, dialogsType, folderId)
+        }
+
+        override fun onClick(fragment: DialogsActivity, adapter: RecyclerView.Adapter<*>, view: View) {
+            val chatActivity = createChatActivity(fragment, this) ?: return
+            if (adapter is DialogsSearchAdapter) {
+                setSearchDate(adapter, this, (System.currentTimeMillis() / 1000).toInt())
+            }
+            fragment.presentFragment(chatActivity)
+        }
+
+        override fun onLongClick(fragment: DialogsActivity, adapter: RecyclerView.Adapter<*>, view: View) {
+            if (adapter is DialogsSearchAdapter) {
+                if (adapter.isSearchWas) return
+                fragment.showDialog(
+                    AlertDialog.Builder(fragment.parentActivity)
+                        .setTitle(LocaleController.getString(R.string.ClearSearchSingleAlertTitle))
+                        .setMessage(LocaleController.formatString(R.string.ClearSearchSingleChatAlertText, DialogObject.getName(getPeer(this))))
+                        .setPositiveButton(LocaleController.getString(R.string.ClearSearchRemove)) { _, _ ->
+                            setSearchDate(adapter, this, 0)
+                        }
+                        .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
+                        .create()
+                )
+                return
+            }
+            if (view is DialogCell) showChatPreview(fragment, view, this)
         }
     }
 
@@ -89,7 +118,6 @@ object LinkedChatsHelper {
             InuConfig.LINKED_CHATS_LIST.value = value
         }
 
-    private val requestedDialogs = HashSet<String>()
     private val pendingRecents = HashSet<Link>()
     private val resumedFragments = HashSet<BaseFragment>()
 
@@ -138,7 +166,7 @@ object LinkedChatsHelper {
             val source = findAccount(link.sourceUserId) ?: continue
             val dialog = MessagesController.getInstance(source).dialogs_dict.get(link.dialogId)
             if (dialog == null) {
-                requestDialog(source, link.dialogId)
+                DialogEntriesHelper.requestDialog(source, link.dialogId)
                 continue
             }
             if (filter != null && !filter.includesDialog(AccountInstance.getInstance(source), link.dialogId, dialog)) continue
@@ -197,14 +225,6 @@ object LinkedChatsHelper {
         names.addAll(0, arrayOfNulls<CharSequence>(matched.size).asList())
     }
 
-    private fun requestDialog(account: Int, dialogId: Long) {
-        if (!requestedDialogs.add("$account:$dialogId")) return
-        DialogsActivity.loadDialogs(AccountInstance.getInstance(account))
-        MessagesController.getInstance(account).inu_loadDialog(dialogId) {
-            NotificationCenter.getInstance(account).postNotificationName(NotificationCenter.dialogsNeedReload)
-        }
-    }
-
     @JvmStatic
     fun canAdd(account: Int, dialogIds: List<Long>): Boolean =
         InuConfig.LINKED_CHATS.value && dialogIds.any(::canLink) && getOtherAccounts(account).isNotEmpty()
@@ -249,12 +269,6 @@ object LinkedChatsHelper {
         menu.addView(item)
     }
 
-    private fun getLinkedItem(adapter: RecyclerView.Adapter<*>, position: Int): LinkedDialog? = when (adapter) {
-        is DialogsAdapter -> adapter.getItem(position)
-        is DialogsSearchAdapter -> adapter.getItem(position)
-        else -> null
-    } as? LinkedDialog
-
     private fun createChatActivity(fragment: BaseFragment, dialog: LinkedDialog): ChatActivity? {
         val controller = MessagesController.getInstance(dialog.account)
         val args = Bundle()
@@ -275,41 +289,6 @@ object LinkedChatsHelper {
             ForumUtilities.applyTopic(chatActivity, MessagesStorage.TopicKey.of(dialog.id, controller.getForumLastTopicId(chat.id)))
         }
         return chatActivity
-    }
-
-    @JvmStatic
-    fun onItemClick(fragment: DialogsActivity, adapter: RecyclerView.Adapter<*>, position: Int): Boolean {
-        val dialog = getLinkedItem(adapter, position) ?: return false
-        if (fragment.actionBar.isActionModeShowed) return true
-        val chatActivity = createChatActivity(fragment, dialog) ?: return true
-        if (adapter is DialogsSearchAdapter) {
-            setSearchDate(adapter, dialog, (System.currentTimeMillis() / 1000).toInt())
-        }
-        fragment.presentFragment(chatActivity)
-        return true
-    }
-
-    @JvmStatic
-    fun onItemLongClick(fragment: DialogsActivity, view: View, adapter: RecyclerView.Adapter<*>, position: Int): Boolean {
-        val dialog = getLinkedItem(adapter, position) ?: return false
-        if (fragment.actionBar.isActionModeShowed) return true
-        if (adapter is DialogsSearchAdapter) {
-            if (adapter.isSearchWas) return true
-            fragment.showDialog(
-                AlertDialog.Builder(fragment.parentActivity)
-                    .setTitle(LocaleController.getString(R.string.ClearSearchSingleAlertTitle))
-                    .setMessage(LocaleController.formatString(R.string.ClearSearchSingleChatAlertText, DialogObject.getName(getPeer(dialog))))
-                    .setPositiveButton(LocaleController.getString(R.string.ClearSearchRemove)) { _, _ ->
-                        setSearchDate(adapter, dialog, 0)
-                    }
-                    .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
-                    .create()
-            )
-            return true
-        }
-        if (view !is DialogCell) return true
-        showChatPreview(fragment, view, dialog)
-        return true
     }
 
     private fun showChatPreview(fragment: DialogsActivity, cell: DialogCell, dialog: LinkedDialog) {
