@@ -1,0 +1,110 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Nika Krasnova <nika@nikableh.moe>
+Date: Thu, 26 Nov 2026 13:15:58 +0100
+Subject: Add spoiler toggle when sharing media from other apps
+
+---
+ .../java/org/telegram/ui/DialogsActivity.java | 22 +++++++++++++++++++
+ .../java/org/telegram/ui/LaunchActivity.java  |  8 +++++++
+ .../java/org/telegram/ui/PhotoViewer.java     |  3 ++-
+ 3 files changed, 32 insertions(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+@@ -11822,6 +11822,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+                 return sharedMediaEntries != null ? sharedMediaEntries.size() : 0;
+             }
+ 
++            @Override
++            public boolean inu_canSpoiler() {
++                return inu_canSpoilerSharedMedia();
++            }
++
+             @Override
+             public boolean canSendAsFile() {
+                 return canSendDocumentsToSelectedDialogs();
+@@ -12290,6 +12295,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+             }
+         }
+         final boolean multipleMedia = sharedMediaEntries != null && sharedMediaEntries.size() > 1;
++        final boolean canSpoiler = inu_canSpoilerSharedMedia();
++        boolean allSpoilers = canSpoiler;
++        if (canSpoiler) {
++            for (MediaController.PhotoEntry entry : sharedMediaEntries) allSpoilers &= entry.hasSpoiler;
++        }
++        final boolean spoilerEnabled = allSpoilers;
+ 
+         ItemOptions.makeOptions(this, view)
+             .addIf(!isQuote && delegate instanceof ChatActivity, R.drawable.msg_forward_noquote, LocaleController.getString(R.string.InuForwardNoQuote), () -> {
+@@ -12335,11 +12346,22 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+                     }
+                 }, getResourceProvider());
+             })
++            .addIf(canSpoiler, spoilerEnabled ? R.drawable.msg_spoiler_off : R.drawable.msg_spoiler, getString(spoilerEnabled ? R.string.DisablePhotoSpoiler : R.string.EnablePhotoSpoiler), () -> {
++                for (MediaController.PhotoEntry entry : sharedMediaEntries) entry.hasSpoiler = !spoilerEnabled;
++            })
+             .show();
+ 
+         return true;
+     }
+ 
++    private boolean inu_canSpoilerSharedMedia() {
++        if (!hasSharedMediaEntries()) return false;
++        for (long did : selectedDialogs) {
++            if (DialogObject.isEncryptedDialog(did)) return false;
++        }
++        return true;
++    }
++
+     private float getRightSlidingProgress() {
+         if (rightSlidingDialogContainer != null && rightSlidingDialogContainer.hasFragment()) {
+             return rightSlidingDialogContainer.openedProgress;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java
+@@ -6588,6 +6588,13 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+                 if (hasSharedMediaEntries) {
+                     final ArrayList<MediaController.PhotoEntry> sharedEntries = dialogsFragment.getSharedMediaEntries();
+                     photoPathsArray = buildSendingInfosFromEntries(sharedEntries);
++                    // secret chats can't carry media spoilers; one info list is shared by every recipient
++                    for (MessagesStorage.TopicKey key : dids) {
++                        if (DialogObject.isEncryptedDialog(key.dialogId)) {
++                            for (SendMessagesHelper.SendingMediaInfo info : photoPathsArray) info.hasMediaSpoilers = false;
++                            break;
++                        }
++                    }
+                     if (!photoPathsArray.isEmpty()) {
+                         final CharSequence[] m = new CharSequence[]{ sendingText == null ? "" : sendingText };
+                         final ArrayList<TLRPC.MessageEntity> entities = MediaDataController.getInstance(currentAccount).getEntities(m, false);
+@@ -6781,6 +6788,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
+             info.videoEditedInfo = entry.editedInfo;
+             info.canDeleteAfter = entry.canDeleteAfter;
+             info.highQuality = entry.isHighQuality();
++            info.hasMediaSpoilers = entry.hasSpoiler;
+             infos.add(info);
+         }
+         return infos;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+@@ -2947,6 +2947,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+ 
+     public interface PhotoViewerProvider {
+         default void inu_spoilerToggled() { }
++        default boolean inu_canSpoiler() { return false; }
+         default void inu_addSendMenuItems(ItemOptions options, int index) { }
+         PlaceProviderObject getPlaceForPhoto(MessageObject messageObject, TLRPC.FileLocation fileLocation, int index, boolean needPreview, boolean closing);
+         ImageReceiver.BitmapHolder getThumbForPhoto(MessageObject messageObject, TLRPC.FileLocation fileLocation, int index);
+@@ -7483,7 +7484,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+             }
+ 
+             Object currentObject = currentIndex >= 0 && currentIndex < imagesArrLocals.size() ? imagesArrLocals.get(currentIndex) : null;
+-            boolean canSpoiler = parentChatActivity != null && !parentChatActivity.isSecretChat() && currentObject instanceof MediaController.PhotoEntry;
++            boolean canSpoiler = (parentChatActivity != null && !parentChatActivity.isSecretChat() || placeProvider != null && placeProvider.inu_canSpoiler()) && currentObject instanceof MediaController.PhotoEntry;
+ 
+             final boolean canEdit = placeProvider != null && placeProvider.canEdit(currentIndex);
+             final boolean canReplace = placeProvider != null && placeProvider.canReplace(currentIndex);
