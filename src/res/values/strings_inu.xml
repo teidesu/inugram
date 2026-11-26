@@ -227,6 +227,10 @@
     <string name="InuHideAllChatsTab">Hide \"All Chats\" tab</string>
     <string name="InuFolderTabsAtBottom">Show tabs at the bottom</string>
     <string name="InuFolderTabsAtBottomInfo">The classic folders bar can only be moved to the bottom with Material 3 bottom tabs or with bottom tabs disabled.</string>
+    <string name="InuSuggestFolderAfterJoin">Suggest a folder after joining</string>
+    <string name="InuSuggestFolderAfterJoinInfo">Offer to add newly joined public channels and groups to a folder.</string>
+    <string name="InuAddChannelToFolderSuggestion">You can add the channel to your folder</string>
+    <string name="InuAddGroupToFolderSuggestion">You can add the group to your folder</string>
     <string name="InuCommunityDisplayMode">Communities</string>
     <string name="InuCommunityDisplayModeRegular">Regular</string>
     <string name="InuCommunityDisplayModeLongTap">Open on long tap</string>

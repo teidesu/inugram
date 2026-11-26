@@ -128,6 +128,10 @@
     <string name="InuHideAllChatsTab">「すべてのチャット」タブを非表示</string>
     <string name="InuFolderTabsAtBottom">タブを下部に表示</string>
     <string name="InuFolderTabsAtBottomInfo">クラシックのフォルダーバーを下部に移動できるのは、Material 3 の下部タブ使用時か下部タブが無効の場合のみです。</string>
+    <string name="InuSuggestFolderAfterJoin">参加後にフォルダーを提案</string>
+    <string name="InuSuggestFolderAfterJoinInfo">新しく参加した公開チャンネルやグループをフォルダーに追加するよう提案します。</string>
+    <string name="InuAddChannelToFolderSuggestion">このチャンネルをフォルダーに追加できます</string>
+    <string name="InuAddGroupToFolderSuggestion">このグループをフォルダーに追加できます</string>
     <string name="InuHideCallActionButton">タイトルの通話ボタンを非表示</string>
     <string name="InuDisableProfileScrollSnap">プロフィールのスクロールスナップを無効化</string>
     <string name="InuDisableProfileScrollSnapInfo">スクロール時にプロフィールヘッダーを固定位置にスナップしない</string>

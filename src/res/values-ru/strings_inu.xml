@@ -128,6 +128,10 @@
     <string name="InuHideAllChatsTab">Скрыть вкладку «Все чаты»</string>
     <string name="InuFolderTabsAtBottom">Показывать вкладки снизу</string>
     <string name="InuFolderTabsAtBottomInfo">Классическую панель папок можно перенести вниз только с нижними вкладками Material 3 или с отключёнными нижними вкладками.</string>
+    <string name="InuSuggestFolderAfterJoin">Предлагать папку после вступления</string>
+    <string name="InuSuggestFolderAfterJoinInfo">Предлагать добавить в папку публичные каналы и группы, в которые вы вступили.</string>
+    <string name="InuAddChannelToFolderSuggestion">Вы можете добавить канал в папку</string>
+    <string name="InuAddGroupToFolderSuggestion">Вы можете добавить группу в папку</string>
     <string name="InuHideCallActionButton">Скрыть кнопку звонка в заголовке</string>
     <string name="InuDisableProfileScrollSnap">Отключить прилипание прокрутки профиля</string>
     <string name="InuDisableProfileScrollSnapInfo">Не привязывать шапку профиля к фиксированным позициям при прокрутке</string>
