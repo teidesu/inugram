@@ -458,3 +458,4 @@ bugfix/dialogs-switch-account-after-search.patch
 bugfix/album-caption-quotes.patch
 bugfix/widget-png-bounds.patch
 bugfix/zalgo-cap.patch
+feature/share-media-spoiler.patch
