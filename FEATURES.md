@@ -84,6 +84,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - 🐶 full-quality sticker previews in sticker sheets & emoji panel (instead of blurry 90px thumbs; only on unmetered network or when already downloaded)
 - show all recent stickers
 - minimize sticker creator button in recent stickers
+- precise controls in the sticker editor
 - sticker time overlay modes: show / 🐶 hide time / 🐶 hide on incoming / hide completely
 - "Refresh" in the sticker/emoji pack menu
 - edited-message display: compact pencil indicator and configurable primary timestamp
