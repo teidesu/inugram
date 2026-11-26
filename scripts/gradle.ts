@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import process from 'node:process'
 import lockfile from 'proper-lockfile'
@@ -21,8 +21,22 @@ const lockOptions = {
 if (await lockfile.check(cwd, lockOptions)) { step('Waiting for another build to finish') }
 const release = await lockfile.lock(cwd, { ...lockOptions, retries: { forever: true, minTimeout: 200, maxTimeout: 1000 } })
 
+// upstream ships no gradlew.bat, so do what gradlew does with the JDK gradle would pick
+function windowsWrapper(): [string, string[]] {
+  const studioConfig = join(cwd, '.gradle/config.properties')
+  const studioJavaHome = existsSync(studioConfig)
+    ? readFileSync(studioConfig, 'utf8').match(/^[\t ]*java\.home[\t ]*[=:]([^\r\n]*)/m)?.[1].trim().replace(/\\([\\:= ])/g, '$1')
+    : undefined
+  const javaHome = process.env.JAVA_HOME || studioJavaHome
+  return [
+    javaHome ? join(javaHome, 'bin/java.exe') : 'java.exe',
+    ['-Dorg.gradle.appname=gradlew', '-classpath', join(cwd, 'gradle/wrapper/gradle-wrapper.jar'), 'org.gradle.wrapper.GradleWrapperMain', ...args],
+  ]
+}
+
 const isWindows = process.platform === 'win32'
-const child = spawn(isWindows ? 'gradlew.bat' : './gradlew', args, { cwd, stdio: 'inherit', shell: isWindows })
+const [command, commandArgs] = isWindows ? windowsWrapper() : ['./gradlew', args]
+const child = spawn(command, commandArgs, { cwd, stdio: 'inherit' })
 
 // ctrl+c reaches gradlew through the process group, keep the lock until it exits
 process.on('SIGINT', () => {})
@@ -32,6 +46,7 @@ const exitCode = await new Promise<number>((resolve) => {
   child.on('exit', code => resolve(code ?? 1))
   child.on('error', (err) => {
     console.error(err)
+    if (isWindows) console.error('Set JAVA_HOME to your JDK, or configure the Gradle JDK in Android Studio')
     resolve(1)
   })
 })
