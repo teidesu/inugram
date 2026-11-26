@@ -6,7 +6,7 @@ pub(crate) struct InuInfo {
   pub(crate) app_build: String,
   pub(crate) api_version: i32,
   pub(crate) layer: i32,
-  pub(crate) language: String,
+  pub(crate) languages: Vec<String>,
   pub(crate) header: Vec<(String, String)>,
 }
 
@@ -17,7 +17,8 @@ pub(crate) fn build_info_object<'js>(ctx: Ctx<'js>, info: &InuInfo) -> rquickjs:
   obj.set("appBuild", info.app_build.as_str())?;
   obj.set("apiVersion", info.api_version)?;
   obj.set("layer", info.layer)?;
-  obj.set("language", info.language.as_str())?;
+  obj.set("language", info.languages.first().map_or("", String::as_str))?;
+  obj.set("languages", info.languages.clone())?;
   let header = Object::new(ctx.clone())?;
   for (k, v) in info.header.iter() {
     let existing: Option<rquickjs::Array> = header.get(k.as_str()).ok();

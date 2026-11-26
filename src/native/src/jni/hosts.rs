@@ -313,6 +313,10 @@ impl UtilsHost for JniBridge {
   fn format(&self, op: i32, value: i64) -> String {
     self.call_string_or_empty("format", self.on_format, &[Arg::Int(op), Arg::Long(value)])
   }
+
+  fn plural_form(&self, lang: &str, n: i32) -> String {
+    self.call_string_or_empty("pluralize", self.on_plural_form, &[Arg::Str(lang), Arg::Int(n)])
+  }
 }
 
 impl ScreenHost for JniBridge {

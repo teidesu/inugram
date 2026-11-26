@@ -12,7 +12,7 @@ fn the_bundled_info_test_plugin_passes() {
     app_build: "6822".into(),
     api_version: 1,
     layer: 214,
-    language: "en".into(),
+    languages: vec!["en".into()],
     header: crate::testing::harness::manifest_header(ORACLE),
   });
   ctx.with(|ctx| install_inu(&ctx, info, &crate::testing::harness::get_api_globals(&ctx)).unwrap());

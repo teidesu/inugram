@@ -270,7 +270,7 @@ open class QuickJs {
         appBuild: String,
         apiVersion: Int,
         layer: Int,
-        language: String,
+        languages: List<String>,
         header: Map<String, List<String>>,
     ) {
         val keys = ArrayList<String>()
@@ -283,7 +283,7 @@ open class QuickJs {
         }
         requireLive {
             nativeInstallInfo(
-                it, appVersion, appBuild, apiVersion, layer, language,
+                it, appVersion, appBuild, apiVersion, layer, languages.toTypedArray(),
                 keys.toTypedArray(), values.toTypedArray(),
             )
         }
@@ -323,7 +323,7 @@ open class QuickJs {
         appBuild: String,
         apiVersion: Int,
         layer: Int,
-        language: String,
+        languages: Array<String>,
         headerKeys: Array<String>,
         headerValues: Array<String>,
     )

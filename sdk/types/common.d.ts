@@ -149,8 +149,10 @@ declare namespace inu {
     apiVersion: number
     /** Current TL layer */
     layer: number
-    /** User's preferred language */
+    /** App language as a lowercase BCP 47 tag, such as `en` or `pt-br`. Empty when unknown */
     language: string
+    /** Candidate tags for the app language, most specific first. `language` is the first */
+    languages: string[]
     /** The manifest header directives, one array entry per repeated key */
     header: Record<string, string[]>
   }
@@ -1047,6 +1049,44 @@ declare namespace inu {
 
     /** app's clock-style duration text. `seconds` must be a non-negative signed 32-bit integer. */
     function formatDuration(seconds: number): string
+
+    /**
+     * Pick a plural form of `n`, using the app's plural rules for `lang`.
+     *
+     * ```ts
+     * inu.utils.pluralize(n, { one: 'файл', few: 'файла', many: 'файлов', other: 'файла' }, 'ru')
+     * ```
+     */
+    function pluralize<T>(
+      n: number,
+      forms: { zero?: T, one?: T, two?: T, few?: T, many?: T, other: T },
+      lang: string,
+    ): T
+
+    /**
+     * Simple i18n helper that selects the appropriate translations
+     * based on the app's language
+     *
+     * When resolving a language set, we try in order:
+     * - `inu.info().languages`
+     * - their base languages (`pt-br` → `pt`)
+     * - `defaultLang`, if nothing matches
+     *
+     * When a key is missing in the keyset, it is taken from `defaultLang`.
+     *
+     * ```ts
+     * const t = inu.utils.defineLangs({
+     *   en: { title: 'Files', count: (n: number) => `${n} ${inu.utils.pluralize(n, { one: 'file', other: 'files' }, 'en')}` },
+     *   ru: { title: 'Файлы' },
+     * }, 'en')
+     * t.title // 'Files' or 'Файлы'
+     * t.count(3) // 3 files
+     * ```
+     */
+    function defineLangs<L extends Record<string, object>, D extends keyof L & string>(
+      langs: L & { [K in keyof L]: Partial<L[D]> & Record<Exclude<keyof L[K], keyof L[D]>, never> },
+      defaultLang: D,
+    ): Readonly<L[D]>
 
     namespace peers {
       /** get the marked peer id of a peer object */

@@ -8,6 +8,17 @@ impl UtilsHost for TestUtilsHost {
   fn format(&self, op: i32, value: i64) -> String {
     format!("{op}:{value}")
   }
+
+  fn plural_form(&self, lang: &str, n: i32) -> String {
+    match (lang, n % 10) {
+      ("ru", 1) => "one",
+      ("ru", 2..=4) => "few",
+      ("ru", _) => "many",
+      (_, 1) => "one",
+      _ => "other",
+    }
+    .into()
+  }
 }
 
 fn setup() -> (Runtime, Context) {
@@ -271,4 +282,56 @@ fn bad_input_refuses_rather_than_guessing() {
     "#,
   );
   assert_eq!(out, r#"["TypeError","TypeError","TypeError"]"#);
+}
+
+fn set_language(ctx: &Context, language: &str) {
+  ctx.with(|ctx| {
+    let info = std::sync::Arc::new(crate::api::info::InuInfo {
+      app_version: String::new(),
+      app_build: String::new(),
+      api_version: 1,
+      layer: 1,
+      languages: language.split(',').map(String::from).collect(),
+      header: Vec::new(),
+    });
+    crate::api::info::install_inu(&ctx, info, &crate::testing::harness::get_api_globals(&ctx)).unwrap();
+  });
+}
+
+#[test]
+fn lang_strings_follow_the_app_language_and_fall_back_per_key() {
+  let (_rt, ctx) = setup();
+  set_language(&ctx, "en");
+  eval(
+    &ctx,
+    r#"
+      globalThis.t = inu.utils.defineLangs({
+        en: { hi: 'hi', bye: 'bye', count: (n) => inu.utils.pluralize(n, { one: `${n} item`, other: `${n} items` }, 'en') },
+        ru: { hi: 'привет', count: (n) => inu.utils.pluralize(n, { one: `${n} штука`, few: `${n} штуки`, other: `${n} штук` }, 'ru') },
+      }, 'en');
+      ''
+    "#,
+  );
+  let read = "JSON.stringify([t.hi, t.bye, t.count(1), t.count(3), t.count(5), t.missing])";
+  assert_eq!(eval(&ctx, read), r#"["hi","bye","1 item","3 items","5 items",null]"#);
+  set_language(&ctx, "ru-ru");
+  assert_eq!(eval(&ctx, read), r#"["привет","bye","1 штука","3 штуки","5 штук",null]"#);
+  set_language(&ctx, "de");
+  assert_eq!(eval(&ctx, "t.hi"), "hi");
+  set_language(&ctx, "uk,ru");
+  assert_eq!(eval(&ctx, "t.hi"), "привет");
+}
+
+#[test]
+fn pluralize_refuses_bad_input() {
+  let (_rt, ctx) = setup();
+  for call in [
+    "inu.utils.pluralize(1.5, { other: '' }, 'en')",
+    "inu.utils.pluralize(2 ** 31, { other: '' }, 'en')",
+    "inu.utils.pluralize(1, null, 'en')",
+    "inu.utils.pluralize(1, { other: '' })",
+    "inu.utils.pluralize(5, { one: '' }, 'ru')",
+  ] {
+    assert_eq!(catch_error_code(&ctx, call), "TypeError", "{call}");
+  }
 }

@@ -15,6 +15,7 @@ import desu.inugram.core.plugins.PluginManifestParser
 import desu.inugram.core.plugins.PluginPermissions
 import desu.inugram.core.plugins.PluginOrigin
 import desu.inugram.core.plugins.TlTables
+import desu.inugram.helpers.LocaleHelper
 import desu.inugram.helpers.ShortcutHelper
 import desu.inugram.helpers.plugins.io.PluginAssetFiles
 import desu.inugram.helpers.plugins.io.PluginBlobs
@@ -565,23 +566,25 @@ object PluginManager {
             appBuild = appBuild,
             apiVersion = PLUGIN_API_VERSION,
             layer = TLRPC.LAYER,
-            language = getLanguage(),
+            languages = getLanguages(),
             header = session.manifest.raw,
         )
     }
 
-    private fun getLanguage(): String = LocaleController.getInstance().currentLocaleInfo?.langCode ?: ""
+    private fun getLanguages(): List<String> =
+        LocaleController.getInstance().currentLocaleInfo?.let(LocaleHelper::candidatesFor).orEmpty()
+            .map { it.toLanguageTag().lowercase() }
 
-    private var lastLanguage: String? = null
+    private var lastLanguages: List<String>? = null
 
     /** `LocaleController` has no language-changed event, but posts `reloadInterface` after applying one */
     private fun watchLanguage() {
         AndroidUtilities.runOnUIThread {
-            lastLanguage = getLanguage()
+            lastLanguages = getLanguages()
             NotificationCenter.getGlobalInstance().addObserver({ _, _, _ ->
-                val language = getLanguage()
-                if (language != lastLanguage) {
-                    lastLanguage = language
+                val languages = getLanguages()
+                if (languages != lastLanguages) {
+                    lastLanguages = languages
                     EngineDispatch.scheduler.postRunnable {
                         for (plugin in getDispatchTargets()) plugin.session?.let(::installInfo)
                     }

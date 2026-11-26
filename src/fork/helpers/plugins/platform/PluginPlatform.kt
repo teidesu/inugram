@@ -35,6 +35,12 @@ object PluginPlatform {
             else -> error("unknown format op $op")
         }
 
+        override fun pluralForm(lang: String, n: Int): String {
+            val code = lang.lowercase().replace('-', '_')
+            val locale = LocaleController.getInstance()
+            return locale.inu_getPluralForm(code, n) ?: locale.inu_getPluralForm(code.substringBefore('_'), n) ?: "other"
+        }
+
         override fun openUrl(url: String) = PluginPlatform.openUrl(url, log)
 
         override fun clipboardRead(): String = readClipboard(log)

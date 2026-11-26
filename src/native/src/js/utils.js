@@ -1,4 +1,4 @@
-(utils, text) => {
+(utils, text, inu) => {
   const toSub = (value) => {
     if (typeof value === 'boolean' || !value) return null
     if (typeof value === 'string') return value
@@ -305,6 +305,36 @@
   }
 
   const readLocalMediaId = media => (media !== null && typeof media === 'object' ? localMediaIds.get(media) : undefined)
+
+  utils.defineLangs = (langs, defaultLang) => {
+    if (langs === null || typeof langs !== 'object') throw new TypeError('defineLangs: expected an object of languages')
+    const fallback = langs[defaultLang]
+    if (fallback === null || typeof fallback !== 'object') {
+      throw new TypeError(`defineLangs: no strings for the default language '${defaultLang}'`)
+    }
+    const lookup = (strings, key) => (Object.hasOwn(strings, key) ? strings[key] : undefined)
+    const byCode = new Map(Object.entries(langs).map(([code, strings]) => [code.toLowerCase().replace(/_/g, '-'), strings]))
+    const resolve = (languages) => {
+      for (const code of [...languages, ...languages.map(code => code.split('-')[0])]) {
+        const strings = byCode.get(code)
+        if (strings) return strings
+      }
+      return fallback
+    }
+    let resolvedFor
+    let resolved
+    // `inu.info` is replaced whenever the app language changes
+    const pick = () => {
+      if (inu.info !== resolvedFor) {
+        resolvedFor = inu.info
+        resolved = resolve(resolvedFor().languages)
+      }
+      return resolved
+    }
+    return new Proxy(Object.freeze({}), {
+      get: (_, key) => lookup(pick(), key) ?? lookup(fallback, key),
+    })
+  }
 
   Object.freeze(utils)
 

@@ -333,6 +333,8 @@ internal object DeviceMissing : CoreListener, UiListener, PlatformListener, Canv
 
     override fun format(op: Int, value: Long) = throw UnsupportedOperationException("this suite has no formatting")
 
+    override fun pluralForm(lang: String, n: Int) = throw UnsupportedOperationException("this suite has no formatting")
+
     override fun openUrl(url: String) = throw UnsupportedOperationException("this suite has no ui")
 
     override fun clipboardRead() = throw UnsupportedOperationException("this suite has no clipboard")

@@ -98,6 +98,8 @@ interface PlatformListener {
     /** [op] keeps in sync with rust `tl::utils::FORMAT_*` */
     fun format(op: Int, value: Long): String
 
+    fun pluralForm(lang: String, n: Int): String
+
     fun openUrl(url: String)
 
     /** not a wire: user content, so no tag could be told from it */

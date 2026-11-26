@@ -126,7 +126,7 @@ object LocaleHelper {
         }
     }
 
-    private fun candidatesFor(info: LocaleController.LocaleInfo): List<Locale> {
+    fun candidatesFor(info: LocaleController.LocaleInfo): List<Locale> {
         val out = LinkedHashSet<Locale>()
         addFromRaw(out, info.pluralLangCode)
         addFromRaw(out, info.baseLangCode)

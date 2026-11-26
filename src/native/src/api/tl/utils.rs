@@ -19,6 +19,7 @@ pub const FORMAT_DURATION: i32 = 7;
 
 pub trait UtilsHost {
   fn format(&self, op: i32, value: i64) -> String;
+  fn plural_form(&self, lang: &str, n: i32) -> String;
 }
 
 #[cfg(test)]
@@ -107,10 +108,33 @@ pub fn install_utils_with_host<'js>(
     Ok(host.format(FORMAT_DURATION, format_integer(&ctx, &value, "formatDuration", 0, i32::MAX as i64)?))
   });
 
+  set_fn!(utils, "pluralize", ctx, host, move |ctx: Ctx<'js>,
+                                              n: Value<'js>,
+                                              forms: Value<'js>,
+                                              lang: Value<'js>|
+        -> JsResult<Value<'js>> {
+    let n = format_integer(&ctx, &n, "pluralize", -(i32::MAX as i64), i32::MAX as i64)?;
+    let Some(forms) = forms.into_object() else {
+      return Err(Exception::throw_type(&ctx, "pluralize: expected an object of forms"));
+    };
+    let Some(lang) = lang.as_string().and_then(|lang| lang.to_string().ok()) else {
+      return Err(Exception::throw_type(&ctx, "pluralize: expected a language code"));
+    };
+    let form: Value = forms.get(host.plural_form(&lang, n.unsigned_abs() as i32).as_str())?;
+    if !form.is_undefined() {
+      return Ok(form);
+    }
+    let other: Value = forms.get("other")?;
+    if other.is_undefined() {
+      return Err(Exception::throw_type(&ctx, "pluralize: missing the 'other' form"));
+    }
+    Ok(other)
+  });
+
   let text = crate::api::tl::text::install_text(ctx)?;
 
   let factory = qjs_load_prelude(ctx, PRELUDE)?;
-  let shared: Object = factory.call((utils.clone(), text))?;
+  let shared: Object = factory.call((utils.clone(), text, globals.inu.clone()))?;
 
   globals.inu.set("utils", utils)?;
   Ok(shared)
@@ -123,6 +147,10 @@ struct UnavailableUtilsHost;
 impl UtilsHost for UnavailableUtilsHost {
   fn format(&self, _: i32, _: i64) -> String {
     "unavailable".into()
+  }
+
+  fn plural_form(&self, _: &str, _: i32) -> String {
+    "other".into()
   }
 }
 

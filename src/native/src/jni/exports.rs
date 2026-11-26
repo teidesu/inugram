@@ -1541,7 +1541,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallIn
   app_build: JString<'local>,
   api_version: jint,
   layer: jint,
-  language: JString<'local>,
+  languages: JObjectArray<'local, JString<'local>>,
   header_keys: JObjectArray<'local, JString<'local>>,
   header_values: JObjectArray<'local, JString<'local>>,
 ) {
@@ -1551,7 +1551,7 @@ pub extern "system" fn Java_desu_inugram_helpers_plugins_QuickJs_nativeInstallIn
       app_build: jstring_to_string(env, &app_build),
       api_version,
       layer,
-      language: jstring_to_string(env, &language),
+      languages: read_string_array(env, &languages),
       header: read_header(env, &header_keys, &header_values),
     });
     let _ = enter_js(&engine.ctx, |ctx| {

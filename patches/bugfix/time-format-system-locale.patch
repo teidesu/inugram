@@ -28,7 +28,7 @@ index 0000000..0000000 100644
          LocaleInfo currentInfo = null;
          boolean override = false;
  
-@@ -2078,7 +2079,7 @@ public class LocaleController {
+@@ -2083,7 +2084,7 @@ public class LocaleController {
          if (changingConfiguration) {
              return;
          }
