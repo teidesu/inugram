@@ -85,6 +85,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - show all recent stickers
 - minimize sticker creator button in recent stickers
 - precise controls in the sticker editor
+- sticker editor frame shape: non-square aspect ratios and adjustable or square corners
 - sticker time overlay modes: show / 🐶 hide time / 🐶 hide on incoming / hide completely
 - "Refresh" in the sticker/emoji pack menu
 - edited-message display: compact pencil indicator and configurable primary timestamp

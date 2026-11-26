@@ -1051,7 +1051,7 @@
     <string name="InuCrossAccountForwardNotDelivered">メッセージがもう一方のアカウントに届きませんでした</string>
 
     <string name="InuStickerTransformControls">スタンプの変形コントロール</string>
-    <string name="InuStickerTransformControlsInfo">スタンプエディターに、角度制限のない回転ホイール、サイズスライダー、リセットボタン、ジェスチャーロック、枠に収める機能を追加します。</string>
+    <string name="InuStickerTransformControlsInfo">スタンプエディターに、角度制限のない回転ホイール、サイズスライダー、フレームのアスペクト比と角の丸み、リセットボタン、ジェスチャーロック、枠に収める機能を追加します。</string>
     <string name="InuStickerRotation">回転</string>
     <string name="InuStickerRotateClockwise">時計回りに回転</string>
     <string name="InuStickerRotateCounterclockwise">反時計回りに回転</string>
@@ -1065,4 +1065,8 @@
     <string name="InuStickerSizeLocked">ジェスチャーによるサイズ変更はロックされています</string>
     <string name="InuStickerSizeUnlocked">ジェスチャーによるサイズ変更のロックは解除されています</string>
     <string name="InuStickerFitFailed">スタンプの範囲を計算できませんでした。もう一度フィットを試してください。</string>
+    <string name="InuStickerFrame">フレーム</string>
+    <string name="InuStickerCornerRadius">角の丸み</string>
+    <string name="InuStickerAspectRatio">アスペクト比</string>
+    <string name="InuStickerResetFrame">フレームをリセット</string>
 </resources>

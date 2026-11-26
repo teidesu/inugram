@@ -27,9 +27,11 @@ import org.telegram.ui.ActionBar.Theme
 import org.telegram.ui.Components.BackupImageView
 import org.telegram.ui.Components.BulletinFactory
 import org.telegram.ui.Components.CubicBezierInterpolator
+import org.telegram.ui.Components.ItemOptions
 import org.telegram.ui.Components.LayoutHelper
 import org.telegram.ui.Components.SeekBarView
 import org.telegram.ui.PhotoViewer
+import org.telegram.ui.Stories.DarkThemeResourceProvider
 import java.util.concurrent.Executors
 import kotlin.math.*
 
@@ -180,13 +182,13 @@ object StickerTransformHelper {
             viewer.containerView.post(prepareGeometry)
         }
         private val rowHeight = max(48, ceil(36 * viewer.containerView.resources.configuration.fontScale).toInt())
-        // Both rows share one label column so the controls line up in every locale.
+        // All rows share one label column so the controls line up in every locale.
         private val labelWidth = android.text.TextPaint().let { paint ->
             paint.textSize = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 14f, viewer.containerView.resources.displayMetrics)
-            val text = max(paint.measureText(string(R.string.InuStickerRotation)), paint.measureText(string(R.string.InuStickerSizeControl)))
+            val text = listOf(R.string.InuStickerRotation, R.string.InuStickerSizeControl, R.string.InuStickerFrame).maxOf { paint.measureText(string(it)) }
             max(64, ceil(text / AndroidUtilities.density).toInt() + 16)
         }
-        private val panelHeight = rowHeight * 2
+        private val panelHeight = rowHeight * 3
         private var logicalWidth = 0f
         private var logicalHeight = 0f
         private val context = viewer.containerView.context
@@ -203,12 +205,14 @@ object StickerTransformHelper {
         }
         private val rotation = TransformRow(true)
         private val size = TransformRow(false)
+        private val frame = FrameRow()
         private val repositioned = listOf(viewer.cutOutBtn, viewer.btnLayout, viewer.outlineBtn, viewer.undoBtn)
         private var originalPositions: List<Pair<Float, Float>>? = null
 
         init {
             panel.addView(rotation.row, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, rowHeight))
             panel.addView(size.row, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, rowHeight))
+            panel.addView(frame.row, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, rowHeight))
             viewer.containerView.addView(panel, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, panelHeight.toFloat(), Gravity.TOP, 10f, 0f, 10f, 0f))
             panel.visibility = View.GONE
             viewer.stickerMakerView.inu_onContentChanged = contentChanged
@@ -362,18 +366,95 @@ object StickerTransformHelper {
             }
         }
 
+        private fun rowLabel(title: String) = TextView(context).apply {
+            text = title
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            setTextColor(Color.WHITE)
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            setPadding(dp(12), 0, dp(4), 0)
+            isSingleLine = true
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+
+        private inner class FrameRow {
+            val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            private val label = rowLabel(string(R.string.InuStickerFrame))
+            private val slider = SeekBarView(context, false, sliderColors).apply {
+                setColors(0x44ffffff, 0xff51bdf3.toInt())
+                setReportChanges(true)
+                setDelegate(object : SeekBarView.SeekBarViewDelegate {
+                    override fun onSeekBarDrag(stop: Boolean, progress: Float) {
+                        if (!enabled || busy) return
+                        InuConfig.STICKER_FRAME_RADIUS.value = (progress * 100).roundToInt()
+                        frameChanged()
+                    }
+                    override fun getContentDescription(): CharSequence = "${string(R.string.InuStickerCornerRadius)} ${StickerFrameHelper.radiusPercent()}%"
+                    override fun getStepsCount() = 100
+                })
+            }
+            private val reset = ImageView(context).apply {
+                scaleType = ImageView.ScaleType.CENTER
+                setImageResource(R.drawable.msg_reset)
+                setColorFilter(Color.WHITE)
+                background = Theme.createSelectorDrawable(0x22ffffff, Theme.RIPPLE_MASK_CIRCLE_20DP)
+                contentDescription = string(R.string.InuStickerResetFrame)
+                setOnClickListener {
+                    InuConfig.STICKER_FRAME_ASPECT.value = StickerFrameHelper.ASPECTS[0]
+                    InuConfig.STICKER_FRAME_RADIUS.value = StickerFrameHelper.STOCK_RADIUS
+                    frameChanged()
+                }
+            }
+            private val aspect = TextView(context).apply {
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                typeface = AndroidUtilities.bold()
+                setTextColor(Color.WHITE)
+                gravity = Gravity.CENTER
+                isSingleLine = true
+                background = Theme.createSelectorDrawable(0x22ffffff, Theme.RIPPLE_MASK_CIRCLE_20DP)
+                setOnClickListener { showAspects(this) }
+            }
+
+            init {
+                row.addView(label, LayoutHelper.createLinear(labelWidth, LayoutHelper.MATCH_PARENT))
+                row.addView(slider, LayoutHelper.createLinear(0, 48, 1f))
+                row.addView(reset, LayoutHelper.createLinear(48, 48))
+                row.addView(aspect, LayoutHelper.createLinear(48, 48))
+            }
+
+            private fun showAspects(anchor: View) {
+                val current = StickerFrameHelper.aspectKey()
+                val options = ItemOptions.makeOptions(viewer.containerView, DarkThemeResourceProvider(), anchor)
+                for (key in StickerFrameHelper.ASPECTS) {
+                    options.addChecked(key == current, key) {
+                        InuConfig.STICKER_FRAME_ASPECT.value = key
+                        frameChanged()
+                    }
+                }
+                options.show()
+            }
+
+            fun sync() {
+                if (!slider.isDragging) slider.setProgress(StickerFrameHelper.radiusPercent() / 100f)
+                aspect.text = StickerFrameHelper.aspectKey()
+                aspect.contentDescription = "${string(R.string.InuStickerAspectRatio)} ${aspect.text}"
+                slider.isEnabled = enabled && !busy
+                reset.isEnabled = enabled && !busy
+                aspect.isEnabled = enabled && !busy
+                row.alpha = if (enabled && !busy) 1f else .45f
+            }
+        }
+
+        private fun frameChanged() {
+            viewer.stickerMakerView.requestLayout()
+            viewer.stickerMakerBackgroundView.invalidate()
+            viewer.containerView.invalidate()
+            frame.sync()
+        }
+
         private inner class TransformRow(private val isRotation: Boolean) {
             private val title = string(if (isRotation) R.string.InuStickerRotation else R.string.InuStickerSizeControl)
             val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-            private val label = TextView(context).apply {
-                text = title
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-                setTextColor(Color.WHITE)
-                gravity = Gravity.START or Gravity.CENTER_VERTICAL
-                setPadding(dp(12), 0, dp(4), 0)
-                isSingleLine = true
-                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            }
+            private val label = rowLabel(title)
             private val reset = ImageView(context).apply {
                 scaleType = ImageView.ScaleType.CENTER
                 setImageResource(R.drawable.msg_reset)
@@ -509,6 +590,7 @@ object StickerTransformHelper {
             if (!viewer.zooming && !viewer.moving) includeScale(viewer.scale)
             rotation.sync()
             size.sync()
+            frame.sync()
         }
 
         private fun publishControls() {
@@ -645,10 +727,13 @@ object StickerTransformHelper {
             if (panel.layoutParams.width != panelWidth) panel.layoutParams = panel.layoutParams.apply { this.width = panelWidth }
             panel.translationX = controlLeft + dp(10) - panel.left
             panel.translationY = panelTop - panel.top
-            val side = min(previewWidth, max(dp(48).toFloat(), bottom - top))
+            val frameSide = width - dp(20)
+            val frameWidth = StickerFrameHelper.frameWidth(frameSide)
+            val frameHeight = StickerFrameHelper.frameHeight(frameSide)
             val cx = if (compact) controlLeft / 2 else width / 2
             val cy = (top + bottom) / 2
-            val ratio = side / (width - dp(20))
+            val ratio = minOf(previewWidth / frameWidth, max(dp(48).toFloat(), bottom - top) / frameHeight, 1f)
+            val halfHeight = frameHeight * ratio / 2
             viewport.reset()
             viewport.setScale(ratio, ratio)
             viewport.postTranslate(cx - width / 2 * ratio, cy - height / 2 * ratio)
@@ -662,7 +747,7 @@ object StickerTransformHelper {
             frameViewport.setScale(ratio, ratio)
             frameViewport.postTranslate(maker.translationX, maker.translationY)
             if (originalPositions == null) originalPositions = repositioned.map { it.translationX to it.translationY }
-            val actionsTop = if (compact) panelTop + dp(panelHeight + 8) else cy + side / 2 + dp(8)
+            val actionsTop = if (compact) panelTop + dp(panelHeight + 8) else cy + halfHeight + dp(8)
             val actionLeft = controlLeft + (controlWidth - if (stackedActions) actionWidth else totalWidth) / 2
             action.translationX = actionLeft - (action.width - actionWidth) / 2 - action.left
             action.translationY = actionsTop + (dp(48) - action.height) / 2 - action.top
@@ -670,7 +755,7 @@ object StickerTransformHelper {
             fit.translationY = actionsTop + (if (stackedActions) dp(48) else 0) + (dp(48) - fit.height) / 2 - fit.top
             viewer.outlineBtn.translationY = actionsTop + dp((actionRows - 1) * 48) + (dp(48) - viewer.outlineBtn.height) / 2 - viewer.outlineBtn.top
             viewer.outlineBtn.translationX = controlLeft + (controlWidth - viewer.outlineBtn.width) / 2 - viewer.outlineBtn.left
-            viewer.undoBtn.translationY = cy - side / 2 - dp(44) - viewer.undoBtn.top
+            viewer.undoBtn.translationY = cy - halfHeight - dp(44) - viewer.undoBtn.top
             viewer.undoBtn.translationX = cx - viewer.undoBtn.width / 2 - viewer.undoBtn.left
         }
 
@@ -735,7 +820,13 @@ object StickerTransformHelper {
         private fun applyFit() {
             if (!pendingFit || !enabled || !main(viewer)) return
             pendingFit = false
-            val result = StickerFit.fit(support ?: return, viewer.rotate.toDouble(), (viewer.getContainerViewWidth() - dp(20)).toDouble()) ?: return
+            val side = (viewer.getContainerViewWidth() - dp(20)).toFloat()
+            val frameWidth = StickerFrameHelper.frameWidth(side)
+            val frameHeight = StickerFrameHelper.frameHeight(side)
+            val result = StickerFit.fit(
+                support ?: return, viewer.rotate.toDouble(), frameWidth.toDouble(), frameHeight.toDouble(),
+                StickerFrameHelper.radius(frameWidth, frameHeight).toDouble(),
+            ) ?: return
             viewer.scale = result.scale.toFloat()
             viewer.translationX = result.translationX.toFloat()
             viewer.translationY = result.translationY.toFloat() - viewer.currentPanTranslationY

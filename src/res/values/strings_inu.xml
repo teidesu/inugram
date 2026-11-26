@@ -1055,7 +1055,7 @@
     <string name="InuCrossAccountForwardFailed">Couldn\'t forward via %1$s: %2$s</string>
     <string name="InuCrossAccountForwardNotDelivered">messages didn\'t reach the other account</string>
     <string name="InuStickerTransformControls">Sticker transform controls</string>
-    <string name="InuStickerTransformControlsInfo">Add an endless rotation thumbwheel, a size slider, resets, gesture locks, and Fit to the sticker editor.</string>
+    <string name="InuStickerTransformControlsInfo">Add an endless rotation thumbwheel, a size slider, frame aspect ratio and corner radius, resets, gesture locks, and Fit to the sticker editor.</string>
     <string name="InuStickerRotation">Rotation</string>
     <string name="InuStickerRotateClockwise">Rotate clockwise</string>
     <string name="InuStickerRotateCounterclockwise">Rotate counterclockwise</string>
@@ -1069,4 +1069,8 @@
     <string name="InuStickerSizeLocked">Size gestures locked</string>
     <string name="InuStickerSizeUnlocked">Size gestures unlocked</string>
     <string name="InuStickerFitFailed">Could not calculate sticker bounds. Try Fit again.</string>
+    <string name="InuStickerFrame">Frame</string>
+    <string name="InuStickerCornerRadius">Corner radius</string>
+    <string name="InuStickerAspectRatio">Aspect ratio</string>
+    <string name="InuStickerResetFrame">Reset frame</string>
 </resources>

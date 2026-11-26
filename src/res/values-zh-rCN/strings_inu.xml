@@ -1051,7 +1051,7 @@
     <string name="InuCrossAccountForwardNotDelivered">消息未送达另一个账号</string>
 
     <string name="InuStickerTransformControls">贴纸变换控件</string>
-    <string name="InuStickerTransformControlsInfo">为贴纸编辑器添加可无限旋转的滚轮、尺寸滑块、重置按钮、手势锁定和一键适配画布功能。</string>
+    <string name="InuStickerTransformControlsInfo">为贴纸编辑器添加可无限旋转的滚轮、尺寸滑块、边框宽高比和圆角、重置按钮、手势锁定和一键适配画布功能。</string>
     <string name="InuStickerRotation">旋转</string>
     <string name="InuStickerRotateClockwise">顺时针旋转</string>
     <string name="InuStickerRotateCounterclockwise">逆时针旋转</string>
@@ -1065,4 +1065,8 @@
     <string name="InuStickerSizeLocked">缩放手势已锁定</string>
     <string name="InuStickerSizeUnlocked">缩放手势已解锁</string>
     <string name="InuStickerFitFailed">无法计算贴纸边界，请再次点击适配。</string>
+    <string name="InuStickerFrame">边框</string>
+    <string name="InuStickerCornerRadius">圆角</string>
+    <string name="InuStickerAspectRatio">宽高比</string>
+    <string name="InuStickerResetFrame">重置边框</string>
 </resources>

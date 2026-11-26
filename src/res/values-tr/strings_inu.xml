@@ -1057,7 +1057,7 @@
     <string name="InuCrossAccountForwardNotDelivered">mesajlar diğer hesaba ulaşmadı</string>
 
     <string name="InuStickerTransformControls">Çıkartma dönüştürme kontrolleri</string>
-    <string name="InuStickerTransformControlsInfo">Çıkartma düzenleyicisine sınırsız döndürme tekerleği, boyut kaydırıcısı, sıfırlama düğmeleri, hareket kilitleri ve çerçeveye sığdırma seçeneği ekler.</string>
+    <string name="InuStickerTransformControlsInfo">Çıkartma düzenleyicisine sınırsız döndürme tekerleği, boyut kaydırıcısı, çerçeve en boy oranı ve köşe yuvarlaklığı, sıfırlama düğmeleri, hareket kilitleri ve çerçeveye sığdırma seçeneği ekler.</string>
     <string name="InuStickerRotation">Döndürme</string>
     <string name="InuStickerRotateClockwise">Saat yönünde döndür</string>
     <string name="InuStickerRotateCounterclockwise">Saat yönünün tersine döndür</string>
@@ -1071,4 +1071,8 @@
     <string name="InuStickerSizeLocked">Boyut değiştirme hareketleri kilitli</string>
     <string name="InuStickerSizeUnlocked">Boyut değiştirme hareketlerinin kilidi açık</string>
     <string name="InuStickerFitFailed">Çıkartmanın sınırları hesaplanamadı. Sığdırmayı tekrar deneyin.</string>
+    <string name="InuStickerFrame">Çerçeve</string>
+    <string name="InuStickerCornerRadius">Köşe yuvarlaklığı</string>
+    <string name="InuStickerAspectRatio">En boy oranı</string>
+    <string name="InuStickerResetFrame">Çerçeveyi sıfırla</string>
 </resources>

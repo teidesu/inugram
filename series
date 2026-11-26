@@ -459,3 +459,4 @@ bugfix/album-caption-quotes.patch
 bugfix/widget-png-bounds.patch
 bugfix/zalgo-cap.patch
 feature/sticker-transform-controls.patch
+feature/sticker-frame-shape.patch

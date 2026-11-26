@@ -299,6 +299,23 @@ class StickerFitTest {
         assertNull(StickerFit.fit(listOf(StickerFit.Point(Double.NaN, 1.0)), 0.0, 512.0))
     }
 
+    @Test fun a_square_subject_fills_the_short_side_of_a_wide_square_cornered_frame() {
+        val points = rectangle(-256.0, -256.0, 256.0, 256.0)
+        val fit = StickerFit.fit(points, 0.0, 512.0, 256.0, 0.0)!!
+        assertEquals(127.0 / 256.0, fit.scale, 1e-6)
+        assertTrue(StickerFit.contains(256.0 * fit.scale, 256.0 * fit.scale, 512.0, 256.0, 0.0, 1.0 - 1e-7))
+    }
+
+    @Test fun rounder_corners_shrink_a_subject_that_reaches_into_them() {
+        val points = rectangle(-200.0, -100.0, 200.0, 100.0)
+        val square = StickerFit.fit(points, 0.0, 512.0, 256.0, 0.0)!!
+        val pill = StickerFit.fit(points, 0.0, 512.0, 256.0, 128.0)!!
+        assertEquals(127.0 / 100.0, square.scale, 1e-6)
+        assertTrue(pill.scale < square.scale * .95)
+        assertTrue(StickerFit.contains(200.0 * pill.scale, 100.0 * pill.scale, 512.0, 256.0, 128.0, 1.0 - 1e-7))
+        assertFalse(StickerFit.contains(200.0 * pill.scale * 1.01, 100.0 * pill.scale * 1.01, 512.0, 256.0, 128.0, 1.0))
+    }
+
     private fun assertContained(points: List<StickerFit.Point>, angle: Double, fit: StickerFit.Result) {
         val radians = angle * PI / 180
         for (p in points) {

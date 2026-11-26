@@ -221,8 +221,12 @@ object StickerFit {
         return states
     }
 
-    fun fit(points: List<Point>, angle: Double, side: Double, margin: Double = side / 512.0): Result? {
-        if (points.isEmpty() || side <= 0 || !side.isFinite()) return null
+    fun fit(points: List<Point>, angle: Double, side: Double, margin: Double = side / 512.0): Result? =
+        fit(points, angle, side, side, side / 8, margin)
+
+    /** Largest centered scale that keeps every point inside a [width] x [height] frame with corner [radius]. */
+    fun fit(points: List<Point>, angle: Double, width: Double, height: Double, radius: Double, margin: Double = max(width, height) / 512.0): Result? {
+        if (points.isEmpty() || width <= 0 || height <= 0 || !width.isFinite() || !height.isFinite()) return null
         val radians = angle * PI / 180
         val c = cos(radians); val s = sin(radians)
         val rotated = points.map { Point(c * it.x - s * it.y, s * it.x + c * it.y) }
@@ -230,25 +234,29 @@ object StickerFit {
         val left = rotated.minOf { it.x }; val right = rotated.maxOf { it.x }
         val top = rotated.minOf { it.y }; val bottom = rotated.maxOf { it.y }
         val cx = (left + right) / 2; val cy = (top + bottom) / 2
-        val extent = max(right - left, bottom - top)
-        if (extent <= 0 || margin >= side / 2) return null
+        if (right - left <= 0 && bottom - top <= 0 || margin >= min(width, height) / 2) return null
         val centered = rotated.map { Point(it.x - cx, it.y - cy) }
-        var lo = 0.0; var hi = side / extent
+        var lo = 0.0
+        var hi = min(if (right > left) width / (right - left) else Double.MAX_VALUE, if (bottom > top) height / (bottom - top) else Double.MAX_VALUE)
         repeat(60) {
             val mid = (lo + hi) / 2
-            if (centered.all { contains(it.x * mid, it.y * mid, side, margin) }) lo = mid else hi = mid
+            if (centered.all { contains(it.x * mid, it.y * mid, width, height, radius, margin) }) lo = mid else hi = mid
         }
         return Result(lo, -cx * lo, -cy * lo)
     }
 
     /** Rounded square eroded by margin, with its center at the origin. */
-    fun contains(x: Double, y: Double, side: Double, margin: Double): Boolean {
-        val half = side / 2 - margin
-        val radius = max(0.0, side / 8 - margin)
+    fun contains(x: Double, y: Double, side: Double, margin: Double): Boolean = contains(x, y, side, side, side / 8, margin)
+
+    /** Rounded rectangle eroded by margin, with its center at the origin. */
+    fun contains(x: Double, y: Double, width: Double, height: Double, radius: Double, margin: Double): Boolean {
+        val halfW = width / 2 - margin
+        val halfH = height / 2 - margin
+        val r = max(0.0, min(radius, min(width, height) / 2) - margin)
         val ax = abs(x); val ay = abs(y)
-        if (ax > half || ay > half) return false
-        val dx = max(0.0, ax - (half - radius)); val dy = max(0.0, ay - (half - radius))
-        return dx * dx + dy * dy <= radius * radius + 1e-9
+        if (ax > halfW || ay > halfH) return false
+        val dx = max(0.0, ax - (halfW - r)); val dy = max(0.0, ay - (halfH - r))
+        return dx * dx + dy * dy <= r * r + 1e-9
     }
 
     private fun clip(polygon: List<Point>, rect: Rect): List<Point> {

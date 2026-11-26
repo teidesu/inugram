@@ -959,6 +959,12 @@ object InuConfig {
     val STICKER_SIZE_LOCKED = BoolItem("sticker_size_locked", false, exportable = false)
 
     @JvmField
+    val STICKER_FRAME_ASPECT = StringItem("sticker_frame_aspect", "1:1", exportable = false)
+
+    @JvmField
+    val STICKER_FRAME_RADIUS = IntItem("sticker_frame_radius", 25, exportable = false)
+
+    @JvmField
     val VOICE_HINT_SHOWN = BoolItem("voice_hint_shown", false, exportable = false)
 
     @JvmField

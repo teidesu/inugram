@@ -1082,8 +1082,8 @@
     <string name="InuCrossAccountForwardFailed">Не удалось переслать через %1$s: %2$s</string>
     <string name="InuCrossAccountForwardNotDelivered">сообщения не дошли до другого аккаунта</string>
 
-    <string name="InuStickerTransformControls">Поворот и размер стикеров</string>
-    <string name="InuStickerTransformControlsInfo">Добавляет в редактор стикеров шкалу поворота без ограничений, ползунок размера, кнопки сброса, блокировку жестов и вписывание в рамку.</string>
+    <string name="InuStickerTransformControls">Точная настройка стикеров</string>
+    <string name="InuStickerTransformControlsInfo">Добавляет в редактор стикеров шкалу поворота без ограничений, ползунок размера, соотношение сторон и скругление углов рамки, кнопки сброса, блокировку жестов и вписывание в рамку.</string>
     <string name="InuStickerRotation">Поворот</string>
     <string name="InuStickerRotateClockwise">Повернуть по часовой стрелке</string>
     <string name="InuStickerRotateCounterclockwise">Повернуть против часовой стрелки</string>
@@ -1097,4 +1097,8 @@
     <string name="InuStickerSizeLocked">Изменение размера жестами заблокировано</string>
     <string name="InuStickerSizeUnlocked">Изменение размера жестами разблокировано</string>
     <string name="InuStickerFitFailed">Не удалось определить границы стикера. Попробуйте вписать его ещё раз.</string>
+    <string name="InuStickerFrame">Рамка</string>
+    <string name="InuStickerCornerRadius">Скругление углов</string>
+    <string name="InuStickerAspectRatio">Соотношение сторон</string>
+    <string name="InuStickerResetFrame">Сбросить рамку</string>
 </resources>
