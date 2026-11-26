@@ -106,8 +106,11 @@ object UpdateHelper {
         NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.appUpdateAvailable, true)
     }
 
+    val isSelfUpdateSupported: Boolean
+        get() = BuildConfig.INU_BUILD_TYPE != "fdroid"
+
     fun checkForCustomUpdate(force: Boolean, whenDone: Runnable?) {
-        if (!InuConfig.UPDATES_ENABLED.value) {
+        if (!isSelfUpdateSupported || !InuConfig.UPDATES_ENABLED.value) {
             whenDone?.run()
             return
         }
@@ -146,6 +149,7 @@ object UpdateHelper {
     }
 
     fun startDownload(account: Int) {
+        if (!isSelfUpdateSupported) return
         val update = SharedConfig.pendingAppUpdate ?: return
         val doc = update.document ?: return
 
@@ -225,7 +229,7 @@ object UpdateHelper {
     }
 
     fun check(callback: ((CheckResult) -> Unit)?) {
-        if (BuildConfig.INU_BUILD_TYPE == "debug") {
+        if (!isSelfUpdateSupported || BuildConfig.INU_BUILD_TYPE == "debug") {
             callback?.invoke(CheckResult.UpToDate)
             return
         }
@@ -233,7 +237,7 @@ object UpdateHelper {
     }
 
     fun prepareVariantSwitch(callback: (VariantSwitchResult) -> Unit) {
-        if (BuildConfig.INU_BUILD_TYPE == "debug") {
+        if (!isSelfUpdateSupported || BuildConfig.INU_BUILD_TYPE == "debug") {
             callback(VariantSwitchResult.Unavailable)
             return
         }
@@ -528,6 +532,7 @@ object UpdateHelper {
     }
 
     fun onNewMessage(msg: TLRPC.Message, account: Int) {
+        if (!isSelfUpdateSupported) return
         if (!InuConfig.UPDATES_ENABLED.value) return
         if (BuildConfig.INU_BUILD_TYPE == "debug") return
         if (msg.peer_id?.channel_id != CHANNEL_ID) return

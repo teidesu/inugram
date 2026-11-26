@@ -1,0 +1,9 @@
+Inugram is primarily intended for long-term Telegram users who want a clean and robust experience without all the bloat.
+
+What you can expect:
+- Removed annoyances
+- A lot of QoL features
+- UI tweaks to make it look prettier and cleaner
+- Opinionated defaults
+
+All that while still allowing users to disable custom tweaks to mostly achieve the stock experience.
