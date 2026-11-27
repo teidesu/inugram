@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Nika Krasnova <nika@nikableh.moe>
+Date: Thu, 26 Nov 2026 22:02:43 +0100
+Subject: refuse scheduling that would push a chat past 100 scheduled messages
+
+---
+ .../src/main/java/org/telegram/ui/ChatActivity.java         | 6 ++++++
+ .../org/telegram/ui/Components/ChatActivityEnterView.java   | 3 +++
+ 2 files changed, 9 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -15364,6 +15364,9 @@ public class ChatActivity extends BaseFragment implements
+         if (!checkSlowModeAlert()) {
+             return;
+         }
++        if (scheduleDate != 0 && !desu.inugram.helpers.chat.ScheduleLimitHelper.canScheduleForwards(this, arrayList.size())) {
++            return;
++        }
+         if ((scheduleDate != 0) == (chatMode == MODE_SCHEDULED)) {
+             waitingForSendingMessageLoad = true;
+             if (chatAdapter != null) {
+@@ -36007,6 +36010,9 @@ public class ChatActivity extends BaseFragment implements
+                 }
+             }
+         }
++        if (!fragment.isQuote && scheduleDate != 0 && !desu.inugram.helpers.chat.ScheduleLimitHelper.canSchedule(fragment, dids, fmessages.size() + (TextUtils.isEmpty(message) ? 0 : 1))) {
++            return false;
++        }
+ 
+         if (!fragment.isQuote && (inuCrossAccount || dids.size() > 1 || dids.get(0).dialogId == getUserConfig().getClientUserId() || message != null || scheduleDate != 0 || !notify)) {
+             return !AlertsCreator.ensurePaidMessagesMultiConfirmationTopicKeys(fragment.getCurrentAccount(), dids, fmessages.size() + (TextUtils.isEmpty(message) ? 0 : 1), prices -> {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
+@@ -7589,6 +7589,9 @@ public class ChatActivityEnterView extends FrameLayout implements
+             if (checkPremiumAnimatedEmoji(currentAccount, dialog_id, parentFragment, null, message)) {
+                 return;
+             }
++            if (scheduleDate != 0 && parentFragment != null && !desu.inugram.helpers.chat.ScheduleLimitHelper.canSchedule(parentFragment, message)) {
++                return;
++            }
+             if (processSendingText(message, notify, scheduleDate, scheduleRepeatPeriod, payStars)) {
+                 if (delegate.hasForwardingMessages() || (scheduleDate != 0 && !isInScheduleMode()) || isInScheduleMode()) {
+                     if (messageEditText != null) {
