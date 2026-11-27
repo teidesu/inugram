@@ -1,0 +1,41 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Nika Krasnova <nika@nikableh.moe>
+Date: Fri, 27 Nov 2026 18:52:20 +0100
+Subject: Fix photo viewer back arrow ripple stalling the close animation
+
+---
+ .../src/main/java/org/telegram/ui/PhotoViewer.java | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+@@ -4922,6 +4922,11 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                         return;
+                     }
+                     closePhoto(true, false);
++                    if (animationInProgress == 3 && actionBar.backButtonImageView != null) {
++                        // The ripple animates on the RenderThread for most of a second, and every frame
++                        // of it redraws the fading viewer; a hidden view's animators run without damage
++                        actionBar.backButtonImageView.setVisibility(View.INVISIBLE);
++                    }
+                 } else if (id == gallery_menu_save) {
+                     if (pageBlocksAdapter != null && !allowShare) {
+                         return;
+@@ -18962,6 +18967,15 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+         if (doneButtonPressed) {
+             releasePlayer(true);
+         }
++        final View back = actionBar != null ? actionBar.backButtonImageView : null;
++        if (back != null && back.getVisibility() == View.INVISIBLE) {
++            // Hiding does not drop a press the ripple has not drawn yet, so it would play on the next open
++            final Drawable.ConstantState ripple = back.getBackground() != null ? back.getBackground().getConstantState() : null;
++            if (ripple != null) {
++                back.setBackground(ripple.newDrawable());
++            }
++            back.setVisibility(View.VISIBLE);
++        }
+         if (currentMessageObject != null && !currentMessageObject.putInDownloadsStore) {
+             FileLoader.getInstance(currentAccount).cancelLoadFile(currentMessageObject.getDocument());
+         }
