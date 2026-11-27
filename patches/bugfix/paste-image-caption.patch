@@ -1,0 +1,41 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Fri, 27 Nov 2026 18:02:59 +0400
+Subject: keep input text as caption when pasting an image
+
+---
+ .../telegram/ui/Components/ChatActivityEnterView.java    | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java
+@@ -5670,6 +5670,7 @@ public class ChatActivityEnterView extends FrameLayout implements
+                     ArrayList<Object> entries = new ArrayList<>();
+                     entries.add(photoEntry);
+                     AndroidUtilities.runOnUIThread(() -> {
++                        photoEntry.caption = getFieldText();
+                         openPhotoViewerForEdit(entries, file);
+                     });
+                 } catch (Throwable e) {
+@@ -5728,11 +5729,19 @@ public class ChatActivityEnterView extends FrameLayout implements
+                     sending = true;
+                     boolean updateStickersOrder = SendMessagesHelper.checkUpdateStickersOrder(info.caption);
+                     SendMessagesHelper.prepareSendingMedia(accountInstance, photos, dialog_id, replyingMessageObject, getThreadMessage(), null, replyingQuote, false, false, editingMessageObject, notify, scheduleDate, scheduleRepeatPeriod, parentFragment == null ? 0 : parentFragment.getChatMode(), updateStickersOrder, null, parentFragment != null ? parentFragment.getMessageChatSendParams() : null, 0, false, 0, getSendMonoForumPeerId(), parentFragment != null ? parentFragment.messageSuggestionParams : null);
++                    setFieldText("");
+                     if (delegate != null) {
+                         delegate.onMessageSend(null, true, scheduleDate, scheduleRepeatPeriod, 0);
+                     }
+                 }
+ 
++                @Override
++                public void onApplyCaption(CharSequence caption) {
++                    if (!sending) {
++                        setFieldText(caption, true);
++                    }
++                }
++
+                 @Override
+                 public void willHidePhotoViewer() {
+                     if (!sending) {
