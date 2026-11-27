@@ -1,8 +1,9 @@
+/// <reference path="../manifest.d.ts" />
 import type { CatalogGrant, Vocabulary } from './catalog.js'
 import * as v from 'valibot'
 import { oneLineString } from './schema.js'
 
-export const ManifestSchema = v.object({
+export const ManifestSchema = v.strictObject({
   /** shown everywhere the plugin is named; the only required field */
   name: v.pipe(oneLineString, v.minLength(1)),
   /**
@@ -46,8 +47,11 @@ export const ManifestSchema = v.object({
     oneLineString,
     v.union([oneLineString, v.array(oneLineString)]),
   )),
-})
+}, issue => (issue.expected === 'never' ? 'Unknown key' : `Expected an object but received ${issue.received}`)) satisfies v.GenericSchema<inu.Manifest>
 export type Manifest = v.InferInput<typeof ManifestSchema>
+
+/** one layer of a manifest: the config's defaults, a plugin's config, or the entry's inline export */
+export const PartialManifestSchema = v.partial(ManifestSchema)
 
 const BLOCK_OPEN = '// ==InuPlugin=='
 const BLOCK_CLOSE = '// ==/InuPlugin=='

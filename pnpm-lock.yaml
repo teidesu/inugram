@@ -30,6 +30,9 @@ importers:
         specifier: ^8.8.4
         version: 8.8.5
     devDependencies:
+      '@inugram/cli':
+        specifier: workspace:*
+        version: link:sdk/cli
       '@inugram/plugin-types':
         specifier: workspace:*
         version: link:sdk/types

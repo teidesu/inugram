@@ -17,7 +17,8 @@
   ],
   "sideEffects": false,
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./manifest.d.ts": "./src/manifest.d.ts"
   },
   "bin": {
     "inu": "./src/cli.ts"

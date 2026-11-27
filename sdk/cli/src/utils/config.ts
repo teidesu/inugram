@@ -3,13 +3,15 @@ import type { Vocabulary } from './catalog.js'
 import type { Manifest } from './manifest.js'
 import { existsSync } from 'node:fs'
 import fs from 'node:fs/promises'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { build, context } from 'esbuild'
 import * as v from 'valibot'
+import { parseFile } from '../routines/find.js'
 import { loadVocabulary } from './catalog.js'
+import { NotALiteralError, readLiteral } from './literal.js'
 import { CliError, color } from './log.js'
-import { createManifestSchema, ManifestSchema } from './manifest.js'
+import { createManifestSchema, PartialManifestSchema } from './manifest.js'
 import { customFn, describeIssue } from './schema.js'
 
 const PluginConfigSchema = v.object({
@@ -21,8 +23,8 @@ const PluginConfigSchema = v.object({
    * @default `{outDir}/{key}.inu.js`
    */
   outFile: v.optional(v.string()),
-  /** plugin manifest */
-  manifest: ManifestSchema,
+  /** plugin manifest, overridden key by key by the entry's `export const manifest` */
+  manifest: v.optional(PartialManifestSchema),
   esbuild: v.optional(customFn<(options: BuildOptions) => BuildOptions | void>()),
 })
 export type PluginConfig = v.InferInput<typeof PluginConfigSchema>
@@ -34,11 +36,15 @@ const InuCliConfigSchema = v.object({
    * @default `dist`
    */
   outDir: v.optional(v.string()),
+  /** manifest defaults for every plugin */
+  manifest: v.optional(PartialManifestSchema),
   /**
    * Plugins built by this repo, keyed by short names used to select them in `dev`, `build`,
    * and other commands.
+   *
+   * A plain string is a shorthand for `{ entry: '...' }`
    */
-  plugins: v.record(v.string(), PluginConfigSchema),
+  plugins: v.record(v.string(), v.union([v.string(), PluginConfigSchema])),
   /** Customizes the esbuild configuration for all plugins. */
   esbuild: v.optional(customFn<(options: BuildOptions, plugin: ResolvedPluginConfig) => BuildOptions | void>()),
 })
@@ -55,6 +61,8 @@ export interface ResolvedPluginConfig {
   manifest: Manifest
   /** the app's reasons to refuse [manifest], relative to this plugin; empty when it would install */
   manifestIssues: string[]
+  /** manifest of the plugin read from entrypoint's `export const manifest` */
+  entryManifest: EntryManifest
   /** Customizes the esbuild configuration for this plugin. */
   esbuild?: (options: BuildOptions) => BuildOptions | void
 }
@@ -93,14 +101,66 @@ export function refuse(configFile: string, issues: string[]): never {
   throw new CliError(`${configFile} is not a valid config:\n${issues.join('\n')}`)
 }
 
+export interface EntryManifest { manifest?: v.InferOutput<typeof PartialManifestSchema>, issues?: string[] }
+
+/** Reads `export const manifest = { ... }` without running the entry, which only works in the app. */
+export async function readEntryManifest(root: string, entry: string): Promise<EntryManifest> {
+  const source = await fs.readFile(entry, 'utf8').catch(() => null)
+  if (source === null || !source.includes('manifest')) return {}
+  const parsed = parseFile(entry, source)
+  // esbuild reports these with more context
+  if (parsed.errors.length > 0) return {}
+
+  const at = (start: number, text: string) => {
+    const before = source.slice(0, start)
+    const column = start - before.lastIndexOf('\n')
+    return `${relative(root, entry)}:${before.split('\n').length}:${column}: ${text}`
+  }
+  for (const statement of parsed.program.body) {
+    if (statement.type !== 'ExportNamedDeclaration') continue
+    const declaration = statement.declaration
+    if (declaration?.type !== 'VariableDeclaration') {
+      const reexport = statement.specifiers.find(it => it.exported.type === 'Identifier' && it.exported.name === 'manifest')
+      if (reexport) return { issues: [at(reexport.start, 'declare the manifest as `export const manifest = { ... }`')] }
+      continue
+    }
+    const declarator = declaration.declarations.find(it => it.id.type === 'Identifier' && it.id.name === 'manifest')
+    if (!declarator) continue
+
+    let literal: unknown
+    try {
+      literal = readLiteral(declarator.init)
+    } catch (error) {
+      if (!(error instanceof NotALiteralError)) throw error
+      return { issues: [at(error.start ?? declarator.start, 'the manifest must be a literal, the cli reads it without running the entry')] }
+    }
+    const layer = v.safeParse(PartialManifestSchema, literal)
+    if (!layer.success) {
+      return { issues: layer.issues.map(issue => at(declarator.start, describeIssue(issue, 'manifest').trim())) }
+    }
+    return { manifest: layer.output }
+  }
+  return {}
+}
+
 /**
- * Validates a manifest using the app's rules. This runs after schema validation
- * because Valibot cannot receive the grant catalogue during parsing.
+ * Merges the manifest layers and validates the result using the app's rules. This runs after
+ * schema validation because Valibot cannot receive the grant catalogue during parsing.
  */
-function checkManifest(schema: ReturnType<typeof createManifestSchema>, manifest: Manifest): string[] {
-  const parsed = v.safeParse(schema, manifest)
-  if (parsed.success) return []
-  return parsed.issues.map(issue => describeIssue(issue, 'manifest').trim())
+function resolveManifest(
+  schema: ReturnType<typeof createManifestSchema>,
+  layers: (v.InferOutput<typeof PartialManifestSchema> | undefined)[],
+  entry: EntryManifest,
+): { manifest: Manifest, issues: string[] } {
+  const present = [...layers, entry.manifest].filter(layer => layer !== undefined)
+  const merged: Record<string, unknown> = Object.assign({}, ...present)
+  const extra = Object.assign({}, ...present.map(layer => layer.extra))
+  if (Object.keys(extra).length > 0) merged.extra = extra
+  if (entry.issues) return { manifest: merged as Manifest, issues: entry.issues }
+
+  const parsed = v.safeParse(schema, merged)
+  if (parsed.success) return { manifest: parsed.output, issues: [] }
+  return { manifest: merged as Manifest, issues: parsed.issues.map(issue => describeIssue(issue, 'manifest').trim()) }
 }
 
 /**
@@ -165,13 +225,20 @@ export async function loadConfig(cwd: string, explicit?: string): Promise<Resolv
   const outDir = resolve(root, config.outDir ?? 'dist')
   const schema = createManifestSchema(vocabulary)
 
-  const plugins = entries.map(([slug, plugin]): ResolvedPluginConfig => ({
-    slug,
-    entry: resolve(root, plugin.entry),
-    outFile: plugin.outFile ? resolve(root, plugin.outFile) : join(outDir, `${slug}.inu.js`),
-    manifest: plugin.manifest,
-    manifestIssues: checkManifest(schema, plugin.manifest),
-    esbuild: plugin.esbuild,
+  const plugins = await Promise.all(entries.map(async ([slug, declared]): Promise<ResolvedPluginConfig> => {
+    const plugin = typeof declared === 'string' ? { entry: declared } : declared
+    const entry = resolve(root, plugin.entry)
+    const entryManifest = await readEntryManifest(root, entry)
+    const { manifest, issues } = resolveManifest(schema, [config.manifest, plugin.manifest], entryManifest)
+    return {
+      slug,
+      entry,
+      outFile: plugin.outFile ? resolve(root, plugin.outFile) : join(outDir, `${slug}.inu.js`),
+      manifest,
+      manifestIssues: issues,
+      entryManifest,
+      esbuild: plugin.esbuild,
+    }
   }))
 
   return {

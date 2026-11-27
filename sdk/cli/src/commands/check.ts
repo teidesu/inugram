@@ -57,8 +57,10 @@ export const checkCmd = defineCommand({
       const name = color.bold(plugin.slug)
       const bundle = bundles[index]
       for (const issue of plugin.manifestIssues) fail(`${name} ${issue}`)
-      for (const message of collectManifestWarnings(plugin.manifest, config.vocabulary)) {
-        warn(`${name} ${message}`)
+      if (plugin.manifestIssues.length === 0) {
+        for (const message of collectManifestWarnings(plugin.manifest, config.vocabulary)) {
+          warn(`${name} ${message}`)
+        }
       }
       await printMessages(bundle.errors, 'error')
       await printMessages(bundle.warnings, 'warning')

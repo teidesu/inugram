@@ -5,15 +5,18 @@ ships as one readable `.inu.js` script with a generated manifest header.
 
 ## Layout
 
-- `inu.config.ts`: plugin entries, manifests, grants, and build configuration.
-  Runs in Node; plugin code does not.
-- `src/<plugin>/index.ts`: a plugin's entry point. `hello` is the starter example.
+- `inu.config.ts`: plugin entries, manifest defaults shared by every plugin, and
+  build configuration. Runs in Node; plugin code does not.
+- `src/<plugin>/index.ts`: a plugin's entry point, starting with its
+  `export const manifest = { ... } satisfies inu.Manifest`. `hello` is the starter example.
 - `src/shared/`: reusable source. Each plugin bundles its own copy and runs in an
   isolated engine; module state is not shared between plugins.
 - `dist/<plugin>.inu.js`: generated output. Edit sources and config, then rebuild.
 - `tsconfig.json`: extends the plugin SDK's runtime types; checks `src`.
 
-Add plugins under `src/` and register their entries in `inu.config.ts`. Follow the
+Add plugins under `src/` and register their entries in `inu.config.ts`. The CLI reads
+an entry's manifest without running it, so it must stay a plain literal: no variables,
+spreads, calls or interpolation. Follow the
 existing `.js` extension convention for relative TypeScript imports.
 
 ## API reference
@@ -43,7 +46,7 @@ Use the installed versions as the reference; app and SDK compatibility matters.
   adding a dependency; do not assume an npm package's runtime is available.
 - Keep bundles readable and preserve the CLI's script format and manifest banner.
   Do not handwrite manifest headers or bypass the routine compiler.
-- Update `manifest.grants` with API changes. Request only the required grants and
+- Update the entry's `manifest.grants` with API changes. Request only the required grants and
   scopes; check `@needs-grant` on every API used. Prefer public plugin APIs over
   `unsafe.jvm` or `unsafe.xposed` when they cover the task.
 - Never change manifest `id`: it determines whether an install updates an existing

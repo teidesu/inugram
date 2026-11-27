@@ -1,5 +1,13 @@
 import { readFlag, writeFlag } from '../shared/storage.js'
 
+export const manifest = {
+  id: '__ID__',
+  name: 'Hello',
+  version: '1.0.0',
+  description: 'a starting point',
+  icon: 'inu://bot',
+} satisfies inu.Manifest
+
 const GREET_KEY = 'greet'
 
 inu.registerSettings(inu.ui.settingsPage({

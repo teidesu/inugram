@@ -34,7 +34,7 @@ export async function loadProject(args: ProjectArgs, options: ProjectOptions = {
   }
 
   if (!options.keepRefusedManifests) {
-    const issues = plugins.flatMap(plugin => plugin.manifestIssues.map(issue => `  plugins.${plugin.slug}.${issue}`))
+    const issues = plugins.flatMap(plugin => plugin.manifestIssues.map(issue => `  ${plugin.slug}: ${issue}`))
     if (issues.length > 0) refuse(config.configFile, issues)
   }
 

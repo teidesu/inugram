@@ -8,7 +8,7 @@ import * as esbuild from 'esbuild'
 import { bundleAssets } from '../assets.js'
 import { compileRoutines } from '../routines/plugin.js'
 import { configArgs, defineCommand } from '../utils/args.js'
-import { watchConfig } from '../utils/config.js'
+import { readEntryManifest, watchConfig } from '../utils/config.js'
 import { readFileSize } from '../utils/fs.js'
 import { color, fail, printMessages, step, warn } from '../utils/log.js'
 import { collectManifestWarnings, renderManifestHeader } from '../utils/manifest.js'
@@ -32,7 +32,13 @@ export function createBuildOptions(
 ): BuildOptions {
   let options: BuildOptions = {
     absWorkingDir: config.root,
-    entryPoints: [plugin.entry],
+    // not `entrypoint` to ensure we treeshake away all the exports and keep just the top-levek code
+    stdin: {
+      contents: 'import \'inu:entry\'',
+      resolveDir: config.root,
+      sourcefile: `<${plugin.slug}>`,
+      loader: 'js',
+    },
     outfile: plugin.outFile,
     bundle: true,
     format: 'esm', // not really actually
@@ -42,11 +48,22 @@ export function createBuildOptions(
     sourcemap: false,
     minify: false,
     charset: 'utf8',
-    banner: {
-      js: renderManifestHeader(plugin.manifest, config.vocabulary.catalog.pluginApi),
-    },
+    // `check` still bundles a plugin whose manifest is refused, to report its other problems
+    banner: plugin.manifestIssues.length > 0
+      ? undefined
+      : { js: renderManifestHeader(plugin.manifest, config.vocabulary.catalog.pluginApi) },
     logLevel: 'silent',
-    plugins: [compileRoutines(), bundleAssets(), ...extra],
+    plugins: [
+      {
+        name: 'inu-entry',
+        setup(build) {
+          build.onResolve({ filter: /^inu:entry$/ }, () => ({ path: plugin.entry, sideEffects: true }))
+        },
+      },
+      compileRoutines(),
+      bundleAssets(),
+      ...extra,
+    ],
   }
 
   options = plugin.esbuild?.(options) ?? options
@@ -100,9 +117,14 @@ export interface Watcher {
 
 /**
  * Creates one independent esbuild context per plugin. Calls [onBuilt] after every build,
- * including the first, so callers can push only the changed plugin.
+ * including the first, so callers can push only the changed plugin, and [onManifestChanged]
+ * instead when the build changed the entry's inline manifest, which the banner was made from.
  */
-async function watchPlugins(project: Project, onBuilt: (config: ResolvedCliConfig, outcome: BuildOutcome) => void): Promise<Watcher> {
+async function watchPlugins(
+  project: Project,
+  onBuilt: (config: ResolvedCliConfig, outcome: BuildOutcome) => void,
+  onManifestChanged: () => void,
+): Promise<Watcher> {
   const { config, plugins } = project
   const contexts = await Promise.all(plugins.map(async (plugin) => {
     const warnings = collectManifestWarnings(plugin.manifest, config.vocabulary)
@@ -110,6 +132,11 @@ async function watchPlugins(project: Project, onBuilt: (config: ResolvedCliConfi
       name: 'inu-notify',
       setup(build) {
         build.onEnd(async (result) => {
+          const entryManifest = await readEntryManifest(config.root, plugin.entry)
+          if (JSON.stringify(entryManifest) !== JSON.stringify(plugin.entryManifest)) {
+            onManifestChanged()
+            return
+          }
           onBuilt(config, {
             plugin,
             ok: result.errors.length === 0,
@@ -144,8 +171,8 @@ export async function watchProject(options: {
   onBuilt: (config: ResolvedCliConfig, outcome: BuildOutcome) => void
 }): Promise<Watcher> {
   const { args, onReload, onBuilt } = options
-  let plugins = await watchPlugins(options.project, onBuilt)
   const lock = new AsyncLock()
+  let plugins: Watcher | undefined
   const reload = async () => {
     let project: Project
     try {
@@ -155,18 +182,20 @@ export async function watchProject(options: {
       fail(`config not reloaded: ${error instanceof Error ? error.message : String(error)}`)
       return
     }
-    await plugins.dispose()
-    plugins = await watchPlugins(project, onBuilt)
+    await plugins?.dispose()
+    plugins = await watchPlugins(project, onBuilt, scheduleReload)
     step(`config reloaded, watching ${project.plugins.map(plugin => plugin.slug).join(', ')}`)
   }
-  const config = await watchConfig(options.project.config.configFile, () => {
+  const scheduleReload = () => {
     lock.with(reload).catch((error: unknown) => { fail(String(error)) })
-  })
+  }
+  plugins = await watchPlugins(options.project, onBuilt, scheduleReload)
+  const config = await watchConfig(options.project.config.configFile, scheduleReload)
 
   return {
     async dispose() {
       await config.dispose()
-      await lock.with(() => plugins.dispose())
+      await lock.with(async () => { await plugins?.dispose() })
     },
   }
 }

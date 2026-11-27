@@ -1,4 +1,7 @@
 {
   "extends": "@inugram/plugin-types/tsconfig.json",
+  "compilerOptions": {
+    "types": ["@inugram/plugin-types", "@inugram/cli/manifest.d.ts"]
+  },
   "include": ["src"]
 }

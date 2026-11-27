@@ -37,6 +37,7 @@
     "zx": "^8.8.4"
   },
   "devDependencies": {
+    "@inugram/cli": "workspace:*",
     "@inugram/plugin-types": "workspace:*",
     "@types/node": "^24.6.1",
     "@types/proper-lockfile": "^4.1.4",

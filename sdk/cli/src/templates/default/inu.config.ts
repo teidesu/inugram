@@ -1,17 +1,10 @@
 import { defineConfig } from '@inugram/cli'
 
 export default defineConfig({
+  manifest: {
+    author: '__AUTHOR__',
+  },
   plugins: {
-    hello: {
-      entry: 'src/hello/index.ts',
-      manifest: {
-        id: '__ID__',
-        name: 'Hello',
-        author: '__AUTHOR__',
-        version: '1.0.0',
-        description: 'a starting point',
-        icon: 'inu://bot',
-      },
-    },
+    hello: 'src/hello/index.ts',
   },
 })

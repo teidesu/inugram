@@ -1,4 +1,4 @@
-import type { Argument, Expression, SpreadElement } from '@oxc-project/types'
+import type { Argument } from '@oxc-project/types'
 import type { PartialMessage } from 'esbuild'
 import fs from 'node:fs/promises'
 import { relative, resolve } from 'node:path'
@@ -8,6 +8,7 @@ import { dedentRoutineSource } from '../routines/emit.js'
 import { findRoutineCalls, parseFile } from '../routines/find.js'
 import { RoutineProgramSchema } from '../routines/ops.js'
 import { defineCommand } from '../utils/args.js'
+import { readLiteral } from '../utils/literal.js'
 import { CliError, fail, messageAt, printMessages, success } from '../utils/log.js'
 import { describeIssue } from '../utils/schema.js'
 
@@ -16,50 +17,6 @@ interface Verdict {
   /** the span of the routine call in the built file, which is what an error points at */
   start: number
   end: number
-}
-
-/**
- * Compare parsed routine values, ignoring formatting changes from the bundler.
- * Compiled routines contain only literals, so no evaluation is needed.
- */
-function readLiteral(node: Expression | SpreadElement | null): unknown {
-  if (node === null) throw new CliError('not a literal')
-  switch (node.type) {
-    case 'ParenthesizedExpression':
-      return readLiteral(node.expression)
-    case 'Literal': {
-      const value = node.value
-      if (value === null) return null
-      // a bigint crosses as `['L', '123']` and a regex is refused, so neither is ever emitted
-      if (typeof value === 'boolean' || typeof value === 'number' || typeof value === 'string') return value
-      throw new CliError('not a literal')
-    }
-    case 'TemplateLiteral': {
-      if (node.expressions.length > 0) throw new CliError('not a literal')
-      return node.quasis[0].value.cooked ?? ''
-    }
-    case 'ArrayExpression':
-      return node.elements.map(element => readLiteral(element))
-    case 'ObjectExpression': {
-      const object: Record<string, unknown> = {}
-      for (const property of node.properties) {
-        if (property.type !== 'Property' || property.computed) throw new CliError('not a literal')
-        const key = property.key
-        const name = key.type === 'Identifier' ? key.name : key.type === 'Literal' ? key.value : null
-        if (typeof name !== 'string') throw new CliError('not a literal')
-        object[name] = readLiteral(property.value)
-      }
-      return object
-    }
-    case 'UnaryExpression': {
-      if (node.operator !== '-') throw new CliError('not a literal')
-      const value = readLiteral(node.argument)
-      if (typeof value !== 'number') throw new CliError('not a literal')
-      return -value
-    }
-    default:
-      throw new CliError('not a literal')
-  }
 }
 
 /**
