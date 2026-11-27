@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Fri, 27 Nov 2026 18:39:06 +0400
+Subject: re-check network on default network callback so accounts don't stay waiting for network
+
+---
+ .../telegram/messenger/ApplicationLoader.java | 19 +++++++++++++++++++
+ 1 file changed, 19 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java b/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/ApplicationLoader.java
+@@ -221,6 +221,25 @@ public class ApplicationLoader extends Application {
+             };
+             IntentFilter filter = new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION);
+             ApplicationLoader.applicationContext.registerReceiver(networkStateReceiver, filter);
++            // the last CONNECTIVITY_ACTION can arrive before getActiveNetworkInfo reports the network as usable
++            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
++                connectivityManager.registerDefaultNetworkCallback(new ConnectivityManager.NetworkCallback() {
++                    @Override
++                    public void onAvailable(@NonNull Network network) {
++                        AndroidUtilities.runOnUIThread(() -> networkStateReceiver.onReceive(applicationContext, null));
++                    }
++
++                    @Override
++                    public void onLost(@NonNull Network network) {
++                        AndroidUtilities.runOnUIThread(() -> networkStateReceiver.onReceive(applicationContext, null));
++                    }
++
++                    @Override
++                    public void onBlockedStatusChanged(@NonNull Network network, boolean blocked) {
++                        AndroidUtilities.runOnUIThread(() -> networkStateReceiver.onReceive(applicationContext, null));
++                    }
++                });
++            }
+         } catch (Exception e) {
+             e.printStackTrace();
+         }
