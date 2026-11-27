@@ -48,6 +48,7 @@ export default defineConfig({
       // `inu init` copies these, so they ship beside the bundle rather than being bundled into it
       finalize: async (ctx) => {
         await fs.cp(join(ctx.packageDir, 'src/templates'), join(ctx.outDir, 'templates'), { recursive: true })
+        await fs.cp(join(ctx.packageDir, 'AGENTS.md'), join(ctx.outDir, 'AGENTS.md'))
         await assertTemplatesBesideTheBundle(ctx)
       },
     }),
