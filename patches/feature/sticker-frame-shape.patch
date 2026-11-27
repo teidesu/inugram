@@ -1,0 +1,259 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Nika Krasnova <nika@nikableh.moe>
+Date: Thu, 26 Nov 2026 14:46:50 +0100
+Subject: Add sticker frame aspect ratio and corner radius.
+
+---
+ .../telegram/messenger/VideoEditedInfo.java   |  1 +
+ .../video/MediaCodecVideoConvertor.java       |  2 ++
+ .../telegram/messenger/video/WebmEncoder.java |  4 +++
+ .../Views/StickerMakerBackgroundView.java     |  1 +
+ .../Paint/Views/StickerMakerView.java         |  7 ++++
+ .../org/telegram/ui/ContentPreviewViewer.java |  4 +--
+ .../java/org/telegram/ui/PhotoViewer.java     | 36 +++++++++++--------
+ 7 files changed, 39 insertions(+), 16 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/VideoEditedInfo.java b/TMessagesProj/src/main/java/org/telegram/messenger/VideoEditedInfo.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/VideoEditedInfo.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/VideoEditedInfo.java
+@@ -83,6 +83,7 @@ public class VideoEditedInfo {
+     public ArrayList<Part> collageParts;
+ 
+     public boolean isSticker;
++    public float inu_stickerRadius = -1;
+ 
+     public Bitmap thumb;
+     public boolean notReadyYet;
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/video/MediaCodecVideoConvertor.java b/TMessagesProj/src/main/java/org/telegram/messenger/video/MediaCodecVideoConvertor.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/video/MediaCodecVideoConvertor.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/video/MediaCodecVideoConvertor.java
+@@ -1781,6 +1781,7 @@ public class MediaCodecVideoConvertor {
+         boolean isDark;
+         long wallpaperPeerId;
+         boolean isSticker;
++        float inu_stickerRadius = -1;
+         CollageLayout collage;
+         ArrayList<VideoEditedInfo.Part> collageParts;
+ 
+@@ -1838,6 +1839,7 @@ public class MediaCodecVideoConvertor {
+             params.messageVideoMaskPath = info.messageVideoMaskPath;
+             params.backgroundPath = info.backgroundPath;
+             params.isSticker = info.isSticker;
++            params.inu_stickerRadius = info.inu_stickerRadius;
+             params.collage = info.collage;
+             params.collageParts = info.collageParts;
+             return params;
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/video/WebmEncoder.java b/TMessagesProj/src/main/java/org/telegram/messenger/video/WebmEncoder.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/video/WebmEncoder.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/video/WebmEncoder.java
+@@ -148,6 +148,10 @@ public class WebmEncoder {
+             clipPath = new Path();
+             RectF bounds = new RectF(0, 0, W, H);
+             clipPath.addRoundRect(bounds, W * .125f, H * .125f, Path.Direction.CW);
++            if (params.inu_stickerRadius >= 0) {
++                clipPath.rewind();
++                clipPath.addRoundRect(bounds, params.inu_stickerRadius, params.inu_stickerRadius, Path.Direction.CW);
++            }
+ 
+             photo = BitmapFactory.decodeFile(params.videoPath);
+ 
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/StickerMakerBackgroundView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/StickerMakerBackgroundView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/StickerMakerBackgroundView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/StickerMakerBackgroundView.java
+@@ -32,6 +32,7 @@ public class StickerMakerBackgroundView extends View {
+         AndroidUtilities.rectTmp.set(inset, inset, inset + width, inset + width);
+         AndroidUtilities.rectTmp.offset(0, (height - AndroidUtilities.rectTmp.height()) / 2);
+         float rx = width / 7f;
++        if (desu.inugram.helpers.media.StickerFrameHelper.isCustom()) rx = desu.inugram.helpers.media.StickerFrameHelper.applyFrame(AndroidUtilities.rectTmp);
+         path.rewind();
+         path.addRoundRect(AndroidUtilities.rectTmp, rx, rx, Path.Direction.CW);
+         canvas.clipPath(path);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/StickerMakerView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/StickerMakerView.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/StickerMakerView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/StickerMakerView.java
+@@ -514,6 +514,7 @@ public class StickerMakerView extends FrameLayout implements NotificationCenter.
+     public boolean setOutlineBounds;
+     public final Matrix outlineMatrix = new Matrix();
+     private Path outlineBoundsPath, outlineBoundsInnerPath;
++    private boolean inu_customOutlinePath;
+     private final RectF outlineBounds = new RectF();
+     public void updateOutlineBounds(boolean set) {
+         setOutlineBounds = set;
+@@ -523,11 +524,16 @@ public class StickerMakerView extends FrameLayout implements NotificationCenter.
+             } else {
+                 outlineBoundsPath.rewind();
+             }
++            if (inu_customOutlinePath != desu.inugram.helpers.media.StickerFrameHelper.isCustom()) {
++                inu_customOutlinePath = !inu_customOutlinePath;
++                outlineBoundsInnerPath = null;
++            }
+             if (outlineBoundsInnerPath == null) {
+                 outlineBoundsInnerPath = new Path();
+                 AndroidUtilities.rectTmp.set(0, 0, 1, 1);
+                 outlineBoundsInnerPath.addRoundRect(AndroidUtilities.rectTmp, AndroidUtilities.rectTmp.width() * .12f, AndroidUtilities.rectTmp.height() * .12f, Path.Direction.CW);
+             }
++            if (inu_customOutlinePath) desu.inugram.helpers.media.StickerFrameHelper.unitFramePath(outlineBoundsInnerPath);
+             outlineBoundsPath.addPath(outlineBoundsInnerPath, outlineMatrix);
+             outlineBoundsPath.computeBounds(outlineBounds, true);
+         }
+@@ -768,6 +774,7 @@ public class StickerMakerView extends FrameLayout implements NotificationCenter.
+         float rx = width / 8f;
+         AndroidUtilities.rectTmp.set(inset, inset, inset + width, inset + width);
+         AndroidUtilities.rectTmp.offset(0, (height - AndroidUtilities.rectTmp.height()) / 2);
++        if (desu.inugram.helpers.media.StickerFrameHelper.isCustom()) rx = desu.inugram.helpers.media.StickerFrameHelper.applyFrame(AndroidUtilities.rectTmp);
+         areaPath.rewind();
+         areaPath.addRoundRect(AndroidUtilities.rectTmp, rx, rx, Path.Direction.CW);
+ 
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ContentPreviewViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/ContentPreviewViewer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ContentPreviewViewer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ContentPreviewViewer.java
+@@ -1880,7 +1880,7 @@ public class ContentPreviewViewer {
+                 if (sticker.videoEditedInfo != null) {
+                     if (paintingOverlay == null) {
+                         paintingOverlay = new PaintingOverlay(containerView.getContext());
+-                        containerView.addView(paintingOverlay, new FrameLayout.LayoutParams(512, 512));
++                        containerView.addView(paintingOverlay, new FrameLayout.LayoutParams(sticker.videoEditedInfo.resultWidth > 0 ? sticker.videoEditedInfo.resultWidth : 512, sticker.videoEditedInfo.resultHeight > 0 ? sticker.videoEditedInfo.resultHeight : 512));
+                     }
+                     paintingOverlay.setEntities(sticker.videoEditedInfo.mediaEntities, true, true, false);
+                 }
+@@ -2128,7 +2128,7 @@ public class ContentPreviewViewer {
+             centerImage.draw(canvas);
+         }
+ 
+-        if (paintingOverlay != null) {
++        if (paintingOverlay != null && !desu.inugram.helpers.media.StickerFrameHelper.drawPreviewOverlay(canvas, paintingOverlay, size, showProgress)) {
+             canvas.save();
+             canvas.translate(-size / 2f, -size / 2f);
+             canvas.scale((float) size / paintingOverlay.getWidth(), (float) size / paintingOverlay.getHeight());
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java
+@@ -2046,7 +2046,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+     public StickerMakerView stickerMakerView;
+     public PhotoViewerCoverEditor coverEditor;
+     private ArrayList<String> selectedEmojis;
+-    private StickerMakerBackgroundView stickerMakerBackgroundView;
++    public StickerMakerBackgroundView stickerMakerBackgroundView;
+     public BlurButton cutOutBtn;
+     public LinearLayout btnLayout;
+     private BlurButton eraseBtn, restoreBtn;
+@@ -8243,8 +8243,11 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                     Object object = imagesArrLocals.get(currentIndex);
+                     if (object instanceof MediaController.PhotoEntry) {
+                         int stickerMaxSize = 512;
++                        boolean inu_customFrame = desu.inugram.helpers.media.StickerFrameHelper.isCustom();
++                        int inu_stickerWidth = inu_customFrame ? desu.inugram.helpers.media.StickerFrameHelper.outputWidth(stickerMaxSize) : stickerMaxSize;
++                        int inu_stickerHeight = inu_customFrame ? desu.inugram.helpers.media.StickerFrameHelper.outputHeight(stickerMaxSize) : stickerMaxSize;
+                         MediaController.PhotoEntry photoEntry = ((MediaController.PhotoEntry) object);
+-                        Bitmap canvasBitmap = Bitmap.createBitmap(stickerMaxSize, stickerMaxSize, Bitmap.Config.ARGB_8888);
++                        Bitmap canvasBitmap = Bitmap.createBitmap(inu_stickerWidth, inu_stickerHeight, Bitmap.Config.ARGB_8888);
+ 
+                         Canvas canvas = new Canvas(canvasBitmap);
+ 
+@@ -8252,39 +8255,42 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                         RectF clipRect = new RectF();
+                         clipRect.set(0, 0, canvasBitmap.getWidth(), canvasBitmap.getHeight());
+                         int r = canvasBitmap.getWidth() / 8;
++                        if (inu_customFrame) r = Math.round(desu.inugram.helpers.media.StickerFrameHelper.radius(inu_stickerWidth, inu_stickerHeight));
+                         clipPath.addRoundRect(clipRect, r, r, Path.Direction.CW);
+                         canvas.clipPath(clipPath);
+ 
+                         int containerWidth = getContainerViewWidth();
+                         int containerHeight = getContainerViewHeight();
+                         float borderSize = containerWidth - dp(20);
++                        float inu_borderWidth = inu_customFrame ? desu.inugram.helpers.media.StickerFrameHelper.frameWidth(borderSize) : borderSize;
++                        float inu_borderHeight = inu_customFrame ? desu.inugram.helpers.media.StickerFrameHelper.frameHeight(borderSize) : borderSize;
+ 
+                         if (stickerMakerView != null && stickerMakerView.outlineVisible && stickerMakerView.getSourceBitmap() != null) {
+ 
+                             canvas.save();
+                             canvas.translate(canvasBitmap.getWidth() / 2f, canvasBitmap.getHeight() / 2f);
+-                            canvas.scale(canvasBitmap.getWidth() / borderSize, canvasBitmap.getHeight() / borderSize);
++                            canvas.scale(canvasBitmap.getWidth() / inu_borderWidth, canvasBitmap.getHeight() / inu_borderHeight);
+                             applyTransformToOutline(canvas);
+                             stickerMakerView.drawOutline(canvas, false, null, false);
+                             canvas.restore();
+ 
+                             canvas.save();
+                             canvas.translate(canvasBitmap.getWidth() / 2f, canvasBitmap.getHeight() / 2f);
+-                            canvas.scale(canvasBitmap.getWidth() / borderSize, canvasBitmap.getHeight() / borderSize);
++                            canvas.scale(canvasBitmap.getWidth() / inu_borderWidth, canvasBitmap.getHeight() / inu_borderHeight);
+                             applyTransformToOutline(canvas);
+                             centerImage.draw(canvas);
+                             canvas.restore();
+ 
+                             canvas.save();
+                             canvas.translate(canvasBitmap.getWidth() / 2f, canvasBitmap.getHeight() / 2f);
+-                            canvas.scale(canvasBitmap.getWidth() / borderSize, canvasBitmap.getHeight() / borderSize);
++                            canvas.scale(canvasBitmap.getWidth() / inu_borderWidth, canvasBitmap.getHeight() / inu_borderHeight);
+                             applyTransformToOutline(canvas);
+                             stickerMakerView.drawOutline(canvas, true, null, false);
+                             canvas.restore();
+                         } else {
+                             canvas.save();
+                             canvas.translate(canvasBitmap.getWidth() / 2f, canvasBitmap.getHeight() / 2f);
+-                            canvas.scale(canvasBitmap.getWidth() / borderSize, canvasBitmap.getHeight() / borderSize);
++                            canvas.scale(canvasBitmap.getWidth() / inu_borderWidth, canvasBitmap.getHeight() / inu_borderHeight);
+                             applyTransformToOutline(canvas);
+                             centerImage.draw(canvas);
+                             canvas.restore();
+@@ -8293,7 +8299,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                         if (paintingOverlay != null) {
+                             canvas.save();
+                             canvas.translate(canvasBitmap.getWidth() / 2f, canvasBitmap.getHeight() / 2f);
+-                            canvas.scale(canvasBitmap.getWidth() / borderSize, canvasBitmap.getHeight() / borderSize);
++                            canvas.scale(canvasBitmap.getWidth() / inu_borderWidth, canvasBitmap.getHeight() / inu_borderHeight);
+                             applyTransformToOutline(canvas);
+                             canvas.translate(-centerImage.getImageWidth() / 2f, -centerImage.getImageHeight() / 2f);
+                             canvas.scale(centerImage.getImageWidth() / paintingOverlay.getMeasuredWidth(), centerImage.getImageHeight() / paintingOverlay.getMeasuredHeight());
+@@ -8308,7 +8314,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                         if (hasAnimatedMediaEntities()) {
+                             Matrix matrix = new Matrix();
+                             matrix.reset();
+-                            matrix.preTranslate(borderSize / 2f, borderSize / 2f);
++                            matrix.preTranslate(inu_borderWidth / 2f, inu_borderHeight / 2f);
+                             applyTransformToMatrix(matrix);
+                             matrix.preTranslate(-centerImage.getImageWidth() / 2f, -centerImage.getImageHeight() / 2f);
+                             matrix.preScale(centerImage.getImageWidth(), centerImage.getImageHeight());
+@@ -8327,10 +8333,10 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                                     x, y + h
+                                 };
+                                 matrix.mapPoints(pos);
+-                                e.width = (float) Math.sqrt(Math.pow(pos[0] - pos[2], 2) + Math.pow(pos[1] - pos[3], 2)) / borderSize;
+-                                e.height = (float) Math.sqrt(Math.pow(pos[0] - pos[6], 2) + Math.pow(pos[1] - pos[7], 2)) / borderSize;
+-                                e.x = ((pos[0] + pos[4]) / 2f) / borderSize - e.width / 2f;
+-                                e.y = ((pos[1] + pos[5]) / 2f) / borderSize - e.height / 2f;
++                                e.width = (float) Math.sqrt(Math.pow(pos[0] - pos[2], 2) + Math.pow(pos[1] - pos[3], 2)) / inu_borderWidth;
++                                e.height = (float) Math.sqrt(Math.pow(pos[0] - pos[6], 2) + Math.pow(pos[1] - pos[7], 2)) / inu_borderHeight;
++                                e.x = ((pos[0] + pos[4]) / 2f) / inu_borderWidth - e.width / 2f;
++                                e.y = ((pos[1] + pos[5]) / 2f) / inu_borderHeight - e.height / 2f;
+                                 e.scale = 1f;
+                                 e.customTextView = true;
+                                 if (photoEntry.isCropped && photoEntry.cropState != null) {
+@@ -8344,8 +8350,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                             }
+                             videoEditedInfo1 = new VideoEditedInfo();
+                             videoEditedInfo1.isPhoto = true;
+-                            videoEditedInfo1.originalWidth = videoEditedInfo1.resultWidth = stickerMaxSize;
+-                            videoEditedInfo1.originalHeight = videoEditedInfo1.resultHeight = stickerMaxSize;
++                            videoEditedInfo1.originalWidth = videoEditedInfo1.resultWidth = inu_stickerWidth;
++                            videoEditedInfo1.originalHeight = videoEditedInfo1.resultHeight = inu_stickerHeight;
++                            if (inu_customFrame) videoEditedInfo1.inu_stickerRadius = r;
+                             videoEditedInfo1.mediaEntities = entities;
+                             videoEditedInfo1.originalDuration = videoEditedInfo1.estimatedDuration = Utilities.clamp(photoEntry.averageDuration, 2999L, 800L);
+                             videoEditedInfo1.bitrate = 200_000;
+@@ -20346,6 +20353,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
+                     stickerMakerView.outlineMatrix.reset();
+                     stickerMakerView.outlineMatrix.postTranslate(-.5f, -.5f);
+                     stickerMakerView.outlineMatrix.postScale(stickerSize, stickerSize);
++                    if (desu.inugram.helpers.media.StickerFrameHelper.isCustom()) stickerMakerView.outlineMatrix.postScale(desu.inugram.helpers.media.StickerFrameHelper.frameWidth(stickerSize) / stickerSize, desu.inugram.helpers.media.StickerFrameHelper.frameHeight(stickerSize) / stickerSize);
+                     stickerMakerView.outlineMatrix.postScale(1f / currentScale, 1f / currentScale);
+                     stickerMakerView.outlineMatrix.postTranslate(-currentTranslationX / currentScale, -currentTranslationY / currentScale);
+                     stickerMakerView.outlineMatrix.postRotate(-currentRotation);
