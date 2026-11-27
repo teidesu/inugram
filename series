@@ -459,3 +459,4 @@ bugfix/album-caption-quotes.patch
 bugfix/widget-png-bounds.patch
 bugfix/zalgo-cap.patch
 bugfix/scheduled-forward-limit.patch
+feature/select-failed-messages.patch

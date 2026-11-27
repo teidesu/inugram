@@ -1,0 +1,68 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Nika Krasnova <nika@nikableh.moe>
+Date: Thu, 26 Nov 2026 22:02:51 +0100
+Subject: allow long-tap selecting messages that failed to send
+
+---
+ .../main/java/org/telegram/messenger/MessageObject.java    | 1 +
+ .../main/java/org/telegram/ui/Cells/ChatMessageCell.java   | 2 +-
+ .../src/main/java/org/telegram/ui/ChatActivity.java        | 7 +++++--
+ 3 files changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessageObject.java
+@@ -12026,6 +12026,7 @@ public class MessageObject {
+ 
+     public boolean canForwardMessage() {
+         if (isQuickReply()) return false;
++        if (isSendError()) return false;
+         if (type == TYPE_GIFT_STARS || type == TYPE_GIFT_THEME_UPDATE || type == TYPE_SUGGEST_BIRTHDAY || type == TYPE_GIFT_OFFER || type == TYPE_SHARING_OFFER || type == TYPE_COMMUNITY_CHANGED) return false;
+         return !(messageOwner instanceof TLRPC.TL_message_secret) && !needDrawBluredPreview() && !isLiveLocation() && type != MessageObject.TYPE_PHONE_CALL && !isSponsored() && !messageOwner.noforwards;
+     }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+@@ -17220,7 +17220,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+             return;
+         }
+ 
+-        if (currentMessageObject != null && !currentMessageObject.isSending() && currentMessageObject.type != MessageObject.TYPE_JOINED_CHANNEL && !currentMessageObject.isSendError() && checkBox != null && (checkBoxVisible || checkBoxAnimationInProgress) && (currentPosition == null || (currentPosition.flags & MessageObject.POSITION_FLAG_BOTTOM) != 0 && (currentPosition.flags & MessageObject.POSITION_FLAG_LEFT) != 0)) {
++        if (currentMessageObject != null && !currentMessageObject.isSending() && currentMessageObject.type != MessageObject.TYPE_JOINED_CHANNEL && checkBox != null && (checkBoxVisible || checkBoxAnimationInProgress) && (currentPosition == null || (currentPosition.flags & MessageObject.POSITION_FLAG_BOTTOM) != 0 && (currentPosition.flags & MessageObject.POSITION_FLAG_LEFT) != 0)) {
+             canvas.save();
+             float y = getY() + getPaddingTop();
+             if (currentMessagesGroup != null && currentMessagesGroup.messages.size() > 1) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -20489,6 +20489,9 @@ public class ChatActivity extends BaseFragment implements
+                             }
+                         }
+                     }
++                    if (newVisibility == View.VISIBLE && desu.inugram.helpers.chat.FailedSelectHelper.hasSendError(selectedMessagesIds)) {
++                        newVisibility = View.GONE;
++                    }
+                     actionsButtonsLayout.showReplyButton(newVisibility == View.VISIBLE, true);
+                 }
+ 
+@@ -20593,7 +20596,7 @@ public class ChatActivity extends BaseFragment implements
+         if (message != null && message.isAnyGift()) {
+             return;
+         }
+-        if (type < 2 || type == 20 || type == MessageObject.TYPE_SUGGEST_PHOTO || message != null && (message.type == MessageObject.TYPE_JOINED_CHANNEL || message.type == MessageObject.TYPE_GIFT_STARS) || (message != null && message.isWallpaperAction())) {
++        if ((type < 2 || type == 20) && (message == null || !message.isSendError()) || type == MessageObject.TYPE_SUGGEST_PHOTO || message != null && (message.type == MessageObject.TYPE_JOINED_CHANNEL || message.type == MessageObject.TYPE_GIFT_STARS) || (message != null && message.isWallpaperAction())) {
+             return;
+         }
+         if (message != null && (message.isSponsored() || message.isEphemeral())) {
+@@ -32486,7 +32489,7 @@ public class ChatActivity extends BaseFragment implements
+             allowChatActions = false;
+         }
+ 
+-        if (single || type < 2 || type == 20) {
++        if (single || (type < 2 || type == 20) && !(longpress && message != null && message.isSendError())) {
+             if (getParentActivity() == null) {
+                 return false;
+             }

@@ -146,6 +146,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - "select between messages" (🐶 done right)
 - 🐶 lift 100-message selection cap (forwards/saves/deletes are auto-chunked)
 - 🐶 two-finger swipe over messages to select/deselect them
+- 🐶 long-tap a message that failed to send to select it like any other, so failed messages can be deleted in bulk (tap still opens Retry/Delete)
 - more bulk actions in message selection mode (save, translate, gallery, pin/unpin, no-quote forward)
 - three-dot menu in shared media selection mode (save, gallery, no-quote forward, plugin actions)
 - in-place message translation, with optional web preview translation, original-text appending and on-device source-language auto-detection (hides Translate when already in your language)
