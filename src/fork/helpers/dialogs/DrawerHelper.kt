@@ -161,6 +161,7 @@ object DrawerHelper {
             }
         }
         sm.setItemSelectorColorProvider { position ->
+            if (position == RecyclerView.NO_POSITION) return@setItemSelectorColorProvider null
             val type = sm.adapter?.getItemViewType(position)
             if (type == DrawerLayoutAdapter.TYPE_ACCOUNT || type == DrawerLayoutAdapter.TYPE_ADD_ACCOUNT) 0 else null
         }
