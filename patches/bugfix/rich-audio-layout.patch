@@ -1,0 +1,281 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Sat, 28 Nov 2026 07:12:42 +0400
+Subject: bugfix: rich message audio looks like a regular music message
+
+---
+ .../telegram/messenger/RichMessageLayout.java | 172 +++++++++++-------
+ .../java/org/telegram/ui/ArticleViewer.java   |   4 +-
+ 2 files changed, 107 insertions(+), 69 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java b/TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java
+@@ -7729,18 +7729,22 @@ public class RichMessageLayout {
+ 
+         private final RadialProgress2 radialProgress;
+         private final SeekBar seekBar;
+-        private final TextPaint audioTimePaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
++        private final TextPaint titlePaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
++        private final TextPaint performerPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
++        private final TextPaint timePaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+ 
+         private StaticLayout titleLayout;
++        private StaticLayout performerLayout;
+         private StaticLayout durationLayout;
+-        private String lastTimeString;
++        private int lastTime = -1;
++        private float toSeekBarProgress;
+ 
+         private final int buttonX = dp(16);
+-        private final int buttonY = dp(4 + 5);
++        private final int buttonY = dp(9);
+         private final int size = dp(44);
+-        private int seekBarX;
+-        private int seekBarY;
+-        private int seekBarWidth;
++        private final int textX = buttonX + dp(53);
++        private final int seekBarX = buttonX + dp(42);
++        private final int seekBarY = buttonY + dp(16);
+         private int layoutWidth = -1;
+         private boolean layoutHasOptions;
+         private final RectF optionsHit = new RectF();
+@@ -7756,17 +7760,44 @@ public class RichMessageLayout {
+             this.currentMessageObject = root.audioBlocks.get(block);
+             this.currentDocument = currentMessageObject != null ? currentMessageObject.getDocument() : null;
+             this.observerTag = DownloadController.getInstance(root.currentAccount).generateObserverTag();
+-            desu.inugram.helpers.font.FontHelper.applyDefaultFont(audioTimePaint);
++            titlePaint.setTypeface(AndroidUtilities.bold());
++            titlePaint.setTextSize(dp(16));
++            performerPaint.setTextSize(dp(15));
++            timePaint.setTextSize(dp(12));
++            desu.inugram.helpers.font.FontHelper.applyDefaultFont(performerPaint);
++            desu.inugram.helpers.font.FontHelper.applyDefaultFont(timePaint);
+ 
+             radialProgress = new RadialProgress2(null);
+             radialProgress.setCircleRadius(dp(24));
+             radialProgress.setProgressRect(buttonX, buttonY, buttonX + size, buttonY + size);
++            if (currentDocument != null && MessageObject.isDocumentHasThumb(currentDocument)) {
++                final TLRPC.PhotoSize thumb = FileLoader.getClosestPhotoSizeWithSize(currentDocument.thumbs, dp(22), true, null, false);
++                final TLRPC.PhotoSize image = FileLoader.getClosestPhotoSizeWithSize(currentDocument.thumbs, dp(44), true, thumb, true);
++                radialProgress.setImageOverlay(image, thumb, currentDocument, root.messageObject);
++            } else if (currentMessageObject != null) {
++                final String artworkUrl = currentMessageObject.getArtworkUrl(true);
++                if (!TextUtils.isEmpty(artworkUrl)) {
++                    radialProgress.setImageOverlay(artworkUrl);
++                }
++            }
++            toSeekBarProgress = MediaController.getInstance().isPlayingMessage(currentMessageObject) ? 1f : 0f;
+ 
+             seekBar = new SeekBar(null);
+-            seekBar.setDelegate(progress -> {
+-                if (currentMessageObject == null) return;
+-                currentMessageObject.audioProgress = progress;
+-                MediaController.getInstance().seekToProgress(currentMessageObject, progress);
++            seekBar.setDelegate(new SeekBar.SeekBarDelegate() {
++                @Override
++                public void onSeekBarDrag(float progress) {
++                    if (currentMessageObject == null) return;
++                    onSeekBarContinuousDrag(progress);
++                    MediaController.getInstance().seekToProgress(currentMessageObject, progress);
++                }
++
++                @Override
++                public void onSeekBarContinuousDrag(float progress) {
++                    if (currentMessageObject == null) return;
++                    currentMessageObject.audioProgress = progress;
++                    currentMessageObject.audioProgressSec = (int) (currentMessageObject.getDuration() * progress);
++                    updatePlayingMessageProgress();
++                }
+             });
+ 
+             layoutInner();
+@@ -7776,39 +7807,22 @@ public class RichMessageLayout {
+         private void layoutInner() {
+             layoutWidth = this.maxWidth + root.padLeft + root.padRight;
+             layoutHasOptions = canShowOptions();
+-            seekBarX = buttonX + dp(50) + size;
+-            seekBarWidth = Math.max(0, layoutWidth - seekBarX - dp(layoutHasOptions ? 42 : 18));
+-
+-            String author = currentMessageObject != null ? currentMessageObject.getMusicAuthor(false) : null;
+-            String title = currentMessageObject != null ? currentMessageObject.getMusicTitle(false) : null;
+-            if (!TextUtils.isEmpty(title) || !TextUtils.isEmpty(author)) {
+-                SpannableStringBuilder stringBuilder;
+-                if (!TextUtils.isEmpty(title) && !TextUtils.isEmpty(author)) {
+-                    stringBuilder = new SpannableStringBuilder(String.format("%s - %s", author, title));
+-                } else if (!TextUtils.isEmpty(title)) {
+-                    stringBuilder = new SpannableStringBuilder(title);
+-                } else {
+-                    stringBuilder = new SpannableStringBuilder(author);
+-                }
+-                if (!TextUtils.isEmpty(author)) {
+-                    final TypefaceSpan span = new TypefaceSpan(AndroidUtilities.bold());
+-                    stringBuilder.setSpan(span, 0, author.length(), Spanned.SPAN_INCLUSIVE_INCLUSIVE);
+-                }
+-                audioTimePaint.setTextSize(dp(16));
+-                final int titleWidth = seekBarWidth + dp(50);
+-                final CharSequence stringFinal = TextUtils.ellipsize(stringBuilder, Theme.chat_audioTitlePaint, titleWidth, TextUtils.TruncateAt.END);
+-                titleLayout = new StaticLayout(stringFinal, audioTimePaint, titleWidth, Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
+-                seekBarY = buttonY + (size - dp(30)) / 2 + dp(11);
+-            } else {
++            seekBar.setSize(Math.max(0, layoutWidth - seekBarX - dp(12)), dp(30));
++            if (currentMessageObject == null) {
+                 titleLayout = null;
+-                seekBarY = buttonY + (size - dp(30)) / 2;
++                performerLayout = null;
++                return;
+             }
+-            seekBar.setSize(seekBarWidth, dp(30));
++            final int textWidth = Math.max(0, layoutWidth - textX - dp(layoutHasOptions ? 42 : 18));
++            final CharSequence title = TextUtils.ellipsize(currentMessageObject.getMusicTitle().replace('\n', ' '), titlePaint, textWidth, TextUtils.TruncateAt.END);
++            titleLayout = new StaticLayout(title, titlePaint, textWidth, Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
++            final CharSequence performer = TextUtils.ellipsize(currentMessageObject.getMusicAuthor().replace('\n', ' '), performerPaint, textWidth, TextUtils.TruncateAt.END);
++            performerLayout = new StaticLayout(performer, performerPaint, textWidth, Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
+         }
+ 
+         @Override
+         public int getHeight() {
+-            return padding.top + dp(4 + 54 + 4) + padding.bottom;
++            return padding.top + dp(9 + 60 + 5) + padding.bottom;
+         }
+ 
+         @Override
+@@ -7841,26 +7855,12 @@ public class RichMessageLayout {
+             if (!seekBar.isDragging()) {
+                 seekBar.setProgress(currentMessageObject.audioProgress);
+             }
+-            int duration = 0;
+-            if (MediaController.getInstance().isPlayingMessage(currentMessageObject)) {
+-                duration = currentMessageObject.audioProgressSec;
+-            } else {
+-                for (int a = 0; a < currentDocument.attributes.size(); a++) {
+-                    final TLRPC.DocumentAttribute attribute = currentDocument.attributes.get(a);
+-                    if (attribute instanceof TLRPC.TL_documentAttributeAudio) {
+-                        duration = (int) attribute.duration;
+-                        break;
+-                    }
+-                }
+-            }
+-            final String timeString = AndroidUtilities.formatShortDuration(duration);
+-            if (lastTimeString == null || !lastTimeString.equals(timeString)) {
+-                lastTimeString = timeString;
+-                audioTimePaint.setTextSize(dp(16));
+-                final int timeWidth = (int) Math.ceil(audioTimePaint.measureText(timeString));
+-                durationLayout = new StaticLayout(timeString, audioTimePaint, timeWidth, Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
++            final int progress = MediaController.getInstance().isPlayingMessage(currentMessageObject) ? currentMessageObject.audioProgressSec : 0;
++            if (durationLayout == null || lastTime != progress) {
++                lastTime = progress;
++                final String timeString = AndroidUtilities.formatShortDuration(progress, (int) currentMessageObject.getDuration());
++                durationLayout = new StaticLayout(timeString, timePaint, (int) Math.ceil(timePaint.measureText(timeString)), Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
+             }
+-            audioTimePaint.setColor(root.getThemedColor(root.isOut() ? Theme.key_chat_messageTextOut : Theme.key_chat_messageTextIn));
+             if (view != null) view.invalidate();
+         }
+ 
+@@ -7957,21 +7957,54 @@ public class RichMessageLayout {
+                 root.getThemedColor(root.isOut() ? Theme.key_chat_outAudioSeekbarSelected : Theme.key_chat_inAudioSeekbarSelected)
+             );
+ 
+-            canvas.save();
+-            canvas.translate(seekBarX, seekBarY);
+-            seekBar.draw(canvas);
+-            canvas.restore();
++            final boolean out = root.isOut();
++            titlePaint.setColor(root.getThemedColor(out ? Theme.key_chat_outAudioTitleText : Theme.key_chat_inAudioTitleText));
++            performerPaint.setColor(root.getThemedColor(out ? Theme.key_chat_outAudioPerformerText : Theme.key_chat_inAudioPerformerText));
++            timePaint.setColor(root.getThemedColor(out ? Theme.key_chat_outAudioDurationText : Theme.key_chat_inAudioDurationText));
+ 
+-            if (durationLayout != null) {
++            if (titleLayout != null) {
+                 canvas.save();
+-                canvas.translate(buttonX + dp(54), seekBarY + dp(6));
+-                durationLayout.draw(canvas);
++                canvas.translate(textX, buttonY);
++                titleLayout.draw(canvas);
+                 canvas.restore();
+             }
+-            if (titleLayout != null) {
++
++            final boolean showSeekbar = MediaController.getInstance().isPlayingMessage(currentMessageObject);
++            if (showSeekbar && toSeekBarProgress != 1f) {
++                toSeekBarProgress = Math.min(1f, toSeekBarProgress + 16f / 100f);
++                if (view != null) view.invalidate();
++            } else if (!showSeekbar && toSeekBarProgress != 0f) {
++                toSeekBarProgress = Math.max(0f, toSeekBarProgress - 16f / 100f);
++                if (view != null) view.invalidate();
++            }
++            if (toSeekBarProgress > 0f) {
++                if (toSeekBarProgress != 1f) {
++                    canvas.saveLayerAlpha(seekBarX, seekBarY, seekBarX + seekBar.getWidth() + dp(24), seekBarY + dp(24), (int) (255 * toSeekBarProgress), Canvas.ALL_SAVE_FLAG);
++                } else {
++                    canvas.save();
++                }
++                canvas.translate(seekBarX, seekBarY);
++                seekBar.draw(canvas);
++                canvas.restore();
++            }
++            if (toSeekBarProgress < 1f && performerLayout != null) {
++                final float y = buttonY + dp(22);
++                if (toSeekBarProgress != 0f) {
++                    canvas.saveLayerAlpha(textX, y, textX + performerLayout.getWidth(), y + performerLayout.getHeight(), (int) (255 * (1f - toSeekBarProgress)), Canvas.ALL_SAVE_FLAG);
++                    final float scale = 0.7f + 0.3f * (1f - toSeekBarProgress);
++                    canvas.scale(scale, scale, textX, y + performerLayout.getHeight() / 2f);
++                } else {
++                    canvas.save();
++                }
++                canvas.translate(textX, y);
++                performerLayout.draw(canvas);
++                canvas.restore();
++            }
++
++            if (durationLayout != null) {
+                 canvas.save();
+-                canvas.translate(buttonX + dp(54), seekBarY - dp(16));
+-                titleLayout.draw(canvas);
++                canvas.translate(textX, buttonY + dp(44));
++                durationLayout.draw(canvas);
+                 canvas.restore();
+             }
+ 
+@@ -8026,7 +8059,8 @@ public class RichMessageLayout {
+                 }
+             }
+ 
+-            final boolean seekHandled = seekBar.onTouch(act, x - seekBarX, y - seekBarY);
++            final boolean seekHandled = (seekBar.isDragging() || MediaController.getInstance().isPlayingMessage(currentMessageObject))
++                && seekBar.onTouch(act, x - seekBarX, y - seekBarY);
+             if (seekHandled) {
+                 if (act == MotionEvent.ACTION_DOWN) requestDisallowParentIntercept(true);
+                 if (act == MotionEvent.ACTION_UP || act == MotionEvent.ACTION_CANCEL) requestDisallowParentIntercept(false);
+@@ -8060,6 +8094,7 @@ public class RichMessageLayout {
+                 radialProgress.setParent(view);
+                 seekBar.setParent(view);
+             }
++            radialProgress.onAttachedToWindow();
+             updateButtonState(false);
+             NotificationCenter.getInstance(root.currentAccount).addWeakObserver(this, NotificationCenter.messagePlayingDidStart);
+             NotificationCenter.getInstance(root.currentAccount).addWeakObserver(this, NotificationCenter.messagePlayingDidReset);
+@@ -8069,6 +8104,7 @@ public class RichMessageLayout {
+ 
+         @Override
+         protected void onDetachedFromWindow() {
++            radialProgress.onDetachedFromWindow();
+             DownloadController.getInstance(root.currentAccount).removeLoadingFileObserver(this);
+             NotificationCenter.getInstance(root.currentAccount).removeObserver(this, NotificationCenter.messagePlayingDidStart);
+             NotificationCenter.getInstance(root.currentAccount).removeObserver(this, NotificationCenter.messagePlayingDidReset);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ArticleViewer.java b/TMessagesProj/src/main/java/org/telegram/ui/ArticleViewer.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ArticleViewer.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ArticleViewer.java
+@@ -8513,7 +8513,9 @@ public class ArticleViewer extends IArticleViewer implements NotificationCenter.
+ 
+                 String author = currentMessageObject.getMusicAuthor(false);
+                 String title = currentMessageObject.getMusicTitle(false);
+-                seekBarX = buttonX + dp(50) + size;
++                audioTimePaint.setTextSize(dp(16));
++                int durationWidth = (int) Math.ceil(audioTimePaint.measureText(AndroidUtilities.formatShortDuration((int) currentMessageObject.getDuration())));
++                seekBarX = Math.max(buttonX + dp(50) + size, buttonX + dp(62) + durationWidth);
+                 int w = width - seekBarX - dp(18);
+                 if (!TextUtils.isEmpty(title) || !TextUtils.isEmpty(author)) {
+                     SpannableStringBuilder stringBuilder;

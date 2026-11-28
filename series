@@ -461,3 +461,4 @@ bugfix/zalgo-cap.patch
 bugfix/paste-image-caption.patch
 bugfix/network-state-latch.patch
 bugfix/search-unread-counter.patch
+bugfix/rich-audio-layout.patch
