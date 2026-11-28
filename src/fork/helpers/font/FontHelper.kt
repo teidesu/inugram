@@ -252,7 +252,7 @@ object FontHelper {
                 (if (primary != null) getPreviewTypeface(primary, fallbacks, weight, italic) else null)
                     ?: Typeface.create(stockDefault, weight, italic)
             return PreviewTypefaces(
-                tf(400, false), tf(700, false), tf(400, true),
+                tf(400, false), tf(500, false), tf(400, true),
                 FontLibrary.getTypefaceFor(monoToken) ?: stockMonospace,
             )
         } finally {
