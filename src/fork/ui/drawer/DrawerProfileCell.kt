@@ -260,9 +260,7 @@ class DrawerProfileCell(
         } else {
             PhoneFormat.getInstance().format("+" + user.phone)
         }
-        val avatarDrawable = AvatarDrawable(user)
-        avatarDrawable.setColor(Theme.getColor(Theme.key_avatar_backgroundInProfileBlue))
-        avatarImageView.setForUserOrChat(user, avatarDrawable)
+        avatarImageView.setForUserOrChat(user, AvatarDrawable(user))
     }
 
     // updated in place: replacing the drawable restarts an in-flight ripple from the center
