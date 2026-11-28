@@ -3,6 +3,8 @@ package desu.inugram.helpers.chat
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Canvas
+import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
 import android.graphics.Rect
@@ -2126,6 +2128,38 @@ object ChatHelper {
         }
         return if (out == null) text else String(out)
     }
+
+    @JvmStatic
+    fun hideServicePaints(fragment: ChatActivity): IntArray {
+        val paints = getServicePaints(fragment)
+        return IntArray(paints.size) { i -> paints[i].alpha.also { paints[i].alpha = 0 } }
+    }
+
+    @JvmStatic
+    fun restoreServicePaints(fragment: ChatActivity, alphas: IntArray?) {
+        alphas ?: return
+        getServicePaints(fragment).forEachIndexed { i, paint -> paint.alpha = alphas[i] }
+    }
+
+    // drawn directly instead of through the child's render node: the node can be re-recorded
+    // outside the parent's drawChild (e.g. when only the child is invalidated)
+    @JvmStatic
+    fun drawScrimChildCopy(canvas: Canvas, child: View) {
+        val count = canvas.save()
+        canvas.translate(child.left.toFloat(), child.top.toFloat())
+        canvas.concat(child.matrix)
+        if (child.alpha < 1f) {
+            canvas.saveLayerAlpha(0f, 0f, child.width.toFloat(), child.height.toFloat(), (255 * child.alpha).toInt())
+        }
+        child.draw(canvas)
+        canvas.restoreToCount(count)
+    }
+
+    private fun getServicePaints(fragment: ChatActivity): Array<Paint> = arrayOf(
+        fragment.getThemedPaint(Theme.key_paint_chatActionBackground),
+        fragment.getThemedPaint(Theme.key_paint_chatActionBackgroundSelected),
+        fragment.getThemedPaint(Theme.key_paint_chatActionBackgroundDarken),
+    )
 
     private fun getFirstNameOrDefault(user: TLRPC.User?): String {
         if (user == null) return LocaleController.getString(R.string.AppName)

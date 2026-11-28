@@ -1,0 +1,66 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Sat, 28 Nov 2026 08:51:19 +0400
+Subject: Fix service panels snapping back after the message menu closes
+
+---
+ .../src/main/java/org/telegram/ui/ChatActivity.java   | 11 +++++++++--
+ 1 file changed, 9 insertions(+), 2 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -6136,6 +6136,7 @@ public class ChatActivity extends BaseFragment implements
+                 int clipLeft = 0;
+                 int clipBottom = 0;
+                 boolean skipDraw = child == scrimView && scrimViewTask == null;
++                boolean inu_scrimChild = skipDraw;
+                 IMessageCell mcell = null;
+                 ChatMessageCell cell;
+                 ChatActionCell actionCell = null;
+@@ -6173,6 +6174,7 @@ public class ChatActivity extends BaseFragment implements
+                         ChatMessageCell cell2 = (ChatMessageCell) scrimView;
+                         if (cell2.getCurrentMessagesGroup() != null && cell2.getCurrentMessagesGroup() == group) {
+                             skipDraw = true;
++                            inu_scrimChild = true;
+                         }
+                     }
+                     if (skipDraw) {
+@@ -6199,6 +6201,7 @@ public class ChatActivity extends BaseFragment implements
+                     skipDraw = false;
+                 }
+ 
++                final int[] inu_serviceAlphas = inu_scrimChild ? ChatHelper.hideServicePaints(ChatActivity.this) : null;
+                 boolean result;
+                 if (!skipDraw) {
+                     boolean clipToGroupBounds = (cell != null && !cell.transitionParams.needsStopClipping) && (group != null && group.transitionParams.backgroundChangeBounds) && !cell.isCompactLayout();
+@@ -6217,7 +6220,10 @@ public class ChatActivity extends BaseFragment implements
+                                 b - AndroidUtilities.dp(4)
+                         );
+                     }
+-                    if (cell != null && cell.transitionParams.needsStopClipping) {
++                    if (inu_scrimChild && !clipToGroupBounds && (cell == null || !cell.transitionParams.needsStopClipping)) {
++                        ChatHelper.drawScrimChildCopy(canvas, child);
++                        result = false;
++                    } else if (cell != null && cell.transitionParams.needsStopClipping) {
+                         canvas.save();
+                         canvas.translate(cell.getX(), cell.getY());
+                         cell.drawInternal(canvas);
+@@ -6247,6 +6253,7 @@ public class ChatActivity extends BaseFragment implements
+                 } else {
+                     result = false;
+                 }
++                ChatHelper.restoreServicePaints(ChatActivity.this, inu_serviceAlphas);
+                 if (clipLeft != 0 || clipBottom != 0) {
+                     canvas.restore();
+                 }
+@@ -6272,7 +6279,7 @@ public class ChatActivity extends BaseFragment implements
+                 if (cell != null) {
+                     final MessageObject message = cell.getMessageObject();
+                     final MessageObject.GroupedMessagePosition position = cell.getCurrentPosition();
+-                    if (!skipDraw) {
++                    if (!skipDraw && !inu_scrimChild) {
+                         if (position != null || cell.getTransitionParams().animateBackgroundBoundsInner) {
+                             if (position == null || (position.last || position.minX == 0 && position.minY == 0)) {
+                                 if (position == null || position.last) {
