@@ -5,7 +5,11 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.RectF
+import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
+import androidx.core.graphics.ColorUtils
 import org.telegram.messenger.AndroidUtilities.dp
 import org.telegram.messenger.AndroidUtilities.lerp
 import org.telegram.ui.ActionBar.Theme
@@ -13,10 +17,12 @@ import org.telegram.ui.Components.AnimatedFloat
 import org.telegram.ui.Components.CubicBezierInterpolator
 import org.telegram.ui.Components.LayoutHelper
 import org.telegram.ui.Components.ScrollSlidingTextTabStrip
+import org.telegram.ui.Components.ViewPagerFixed
 import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory
 
 class TabsPillDrawer(
-    private val strip: ScrollSlidingTextTabStrip,
+    private val strip: View,
+    private val container: ViewGroup,
     private val background: ClassicBarDrawable,
 ) {
     private var docked = false
@@ -33,14 +39,11 @@ class TabsPillDrawer(
         }
     }
 
-    fun getDockedProgress(): Float = dockedT.get()
-
     fun drawBackgroundAndClip(canvas: Canvas, color: Int) {
         val t = dockedT.set(docked)
         val w = strip.measuredWidth.toFloat()
         val h = strip.measuredHeight.toFloat()
         val margin = dp(MARGIN_DP).toFloat()
-        val container = strip.tabsContainer
         val first = container.getChildAt(0)
         val last = container.getChildAt(container.childCount - 1)
         val span = if (first != null && last != null) (last.right - first.left).toFloat() else w
@@ -77,6 +80,20 @@ class TabsPillDrawer(
         canvas.translate(-strip.scrollX.toFloat(), 0f)
     }
 
+    fun updateSelector(selector: GradientDrawable, centerX: Float, pillHalf: Float, barHalf: Float, pillColor: Int, barColor: Int) {
+        val t = dockedT.get()
+        val height = strip.measuredHeight
+        val half = lerp(pillHalf, barHalf, t)
+        val dockExtra = t * dp(4f)
+        val top = lerp((strip.paddingTop + dp(4f)).toFloat(), (height - strip.paddingBottom - dp(3f)).toFloat(), t) + dockExtra
+        val bottom = lerp((height - strip.paddingBottom - dp(4f)).toFloat(), (height - strip.paddingBottom).toFloat(), t) + dockExtra
+        val topRad = lerp(dp(14f).toFloat(), dp(3f).toFloat(), t)
+        val botRad = lerp(dp(14f).toFloat(), 0f, t)
+        selector.cornerRadii = floatArrayOf(topRad, topRad, topRad, topRad, botRad, botRad, botRad, botRad)
+        selector.setColor(ColorUtils.blendARGB(pillColor, barColor, t))
+        selector.setBounds((centerX - half).toInt(), top.toInt(), (centerX + half).toInt(), bottom.toInt())
+    }
+
     companion object {
         private const val MARGIN_DP = 12f
 
@@ -87,7 +104,15 @@ class TabsPillDrawer(
             strip.clipToPadding = false
             strip.tabsContainer.setPadding(dp(12f), 0, dp(12f), 0)
             strip.setUseMinimalWidth(true)
-            strip.inu_pill = TabsPillDrawer(strip, ClassicBarDrawable(factory, strip, resourcesProvider))
+            strip.inu_pill = TabsPillDrawer(strip, strip.tabsContainer, ClassicBarDrawable(factory, strip, resourcesProvider))
+        }
+
+        @JvmStatic
+        fun attach(tabs: ViewPagerFixed.TabsView, factory: BlurredBackgroundDrawableViewFactory, resourcesProvider: Theme.ResourcesProvider?) {
+            tabs.layoutParams = LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 50, Gravity.LEFT or Gravity.TOP)
+            tabs.setPadding(0, dp(7f), 0, dp(7f))
+            tabs.clipToPadding = false
+            tabs.inu_pill = TabsPillDrawer(tabs, tabs.listView, ClassicBarDrawable(factory, tabs, resourcesProvider))
         }
     }
 }

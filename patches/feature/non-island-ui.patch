@@ -9,7 +9,8 @@ Subject: non-island ui in various parts of the app
  .../telegram/ui/ActionBar/BaseFragment.java   |   6 +-
  .../ui/ActionBar/SimpleActionBar.java         |  81 +++++--
  .../ui/ActionBar/SimpleActionBarMenu.java     |  14 +-
- .../org/telegram/ui/CacheControlActivity.java |   2 +
+ .../org/telegram/ui/CacheControlActivity.java |  20 +-
+ .../org/telegram/ui/CachedMediaLayout.java    |   2 +-
  .../org/telegram/ui/CalendarActivity.java     |  14 +-
  .../java/org/telegram/ui/CallLogActivity.java |  20 +-
  .../telegram/ui/ChannelAdminLogActivity.java  |  25 ++-
@@ -29,14 +30,14 @@ Subject: non-island ui in various parts of the app
  .../telegram/ui/Components/MediaActivity.java |  21 +-
  .../ui/Components/MentionsContainerView.java  |  19 +-
  .../ui/Components/RecyclerListView.java       |  15 +-
- .../Components/ScrollSlidingTextTabStrip.java | 118 ++++++++++-
+ .../Components/ScrollSlidingTextTabStrip.java | 104 ++++++++-
  .../ui/Components/SearchTagsList.java         |   3 +
  .../telegram/ui/Components/ShareAlert.java    |  39 +++-
  .../ui/Components/SharedMediaLayout.java      |  61 +++++-
  .../ui/Components/TopicsSidePanel.java        |   7 +-
  .../ui/Components/TopicsTabsView.java         |  78 ++++---
  .../ui/Components/TranslateButton.java        |   4 +-
- .../ui/Components/ViewPagerFixed.java         |  12 +-
+ .../ui/Components/ViewPagerFixed.java         |  31 ++-
  .../blur3/drawable/GlassRimRenderer.java      |   4 +-
  .../impl/BlurredBackgroundProviderImpl.java   |  13 +-
  .../chat/ChatInputViewsContainer.java         |  31 ++-
@@ -44,7 +45,7 @@ Subject: non-island ui in various parts of the app
  .../ChatActivityActionsButtonsLayout.java     |  19 ++
  .../ChatActivityChannelButtonsLayout.java     |  33 ++-
  .../ui/Components/glass/GlassTabView.java     |   5 +-
- .../org/telegram/ui/DataUsage2Activity.java   |   2 +
+ .../org/telegram/ui/DataUsage2Activity.java   |  31 ++-
  .../java/org/telegram/ui/DialogsActivity.java | 173 ++++++++++-----
  .../java/org/telegram/ui/ProfileActivity.java |  61 ++++--
  .../java/org/telegram/ui/QrShare/QrGlass.java |   3 +
@@ -59,7 +60,7 @@ Subject: non-island ui in various parts of the app
  .../java/org/telegram/ui/iv/RichEditor.java   |   4 +-
  .../utils/glass/BaseFragmentSimpleGlass.java  |   6 +-
  .../utils/glass/GlassCaptureSourceCanvas.java |  52 +++--
- 55 files changed, 1131 insertions(+), 373 deletions(-)
+ 56 files changed, 1173 insertions(+), 385 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -481,16 +482,90 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/CacheControlActivity.ja
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/CacheControlActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/CacheControlActivity.java
-@@ -1372,7 +1372,9 @@ public class CacheControlActivity extends BaseFragment implements NotificationCe
+@@ -1262,6 +1262,9 @@ public class CacheControlActivity extends BaseFragment implements NotificationCe
+             @Override
+             public float tabsPinnedTop(SiblingRecyclerPagerLayout parent) {
+                 // the glass of the tabs (inset by 9.66dp) 7dp under the header's buttons
++                if (desu.inugram.helpers.theme.NonIslandHelper.headers()) {
++                    return Math.max(0, contentInsetTop + ActionBar.getCurrentActionBarHeight() - dp(7));
++                }
+                 return Math.max(0, BaseFragmentSimpleGlass.getPillGlassTop(contentInsetTop) - dp(9.66f));
+             }
+ 
+@@ -1372,7 +1375,9 @@ public class CacheControlActivity extends BaseFragment implements NotificationCe
          getBaseSimpleGlass().setCapture((canvas, position) ->
                  scrollCoordinator.captureScrollingContent(canvas, position, listCapture));
  
-+        if (!desu.inugram.helpers.theme.NonIslandHelper.applyClassicHeaderBackground(listTopOverlay, listView, resourceProvider, getBaseSimpleGlass())) {
++        if (!desu.inugram.helpers.theme.NonIslandHelper.applyClassicHeaderBackground(listTopOverlay, null, resourceProvider, getBaseSimpleGlass(), desu.inugram.helpers.theme.NonIslandHelper.headers(), () -> !actionBarShownAnimator.getValue())) {
          listTopOverlay.setBackground(getBaseSimpleGlass().createActionBarFadeDrawable(listTopOverlay));
 +        }
          simpleActionBar.setBackground(null);
  
          setListViewParams(contentInsetTop, contentInsetBottom);
+@@ -1398,15 +1403,21 @@ public class CacheControlActivity extends BaseFragment implements NotificationCe
+             }
+         };
+         tabsContainer = cachedMediaLayout.takeTabsContainer();
++        if (desu.inugram.helpers.theme.NonIslandHelper.headers()) {
++            tabsContainer.setPadding(0, 0, 0, 0);
++            desu.inugram.ui.TabsPillDrawer.attach(cachedMediaLayout.tabs, getBaseSimpleGlass().frostedFactory, resourceProvider);
++        } else {
+         tabsContainer.setBackground(getBaseSimpleGlass().factory
+                 .create(tabsContainer)
+                 .setColorProvider(BlurredBackgroundProviderImpl.simpleActionBar(resourceProvider))
+                 .setPadding(dp(9.66f))
+                 .setRadius(dp(18)));
++        }
+         scrollCoordinator.setPager(cachedMediaLayout, cachedMediaLayout.getViewPager(), cachedMediaLayout::getPageListView);
+         scrollCoordinator.setTabs(tabsContainer, LayoutHelper.WRAP_CONTENT);
++        final int inu_tabsMargin = desu.inugram.helpers.theme.NonIslandHelper.headers() ? 0 : -4;
+         tabsContainer.setLayoutParams(LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT,
+-                Gravity.TOP, -4, 0, -4, 0));
++                Gravity.TOP, inu_tabsMargin, 0, inu_tabsMargin, 0));
+         simpleActionBar.bringToFront();
+         tabsContainer.bringToFront();
+         cachedMediaLayout.setDelegate(new CachedMediaLayout.Delegate() {
+@@ -3176,7 +3187,7 @@ public class CacheControlActivity extends BaseFragment implements NotificationCe
+         applyListViewInsets(listView, insetTop, insetBottom, ActionBar.getCurrentActionBarHeight() / 2, 0);
+         if (listTopOverlay != null) {
+             ViewGroup.LayoutParams layoutParams = listTopOverlay.getLayoutParams();
+-            layoutParams.height = insetTop + ActionBar.getCurrentActionBarHeight() + dp(44);
++            layoutParams.height = insetTop + ActionBar.getCurrentActionBarHeight() + (desu.inugram.helpers.theme.NonIslandHelper.headers() ? 0 : dp(44));
+             listTopOverlay.setLayoutParams(layoutParams);
+             updateListTopOverlayTranslation();
+         }
+@@ -3198,6 +3209,9 @@ public class CacheControlActivity extends BaseFragment implements NotificationCe
+     }
+ 
+     private void setTabsPinned(boolean pinned) {
++        if (cachedMediaLayout != null && cachedMediaLayout.tabs.inu_pill != null) {
++            cachedMediaLayout.tabs.inu_pill.setDocked(pinned);
++        }
+         if (tabsPinnedAnimator == null || tabsPinnedAnimator.getValue() == pinned) {
+             return;
+         }
+@@ -3213,7 +3227,7 @@ public class CacheControlActivity extends BaseFragment implements NotificationCe
+     }
+ 
+     private void updateListTopOverlayTranslation() {
+-        if (listTopOverlay == null) {
++        if (listTopOverlay == null || desu.inugram.helpers.theme.NonIslandHelper.headers()) {
+             return;
+         }
+         final float actionBarFactor = actionBarShownAnimator == null ? 0 : actionBarShownAnimator.getFloatValue();
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/CachedMediaLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/CachedMediaLayout.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/CachedMediaLayout.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/CachedMediaLayout.java
+@@ -92,7 +92,7 @@ public class CachedMediaLayout extends FrameLayout implements Theme.Colorable, N
+     public final AnimatedTextView selectedMessagesCountTextView;
+     private final ActionBarMenuItem clearItem;
+     public final FrameLayout tabsContainer;
+-    private final ViewPagerFixed.TabsView tabs;
++    public final ViewPagerFixed.TabsView tabs;
+ 
+     BaseFragment parentFragment;
+ 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/CalendarActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/CalendarActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/CalendarActivity.java
@@ -2539,28 +2614,14 @@ index 0000000..0000000 100644
              float r = l + indicatorWidth + indicatorWidthAnimationDx;
  
              final View current = tabsContainer.getChildAt(currentPosition);
-@@ -764,12 +814,34 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
+@@ -764,12 +814,20 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
  //                (int) r,
  //                height
  //            );
 +            if (inu_pill != null) {
-+                final float t = inu_pill.getDockedProgress();
-+                final float centerX = getPaddingLeft() + l + (r - l) / 2f;
-+                final float barHalf = Math.max(dp(24), inu_currentLabelWidth()) / 2f;
-+                final float pillHalf = (r - l) / 2f - dp(4);
-+                final float half = AndroidUtilities.lerp(pillHalf, barHalf, t);
-+                final float dockExtra = t * dp(4);
-+                final float top = AndroidUtilities.lerp(getPaddingTop() + dp(4), height - getPaddingBottom() - dp(3), t) + dockExtra;
-+                final float bottom = AndroidUtilities.lerp(height - getPaddingBottom() - dp(4), height - getPaddingBottom(), t) + dockExtra;
-+                final float topRad = AndroidUtilities.lerp(dp(14), dp(3), t);
-+                final float botRad = AndroidUtilities.lerp(dp(14), 0, t);
-+                selectorDrawable.setCornerRadii(new float[]{topRad, topRad, topRad, topRad, botRad, botRad, botRad, botRad});
-+                selectorDrawable.setColor(androidx.core.graphics.ColorUtils.blendARGB(
++                inu_pill.updateSelector(selectorDrawable, getPaddingLeft() + l + (r - l) / 2f, (r - l) / 2f - dp(4), Math.max(dp(24), inu_currentLabelWidth()) / 2f,
 +                    Theme.multAlpha(processColor(Theme.getColor(activeTextColorKey, resourcesProvider)), .15f),
-+                    processColor(Theme.getColor(tabLineColorKey, resourcesProvider)),
-+                    t
-+                ));
-+                selectorDrawable.setBounds((int) (centerX - half), (int) top, (int) (centerX + half), (int) bottom);
++                    processColor(Theme.getColor(tabLineColorKey, resourcesProvider)));
 +            } else if (inu_nonIsland) {
 +                desu.inugram.helpers.theme.NonIslandHelper.setMd3TabIndicatorBounds(selectorDrawable, getPaddingLeft() + l, r - l, height, 0f);
 +            } else {
@@ -2574,7 +2635,7 @@ index 0000000..0000000 100644
              selectorDrawable.draw(canvas);
              selectorDrawable.setAlpha(wasAlpha);
  
-@@ -950,8 +1022,38 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
+@@ -950,8 +1008,38 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView implements T
          }
      }
  
@@ -3124,11 +3185,23 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ViewPagerFix
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ViewPagerFixed.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ViewPagerFixed.java
-@@ -1636,6 +1636,13 @@ public class ViewPagerFixed extends FrameLayout {
+@@ -1636,6 +1636,25 @@ public class ViewPagerFixed extends FrameLayout {
          ValueAnimator tabsAnimator;
          private float animationValue;
  
 +        public boolean inu_md3Tabs;
++        public desu.inugram.ui.TabsPillDrawer inu_pill;
++
++        @Override
++        protected void dispatchDraw(Canvas canvas) {
++            if (inu_pill == null) {
++                super.dispatchDraw(canvas);
++                return;
++            }
++            inu_pill.drawBackgroundAndClip(canvas, Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider));
++            super.dispatchDraw(canvas);
++            canvas.restore();
++        }
 +
 +        public void inu_applyMd3Style() {
 +            inu_md3Tabs = true;
@@ -3138,18 +3211,32 @@ index 0000000..0000000 100644
          public TabsView(Context context, boolean hasStableIds, int tabsSelectorType, Theme.ResourcesProvider resourcesProvider) {
              super(context);
              this.resourcesProvider = resourcesProvider;
-@@ -2086,7 +2093,10 @@ public class ViewPagerFixed extends FrameLayout {
+@@ -2086,7 +2105,15 @@ public class ViewPagerFixed extends FrameLayout {
                              indicatorX = (int) AndroidUtilities.lerp(lastDrawnIndicatorX, indicatorX, indicatorProgress2);
                              indicatorWidth = (int) AndroidUtilities.lerp(lastDrawnIndicatorW, indicatorWidth, indicatorProgress2);
                          }
 -                        if (selectorType == SELECTOR_TYPE_BUBBLE_STYLE) {
-+                        if (inu_md3Tabs) {
++                        if (inu_pill != null) {
++                            inu_pill.updateSelector(selectorDrawable, indicatorX + indicatorWidth / 2f, indicatorWidth / 2f + dp(tabMarginDp) - dp(4), Math.max(dp(24), indicatorWidth) / 2f,
++                                Theme.multAlpha(Theme.getColor(activeTextColorKey, resourcesProvider), .15f),
++                                Theme.getColor(tabLineColorKey, resourcesProvider));
++                            selectorDrawable.draw(canvas);
++                        } else if (inu_md3Tabs) {
 +                            desu.inugram.helpers.theme.NonIslandHelper.setMd3TabIndicatorBounds(selectorDrawable, indicatorX, indicatorWidth, height, hideProgress);
 +                            selectorDrawable.draw(canvas);
 +                        } else if (selectorType == SELECTOR_TYPE_BUBBLE_STYLE) {
                              final float TAB_INTERNAL_PADDING = 12.5f;
                              final float add = additionalTabWidth / 2f;
                              final int y = height / 2 - dp(14);
+@@ -2112,7 +2139,7 @@ public class ViewPagerFixed extends FrameLayout {
+             if (!tabs.isEmpty()) {
+                 int width = MeasureSpec.getSize(widthMeasureSpec) - dp(7) - dp(7);
+                 int prevWidth = additionalTabWidth;
+-                if (tabs.size() == 1 || selectorType == 9 || selectorType == 10) {
++                if (tabs.size() == 1 || selectorType == 9 || selectorType == 10 || inu_pill != null) {
+                     additionalTabWidth = 0;
+                 } else {
+                     additionalTabWidth = allTabsWidth < width ? (width - allTabsWidth) / tabs.size() : 0;
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/blur3/drawable/GlassRimRenderer.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/blur3/drawable/GlassRimRenderer.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/blur3/drawable/GlassRimRenderer.java
@@ -3494,16 +3581,79 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DataUsage2Activity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DataUsage2Activity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/DataUsage2Activity.java
-@@ -151,7 +151,9 @@ public class DataUsage2Activity extends BaseFragment {
+@@ -127,9 +127,14 @@ public class DataUsage2Activity extends BaseFragment {
+         listTopOverlay = new View(context);
+         frameLayout.addView(listTopOverlay, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 0, Gravity.TOP));
+         ViewGroup.LayoutParams layoutParams = listTopOverlay.getLayoutParams();
+-        layoutParams.height = insetTop + ActionBar.getCurrentActionBarHeight() + dp(44);
+-
+-        tabsContainer.setTranslationY(BaseFragmentSimpleGlass.getPillGlassTop(insetTop) - dp(9.66f));
++        layoutParams.height = inu_getListTopOverlayHeight();
++
++        tabsContainer.setTranslationY(inu_getTabsTop());
++        if (desu.inugram.helpers.theme.NonIslandHelper.headers()) {
++            tabsView.inu_applyMd3Style();
++            tabsContainer.addView(tabsView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 44));
++            tabsContainer.setBackground(new desu.inugram.ui.ClassicBarDrawable(getBaseSimpleGlass().frostedFactory, tabsContainer, resourceProvider));
++        } else {
+         tabsContainer.addView(tabsView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 36 + 6 + 6));
+         tabsContainer.setPadding(dp(4), dp(4), dp(4), dp(4));
+         tabsContainer.setBackground(getBaseSimpleGlass().factory
+@@ -138,6 +143,7 @@ public class DataUsage2Activity extends BaseFragment {
+             .setPadding(dp(9.66f))
+             .setRadius(dp(18))
+         );
++        }
+ 
+         getBaseSimpleGlass().setViews(frameLayout, pager, simpleActionBar, resourceProvider);
+         getBaseSimpleGlass().setCapture((canvas, position) -> {
+@@ -150,8 +156,11 @@ public class DataUsage2Activity extends BaseFragment {
+             }
          });
          getBaseSimpleGlass().setClipView(null);
-         frameLayout.addView(tabsContainer, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP, -4, 0, -4, 0));
-+        if (!desu.inugram.helpers.theme.NonIslandHelper.applyClassicHeaderBackground(listTopOverlay, null, resourceProvider, getBaseSimpleGlass(), desu.inugram.helpers.theme.NonIslandHelper.headers(), () -> pager.getCurrentView() == null || !pager.getCurrentView().canScrollVertically(-1))) {
+-        frameLayout.addView(tabsContainer, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP, -4, 0, -4, 0));
++        final int inu_tabsMargin = desu.inugram.helpers.theme.NonIslandHelper.headers() ? 0 : -4;
++        frameLayout.addView(tabsContainer, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP, inu_tabsMargin, 0, inu_tabsMargin, 0));
++        if (!desu.inugram.helpers.theme.NonIslandHelper.applyClassicHeaderBackground(listTopOverlay, null, resourceProvider, getBaseSimpleGlass())) {
          listTopOverlay.setBackground(getBaseSimpleGlass().createActionBarFadeDrawable(listTopOverlay));
 +        }
          simpleActionBar.setBackground(null);
  
          return fragmentView = frameLayout;
+@@ -378,7 +387,7 @@ public class DataUsage2Activity extends BaseFragment {
+         private CacheChart chart;
+ 
+         public void checkInsets() {
+-            BaseFragmentSimpleGlass.setListViewParams(this, insetTop, insetBottom, ActionBar.getCurrentActionBarHeight() + dp(42), 0);
++            BaseFragmentSimpleGlass.setListViewParams(this, insetTop, insetBottom, ActionBar.getCurrentActionBarHeight() + (desu.inugram.helpers.theme.NonIslandHelper.headers() ? dp(44) : dp(42)), 0);
+         }
+ 
+         private String formatPercent(int percent) {
+@@ -1202,14 +1211,22 @@ public class DataUsage2Activity extends BaseFragment {
+     private int insetTop;
+     private int insetBottom;
+ 
++    private float inu_getTabsTop() {
++        return desu.inugram.helpers.theme.NonIslandHelper.headers() ? insetTop + ActionBar.getCurrentActionBarHeight() : BaseFragmentSimpleGlass.getPillGlassTop(insetTop) - dp(9.66f);
++    }
++
++    private int inu_getListTopOverlayHeight() {
++        return insetTop + ActionBar.getCurrentActionBarHeight() + (desu.inugram.helpers.theme.NonIslandHelper.headers() ? 0 : dp(44));
++    }
++
+     @Override
+     public void onInsets(int left, int top, int right, int bottom) {
+         this.insetTop = top;
+         this.insetBottom = bottom;
+ 
+-        tabsContainer.setTranslationY(BaseFragmentSimpleGlass.getPillGlassTop(insetTop) - dp(9.66f));
++        tabsContainer.setTranslationY(inu_getTabsTop());
+         ViewGroup.LayoutParams layoutParams = listTopOverlay.getLayoutParams();
+-        layoutParams.height = insetTop + ActionBar.getCurrentActionBarHeight() + dp(44);
++        layoutParams.height = inu_getListTopOverlayHeight();
+ 
+         for (ListView listView : listViews) {
+             listView.checkInsets();
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
