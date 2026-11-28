@@ -48,7 +48,7 @@ Subject: non-island ui in various parts of the app
  .../org/telegram/ui/DataUsage2Activity.java   |  31 ++-
  .../java/org/telegram/ui/DialogsActivity.java | 173 ++++++++++-----
  .../ui/Gifts/ResaleGiftsFragment.java         |   2 +
- .../java/org/telegram/ui/ProfileActivity.java |  61 ++++--
+ .../java/org/telegram/ui/ProfileActivity.java |  63 ++++--
  .../java/org/telegram/ui/QrShare/QrGlass.java |   3 +
  .../org/telegram/ui/QrShare/QrShareView.java  |   1 +
  .../org/telegram/ui/QrShare/RimPainter.java   |   1 +
@@ -64,7 +64,7 @@ Subject: non-island ui in various parts of the app
  .../java/org/telegram/ui/iv/RichEditor.java   |   4 +-
  .../utils/glass/BaseFragmentSimpleGlass.java  |   6 +-
  .../utils/glass/GlassCaptureSourceCanvas.java |  52 +++--
- 60 files changed, 1260 insertions(+), 401 deletions(-)
+ 60 files changed, 1262 insertions(+), 401 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -4404,7 +4404,16 @@ index 0000000..0000000 100644
      }
  
      private static void setHeaderBlurHeight(View view, int height) {
-@@ -8352,7 +8377,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -8171,6 +8196,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+         view.getLayoutParams().height = height;
+         if (view.isLaidOut()) {
+             // follows the scroll on each frame: the bounds without a layout pass, the params for the next one
++            // a parent's layout without a measure would restore the stale measured height
++            view.measure(View.MeasureSpec.makeMeasureSpec(view.getWidth(), View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+             view.setBottom(view.getTop() + height);
+         } else {
+             view.requestLayout();
+@@ -8352,7 +8379,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          boolean searchVisible = imageUpdater == null && actionBar.isSearchFieldVisible();
          if (sharedMediaRow != -1 && !searchVisible) {
              holder = (RecyclerListView.Holder) listView.findViewHolderForAdapterPosition(sharedMediaRow);
@@ -4413,7 +4422,7 @@ index 0000000..0000000 100644
          } else {
              mediaHeaderVisible = searchVisible;
          }
-@@ -8585,7 +8610,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -8585,7 +8612,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          nameY = AndroidUtilities.lerp(minNameY, backwardInitialValues[8], backwardDiff);
          onlineY = AndroidUtilities.lerp(minOnlineY, backwardInitialValues[9], backwardDiff);
  
@@ -4422,7 +4431,7 @@ index 0000000..0000000 100644
          final float nameX = lerp(getPreviousHeaderTranslationX(nameTextView, PREVIOUS_HEADER_TITLE, minimizedX), backwardInitialValues[12], backwardDiff);
          final float onlineX = lerp(getPreviousHeaderTranslationX(onlineTextView, PREVIOUS_HEADER_SUBTITLE, minimizedX + customPhotoOffset) - customPhotoOffset, backwardInitialValues[13], backwardDiff);
          nameTextView.setTranslationX(nameX);
-@@ -9046,7 +9071,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -9046,7 +9073,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                  final float avatarBottom = (float) Math.floor(endNameY) + (avatarContainer.getHeight() * avatarContainer.getScaleY() + dpf2(8)) * (openAnimationInProgress ? avatarAnimationProgress : diff);
                  nameY = avatarBottom + dp(1.3f) + dp(7) * diff + titleAnimationsYDiff * (1f - avatarAnimationProgress);
                  onlineY = avatarBottom + dp(24) + (float) Math.floor(11 * AndroidUtilities.density) * diff;
@@ -4431,7 +4440,7 @@ index 0000000..0000000 100644
  
                  if (showStatusButton != null) {
                      showStatusButton.setAlpha((int) (0xFF * diff));
-@@ -10031,6 +10056,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -10031,6 +10058,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
      public void onTransitionAnimationEnd(boolean isOpen, boolean backward) {
          if (isOpen && simpleActionBar != null) {
              simpleActionBar.setAlpha(1f);
@@ -4439,7 +4448,7 @@ index 0000000..0000000 100644
          }
          if (isOpen) {
              if (!backward) {
-@@ -10084,6 +10110,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -10084,6 +10112,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
          checkPhotoDescriptionAlpha();
          if (simpleActionBar != null) {
              simpleActionBar.setAlpha(progress);
@@ -4447,7 +4456,7 @@ index 0000000..0000000 100644
          }
          if (actionBar != null) {
              // the back button comes from where the previous header has it
-@@ -15605,10 +15632,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+@@ -15605,10 +15634,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
              if (animated) {
                  LinearSmoothScrollerCustom linearSmoothScroller = new LinearSmoothScrollerCustom(getContext(), LinearSmoothScrollerCustom.POSITION_TOP, .6f);
                  linearSmoothScroller.setTargetPosition(sharedMediaRow);
