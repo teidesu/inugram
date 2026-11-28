@@ -73,6 +73,7 @@ object NonIslandHelper {
         glass: BaseFragmentSimpleGlass,
         enabled: Boolean = headers(),
         isOnTop: BooleanSupplier? = null,
+        shadowAnchor: View? = null,
     ): Boolean {
         if (!enabled) return false
         val background = ClassicHeaderBackground(glass.frostedFactory, header, resourcesProvider, list != null || isOnTop != null)
@@ -87,9 +88,10 @@ object NonIslandHelper {
         }
         // the parent may be dispatching attach to its children right now: adding a sibling then skips the last one
         header.post {
-            val parent = header.parent as? ViewGroup ?: return@post
+            val parent = (shadowAnchor ?: header).parent as? ViewGroup ?: return@post
             val shadow = ClassicHeaderShadow(header, background, isOnTop)
-            parent.addView(shadow, parent.indexOfChild(header) + 1, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, shadow.background.intrinsicHeight))
+            val index = if (shadowAnchor != null) parent.indexOfChild(shadowAnchor) else parent.indexOfChild(header) + 1
+            parent.addView(shadow, index, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, shadow.background.intrinsicHeight))
         }
         return true
     }
@@ -136,6 +138,8 @@ object NonIslandHelper {
         private val headerBackground: ClassicHeaderBackground,
         private val isOnTop: BooleanSupplier?,
     ) : View(header.context), ViewTreeObserver.OnPreDrawListener {
+        private val location = IntArray(2)
+
         init {
             setBackgroundResource(R.drawable.header_shadow)
             importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
@@ -154,7 +158,16 @@ object NonIslandHelper {
         override fun onPreDraw(): Boolean {
             isOnTop?.let { headerBackground.setOnTop(it.asBoolean) }
             visibility = header.visibility
-            translationY = header.y + header.height - top
+            var offset = 0
+            val headerParent = header.parent as? View
+            val ownParent = parent as? View
+            if (headerParent != null && ownParent != null && headerParent !== ownParent) {
+                headerParent.getLocationInWindow(location)
+                offset = location[1]
+                ownParent.getLocationInWindow(location)
+                offset -= location[1]
+            }
+            translationY = header.y + header.height - top + offset
             alpha = header.alpha * headerBackground.shadowAlpha
             return true
         }

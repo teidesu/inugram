@@ -53,14 +53,16 @@ Subject: non-island ui in various parts of the app
  .../org/telegram/ui/QrShare/RimPainter.java   |   1 +
  .../ui/SearchTabsAndFiltersLayout.java        |   7 +
  .../org/telegram/ui/SettingsActivity.java     |   4 +-
+ .../telegram/ui/Stars/StarsIntroActivity.java |  38 +++-
  .../org/telegram/ui/StatisticActivity.java    |  17 ++
+ .../org/telegram/ui/TON/TONIntroActivity.java |  38 +++-
  .../java/org/telegram/ui/bots/BotAdView.java  |   2 +-
  .../ui/bots/BotCommandsMenuContainer.java     |   4 +-
  .../bots/ChatAttachAlertBotWebViewLayout.java |   5 +-
  .../java/org/telegram/ui/iv/RichEditor.java   |   4 +-
  .../utils/glass/BaseFragmentSimpleGlass.java  |   6 +-
  .../utils/glass/GlassCaptureSourceCanvas.java |  52 +++--
- 56 files changed, 1173 insertions(+), 385 deletions(-)
+ 58 files changed, 1237 insertions(+), 397 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -4534,6 +4536,112 @@ index 0000000..0000000 100644
          contentView.addView(actionBarFadeView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 0, Gravity.TOP));
          contentView.addView(simpleActionBar, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.FILL_HORIZONTAL | Gravity.TOP));
  
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stars/StarsIntroActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/Stars/StarsIntroActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Stars/StarsIntroActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Stars/StarsIntroActivity.java
+@@ -316,6 +316,9 @@ public class StarsIntroActivity extends GradientHeaderActivity implements Notifi
+         scrollCoordinator.setGeometry(new SiblingRecyclerPagerLayout.Geometry() {
+             @Override
+             public float tabsPinnedTop(SiblingRecyclerPagerLayout parent) {
++                if (desu.inugram.helpers.theme.NonIslandHelper.headers()) {
++                    return Math.max(0, contentInsetTop + ActionBar.getCurrentActionBarHeight() - dp(7));
++                }
+                 // the glass of the tabs (inset by 9.66dp) 7dp under the header's buttons
+                 return Math.max(0, BaseFragmentSimpleGlass.getPillGlassTop(contentInsetTop) - dp(9.66f));
+             }
+@@ -330,6 +333,9 @@ public class StarsIntroActivity extends GradientHeaderActivity implements Notifi
+                 if (tabsPinnedAnimator != null) {
+                     tabsPinnedAnimator.setValue(pinned, true);
+                 }
++                if (transactionsLayout != null && transactionsLayout.tabsView.inu_pill != null) {
++                    transactionsLayout.tabsView.inu_pill.setDocked(pinned);
++                }
+                 if (contentView != null) {
+                     contentView.invalidate();
+                 }
+@@ -562,8 +568,9 @@ public class StarsIntroActivity extends GradientHeaderActivity implements Notifi
+         scrollCoordinator.setPager(transactionsLayout, transactionsLayout.viewPager,
+                 page -> ((StarsTransactionsLayout.Page) page).listView);
+         scrollCoordinator.setTabs(transactionsLayout.tabsContainer, ViewGroup.LayoutParams.WRAP_CONTENT);
++        final int inu_tabsMargin = desu.inugram.helpers.theme.NonIslandHelper.headers() ? 0 : -4;
+         transactionsLayout.tabsContainer.setLayoutParams(LayoutHelper.createFrame(
+-                LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP, -4, 0, -4, 0));
++                LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP, inu_tabsMargin, 0, inu_tabsMargin, 0));
+         applyScrollInsets();
+     }
+ 
+@@ -588,15 +595,28 @@ public class StarsIntroActivity extends GradientHeaderActivity implements Notifi
+         FrameLayout tabs = transactionsLayout.tabsContainer;
+         listTopOverlay = new View(getContext());
+         listTopOverlay.setAlpha(0f);
++        if (desu.inugram.helpers.theme.NonIslandHelper.headers()) {
++            simpleActionBar.setTitlesAlpha(0f);
++            simpleActionBar.setTitle(getString(R.string.TelegramStars));
++            captureRoot.addView(listTopOverlay, captureRoot.indexOfChild(simpleActionBar),
++                    LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 0, Gravity.TOP));
++        } else {
+         scrollCoordinator.addView(listTopOverlay, scrollCoordinator.indexOfChild(tabs),
+                 LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 0, Gravity.TOP));
++        }
++        if (!desu.inugram.helpers.theme.NonIslandHelper.applyClassicHeaderBackground(listTopOverlay, null, resourceProvider, getBaseSimpleGlass(), desu.inugram.helpers.theme.NonIslandHelper.headers(), null, tabs)) {
+         listTopOverlay.setBackground(getBaseSimpleGlass().createActionBarFadeDrawable(listTopOverlay));
++        }
+         actionBarShownAnimator = new BoolAnimator(0, (id, factor, fraction, callee) ->
+                 updateListTopOverlayTranslation(), CubicBezierInterpolator.EASE_OUT_QUINT, 380);
+         tabsPinnedAnimator = new BoolAnimator(1, (id, factor, fraction, callee) ->
+                 updateListTopOverlayTranslation(), CubicBezierInterpolator.EASE_OUT_QUINT, 380);
+-        headerVisibleAnimator = new BoolAnimator(2, (id, factor, fraction, callee) ->
+-                listTopOverlay.setAlpha(factor), CubicBezierInterpolator.EASE_OUT_QUINT, 380);
++        headerVisibleAnimator = new BoolAnimator(2, (id, factor, fraction, callee) -> {
++            listTopOverlay.setAlpha(factor);
++            if (desu.inugram.helpers.theme.NonIslandHelper.headers()) {
++                simpleActionBar.setTitlesAlpha(factor);
++            }
++        }, CubicBezierInterpolator.EASE_OUT_QUINT, 380);
+         actionBarShownAnimator.setValue(listView.canScrollVertically(-1) || simpleActionBar.isActionModeShowed(), false);
+         tabsPinnedAnimator.setValue(scrollCoordinator.areTabsPinned(), false);
+         listView.addOnScrollListener(new RecyclerView.OnScrollListener() {
+@@ -607,6 +627,12 @@ public class StarsIntroActivity extends GradientHeaderActivity implements Notifi
+             }
+         });
+         updateListTopOverlaySize();
++        if (desu.inugram.helpers.theme.NonIslandHelper.headers()) {
++            tabs.setPadding(0, 0, 0, 0);
++            desu.inugram.ui.TabsPillDrawer.attach(transactionsLayout.tabsView, getBaseSimpleGlass().frostedFactory, resourceProvider);
++            transactionsLayout.tabsView.inu_pill.setDocked(scrollCoordinator.areTabsPinned());
++            return;
++        }
+         tabs.setBackground(getBaseSimpleGlass().factory.create(tabs)
+                 .setColorProvider(BlurredBackgroundProviderImpl.simpleActionBar(resourceProvider))
+                 .setPadding(dp(9.66f))
+@@ -617,7 +643,7 @@ public class StarsIntroActivity extends GradientHeaderActivity implements Notifi
+         if (listTopOverlay == null) {
+             return;
+         }
+-        int height = contentInsetTop + ActionBar.getCurrentActionBarHeight() + dp(44);
++        int height = contentInsetTop + ActionBar.getCurrentActionBarHeight() + (desu.inugram.helpers.theme.NonIslandHelper.headers() ? 0 : dp(44));
+         ViewGroup.LayoutParams params = listTopOverlay.getLayoutParams();
+         if (params.height != height) {
+             params.height = height;
+@@ -627,7 +653,7 @@ public class StarsIntroActivity extends GradientHeaderActivity implements Notifi
+     }
+ 
+     private void updateListTopOverlayTranslation() {
+-        if (listTopOverlay == null) {
++        if (listTopOverlay == null || desu.inugram.helpers.theme.NonIslandHelper.headers()) {
+             return;
+         }
+         float actionBarFactor = actionBarShownAnimator == null ? 0f : actionBarShownAnimator.getFloatValue();
+@@ -1341,7 +1367,7 @@ public class StarsIntroActivity extends GradientHeaderActivity implements Notifi
+         private final boolean ton;
+         private final ViewPagerFixed viewPager;
+         private final PageAdapter adapter;
+-        private final ViewPagerFixed.TabsView tabsView;
++        public final ViewPagerFixed.TabsView tabsView;
+         private final FrameLayout tabsContainer;
+         private final SiblingRecyclerPagerLayout scrollCoordinator;
+         private final long bot_id;
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/StatisticActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/StatisticActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/StatisticActivity.java
@@ -4570,6 +4678,112 @@ index 0000000..0000000 100644
      private void updateHeaderOverlayHeight() {
          if (listTopOverlay == null) return;
          int height = mSystemInsets.top + ActionBar.getCurrentActionBarHeight() + dp(44);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/TON/TONIntroActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/TON/TONIntroActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/TON/TONIntroActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/TON/TONIntroActivity.java
+@@ -210,6 +210,9 @@ public class TONIntroActivity extends GradientHeaderActivity implements Notifica
+         scrollCoordinator.setGeometry(new SiblingRecyclerPagerLayout.Geometry() {
+             @Override
+             public float tabsPinnedTop(SiblingRecyclerPagerLayout parent) {
++                if (desu.inugram.helpers.theme.NonIslandHelper.headers()) {
++                    return Math.max(0, contentInsetTop + ActionBar.getCurrentActionBarHeight() - dp(7));
++                }
+                 // the glass of the tabs (inset by 9.66dp) 7dp under the header's buttons
+                 return Math.max(0, BaseFragmentSimpleGlass.getPillGlassTop(contentInsetTop) - dp(9.66f));
+             }
+@@ -224,6 +227,9 @@ public class TONIntroActivity extends GradientHeaderActivity implements Notifica
+                 if (tabsPinnedAnimator != null) {
+                     tabsPinnedAnimator.setValue(pinned, true);
+                 }
++                if (transactionsLayout != null && transactionsLayout.tabsView.inu_pill != null) {
++                    transactionsLayout.tabsView.inu_pill.setDocked(pinned);
++                }
+                 if (contentView != null) {
+                     contentView.invalidate();
+                 }
+@@ -261,7 +267,7 @@ public class TONIntroActivity extends GradientHeaderActivity implements Notifica
+ 
+         aboveTitleView = new FrameLayout(context);
+         aboveTitleView.setClickable(true);
+-        iconTextureView = new WalletDiamondView(context, 170);
++        iconTextureView = new WalletDiamondView(context, 170, desu.inugram.helpers.theme.NonIslandHelper.headers());
+         iconTextureView.setStarParticlesView(particlesView);
+         aboveTitleView.addView(iconTextureView, LayoutHelper.createFrame(170, 170, Gravity.CENTER, 0, 32, 0, 12));
+         configureHeader(getString(R.string.GramEarningsTitle), AndroidUtilities.replaceArrows(AndroidUtilities.replaceSingleTag(getString(R.string.GramEarningsText), () -> {
+@@ -456,8 +462,9 @@ public class TONIntroActivity extends GradientHeaderActivity implements Notifica
+         scrollCoordinator.setPager(transactionsLayout, transactionsLayout.getViewPager(),
+                 transactionsLayout::getPageListView);
+         scrollCoordinator.setTabs(transactionsLayout.getTabsContainer(), ViewGroup.LayoutParams.WRAP_CONTENT);
++        final int inu_tabsMargin = desu.inugram.helpers.theme.NonIslandHelper.headers() ? 0 : -4;
+         transactionsLayout.getTabsContainer().setLayoutParams(LayoutHelper.createFrame(
+-                LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP, -4, 0, -4, 0));
++                LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP, inu_tabsMargin, 0, inu_tabsMargin, 0));
+         applyScrollInsets();
+     }
+ 
+@@ -482,15 +489,28 @@ public class TONIntroActivity extends GradientHeaderActivity implements Notifica
+         FrameLayout tabs = transactionsLayout.getTabsContainer();
+         listTopOverlay = new View(getContext());
+         listTopOverlay.setAlpha(0f);
++        if (desu.inugram.helpers.theme.NonIslandHelper.headers()) {
++            simpleActionBar.setTitlesAlpha(0f);
++            simpleActionBar.setTitle(getString(R.string.GramEarningsTitle));
++            captureRoot.addView(listTopOverlay, captureRoot.indexOfChild(simpleActionBar),
++                    LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 0, Gravity.TOP));
++        } else {
+         scrollCoordinator.addView(listTopOverlay, scrollCoordinator.indexOfChild(tabs),
+                 LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 0, Gravity.TOP));
++        }
++        if (!desu.inugram.helpers.theme.NonIslandHelper.applyClassicHeaderBackground(listTopOverlay, null, resourceProvider, getBaseSimpleGlass(), desu.inugram.helpers.theme.NonIslandHelper.headers(), null, tabs)) {
+         listTopOverlay.setBackground(getBaseSimpleGlass().createActionBarFadeDrawable(listTopOverlay));
++        }
+         actionBarShownAnimator = new BoolAnimator(0, (id, factor, fraction, callee) ->
+                 updateListTopOverlayTranslation(), CubicBezierInterpolator.EASE_OUT_QUINT, 380);
+         tabsPinnedAnimator = new BoolAnimator(1, (id, factor, fraction, callee) ->
+                 updateListTopOverlayTranslation(), CubicBezierInterpolator.EASE_OUT_QUINT, 380);
+-        headerVisibleAnimator = new BoolAnimator(2, (id, factor, fraction, callee) ->
+-                listTopOverlay.setAlpha(factor), CubicBezierInterpolator.EASE_OUT_QUINT, 380);
++        headerVisibleAnimator = new BoolAnimator(2, (id, factor, fraction, callee) -> {
++            listTopOverlay.setAlpha(factor);
++            if (desu.inugram.helpers.theme.NonIslandHelper.headers()) {
++                simpleActionBar.setTitlesAlpha(factor);
++            }
++        }, CubicBezierInterpolator.EASE_OUT_QUINT, 380);
+         actionBarShownAnimator.setValue(listView.canScrollVertically(-1) || simpleActionBar.isActionModeShowed(), false);
+         tabsPinnedAnimator.setValue(scrollCoordinator.areTabsPinned(), false);
+         listView.addOnScrollListener(new RecyclerView.OnScrollListener() {
+@@ -501,6 +521,12 @@ public class TONIntroActivity extends GradientHeaderActivity implements Notifica
+             }
+         });
+         updateListTopOverlaySize();
++        if (desu.inugram.helpers.theme.NonIslandHelper.headers()) {
++            tabs.setPadding(0, 0, 0, 0);
++            desu.inugram.ui.TabsPillDrawer.attach(transactionsLayout.tabsView, getBaseSimpleGlass().frostedFactory, resourceProvider);
++            transactionsLayout.tabsView.inu_pill.setDocked(scrollCoordinator.areTabsPinned());
++            return;
++        }
+         tabs.setBackground(getBaseSimpleGlass().factory.create(tabs)
+                 .setColorProvider(BlurredBackgroundProviderImpl.simpleActionBar(resourceProvider))
+                 .setPadding(dp(9.66f))
+@@ -511,7 +537,7 @@ public class TONIntroActivity extends GradientHeaderActivity implements Notifica
+         if (listTopOverlay == null) {
+             return;
+         }
+-        int height = contentInsetTop + ActionBar.getCurrentActionBarHeight() + dp(44);
++        int height = contentInsetTop + ActionBar.getCurrentActionBarHeight() + (desu.inugram.helpers.theme.NonIslandHelper.headers() ? 0 : dp(44));
+         ViewGroup.LayoutParams params = listTopOverlay.getLayoutParams();
+         if (params.height != height) {
+             params.height = height;
+@@ -521,7 +547,7 @@ public class TONIntroActivity extends GradientHeaderActivity implements Notifica
+     }
+ 
+     private void updateListTopOverlayTranslation() {
+-        if (listTopOverlay == null) {
++        if (listTopOverlay == null || desu.inugram.helpers.theme.NonIslandHelper.headers()) {
+             return;
+         }
+         float actionBarFactor = actionBarShownAnimator == null ? 0f : actionBarShownAnimator.getFloatValue();
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/bots/BotAdView.java b/TMessagesProj/src/main/java/org/telegram/ui/bots/BotAdView.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/bots/BotAdView.java
