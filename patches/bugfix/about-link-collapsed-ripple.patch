@@ -1,0 +1,122 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Sat, 28 Nov 2026 09:06:07 +0400
+Subject: Fix link highlight position in collapsed profile description
+
+---
+ .../org/telegram/ui/Cells/AboutLinkCell.java  | 19 ++++++++++---------
+ .../ui/Components/LinkSpanDrawable.java       |  6 +++++-
+ 2 files changed, 15 insertions(+), 10 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/AboutLinkCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/AboutLinkCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/AboutLinkCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/AboutLinkCell.java
+@@ -82,7 +82,7 @@ public class AboutLinkCell extends FrameLayout implements Theme.Colorable {
+     private Drawable showMoreBackgroundDrawable;
+ 
+     private LinkSpanDrawable pressedLink;
+-    private float pressedLinkYOffset;
++    private float pressedLinkXOffset, pressedLinkYOffset;
+     private Layout pressedLinkLayout;
+     private LinkSpanDrawable.LinkCollector links;
+     private Point urlPathOffset = new Point();
+@@ -234,13 +234,12 @@ public class AboutLinkCell extends FrameLayout implements Theme.Colorable {
+                     LinkSpanDrawable link = hitLink(x, y);
+                     if (link != null) {
+                         result = true;
+-                        pressedLinkLayout = textLayout;
+                         links.addLink(pressedLink = link);
+                         AndroidUtilities.runOnUIThread(longPressedRunnable, ViewConfiguration.getLongPressTimeout());
+                     }
+                 } else if (pressedLink != null) {
+                     try {
+-                        onLinkClick((ClickableSpan) pressedLink.getSpan(), textLayout, pressedLinkYOffset);
++                        onLinkClick((ClickableSpan) pressedLink.getSpan(), pressedLinkLayout, pressedLinkXOffset, pressedLinkYOffset);
+                     } catch (Exception e) {
+                         FileLog.e(e);
+                     }
+@@ -420,6 +419,7 @@ public class AboutLinkCell extends FrameLayout implements Theme.Colorable {
+                 } catch (Exception ignore) {}
+ 
+                 final Layout layout = pressedLinkLayout;
++                final float xOffset = pressedLinkXOffset;
+                 final float yOffset = pressedLinkYOffset;
+ 
+                 if (getContext() != null) {
+@@ -428,7 +428,7 @@ public class AboutLinkCell extends FrameLayout implements Theme.Colorable {
+                     builder.setTitle(url);
+                     builder.setItems(new CharSequence[]{LocaleController.getString(R.string.Open), LocaleController.getString(R.string.Copy)}, (dialog, which) -> {
+                         if (which == 0) {
+-                            onLinkClick(pressedLinkFinal, layout, yOffset);
++                            onLinkClick(pressedLinkFinal, layout, xOffset, yOffset);
+                         } else if (which == 1) {
+                             AndroidUtilities.addToClipboard(url);
+                             if (AndroidUtilities.shouldShowClipboardToast()) {
+@@ -490,12 +490,13 @@ public class AboutLinkCell extends FrameLayout implements Theme.Colorable {
+                 Spannable buffer = (Spannable) textLayout.getText();
+                 ClickableSpan[] link = buffer.getSpans(off, off, ClickableSpan.class);
+                 if (link.length != 0 && !AndroidUtilities.isAccessibilityScreenReaderEnabled()) {
+-                    LinkSpanDrawable linkDrawable = new LinkSpanDrawable(link[0], resourcesProvider, ex, ey);
++                    LinkSpanDrawable linkDrawable = new LinkSpanDrawable(link[0], resourcesProvider, ex - this.textX, ey);
+                     linkDrawable.setColor(processColor(Theme.getColor(Theme.key_chat_linkSelectBackground, resourcesProvider)));
+                     int start = buffer.getSpanStart(link[0]);
+                     int end = buffer.getSpanEnd(link[0]);
+                     LinkPath path = linkDrawable.obtainNewPath();
+-                    path.setCurrentLayout(textLayout, start, pressedLinkYOffset = textY);
++                    pressedLinkLayout = textLayout;
++                    path.setCurrentLayout(textLayout, start, pressedLinkXOffset = textX - this.textX, pressedLinkYOffset = textY);
+                     textLayout.getSelectionPath(start, end, path);
+                     return linkDrawable;
+                 }
+@@ -506,7 +507,7 @@ public class AboutLinkCell extends FrameLayout implements Theme.Colorable {
+         return null;
+     }
+ 
+-    private void onLinkClick(ClickableSpan pressedLink, Layout layout, float yOffset) {
++    private void onLinkClick(ClickableSpan pressedLink, Layout layout, float xOffset, float yOffset) {
+         if (currentProgress != null) {
+             currentProgress.cancel();
+             currentProgress = null;
+@@ -519,7 +520,7 @@ public class AboutLinkCell extends FrameLayout implements Theme.Colorable {
+                 if (currentLoading != null) {
+                     links.removeLoading(currentLoading, true);
+                 }
+-                currentLoading = thisLoading = LinkSpanDrawable.LinkCollector.makeLoading(layout, pressedLink, yOffset);
++                currentLoading = thisLoading = LinkSpanDrawable.LinkCollector.inu_makeLoading(layout, pressedLink, xOffset, yOffset);
+                 final int color = processColor(Theme.getColor(Theme.key_chat_linkSelectBackground, resourcesProvider));
+                 thisLoading.setColors(
+                     Theme.multAlpha(color, .8f),
+@@ -834,7 +835,7 @@ public class AboutLinkCell extends FrameLayout implements Theme.Colorable {
+             sb.setSpan(new ClickableSpan() {
+                 @Override
+                 public void onClick(View widget) {
+-                    onLinkClick(original, textLayout, 0);
++                    onLinkClick(original, textLayout, 0, 0);
+                 }
+             }, start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+         }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/LinkSpanDrawable.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/LinkSpanDrawable.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/LinkSpanDrawable.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/LinkSpanDrawable.java
+@@ -282,6 +282,10 @@ public class LinkSpanDrawable<S extends CharacterStyle> {
+         }
+ 
+         public static LoadingDrawable makeLoading(Layout layout, CharacterStyle span, float yOffset) {
++            return inu_makeLoading(layout, span, 0, yOffset);
++        }
++
++        public static LoadingDrawable inu_makeLoading(Layout layout, CharacterStyle span, float xOffset, float yOffset) {
+             if (layout == null || span == null || !(layout.getText() instanceof Spanned)) {
+                 return null;
+             }
+@@ -289,7 +293,7 @@ public class LinkSpanDrawable<S extends CharacterStyle> {
+             LinkPath path = new LinkPath(true);
+             int start = spanned.getSpanStart(span);
+             int end = spanned.getSpanEnd(span);
+-            path.setCurrentLayout(layout, start, yOffset);
++            path.setCurrentLayout(layout, start, xOffset, yOffset);
+             layout.getSelectionPath(start, end, path);
+             LoadingDrawable loadingDrawable = new LoadingDrawable();
+             loadingDrawable.usePath(path);

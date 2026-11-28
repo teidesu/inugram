@@ -367,6 +367,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - sticky date pill jump and color shift when replacing an inline date separator
 - bubble jump when ime height changes mid send-animation
 - forwarded header ripple starting from the middle instead of the touch point
+- profile description link highlight misplaced when the link wraps into a collapsed line
 - out-of-bubble panels (inline buttons, reply/forward/name, sticker time) darkening while the message menu is open and snapping back after it closes, without wallpaper sampling: the list drew the lifted message under the scrim too, doubling the translucent fill
 - out-of-bubble panels (reply/forward/name) on custom wallpapers jumping tint when the keyboard opens (wallpaper-sampling offset flipped by the action bar height via a stale keyboard-layout conditional)
 - markdown `__`/`**`/`~~`/`||` no longer parsed inside auto-detected links on send
