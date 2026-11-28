@@ -11,7 +11,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelp
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/SendMessagesHelper.java
-@@ -9947,6 +9947,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -9948,6 +9948,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
      }
  
      public static TL_iv.PageBlock toInputPageBlock(TL_iv.PageBlock block) {
@@ -19,7 +19,7 @@ index 0000000..0000000 100644
          if (block instanceof TL_iv.pageBlockMap) {
              TL_iv.pageBlockMap map = (TL_iv.pageBlockMap) block;
              TL_iv.inputPageBlockMap input = new TL_iv.inputPageBlockMap();
-@@ -9960,6 +9961,50 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -9961,6 +9962,50 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
          return block;
      }
  

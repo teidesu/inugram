@@ -293,7 +293,7 @@ object PluginOptimisticSend : SessionResource {
         fail(token, "the send failed")
     }
 
-    private fun readSendToken(message: TLRPC.Message?): String? = message?.params?.get(TOKEN_KEY)
+    internal fun readSendToken(message: TLRPC.Message?): String? = message?.params?.get(TOKEN_KEY)
 
     /** leased like [PluginWrites.send]'s requests, or a rewriting plugin and a sending plugin loop */
     internal fun claimRequest(request: TLObject, message: MessageObject): Boolean {

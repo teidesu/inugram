@@ -36,7 +36,7 @@ index 0000000..0000000 100644
              sendMessageParams.replyToStoryItem = storyItem;
              sendMessageParams.replyQuote = quote;
              sendMessageParams.sendMessageChatArguments = sendMessageChatArguments;
-@@ -9118,6 +9118,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
+@@ -9119,6 +9119,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
              newMedia.document.size = sentMedia.document.size;
              newMedia.document.mime_type = sentMedia.document.mime_type;
  

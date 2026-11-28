@@ -55,6 +55,7 @@ object PluginCompose {
     private const val BOUND_KEY = "inu_plugin_compose"
     /** likewise, so a restart finds an early message the stages never answered for */
     private const val EARLY_KEY = "inu_plugin_early"
+    private const val SCHEDULED_KEY = "inu_plugin_scheduled"
     private const val LOCAL_MEDIA = "localMedia"
     private const val SCHEDULE_WHEN_ONLINE = 0x7FFFFFFE
     private const val FORWARD_BATCH = 100
@@ -124,7 +125,10 @@ object PluginCompose {
         val quote: ChatActivity.ReplyQuote?,
         val notify: Boolean,
         val scheduleDate: Int,
-    )
+    ) {
+        /** a stage scheduled a send typed in the chat itself, which then stays where it is */
+        var scheduledByPlugin = false
+    }
 
     /** stock's forward call, kept to make it again */
     private class ForwardCall(
@@ -179,7 +183,7 @@ object PluginCompose {
     private class Bound(val media: Media?, val splice: List<JSONObject?>?, val then: Runnable)
 
     /** files stock sends one by one: the last of them carries [token] to the request it goes out in */
-    private class Batch(val token: String, var left: Int)
+    private class Batch(val token: String, var left: Int, val scheduledByPlugin: Boolean)
 
     private val queue = ArrayList<Queued>()
 
@@ -188,6 +192,9 @@ object PluginCompose {
 
     /** set while handing a send back to stock, whose entry points would hold it again */
     private var resuming = false
+
+    /** set while stock builds a forward a stage scheduled; ui thread */
+    private var forwardingScheduled = false
 
     private val bound = ConcurrentHashMap<String, Bound>()
     private var nextBound = 0L
@@ -380,10 +387,27 @@ object PluginCompose {
     }
 
     private fun markBatchItem(params: SendMessageParams, batch: Batch) {
+        if (batch.scheduledByPlugin) markScheduled(params)
         val last = synchronized(batch) { --batch.left == 0 }
         if (!last) return
         batches.remove(params.sendMessageChatArguments)
         (params.params ?: HashMap<String, String>().also { params.params = it })[BOUND_KEY] = batch.token
+    }
+
+    private fun markScheduled(params: SendMessageParams) {
+        (params.params ?: HashMap<String, String>().also { params.params = it })[SCHEDULED_KEY] = "1"
+    }
+
+    @JvmStatic
+    fun markForward(message: TLRPC.Message) {
+        if (forwardingScheduled) message.params[SCHEDULED_KEY] = "1"
+    }
+
+    /** stock opens the scheduled messages of a chat a scheduled message is sent from */
+    @JvmStatic
+    fun isScheduledByPlugin(message: MessageObject): Boolean {
+        val params = message.messageOwner?.params ?: return false
+        return params.containsKey(SCHEDULED_KEY) || PluginOptimisticSend.readSendToken(message.messageOwner) != null
     }
 
     /** quick replies and greetings are kept, not sent; a composed send already met the stages */
@@ -669,9 +693,9 @@ object PluginCompose {
         }
         return Plan(taken) { target ->
             // a send that draws nothing where it was typed leaves the composer waiting for a bubble. The chat
-            // only takes one for its own dialog, scheduled mode and topic. Finished first: a scheduled bubble
-            // arriving in a plain chat opens its scheduled messages over it
+            // only takes one for its own dialog, scheduled mode and topic
             val original = send.target
+            target.scheduledByPlugin = target.scheduleDate != 0 && original.scheduleDate == 0
             val drawnHere = target.dialogId == original.dialogId && (target.scheduleDate != 0) == (original.scheduleDate != 0) &&
                 target.replyToTopMsg?.id == original.replyToTopMsg?.id
             if (!drawnHere || (comment == null && forward == null)) {
@@ -744,7 +768,7 @@ object PluginCompose {
                     }
                 }
                 return { target, then ->
-                    val arguments = bindArguments(Bound(null, splice, then), infos.size)
+                    val arguments = bindArguments(Bound(null, splice, then), infos.size, target)
                     origin.resume.send(ArrayList(infos), target.dialogId, target.replyToMsg, target.replyToTopMsg, target.quote, target.notify, target.scheduleDate, arguments)
                 }
             }
@@ -756,7 +780,7 @@ object PluginCompose {
                 val paths = documents.filter { it.uri == null }
                 val uris = documents.mapNotNull { it.uri }
                 return { target, then ->
-                    val arguments = bindArguments(Bound(null, splice, then), documents.size)
+                    val arguments = bindArguments(Bound(null, splice, then), documents.size, target)
                     origin.resume.send(
                         paths.mapNotNullTo(ArrayList()) { it.path }.takeIf { it.isNotEmpty() },
                         paths.mapTo(ArrayList()) { it.originalPath ?: it.path!! }.takeIf { it.isNotEmpty() },
@@ -777,7 +801,7 @@ object PluginCompose {
                 if (files.any { it == null }) {
                     if (origin !is Origin.Params || files.size != 1) refuse("unsupported", "media: a send's own file cannot go with a LocalMedia")
                     return { target, then ->
-                        sendParams(account, origin.params, target, caption, entities, spoilers[0], bindArguments(Bound(null, splice, then), 1))
+                        sendParams(account, origin.params, target, caption, entities, spoilers[0], bindArguments(Bound(null, splice, then), 1, target))
                     }
                 }
                 val created = files.filterNotNull()
@@ -805,7 +829,7 @@ object PluginCompose {
         )
         params.replyQuote = target.quote
         params.hasMediaSpoilers = spoiler
-        params.sendMessageChatArguments = bindArguments(Bound(media, splice, then), 1)
+        params.sendMessageChatArguments = bindArguments(Bound(media, splice, then), 1, target)
         inheritParams(params, origin, target)
         SendMessagesHelper.getInstance(account).sendMessage(params)
     }
@@ -822,7 +846,7 @@ object PluginCompose {
         then: Runnable,
     ) {
         val instance = AccountInstance.getInstance(account)
-        val arguments = bindArguments(Bound(null, splice, then), medias.size)
+        val arguments = bindArguments(Bound(null, splice, then), medias.size, target)
         if (medias.all { PluginOptimisticSend.asPhoto(it.mime, it.asDocument) || (!it.asDocument && it.mime.startsWith("video/")) }) {
             val infos = medias.mapIndexedTo(ArrayList()) { at, it -> createInfo(it).apply { hasMediaSpoilers = spoilers[at] } }
             infos[0].caption = caption
@@ -859,15 +883,16 @@ object PluginCompose {
         params.entities = entities
         spoiler?.let { params.hasMediaSpoilers = it }
         params.sendMessageChatArguments = arguments
+        if (target.scheduledByPlugin) markScheduled(params)
         SendMessagesHelper.getInstance(account).sendMessage(params)
     }
 
     /** arguments for [count] files handed to stock at once: the last of them carries [entry] to its request */
-    private fun bindArguments(entry: Bound, count: Int): SendMessageChatArguments {
+    private fun bindArguments(entry: Bound, count: Int, target: Target): SendMessageChatArguments {
         val arguments = SendMessageChatArguments.Builder().apply { inu_setComposed(true) }.build()
         val token = "f${nextBound++}"
         bound[token] = entry
-        batches[arguments] = Batch(token, count)
+        batches[arguments] = Batch(token, count, target.scheduledByPlugin)
         return arguments
     }
 
@@ -875,6 +900,7 @@ object PluginCompose {
         val params = SendMessageParams.of(text, target.dialogId, target.replyToMsg, target.replyToTopMsg, null, true, entities, null, null, target.notify, target.scheduleDate, 0, null, false)
         params.replyQuote = target.quote
         params.sendMessageChatArguments = COMPOSED
+        if (target.scheduledByPlugin) markScheduled(params)
         origin?.let { inheritParams(params, it, target) }
         SendMessagesHelper.getInstance(account).sendMessage(params)
     }
@@ -991,7 +1017,9 @@ object PluginCompose {
             // stock schedules a forward a second after the comment it follows
             val date = commented.scheduleDate
             val target = if (behind && date != 0 && date != SCHEDULE_WHEN_ONLINE) {
-                Target(commented.dialogId, null, commented.replyToTopMsg, null, commented.notify, date + 1)
+                Target(commented.dialogId, null, commented.replyToTopMsg, null, commented.notify, date + 1).also {
+                    it.scheduledByPlugin = commented.scheduledByPlugin
+                }
             } else {
                 commented
             }
@@ -1015,21 +1043,26 @@ object PluginCompose {
     private fun forward(account: Int, sources: List<MessageObject>, target: Target, mode: String, call: ForwardCall?, originDialogId: Long) {
         val same = target.dialogId == originDialogId
         var result = 0
-        resending {
-            result = SendMessagesHelper.getInstance(account).sendMessage(
-                ArrayList(sources),
-                target.dialogId,
-                mode != "normal",
-                mode == "hide-caption",
-                target.notify,
-                target.scheduleDate,
-                call?.scheduleRepeatPeriod ?: 0,
-                target.replyToTopMsg,
-                call?.videoTimestamp ?: -1,
-                call?.payStars?.takeIf { same } ?: 0L,
-                call?.monoForumPeerId?.takeIf { same } ?: 0L,
-                call?.suggestionParams?.takeIf { same },
-            )
+        forwardingScheduled = target.scheduledByPlugin
+        try {
+            resending {
+                result = SendMessagesHelper.getInstance(account).sendMessage(
+                    ArrayList(sources),
+                    target.dialogId,
+                    mode != "normal",
+                    mode == "hide-caption",
+                    target.notify,
+                    target.scheduleDate,
+                    call?.scheduleRepeatPeriod ?: 0,
+                    target.replyToTopMsg,
+                    call?.videoTimestamp ?: -1,
+                    call?.payStars?.takeIf { same } ?: 0L,
+                    call?.monoForumPeerId?.takeIf { same } ?: 0L,
+                    call?.suggestionParams?.takeIf { same },
+                )
+            }
+        } finally {
+            forwardingScheduled = false
         }
         // the caller that would have shown why a forward was refused was already answered
         if (result != 0) LaunchActivity.getSafeLastFragment()?.let { AlertsCreator.showSendMediaAlert(result, it, null) }
