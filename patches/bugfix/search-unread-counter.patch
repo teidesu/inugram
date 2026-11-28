@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Sat, 28 Nov 2026 05:06:52 +0400
+Subject: fix unread counter alignment in search results
+
+---
+ .../java/org/telegram/ui/Cells/ProfileSearchCell.java    | 9 +++++----
+ 1 file changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileSearchCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileSearchCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileSearchCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileSearchCell.java
+@@ -621,7 +621,7 @@ public class ProfileSearchCell extends BaseCell implements NotificationCenter.No
+             if (unreadCount != 0) {
+                 lastUnreadCount = unreadCount;
+                 String countString = String.format(Locale.US, "%d", unreadCount);
+-                countWidth = Math.max(dp(12), (int) Math.ceil(Theme.dialogs_countTextPaint.measureText(countString)));
++                countWidth = Math.max(dp(8), (int) Math.ceil(Theme.dialogs_countTextPaint.measureText(countString)));
+                 countLayout = new StaticLayout(countString, Theme.dialogs_countTextPaint, countWidth, Layout.Alignment.ALIGN_CENTER, 1.0f, 0.0f, false);
+                 int w = countWidth + dp(18);
+                 nameWidth -= w;
+@@ -1058,11 +1058,12 @@ public class ProfileSearchCell extends BaseCell implements NotificationCenter.No
+         }
+ 
+         if (countLayout != null) {
+-            final int x = countLeft - dp(5.5f);
+-            rect.set(x, countTop, x + countWidth + dp(11), countTop + dp(23));
++            final int x = countLeft - dp(6.333f);
++            final float top = countTop + (dp(23) - dp(20.666f)) / 2f;
++            rect.set(x, top, x + countWidth + dp(12.666f), top + dp(20.666f));
+             canvas.drawRoundRect(rect, 11.5f * AndroidUtilities.density, 11.5f * AndroidUtilities.density, MessagesController.getInstance(currentAccount).isDialogMuted(dialog_id, 0) ? Theme.dialogs_countGrayPaint : Theme.dialogs_countPaint);
+             canvas.save();
+-            canvas.translate(countLeft, countTop + dp(4));
++            canvas.translate(countLeft, top + AndroidUtilities.dpf2(3));
+             countLayout.draw(canvas);
+             canvas.restore();
+         }

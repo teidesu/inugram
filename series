@@ -460,3 +460,4 @@ bugfix/widget-png-bounds.patch
 bugfix/zalgo-cap.patch
 bugfix/paste-image-caption.patch
 bugfix/network-state-latch.patch
+bugfix/search-unread-counter.patch
