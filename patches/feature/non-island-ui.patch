@@ -9,6 +9,7 @@ Subject: non-island ui in various parts of the app
  .../telegram/ui/ActionBar/BaseFragment.java   |   6 +-
  .../ui/ActionBar/SimpleActionBar.java         |  81 +++++--
  .../ui/ActionBar/SimpleActionBarMenu.java     |  14 +-
+ .../org/telegram/ui/CacheControlActivity.java |   2 +
  .../org/telegram/ui/CalendarActivity.java     |  14 +-
  .../java/org/telegram/ui/CallLogActivity.java |  20 +-
  .../telegram/ui/ChannelAdminLogActivity.java  |  25 ++-
@@ -43,6 +44,7 @@ Subject: non-island ui in various parts of the app
  .../ChatActivityActionsButtonsLayout.java     |  19 ++
  .../ChatActivityChannelButtonsLayout.java     |  33 ++-
  .../ui/Components/glass/GlassTabView.java     |   5 +-
+ .../org/telegram/ui/DataUsage2Activity.java   |   2 +
  .../java/org/telegram/ui/DialogsActivity.java | 173 ++++++++++-----
  .../java/org/telegram/ui/ProfileActivity.java |  61 ++++--
  .../java/org/telegram/ui/QrShare/QrGlass.java |   3 +
@@ -57,7 +59,7 @@ Subject: non-island ui in various parts of the app
  .../java/org/telegram/ui/iv/RichEditor.java   |   4 +-
  .../utils/glass/BaseFragmentSimpleGlass.java  |   6 +-
  .../utils/glass/GlassCaptureSourceCanvas.java |  52 +++--
- 53 files changed, 1127 insertions(+), 373 deletions(-)
+ 55 files changed, 1131 insertions(+), 373 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -475,6 +477,20 @@ index 0000000..0000000 100644
          }
          addView(item, index, lp);
          item.setOnClickListener(v -> {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/CacheControlActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/CacheControlActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/CacheControlActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/CacheControlActivity.java
+@@ -1372,7 +1372,9 @@ public class CacheControlActivity extends BaseFragment implements NotificationCe
+         getBaseSimpleGlass().setCapture((canvas, position) ->
+                 scrollCoordinator.captureScrollingContent(canvas, position, listCapture));
+ 
++        if (!desu.inugram.helpers.theme.NonIslandHelper.applyClassicHeaderBackground(listTopOverlay, listView, resourceProvider, getBaseSimpleGlass())) {
+         listTopOverlay.setBackground(getBaseSimpleGlass().createActionBarFadeDrawable(listTopOverlay));
++        }
+         simpleActionBar.setBackground(null);
+ 
+         setListViewParams(contentInsetTop, contentInsetBottom);
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/CalendarActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/CalendarActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/CalendarActivity.java
@@ -3474,6 +3490,20 @@ index 0000000..0000000 100644
          return tab;
      }
  
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DataUsage2Activity.java b/TMessagesProj/src/main/java/org/telegram/ui/DataUsage2Activity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/DataUsage2Activity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/DataUsage2Activity.java
+@@ -151,7 +151,9 @@ public class DataUsage2Activity extends BaseFragment {
+         });
+         getBaseSimpleGlass().setClipView(null);
+         frameLayout.addView(tabsContainer, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP, -4, 0, -4, 0));
++        if (!desu.inugram.helpers.theme.NonIslandHelper.applyClassicHeaderBackground(listTopOverlay, null, resourceProvider, getBaseSimpleGlass(), desu.inugram.helpers.theme.NonIslandHelper.headers(), () -> pager.getCurrentView() == null || !pager.getCurrentView().canScrollVertically(-1))) {
+         listTopOverlay.setBackground(getBaseSimpleGlass().createActionBarFadeDrawable(listTopOverlay));
++        }
+         simpleActionBar.setBackground(null);
+ 
+         return fragmentView = frameLayout;
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
