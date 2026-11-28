@@ -142,7 +142,7 @@ the audit reports later patches that fully revert an earlier patch or delete lin
 
 ## acknowledgements
 
-- the original [Telegram Android](https://github.com/DrKLO/Telegram) - the basis for this fork
+- the original [Telegram Android](https://github.com/TelegramMessenger/Telegram-Android) - the basis for this fork
 - a bunch of features were ported from [Nekogram](https://github.com/Nekogram/Nekogram), [NagramX](https://github.com/risin42/NagramX), [materialgram](https://github.com/kukuruzka165/materialgram)
 - `src/res/drawable/icplaceholder.jpg` is a blurred version of [this artwork by Chobles](https://www.pixiv.net/en/artworks/128756420)
 - Tabler icons by [Tabler Team](https://tabler.io/icons)
