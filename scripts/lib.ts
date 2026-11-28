@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs'
 import fs from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import process from 'node:process'
 import { glob } from 'tinyglobby'
 import { $, chalk } from 'zx'
 import {
@@ -18,6 +19,16 @@ import {
 } from './config.js'
 
 $.verbose = false
+
+if (process.platform === 'win32') {
+  // Git Bash halves backslash runs when parsing its command line, so zx's $'...' turns
+  // patches\bugfix into a backspace. Node already doubles the runs before a double quote
+  $.quote = (arg) => {
+    if (arg === '') return '\'\''
+    if (/^[\w/.\-@:=]+$/.test(arg)) return arg
+    return `'${arg.replaceAll('\'', '\'"\'"\'').replace(/\\+(?!["\\])/g, m => m + m)}'`
+  }
+}
 
 export function step(message: string) {
   console.log(`${chalk.blue('==>')} ${message}`)
