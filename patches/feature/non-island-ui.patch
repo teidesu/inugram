@@ -47,12 +47,14 @@ Subject: non-island ui in various parts of the app
  .../ui/Components/glass/GlassTabView.java     |   5 +-
  .../org/telegram/ui/DataUsage2Activity.java   |  31 ++-
  .../java/org/telegram/ui/DialogsActivity.java | 173 ++++++++++-----
+ .../ui/Gifts/ResaleGiftsFragment.java         |   2 +
  .../java/org/telegram/ui/ProfileActivity.java |  61 ++++--
  .../java/org/telegram/ui/QrShare/QrGlass.java |   3 +
  .../org/telegram/ui/QrShare/QrShareView.java  |   1 +
  .../org/telegram/ui/QrShare/RimPainter.java   |   1 +
  .../ui/SearchTabsAndFiltersLayout.java        |   7 +
  .../org/telegram/ui/SettingsActivity.java     |   4 +-
+ .../telegram/ui/Stars/BotStarsActivity.java   |  25 ++-
  .../telegram/ui/Stars/StarsIntroActivity.java |  38 +++-
  .../org/telegram/ui/StatisticActivity.java    |  17 ++
  .../org/telegram/ui/TON/TONIntroActivity.java |  38 +++-
@@ -62,7 +64,7 @@ Subject: non-island ui in various parts of the app
  .../java/org/telegram/ui/iv/RichEditor.java   |   4 +-
  .../utils/glass/BaseFragmentSimpleGlass.java  |   6 +-
  .../utils/glass/GlassCaptureSourceCanvas.java |  52 +++--
- 58 files changed, 1237 insertions(+), 397 deletions(-)
+ 60 files changed, 1260 insertions(+), 401 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java b/TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ActionBar.java
 index 0000000..0000000 100644
@@ -4239,6 +4241,20 @@ index 0000000..0000000 100644
  
          final float actionModeVisible = Math.max(progressToActionMode, animatorActionModeVisible.getFloatValue());
          final float searchFieldVisible = animatorSearchVisible.getFloatValue();
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Gifts/ResaleGiftsFragment.java b/TMessagesProj/src/main/java/org/telegram/ui/Gifts/ResaleGiftsFragment.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Gifts/ResaleGiftsFragment.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Gifts/ResaleGiftsFragment.java
+@@ -227,7 +227,9 @@ public class ResaleGiftsFragment extends BaseFragment implements FactorAnimator.
+         fragmentView.addView(listTopOverlay, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 0, Gravity.TOP));
+ 
+         glass.setViews(fragmentView, listView, simpleActionBar, resourceProvider);
++        if (!desu.inugram.helpers.theme.NonIslandHelper.applyClassicHeaderBackground(listTopOverlay, null, resourceProvider, glass)) {
+         listTopOverlay.setBackground(glass.createActionBarFadeDrawable(listTopOverlay));
++        }
+         simpleActionBar.setBackground(null);
+ 
+         final BalancePill balanceView = new BalancePill(context, currentAccount, resourceProvider);
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
@@ -4536,6 +4552,110 @@ index 0000000..0000000 100644
          contentView.addView(actionBarFadeView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 0, Gravity.TOP));
          contentView.addView(simpleActionBar, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.FILL_HORIZONTAL | Gravity.TOP));
  
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stars/BotStarsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/Stars/BotStarsActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Stars/BotStarsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Stars/BotStarsActivity.java
+@@ -126,6 +126,7 @@ public class BotStarsActivity extends BaseFragment implements NotificationCenter
+     private StarsIntroActivity.StarsTransactionsLayout transactionsLayout;
+     private FrameLayout tonTransactionsLayout;
+     private FrameLayout transactionTabs;
++    private ViewPagerFixed.TabsView inu_transactionTabsView;
+     private ViewPagerFixed transactionPager;
+     private boolean destroyed;
+ 
+@@ -185,6 +186,9 @@ public class BotStarsActivity extends BaseFragment implements NotificationCenter
+             scrollCoordinator.setGeometry(new SiblingRecyclerPagerLayout.Geometry() {
+                 @Override
+                 public float tabsPinnedTop(SiblingRecyclerPagerLayout parent) {
++                    if (desu.inugram.helpers.theme.NonIslandHelper.headers()) {
++                        return Math.max(0, mSystemInsets.top + ActionBar.getCurrentActionBarHeight() - dp(7));
++                    }
+                     // the glass of the tabs (inset by 9.66dp) 7dp under the header's buttons
+                 return Math.max(0, BaseFragmentSimpleGlass.getPillGlassTop(mSystemInsets.top) - dp(9.66f));
+                 }
+@@ -197,6 +201,9 @@ public class BotStarsActivity extends BaseFragment implements NotificationCenter
+                 @Override
+                 public void onTabsPinnedChanged(boolean pinned) {
+                     if (tabsPinnedAnimator != null) tabsPinnedAnimator.setValue(pinned, true);
++                    if (inu_transactionTabsView != null && inu_transactionTabsView.inu_pill != null) {
++                        inu_transactionTabsView.inu_pill.setDocked(pinned);
++                    }
+                 }
+             });
+             transactionsBoundary = scrollCoordinator.createBoundarySpacer(context);
+@@ -239,6 +246,7 @@ public class BotStarsActivity extends BaseFragment implements NotificationCenter
+         } else if (transactionsLayout != null) {
+             transactionPager = transactionsLayout.getViewPager();
+             transactionTabs = transactionsLayout.getTabsContainer();
++            inu_transactionTabsView = transactionsLayout.tabsView;
+         }
+ 
+         balanceLayout = new LinearLayout(context) {
+@@ -494,7 +502,7 @@ public class BotStarsActivity extends BaseFragment implements NotificationCenter
+         });
+         transactionTabs = new FrameLayout(context);
+         transactionTabs.setPadding(dp(4), dp(4), dp(4), dp(4));
+-        transactionTabs.addView(pager.createTabsView(true, ViewPagerFixed.SELECTOR_TYPE_BUBBLE_STYLE),
++        transactionTabs.addView(inu_transactionTabsView = pager.createTabsView(true, ViewPagerFixed.SELECTOR_TYPE_BUBBLE_STYLE),
+                 LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48, Gravity.TOP));
+         tonTransactionsLayout.addView(pager, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+     }
+@@ -620,8 +628,9 @@ public class BotStarsActivity extends BaseFragment implements NotificationCenter
+                 ? ((TonTransactionsPage) page).recycler : transactionsLayout.getPageListView(page));
+         FrameLayout tabs = transactionTabs;
+         scrollCoordinator.setTabs(tabs, LayoutHelper.WRAP_CONTENT);
++        final int inu_tabsMargin = desu.inugram.helpers.theme.NonIslandHelper.headers() ? 0 : -4;
+         tabs.setLayoutParams(LayoutHelper.createFrame(
+-                LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP, -4, 0, -4, 0));
++                LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP, inu_tabsMargin, 0, inu_tabsMargin, 0));
+     }
+ 
+     private void configureGlass(FrameLayout root) {
+@@ -632,7 +641,9 @@ public class BotStarsActivity extends BaseFragment implements NotificationCenter
+                 ? root.indexOfChild(transactionTabs) : root.indexOfChild(simpleActionBar);
+         root.addView(listTopOverlay, overlayIndex,
+                 LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 0, Gravity.TOP));
++        if (!desu.inugram.helpers.theme.NonIslandHelper.applyClassicHeaderBackground(listTopOverlay, null, resourceProvider, getBaseSimpleGlass())) {
+         listTopOverlay.setBackground(getBaseSimpleGlass().createActionBarFadeDrawable(listTopOverlay));
++        }
+         tabsPinnedAnimator = new BoolAnimator(0, (id, factor, fraction, callee) ->
+                 updateTopOverlayTranslation(), CubicBezierInterpolator.EASE_OUT_QUINT, 380);
+         tabsPinnedAnimator.setValue(scrollCoordinator != null && scrollCoordinator.areTabsPinned(), false);
+@@ -647,9 +658,15 @@ public class BotStarsActivity extends BaseFragment implements NotificationCenter
+             getBaseSimpleGlass().setCapture((canvas, bounds) ->
+                     scrollCoordinator.captureScrollingContent(canvas, bounds, capture));
+             FrameLayout tabs = transactionTabs;
++            if (desu.inugram.helpers.theme.NonIslandHelper.headers()) {
++                tabs.setPadding(0, 0, 0, 0);
++                desu.inugram.ui.TabsPillDrawer.attach(inu_transactionTabsView, getBaseSimpleGlass().frostedFactory, resourceProvider);
++                inu_transactionTabsView.inu_pill.setDocked(scrollCoordinator.areTabsPinned());
++            } else {
+             tabs.setBackground(getBaseSimpleGlass().factory.create(tabs)
+                     .setColorProvider(BlurredBackgroundProviderImpl.simpleActionBar(resourceProvider))
+                     .setPadding(dp(9.66f)).setRadius(dp(18)));
++            }
+         }
+     }
+ 
+@@ -666,7 +683,7 @@ public class BotStarsActivity extends BaseFragment implements NotificationCenter
+         }
+         if (listTopOverlay != null) {
+             int height = mSystemInsets.top + ActionBar.getCurrentActionBarHeight()
+-                    + (scrollCoordinator != null ? dp(44) : 0);
++                    + (scrollCoordinator != null && !desu.inugram.helpers.theme.NonIslandHelper.headers() ? dp(44) : 0);
+             ViewGroup.LayoutParams params = listTopOverlay.getLayoutParams();
+             if (params.height != height) {
+                 params.height = height;
+@@ -679,7 +696,7 @@ public class BotStarsActivity extends BaseFragment implements NotificationCenter
+     private void updateTopOverlayTranslation() {
+         if (listTopOverlay == null) return;
+         float pinnedFactor = tabsPinnedAnimator == null ? 0f : tabsPinnedAnimator.getFloatValue();
+-        listTopOverlay.setTranslationY(scrollCoordinator == null ? 0f : -(1f - pinnedFactor) * dp(44));
++        listTopOverlay.setTranslationY(scrollCoordinator == null || desu.inugram.helpers.theme.NonIslandHelper.headers() ? 0f : -(1f - pinnedFactor) * dp(44));
+     }
+ 
+     @Override
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stars/StarsIntroActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/Stars/StarsIntroActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Stars/StarsIntroActivity.java

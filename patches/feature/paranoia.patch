@@ -664,7 +664,7 @@ diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stars/BotStarsActivity.
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Stars/BotStarsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Stars/BotStarsActivity.java
-@@ -986,6 +986,7 @@ public class BotStarsActivity extends BaseFragment implements NotificationCenter
+@@ -1003,6 +1003,7 @@ public class BotStarsActivity extends BaseFragment implements NotificationCenter
      private int stats_dc = -1;
      @Override
      public boolean onFragmentCreate() {
