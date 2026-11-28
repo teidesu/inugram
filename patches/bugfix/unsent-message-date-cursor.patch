@@ -1,0 +1,218 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Sat, 28 Nov 2026 10:19:46 +0400
+Subject: fix unsent messages bunching and skipping history after jumping to a message
+
+---
+ .../telegram/messenger/MessagesStorage.java   | 114 ++++++++++++++----
+ 1 file changed, 93 insertions(+), 21 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
+@@ -9232,6 +9232,57 @@ public class MessagesStorage extends BaseController {
+         });
+     }
+ 
++    private int inu_queryPositiveMessages(String aggregate, long dialogId, long threadMessageId, int fromMid, int toMid) throws SQLiteException {
++        SQLiteCursor cursor = null;
++        try {
++            if (threadMessageId != 0) {
++                cursor = database.queryFinalized(String.format(Locale.US, "SELECT %s FROM messages_topics WHERE uid = %d AND topic_id = %d AND mid >= %d AND mid <= %d", aggregate, dialogId, threadMessageId, Math.max(fromMid, 1), toMid));
++            } else {
++                cursor = database.queryFinalized(String.format(Locale.US, "SELECT %s FROM messages_v2 WHERE uid = %d AND mid >= %d AND mid <= %d", aggregate, dialogId, Math.max(fromMid, 1), toMid));
++            }
++            return cursor.next() ? cursor.intValue(0) : 0;
++        } finally {
++            if (cursor != null) {
++                cursor.dispose();
++            }
++        }
++    }
++
++    private SQLiteCursor inu_queryTrailingUnsent(String messageSelect, long dialogId, long threadMessageId, int pageMaxId, ArrayList<TLRPC.Message> loaded) throws SQLiteException {
++        if (pageMaxId <= 0 || pageMaxId != inu_queryPositiveMessages("max(mid)", dialogId, threadMessageId, 1, Integer.MAX_VALUE)) {
++            return null;
++        }
++        SQLiteCursor cursor = null;
++        try {
++            if (threadMessageId != 0) {
++                cursor = database.queryFinalized(String.format(Locale.US, "SELECT 1 FROM messages_holes_topics WHERE uid = %d AND topic_id = %d AND end > %d LIMIT 1", dialogId, threadMessageId, pageMaxId));
++            } else {
++                cursor = database.queryFinalized(String.format(Locale.US, "SELECT 1 FROM messages_holes WHERE uid = %d AND end > %d LIMIT 1", dialogId, pageMaxId));
++            }
++            if (cursor.next()) {
++                return null;
++            }
++        } finally {
++            if (cursor != null) {
++                cursor.dispose();
++            }
++        }
++        StringBuilder loadedUnsent = new StringBuilder();
++        for (TLRPC.Message message : loaded) {
++            if (message.id < 0) {
++                if (loadedUnsent.length() > 0) {
++                    loadedUnsent.append(',');
++                }
++                loadedUnsent.append(message.id);
++            }
++        }
++        String condition = "m.mid < 0 AND m.date >= " + inu_queryPositiveMessages("max(date)", dialogId, threadMessageId, pageMaxId, pageMaxId) + (loadedUnsent.length() > 0 ? " AND m.mid NOT IN(" + loadedUnsent + ")" : "");
++        if (threadMessageId != 0) {
++            return database.queryFinalized(String.format(Locale.US, messageSelect + " WHERE m.uid = %d AND m.topic_id = %d AND " + condition, dialogId, threadMessageId));
++        }
++        return database.queryFinalized(String.format(Locale.US, messageSelect + " WHERE m.uid = %d AND " + condition, dialogId));
++    }
++
+     public Runnable getMessagesInternal(long dialogId, long mergeDialogId, int count, int max_id, int offset_date, int minDate, int classGuid, int load_type, int mode, long threadMessageId, int loadIndex, boolean processMessages, boolean isTopic, Timer loaderLogger) {
+         TLRPC.TL_messages_messages res = new TLRPC.TL_messages_messages();
+         long currentUserId = getUserConfig().clientUserId;
+@@ -9736,24 +9787,27 @@ public class MessagesStorage extends BaseController {
+                             }
+                             cursor.dispose();
+                             cursor = null;
++                            int inu_anchorDate = inu_queryPositiveMessages("max(date)", dialogId, threadMessageId, 1, messageMaxId);
++                            String inu_unsentOlder = "m.mid < 0 AND m.date <= " + inu_anchorDate + (holeMessageMinId != 1 ? " AND m.date >= " + inu_queryPositiveMessages("min(date)", dialogId, threadMessageId, holeMessageMinId, Integer.MAX_VALUE) : "");
++                            String inu_unsentNewer = "m.mid < 0 AND m.date > " + inu_anchorDate + (holeMessageMaxId != 0 ? " AND m.date <= " + inu_queryPositiveMessages("max(date)", dialogId, threadMessageId, 1, holeMessageMaxId) : "");
+                             if (holeMessageMaxId != 0 || holeMessageMinId != 1) {
+                                 if (holeMessageMaxId == 0) {
+                                     holeMessageMaxId = 1000000000;
+                                 }
+                                 if (threadMessageId != 0) {
+-                                    cursor = database.queryFinalized(String.format(Locale.US, "SELECT * FROM (" + messageSelect + " WHERE m.uid = %d AND m.topic_id = %d AND m.mid <= %d AND (m.mid >= %d OR m.mid < 0) ORDER BY m.date DESC, m.mid DESC LIMIT %d) UNION " +
+-                                            "SELECT * FROM (" + messageSelect + " WHERE m.uid = %d AND m.topic_id = %d AND m.mid > %d AND (m.mid <= %d OR m.mid < 0) ORDER BY m.date ASC, m.mid ASC LIMIT %d)", dialogId, threadMessageId, messageMaxId, holeMessageMinId, count_query / 2, dialogId, threadMessageId, messageMaxId, holeMessageMaxId, count_query / 2));
++                                    cursor = database.queryFinalized(String.format(Locale.US, "SELECT * FROM (" + messageSelect + " WHERE m.uid = %d AND m.topic_id = %d AND (m.mid <= %d AND m.mid >= %d OR " + inu_unsentOlder + ") ORDER BY m.date DESC, m.mid DESC LIMIT %d) UNION " +
++                                            "SELECT * FROM (" + messageSelect + " WHERE m.uid = %d AND m.topic_id = %d AND (m.mid > %d AND m.mid <= %d OR " + inu_unsentNewer + ") ORDER BY m.date ASC, m.mid ASC LIMIT %d)", dialogId, threadMessageId, messageMaxId, holeMessageMinId, count_query / 2, dialogId, threadMessageId, messageMaxId, holeMessageMaxId, count_query / 2));
+                                 } else {
+-                                    cursor = database.queryFinalized(String.format(Locale.US, "SELECT * FROM (" + messageSelect + " WHERE m.uid = %d AND m.mid <= %d AND (m.mid >= %d OR m.mid < 0) ORDER BY m.date DESC, m.mid DESC LIMIT %d) UNION " +
+-                                            "SELECT * FROM (" + messageSelect + " WHERE m.uid = %d AND m.mid > %d AND (m.mid <= %d OR m.mid < 0) ORDER BY m.date ASC, m.mid ASC LIMIT %d)", dialogId, messageMaxId, holeMessageMinId, count_query / 2, dialogId, messageMaxId, holeMessageMaxId, count_query / 2));
++                                    cursor = database.queryFinalized(String.format(Locale.US, "SELECT * FROM (" + messageSelect + " WHERE m.uid = %d AND (m.mid <= %d AND m.mid >= %d OR " + inu_unsentOlder + ") ORDER BY m.date DESC, m.mid DESC LIMIT %d) UNION " +
++                                            "SELECT * FROM (" + messageSelect + " WHERE m.uid = %d AND (m.mid > %d AND m.mid <= %d OR " + inu_unsentNewer + ") ORDER BY m.date ASC, m.mid ASC LIMIT %d)", dialogId, messageMaxId, holeMessageMinId, count_query / 2, dialogId, messageMaxId, holeMessageMaxId, count_query / 2));
+                                 }
+                             } else {
+                                 if (threadMessageId != 0) {
+-                                    cursor = database.queryFinalized(String.format(Locale.US, "SELECT * FROM (" + messageSelect + " WHERE m.uid = %d AND m.topic_id = %d AND m.mid <= %d ORDER BY m.date DESC, m.mid DESC LIMIT %d) UNION " +
+-                                            "SELECT * FROM (" + messageSelect + " WHERE m.uid = %d AND m.topic_id = %d AND m.mid > %d ORDER BY m.date ASC, m.mid ASC LIMIT %d)", dialogId, threadMessageId, messageMaxId, count_query / 2, dialogId, threadMessageId, messageMaxId, count_query / 2));
++                                    cursor = database.queryFinalized(String.format(Locale.US, "SELECT * FROM (" + messageSelect + " WHERE m.uid = %d AND m.topic_id = %d AND (m.mid > 0 AND m.mid <= %d OR " + inu_unsentOlder + ") ORDER BY m.date DESC, m.mid DESC LIMIT %d) UNION " +
++                                            "SELECT * FROM (" + messageSelect + " WHERE m.uid = %d AND m.topic_id = %d AND (m.mid > %d OR " + inu_unsentNewer + ") ORDER BY m.date ASC, m.mid ASC LIMIT %d)", dialogId, threadMessageId, messageMaxId, count_query / 2, dialogId, threadMessageId, messageMaxId, count_query / 2));
+                                 } else {
+-                                    cursor = database.queryFinalized(String.format(Locale.US, "SELECT * FROM (" + messageSelect + " WHERE m.uid = %d AND m.mid <= %d ORDER BY m.date DESC, m.mid DESC LIMIT %d) UNION " +
+-                                            "SELECT * FROM (" + messageSelect + " WHERE m.uid = %d AND m.mid > %d ORDER BY m.date ASC, m.mid ASC LIMIT %d)", dialogId, messageMaxId, count_query / 2, dialogId, messageMaxId, count_query / 2));
++                                    cursor = database.queryFinalized(String.format(Locale.US, "SELECT * FROM (" + messageSelect + " WHERE m.uid = %d AND (m.mid > 0 AND m.mid <= %d OR " + inu_unsentOlder + ") ORDER BY m.date DESC, m.mid DESC LIMIT %d) UNION " +
++                                            "SELECT * FROM (" + messageSelect + " WHERE m.uid = %d AND (m.mid > %d OR " + inu_unsentNewer + ") ORDER BY m.date ASC, m.mid ASC LIMIT %d)", dialogId, messageMaxId, count_query / 2, dialogId, messageMaxId, count_query / 2));
+                                 }
+                             }
+                         } else {
+@@ -9771,12 +9825,13 @@ public class MessagesStorage extends BaseController {
+                                 cursor = null;
+                                 if (existingUnreadCount == count_unread) {
+                                     unreadCountIsLocal = true;
++                                    int inu_anchorDate = inu_queryPositiveMessages("max(date)", dialogId, threadMessageId, 1, messageMaxId);
+                                     if (threadMessageId != 0) {
+-                                        cursor = database.queryFinalized(String.format(Locale.US, "SELECT * FROM (" + messageSelect + " WHERE m.uid = %d AND m.topic_id = %d AND m.mid <= %d ORDER BY m.date DESC, m.mid DESC LIMIT %d) UNION " +
+-                                                "SELECT * FROM (" + messageSelect + " WHERE m.uid = %d AND m.topic_id = %d AND m.mid > %d ORDER BY m.date ASC, m.mid ASC LIMIT %d)", dialogId, threadMessageId, messageMaxId, count_query / 2, dialogId, threadMessageId, messageMaxId, count_query / 2));
++                                        cursor = database.queryFinalized(String.format(Locale.US, "SELECT * FROM (" + messageSelect + " WHERE m.uid = %d AND m.topic_id = %d AND (m.mid > 0 AND m.mid <= %d OR m.mid < 0 AND m.date <= %d) ORDER BY m.date DESC, m.mid DESC LIMIT %d) UNION " +
++                                                "SELECT * FROM (" + messageSelect + " WHERE m.uid = %d AND m.topic_id = %d AND (m.mid > %d OR m.mid < 0 AND m.date > %d) ORDER BY m.date ASC, m.mid ASC LIMIT %d)", dialogId, threadMessageId, messageMaxId, inu_anchorDate, count_query / 2, dialogId, threadMessageId, messageMaxId, inu_anchorDate, count_query / 2));
+                                     } else {
+-                                        cursor = database.queryFinalized(String.format(Locale.US, "SELECT * FROM (" + messageSelect + " WHERE m.uid = %d AND m.mid <= %d ORDER BY m.date DESC, m.mid DESC LIMIT %d) UNION " +
+-                                                "SELECT * FROM (" + messageSelect + " WHERE m.uid = %d AND m.mid > %d ORDER BY m.date ASC, m.mid ASC LIMIT %d)", dialogId, messageMaxId, count_query / 2, dialogId, messageMaxId, count_query / 2));
++                                        cursor = database.queryFinalized(String.format(Locale.US, "SELECT * FROM (" + messageSelect + " WHERE m.uid = %d AND (m.mid > 0 AND m.mid <= %d OR m.mid < 0 AND m.date <= %d) ORDER BY m.date DESC, m.mid DESC LIMIT %d) UNION " +
++                                                "SELECT * FROM (" + messageSelect + " WHERE m.uid = %d AND (m.mid > %d OR m.mid < 0 AND m.date > %d) ORDER BY m.date ASC, m.mid ASC LIMIT %d)", dialogId, messageMaxId, inu_anchorDate, count_query / 2, dialogId, messageMaxId, inu_anchorDate, count_query / 2));
+                                     }
+                                 }
+                             }
+@@ -9795,15 +9850,15 @@ public class MessagesStorage extends BaseController {
+                         cursor = null;
+                         if (threadMessageId != 0) {
+                             if (holeMessageId != 0) {
+-                                cursor = database.queryFinalized(String.format(Locale.US, "" + messageSelect + " WHERE m.uid = %d AND m.topic_id = %d AND m.date >= %d AND m.mid > %d AND m.mid <= %d ORDER BY m.date ASC, m.mid ASC LIMIT %d", dialogId, threadMessageId, minDate, messageMaxId, holeMessageId, count_query));
++                                cursor = database.queryFinalized(String.format(Locale.US, "" + messageSelect + " WHERE m.uid = %d AND m.topic_id = %d AND m.date >= %d AND (m.mid > %d AND m.mid <= %d OR m.mid < 0 AND m.date <= %d) ORDER BY m.date ASC, m.mid ASC LIMIT %d", dialogId, threadMessageId, minDate, messageMaxId, holeMessageId, inu_queryPositiveMessages("max(date)", dialogId, threadMessageId, 1, holeMessageId), count_query));
+                             } else {
+-                                cursor = database.queryFinalized(String.format(Locale.US, "" + messageSelect + " WHERE m.uid = %d AND m.topic_id = %d AND m.date >= %d AND m.mid > %d ORDER BY m.date ASC, m.mid ASC LIMIT %d", dialogId, threadMessageId, minDate, messageMaxId, count_query));
++                                cursor = database.queryFinalized(String.format(Locale.US, "" + messageSelect + " WHERE m.uid = %d AND m.topic_id = %d AND m.date >= %d AND (m.mid > %d OR m.mid < 0) ORDER BY m.date ASC, m.mid ASC LIMIT %d", dialogId, threadMessageId, minDate, messageMaxId, count_query));
+                             }
+                         } else {
+                             if (holeMessageId != 0) {
+-                                cursor = database.queryFinalized(String.format(Locale.US, "" + messageSelect + " WHERE m.uid = %d AND m.date >= %d AND m.mid > %d AND m.mid <= %d ORDER BY m.date ASC, m.mid ASC LIMIT %d", dialogId, minDate, messageMaxId, holeMessageId, count_query));
++                                cursor = database.queryFinalized(String.format(Locale.US, "" + messageSelect + " WHERE m.uid = %d AND m.date >= %d AND (m.mid > %d AND m.mid <= %d OR m.mid < 0 AND m.date <= %d) ORDER BY m.date ASC, m.mid ASC LIMIT %d", dialogId, minDate, messageMaxId, holeMessageId, inu_queryPositiveMessages("max(date)", dialogId, threadMessageId, 1, holeMessageId), count_query));
+                             } else {
+-                                cursor = database.queryFinalized(String.format(Locale.US, "" + messageSelect + " WHERE m.uid = %d AND m.date >= %d AND m.mid > %d ORDER BY m.date ASC, m.mid ASC LIMIT %d", dialogId, minDate, messageMaxId, count_query));
++                                cursor = database.queryFinalized(String.format(Locale.US, "" + messageSelect + " WHERE m.uid = %d AND m.date >= %d AND (m.mid > %d OR m.mid < 0) ORDER BY m.date ASC, m.mid ASC LIMIT %d", dialogId, minDate, messageMaxId, count_query));
+                             }
+                         }
+                     } else if (minDate != 0) {
+@@ -9822,13 +9877,13 @@ public class MessagesStorage extends BaseController {
+                             cursor = null;
+                             if (threadMessageId != 0) {
+                                 if (holeMessageId != 0) {
+-                                    cursor = database.queryFinalized(String.format(Locale.US, "" + messageSelect + " WHERE m.uid = %d AND m.topic_id = %d AND m.date <= %d AND m.mid < %d AND (m.mid >= %d OR m.mid < 0) ORDER BY m.date DESC, m.mid DESC LIMIT %d", dialogId, threadMessageId, minDate, messageMaxId, holeMessageId, count_query));
++                                    cursor = database.queryFinalized(String.format(Locale.US, "" + messageSelect + " WHERE m.uid = %d AND m.topic_id = %d AND m.date <= %d AND m.mid < %d AND (m.mid >= %d OR m.mid < 0 AND m.date >= %d) ORDER BY m.date DESC, m.mid DESC LIMIT %d", dialogId, threadMessageId, minDate, messageMaxId, holeMessageId, inu_queryPositiveMessages("min(date)", dialogId, threadMessageId, holeMessageId, Integer.MAX_VALUE), count_query));
+                                 } else {
+                                     cursor = database.queryFinalized(String.format(Locale.US, "" + messageSelect + " WHERE m.uid = %d AND m.topic_id = %d AND m.date <= %d AND m.mid < %d ORDER BY m.date DESC, m.mid DESC LIMIT %d", dialogId, threadMessageId, minDate, messageMaxId, count_query));
+                                 }
+                             } else {
+                                 if (holeMessageId != 0) {
+-                                    cursor = database.queryFinalized(String.format(Locale.US, "" + messageSelect + " WHERE m.uid = %d AND m.date <= %d AND m.mid < %d AND (m.mid >= %d OR m.mid < 0) ORDER BY m.date DESC, m.mid DESC LIMIT %d", dialogId, minDate, messageMaxId, holeMessageId, count_query));
++                                    cursor = database.queryFinalized(String.format(Locale.US, "" + messageSelect + " WHERE m.uid = %d AND m.date <= %d AND m.mid < %d AND (m.mid >= %d OR m.mid < 0 AND m.date >= %d) ORDER BY m.date DESC, m.mid DESC LIMIT %d", dialogId, minDate, messageMaxId, holeMessageId, inu_queryPositiveMessages("min(date)", dialogId, threadMessageId, holeMessageId, Integer.MAX_VALUE), count_query));
+                                 } else {
+                                     cursor = database.queryFinalized(String.format(Locale.US, "" + messageSelect + " WHERE m.uid = %d AND m.date <= %d AND m.mid < %d ORDER BY m.date DESC, m.mid DESC LIMIT %d", dialogId, minDate, messageMaxId, count_query));
+                                 }
+@@ -9866,13 +9921,13 @@ public class MessagesStorage extends BaseController {
+                         cursor = null;
+                         if (threadMessageId != 0) {
+                             if (holeMessageId != 0) {
+-                                cursor = database.queryFinalized(String.format(Locale.US, "" + messageSelect + " WHERE m.uid = %d AND m.topic_id = %d AND (m.mid >= %d OR m.mid < 0) ORDER BY m.date DESC, m.mid DESC LIMIT %d,%d", dialogId, threadMessageId, holeMessageId, offset_query, count_query));
++                                cursor = database.queryFinalized(String.format(Locale.US, "" + messageSelect + " WHERE m.uid = %d AND m.topic_id = %d AND (m.mid >= %d OR m.mid < 0 AND m.date >= %d) ORDER BY m.date DESC, m.mid DESC LIMIT %d,%d", dialogId, threadMessageId, holeMessageId, inu_queryPositiveMessages("min(date)", dialogId, threadMessageId, holeMessageId, Integer.MAX_VALUE), offset_query, count_query));
+                             } else {
+                                 cursor = database.queryFinalized(String.format(Locale.US, "" + messageSelect + " WHERE m.uid = %d AND m.topic_id = %d ORDER BY m.date DESC, m.mid DESC LIMIT %d,%d", dialogId, threadMessageId, offset_query, count_query));
+                             }
+                         } else {
+                             if (holeMessageId != 0) {
+-                                cursor = database.queryFinalized(String.format(Locale.US, "" + messageSelect + " WHERE m.uid = %d AND (m.mid >= %d OR m.mid < 0) ORDER BY m.date DESC, m.mid DESC LIMIT %d,%d", dialogId, holeMessageId, offset_query, count_query));
++                                cursor = database.queryFinalized(String.format(Locale.US, "" + messageSelect + " WHERE m.uid = %d AND (m.mid >= %d OR m.mid < 0 AND m.date >= %d) ORDER BY m.date DESC, m.mid DESC LIMIT %d,%d", dialogId, holeMessageId, inu_queryPositiveMessages("min(date)", dialogId, threadMessageId, holeMessageId, Integer.MAX_VALUE), offset_query, count_query));
+                             } else {
+                                 cursor = database.queryFinalized(String.format(Locale.US, "" + messageSelect + " WHERE m.uid = %d ORDER BY m.date DESC, m.mid DESC LIMIT %d,%d", dialogId, offset_query, count_query));
+                             }
+@@ -9970,8 +10025,9 @@ public class MessagesStorage extends BaseController {
+                 int minId = Integer.MAX_VALUE;
+                 int maxId = Integer.MIN_VALUE;
+                 ArrayList<Long> messageIdsToFix = null;
++                boolean inu_trailingUnsentQueried = !processMessages || DialogObject.isEncryptedDialog(dialogId);
+ 
+-                if (cursor != null) {
++                while (cursor != null) {
+                     while (cursor.next()) {
+                         messagesCount++;
+                         if (!processMessages) {
+@@ -10098,6 +10154,10 @@ public class MessagesStorage extends BaseController {
+                     }
+                     cursor.dispose();
+                     cursor = null;
++                    if (!inu_trailingUnsentQueried) {
++                        inu_trailingUnsentQueried = true;
++                        cursor = inu_queryTrailingUnsent(messageSelect, dialogId, threadMessageId, maxId, res.messages);
++                    }
+                 }
+ 
+                 if (withEphemeralMessages && dialogId < 0) {
+@@ -10301,6 +10361,18 @@ public class MessagesStorage extends BaseController {
+                 runnable.run();
+             };
+         } else {*/
++        if (processMessages && load_type == LOAD_FORWARD && !scheduled && !DialogObject.isEncryptedDialog(dialogId)) {
++            boolean inu_hasPositive = false;
++            for (TLRPC.Message message : res.messages) {
++                if (message.id > 0 && !MessageObject.isEphemeralMessageId(message.id)) {
++                    inu_hasPositive = true;
++                    break;
++                }
++            }
++            if (!inu_hasPositive) {
++                res.messages.clear();
++            }
++        }
+         int finalMessagesCount = scheduled || processMessages ? res.messages.size() : messagesCount;
+         return () -> getMessagesController().processLoadedMessages(res, finalMessagesCount, dialogId, mergeDialogId, countQueryFinal, maxIdOverrideFinal, offset_date, true, classGuid, minUnreadIdFinal, lastMessageIdFinal, countUnreadFinal, maxUnreadDateFinal, load_type, isEndFinal, mode, threadMessageId, loadIndex, queryFromServerFinal, mentionsUnreadFinal, processMessages, isTopic, loaderLogger);
+         //}
