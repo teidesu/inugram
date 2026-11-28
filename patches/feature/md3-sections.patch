@@ -26,6 +26,7 @@ Subject: md3-style sections redesign
  .../ui/Components/SectionsScrollView.java     | 40 +++++++++++-
  .../ui/Components/TranslateAlert3.java        |  3 +-
  .../ui/Components/UniversalAdapter.java       | 15 ++++-
+ .../org/telegram/ui/DataUsage2Activity.java   |  5 +-
  .../telegram/ui/LiteModeSettingsActivity.java | 11 +++-
  .../java/org/telegram/ui/LogoutActivity.java  |  4 +-
  .../telegram/ui/MessageStatisticActivity.java |  2 +
@@ -34,7 +35,7 @@ Subject: md3-style sections redesign
  .../org/telegram/ui/SettingsActivity.java     | 18 ++++++
  .../org/telegram/ui/StatisticActivity.java    |  1 +
  .../telegram/ui/bots/BotBiometrySettings.java |  4 ++
- 30 files changed, 278 insertions(+), 50 deletions(-)
+ 31 files changed, 282 insertions(+), 51 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java b/TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java
 index 0000000..0000000 100644
@@ -915,6 +916,29 @@ index 0000000..0000000 100644
                  viewType == VIEW_TYPE_RADIO ||
                  viewType == VIEW_TYPE_RADIO_2 ||
                  viewType == VIEW_TYPE_FILTER_CHAT ||
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DataUsage2Activity.java b/TMessagesProj/src/main/java/org/telegram/ui/DataUsage2Activity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/DataUsage2Activity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/DataUsage2Activity.java
+@@ -673,7 +673,6 @@ public class DataUsage2Activity extends BaseFragment {
+                         break;
+                     case VIEW_TYPE_HEADER:
+                         view = new HeaderCell(getContext());
+-                        ThemeBind.backgroundColor(view, Theme.key_windowBackgroundWhite, ListView.this.resourcesProvider);
+                         break;
+                     case VIEW_TYPE_RESET_BUTTON:
+                         TextCell textCell = new TextCell(getContext());
+@@ -718,6 +717,10 @@ public class DataUsage2Activity extends BaseFragment {
+                     Cell cell = (Cell) holder.itemView;
+                     cell.set(item.imageColorTop, item.imageColorBottom, item.imageResId, item.text, item.valueText, position + 1 < getItemCount() && itemInners.get(position + 1).viewType == viewType);
+                     cell.setArrow(item.pad || item.index < 0 || item.index < segments.length && segments[item.index].size <= 0 ? null : collapsed[item.index]);
++                    if (desu.inugram.helpers.theme.M3SectionsHelper.isEnabled()) {
++                        final ItemInner inu_next = position + 1 < getItemCount() ? itemInners.get(position + 1) : null;
++                        desu.inugram.helpers.theme.M3SectionsHelper.markMerged(cell, item.imageResId == 0, inu_next != null && inu_next.viewType == VIEW_TYPE_SECTION && inu_next.imageResId == 0);
++                    }
+                 } else if (viewType == VIEW_TYPE_SEPARATOR) {
+                     TextInfoPrivacyCell view = (TextInfoPrivacyCell) holder.itemView;
+                     view.setText(item.text);
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/LiteModeSettingsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/LiteModeSettingsActivity.java
 index 0000000..0000000 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/LiteModeSettingsActivity.java
