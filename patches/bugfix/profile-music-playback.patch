@@ -1,0 +1,926 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: nihmadev <maksimsagorov@gmail.com>
+Date: Sat, 28 Nov 2026 18:30:41 +0400
+Subject: Keep playback when browsing profile music
+
+---
+ .../telegram/messenger/MediaController.java   |  67 ++--
+ .../telegram/ui/Cells/AudioPlayerCell.java    |   6 +-
+ .../ui/Components/AudioPlayerAlert.java       | 307 ++++++++++++------
+ .../java/org/telegram/ui/ProfileActivity.java |  72 ++--
+ 4 files changed, 286 insertions(+), 166 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
+@@ -2105,24 +2105,12 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+         } else if (id == NotificationCenter.musicListLoaded) {
+             if (currentSavedMusicList != null && args[0] == currentSavedMusicList) {
+                 int addedCount = currentSavedMusicList.list.size() - playlist.size();
+-                playlist.clear();
+-                playlist.addAll(currentSavedMusicList.list);
+-                sortPlaylist();
+-                if (SharedConfig.shuffleMusic) {
+-                    buildShuffledPlayList();
+-                } else if (playingMessageObject != null) {
+-                    int newIndex = playlist.indexOf(playingMessageObject);
+-                    if (newIndex >= 0) {
+-                        currentPlaylistNum = newIndex;
+-                    } else {
+-                        if (currentPlaylistNum < 0 || currentPlaylistNum >= playlist.size()) {
+-                            currentPlaylistNum = 0;
+-                        }
+-                        if (playlist.size() == 0) {
+-                            cleanup();
+-                        } else {
+-                            playMessage(playlist.get(0));
+-                        }
++                inu_updateSavedMusicQueue(currentSavedMusicList);
++                if (playingMessageObject != null && !playlist.contains(playingMessageObject)) {
++                    if (playlist.isEmpty()) {
++                        cleanup();
++                    } else if (!SharedConfig.shuffleMusic) {
++                        playMessage(playlist.get(currentPlaylistNum));
+                     }
+                 }
+                 if (addedCount != 0 && playingMessageObject != null) {
+@@ -3768,20 +3756,41 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+         return playMessage(messageObject, false);
+     }
+ 
+-    public boolean inu_isMessagePreparedOnly() {
+-        return playingMessageObject != null && audioPlayer == null && videoPlayer == null && !downloadingCurrentMessage;
++    public boolean inu_playSavedMusic(MessagesController.SavedMusicList list, MessageObject track) {
++        final int index = list.list.indexOf(track);
++        if (index < 0) {
++            return false;
++        }
++        if (currentSavedMusicList == list && playingMessageObject == track) {
++            return downloadingCurrentMessage || playMessage(track);
++        }
++
++        clearPlaylist();
++        currentSavedMusicList = list;
++        forceLoopCurrentPlaylist = false;
++        playMusicAgain = false;
++        inu_updateSavedMusicQueue(list, track);
++        return playMessage(track);
++    }
++
++    public void inu_updateSavedMusicQueue(MessagesController.SavedMusicList list) {
++        if (currentSavedMusicList == list) {
++            inu_updateSavedMusicQueue(list, playingMessageObject);
++        }
+     }
+ 
+-    public boolean inu_prepareMessage(final MessageObject messageObject) {
+-        if (messageObject == null) {
+-            return false;
++    private void inu_updateSavedMusicQueue(MessagesController.SavedMusicList list, MessageObject track) {
++        playlist.clear();
++        playlistMap.clear();
++        playlist.addAll(list.list);
++        for (MessageObject item : playlist) {
++            playlistMap.put(item.getId(), item);
++        }
++        currentPlaylistNum = Math.max(0, playlist.indexOf(track));
++        if (SharedConfig.shuffleMusic) {
++            shuffledPlaylist.clear();
++            buildShuffledPlayList();
+         }
+-        playingMessageObject = messageObject;
+-        downloadingCurrentMessage = false;
+-        isPaused = true;
+-        lastProgress = 0;
+-        NotificationCenter.getInstance(messageObject.currentAccount).postNotificationName(NotificationCenter.messagePlayingPlayStateChanged, messageObject.getId());
+-        return true;
+     }
+ 
+     public boolean playMessage(final MessageObject messageObject, boolean silent) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/AudioPlayerCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/AudioPlayerCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/AudioPlayerCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/AudioPlayerCell.java
+@@ -302,12 +302,16 @@ public class AudioPlayerCell extends FrameLayout implements DownloadController.F
+         }
+     }
+ 
++    protected boolean inu_playMessage(MessageObject messageObject) {
++        return MediaController.getInstance().findMessageInPlaylistAndPlay(messageObject);
++    }
++
+     public void didPressedButton() {
+         if (buttonState == 0) {
+             if (miniButtonState == 0) {
+                 FileLoader.getInstance(currentAccount).loadFile(currentMessageObject.getDocument(), currentMessageObject, FileLoader.PRIORITY_NORMAL, 0);
+             }
+-            if (MediaController.getInstance().findMessageInPlaylistAndPlay(currentMessageObject)) {
++            if (inu_playMessage(currentMessageObject)) {
+                 if (hasMiniProgress == 2 && miniButtonState != 1) {
+                     miniButtonState = 1;
+                     radialProgress.setProgress(0, false);
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerAlert.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerAlert.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerAlert.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/AudioPlayerAlert.java
+@@ -200,6 +200,8 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+     private final boolean padWithItem;
+ 
+     private MessagesController.SavedMusicList savedMusicList;
++    // The opened profile owns the rows. The player card follows the global player.
++    private final boolean inu_browsingSavedMusic;
+     private boolean isMyList() {
+         return savedMusicList != null && savedMusicList.dialogId == UserConfig.getInstance(currentAccount).getClientUserId();
+     }
+@@ -284,12 +286,19 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+     };
+ 
+     public AudioPlayerAlert(final Context context, Theme.ResourcesProvider resourcesProvider) {
++        this(context, resourcesProvider, null);
++    }
++
++    public AudioPlayerAlert(final Context context, Theme.ResourcesProvider resourcesProvider, MessagesController.SavedMusicList profilePlaylist) {
+         super(context, true, resourcesProvider);
++        inu_browsingSavedMusic = profilePlaylist != null;
+         doNotOverlayNavigationBar = true;
+         fixNavigationBar();
+ 
+         MessageObject messageObject = MediaController.getInstance().getPlayingMessageObject();
+-        if (messageObject != null) {
++        if (inu_browsingSavedMusic) {
++            currentAccount = profilePlaylist.currentAccount;
++        } else if (messageObject != null) {
+             currentAccount = messageObject.currentAccount;
+         } else {
+             currentAccount = UserConfig.selectedAccount;
+@@ -298,12 +307,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+         parentActivity = (LaunchActivity) context;
+ 
+         TAG = DownloadController.getInstance(currentAccount).generateObserverTag();
+-        NotificationCenter.getInstance(currentAccount).addWeakObserver(this, NotificationCenter.messagePlayingDidReset);
+-        NotificationCenter.getInstance(currentAccount).addWeakObserver(this, NotificationCenter.messagePlayingPlayStateChanged);
+-        NotificationCenter.getInstance(currentAccount).addWeakObserver(this, NotificationCenter.messagePlayingDidStart);
+-        NotificationCenter.getInstance(currentAccount).addWeakObserver(this, NotificationCenter.messagePlayingProgressDidChanged);
+-        NotificationCenter.getInstance(currentAccount).addWeakObserver(this, NotificationCenter.fileLoaded);
+-        NotificationCenter.getInstance(currentAccount).addWeakObserver(this, NotificationCenter.fileLoadProgressChanged);
++        inu_observePlayback(true);
+         NotificationCenter.getInstance(currentAccount).addWeakObserver(this, NotificationCenter.musicDidLoad);
+         NotificationCenter.getInstance(currentAccount).addWeakObserver(this, NotificationCenter.moreMusicDidLoad);
+         NotificationCenter.getInstance(currentAccount).addWeakObserver(this, NotificationCenter.musicIdsLoaded);
+@@ -371,7 +375,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+                 layoutParams.topMargin = -getPaddingTop();
+ 
+                 int contentSize = dp(179 + (!isMyList() && !noforwards ? 52 : 0));
+-                if (playlist.size() > 1) {
++                if (inu_showPlaylistRows()) {
+                     contentSize += backgroundPaddingTop + playlist.size() * dp(56);
+                     if (isProfilePlaylist) {
+                         contentSize += ActionBar.getCurrentActionBarHeight();
+@@ -476,7 +480,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+ 
+             @Override
+             protected void onDraw(Canvas canvas) {
+-                if (playlist.size() <= 1) {
++                if (!inu_showPlaylistRows()) {
+                     shadowDrawable.setBounds(0, getMeasuredHeight() - playerLayout.getMeasuredHeight() - backgroundPaddingTop, getMeasuredWidth(), getMeasuredHeight());
+                     shadowDrawable.draw(canvas);
+                     if (isProfilePlaylist) {
+@@ -705,7 +709,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+         seekBarView = new SeekBarView(context, resourcesProvider) {
+             @Override
+             boolean onTouch(MotionEvent ev) {
+-                if (rewindingState != 0) {
++                if (rewindingState != 0 || inu_browsingSavedMusic && !isEnabled() && ev.getAction() == MotionEvent.ACTION_DOWN) {
+                     return false;
+                 }
+                 return super.onTouch(ev);
+@@ -716,6 +720,9 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+         seekBarView.setDelegate(new SeekBarView.SeekBarViewDelegate() {
+             @Override
+             public void onSeekBarDrag(boolean stop, float progress) {
++                if (inu_browsingSavedMusic && inu_getActiveMusic() == null) {
++                    return;
++                }
+                 if (stop) {
+                     MediaController.getInstance().seekToProgress(MediaController.getInstance().getPlayingMessageObject(), progress);
+                 }
+@@ -906,10 +913,14 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+             private final Runnable pressedRunnable = new Runnable() {
+                 @Override
+                 public void run() {
++                    final MessageObject track = MediaController.getInstance().getPlayingMessageObject();
++                    if (track == null || inu_browsingSavedMusic && !track.isMusic()) {
++                        return;
++                    }
+                     pressedCount++;
+                     if (pressedCount == 1) {
+                         rewindingState = -1;
+-                        rewindingProgress = MediaController.getInstance().getPlayingMessageObject().audioProgress;
++                        rewindingProgress = track.audioProgress;
+                         lastTime = System.currentTimeMillis();
+                         AndroidUtilities.runOnUIThread(this, 2000);
+                         AndroidUtilities.runOnUIThread(backSeek);
+@@ -971,7 +982,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+ 
+             @Override
+             public boolean onTouchEvent(MotionEvent event) {
+-                if (seekBarView.isDragging() || rewindingState == 1) {
++                if (seekBarView.isDragging() || rewindingState == 1 || inu_browsingSavedMusic && !isEnabled() && event.getAction() == MotionEvent.ACTION_DOWN) {
+                     return false;
+                 }
+                 float x = event.getRawX();
+@@ -1002,7 +1013,9 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+                     case MotionEvent.ACTION_UP:
+                         AndroidUtilities.cancelRunOnUIThread(pressedRunnable);
+                         AndroidUtilities.cancelRunOnUIThread(backSeek);
+-                        if (rewindingState == 0 && event.getAction() == MotionEvent.ACTION_UP && (System.currentTimeMillis() - startTime < 300)) {
++                        if (rewindingState == 0 && event.getAction() == MotionEvent.ACTION_UP
++                                && System.currentTimeMillis() - startTime < 300
++                                && (!inu_browsingSavedMusic || inu_getActiveMusic() != null)) {
+                             MediaController.getInstance().playPreviousMessage();
+                             prevButton.setProgress(0f);
+                             prevButton.playAnimation();
+@@ -1044,6 +1057,12 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+         ThemeBind.selectorBackground(playButton, Theme.createSelectorDrawable(getThemedColor(Theme.key_listSelector), 1, dp(24)), null, ThemeBind.of(Theme.key_listSelector), resourcesProvider);
+         bottomView.addView(playButton, LayoutHelper.createFrame(48, 48, Gravity.LEFT | Gravity.TOP));
+         playButton.setOnClickListener(v -> {
++            if (inu_browsingSavedMusic && inu_getActiveMusic() == null) {
++                if (!playlist.isEmpty()) {
++                    MediaController.getInstance().inu_playSavedMusic(savedMusicList, playlist.get(0));
++                }
++                return;
++            }
+             if (MediaController.getInstance().isDownloadingCurrentMessage()) {
+                 return;
+             }
+@@ -1063,7 +1082,8 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+             private final Runnable pressedRunnable = new Runnable() {
+                 @Override
+                 public void run() {
+-                    if (MediaController.getInstance().getPlayingMessageObject() == null) {
++                    final MessageObject track = MediaController.getInstance().getPlayingMessageObject();
++                    if (track == null || inu_browsingSavedMusic && !track.isMusic()) {
+                         return;
+                     }
+                     rewindingForwardPressedCount++;
+@@ -1089,7 +1109,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+ 
+             @Override
+             public boolean onTouchEvent(MotionEvent event) {
+-                if (seekBarView.isDragging() || rewindingState == -1) {
++                if (seekBarView.isDragging() || rewindingState == -1 || inu_browsingSavedMusic && !isEnabled() && event.getAction() == MotionEvent.ACTION_DOWN) {
+                     return false;
+                 }
+                 float x = event.getRawX();
+@@ -1117,7 +1137,8 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+                         break;
+                     case MotionEvent.ACTION_CANCEL:
+                     case MotionEvent.ACTION_UP:
+-                        if (!pressed && event.getAction() == MotionEvent.ACTION_UP && isPressed()) {
++                        if (!pressed && event.getAction() == MotionEvent.ACTION_UP && isPressed()
++                                && (!inu_browsingSavedMusic || inu_getActiveMusic() != null)) {
+                             MediaController.getInstance().playNextMessage();
+                             nextButton.setProgress(0f);
+                             nextButton.playAnimation();
+@@ -1305,13 +1326,12 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+                     int visibleItemCount = firstVisibleItem == RecyclerView.NO_POSITION ? 0 : Math.abs(layoutManager.findLastVisibleItemPosition() - firstVisibleItem) + 1;
+                     int totalItemCount = recyclerView.getAdapter().getItemCount();
+ 
+-                    MessageObject playingMessageObject = MediaController.getInstance().getPlayingMessageObject();
+-                    if (SharedConfig.playOrderReversed) {
+-                        if (firstVisibleItem < 10) {
+-                            MediaController.getInstance().loadMoreMusic();
+-                        }
+-                    } else {
+-                        if (firstVisibleItem + visibleItemCount > totalItemCount - 10) {
++                    if (SharedConfig.playOrderReversed
++                            ? firstVisibleItem < 10
++                            : firstVisibleItem + visibleItemCount > totalItemCount - 10) {
++                        if (inu_browsingSavedMusic) {
++                            savedMusicList.load();
++                        } else {
+                             MediaController.getInstance().loadMoreMusic();
+                         }
+                     }
+@@ -1326,7 +1346,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+         sb.append(getString(R.string.AudioAddToProfile));
+         saveToProfileButton.setText(sb);
+         saveToProfileButton.setOnClickListener(v -> {
+-            final MessageObject messageObject1 = MediaController.getInstance().getPlayingMessageObject();
++            final MessageObject messageObject1 = inu_getHeaderTrack();
+             if (messageObject1 == null || parentActivity == null) {
+                 return;
+             }
+@@ -1341,7 +1361,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+         unsaveFromProfileButton = new ButtonWithCounterView(context, resourcesProvider).setRound().setNeutral();
+         unsaveFromProfileButton.setText(getString(R.string.AudioRemoveFromProfile));
+         unsaveFromProfileButton.setOnClickListener(v -> {
+-            final MessageObject messageObject1 = MediaController.getInstance().getPlayingMessageObject();
++            final MessageObject messageObject1 = inu_getHeaderTrack();
+             if (messageObject1 == null || parentActivity == null) {
+                 return;
+             }
+@@ -1353,11 +1373,11 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+         });
+         playerLayout.addView(unsaveFromProfileButton, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 42, Gravity.FILL_HORIZONTAL | Gravity.BOTTOM, 12, 12, 12, 12));
+ 
+-        savedMusicList = MediaController.getInstance().currentSavedMusicList;
++        savedMusicList = inu_browsingSavedMusic ? profilePlaylist : MediaController.getInstance().currentSavedMusicList;
+         isProfilePlaylist = savedMusicList != null;
+         actionBar.menuOccupyBack = isProfilePlaylist;
+         padWithItem = isMyList();
+-        playlist = MediaController.getInstance().getPlaylist();
++        playlist = inu_browsingSavedMusic ? new ArrayList<>(profilePlaylist.list) : MediaController.getInstance().getPlaylist();
+         if (isMyList()) {
+             addItem = menu.addItem(8, R.drawable.msg_add);
+         }
+@@ -1429,7 +1449,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+             if (savedMusicList.dialogId == UserConfig.getInstance(currentAccount).getClientUserId()) {
+                 actionBar.setTitle(getString(R.string.ProfilePlaylistTitleMine));
+             } else {
+-                actionBar.setTitle(formatString(R.string.ProfilePlaylistTitle, DialogObject.getShortName(savedMusicList.dialogId)));
++                actionBar.setTitle(formatString(R.string.ProfilePlaylistTitle, DialogObject.getShortName(currentAccount, savedMusicList.dialogId)));
+             }
+         } else if (messageObject != null && !MediaController.getInstance().currentPlaylistIsGlobalSearch()) {
+             long did = messageObject.getDialogId();
+@@ -1484,8 +1504,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+                     } else {
+                         savedMusicList.move(fromPosition, toPosition);
+                     }
+-                    playlist.clear();
+-                    playlist.addAll(savedMusicList.list);
++                    inu_syncEditedPlaylist();
+                     listAdapter.notifyItemMoved(fromPosition, toPosition);
+                     return true;
+                 }
+@@ -1562,7 +1581,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+         if (playerLayout == null) {
+             return 0;
+         }
+-        if (playlist.size() <= 1) {
++        if (!inu_showPlaylistRows()) {
+             return playerLayout.getMeasuredHeight() + backgroundPaddingTop;
+         } else {
+             int offset = dp(13);
+@@ -1762,7 +1781,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+     }
+ 
+     private void onSubItemClick(int id) {
+-        final MessageObject messageObject = MediaController.getInstance().getPlayingMessageObject();
++        final MessageObject messageObject = inu_getHeaderTrack();
+         if (messageObject == null || parentActivity == null) {
+             return;
+         }
+@@ -1802,7 +1821,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+             saveToProfile(messageObject, false, () -> {
+                 if (savedMusicList != null) {
+                     savedMusicList.remove(messageObject);
+-                    if (savedMusicList.list.isEmpty()) {
++                    if (savedMusicList.list.isEmpty() && !inu_browsingSavedMusic) {
+                         MediaController.getInstance().cleanup();
+                         dismiss();
+                     } else {
+@@ -1824,8 +1843,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+                     if (savedMusicList != null) {
+                         savedMusicList.add(document);
+                     }
+-                    playlist.clear();
+-                    playlist.addAll(savedMusicList.list);
++                    inu_syncEditedPlaylist();
+                     listAdapter.notifyDataSetChanged();
+                     ConnectionsManager.getInstance(currentAccount).sendRequest(req, null);
+                     return;
+@@ -1858,8 +1876,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+                             if (savedMusicList != null) {
+                                 savedMusicList.add(r.document);
+                             }
+-                            playlist.clear();
+-                            playlist.addAll(savedMusicList.list);
++                            inu_syncEditedPlaylist();
+                             listAdapter.notifyDataSetChanged();
+                             ConnectionsManager.getInstance(currentAccount).sendRequest(req2, null);
+                         }
+@@ -1918,6 +1935,9 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+     public void didReceivedNotification(int id, int account, Object... args) {
+         if (id == NotificationCenter.messagePlayingDidStart || id == NotificationCenter.messagePlayingPlayStateChanged || id == NotificationCenter.messagePlayingDidReset) {
+             updateTitle(id == NotificationCenter.messagePlayingDidReset && (Boolean) args[1]);
++            if (inu_browsingSavedMusic && listAdapter.listViewIsVisible != inu_showPlaylistRows()) {
++                listAdapter.notifyDataSetChanged();
++            }
+             if (id == NotificationCenter.messagePlayingDidReset || id == NotificationCenter.messagePlayingPlayStateChanged) {
+                 int count = listView.getChildCount();
+                 for (int a = 0; a < count; a++) {
+@@ -1962,18 +1982,23 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+             if (optionsIcon != null) {
+                 optionsIcon.setCasting(CastSync.isActive(), true);
+             }
+-        } else if (id == NotificationCenter.messagePlayingProgressDidChanged) {
++        } else if (id == NotificationCenter.messagePlayingProgressDidChanged || id == NotificationCenter.messagePlayingDidSeek) {
+             MessageObject messageObject = MediaController.getInstance().getPlayingMessageObject();
+-            if (messageObject != null && messageObject.isMusic()) {
++            if (messageObject != null && messageObject.isMusic() && (!inu_browsingSavedMusic || messageObject.currentAccount == account)) {
+                 updateProgress(messageObject);
+             }
+         } else if (id == NotificationCenter.messagePlayingSpeedChanged) {
+             updatePlaybackButton(true);
+-        } else if (id == NotificationCenter.musicDidLoad) {
++        } else if (id == NotificationCenter.musicListLoaded && inu_browsingSavedMusic && args[0] == savedMusicList) {
++            playlist.clear();
++            playlist.addAll(savedMusicList.list);
++            listAdapter.notifyDataSetChanged();
++            updateTitle(false);
++        } else if (id == NotificationCenter.musicDidLoad && !inu_browsingSavedMusic) {
+             savedMusicList = MediaController.getInstance().currentSavedMusicList;
+             playlist = MediaController.getInstance().getPlaylist();
+             listAdapter.notifyDataSetChanged();
+-        } else if (id == NotificationCenter.moreMusicDidLoad) {
++        } else if (id == NotificationCenter.moreMusicDidLoad && !inu_browsingSavedMusic) {
+             savedMusicList = MediaController.getInstance().currentSavedMusicList;
+             playlist = MediaController.getInstance().getPlaylist();
+             listAdapter.notifyDataSetChanged();
+@@ -1990,26 +2015,29 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+             }
+         } else if (id == NotificationCenter.fileLoaded) {
+             String name = (String) args[0];
+-            if (name.equals(currentFile)) {
++            if (name.equals(currentFile) && (!inu_browsingSavedMusic || lastMessageObject != null && lastMessageObject.currentAccount == account)) {
+                 updateTitle(false);
+                 currentAudioFinishedLoading = true;
+             }
+         } else if (id == NotificationCenter.fileLoadProgressChanged) {
+             String name = (String) args[0];
+-            if (name.equals(currentFile)) {
++            if (name.equals(currentFile) && (!inu_browsingSavedMusic || lastMessageObject != null && lastMessageObject.currentAccount == account)) {
+                 MessageObject messageObject = MediaController.getInstance().getPlayingMessageObject();
++                Long loadedSize = (Long) args[1];
++                Long totalSize = (Long) args[2];
++                if (inu_browsingSavedMusic && progressView.getVisibility() == View.VISIBLE && totalSize > 0) {
++                    progressView.setProgress(Math.min(1f, loadedSize / (float) totalSize), true);
++                }
+                 if (messageObject == null) {
+                     return;
+                 }
+-                Long loadedSize = (Long) args[1];
+-                Long totalSize = (Long) args[2];
+                 float bufferedProgress;
+                 if (currentAudioFinishedLoading) {
+                     bufferedProgress = 1.0f;
+                 } else {
+                     long newTime = SystemClock.elapsedRealtime();
+                     if (Math.abs(newTime - lastBufferedPositionCheck) >= 500) {
+-                        bufferedProgress = MediaController.getInstance().isStreamingCurrentAudio() ? FileLoader.getInstance(currentAccount).getBufferedProgressFromPosition(messageObject.audioProgress, currentFile) : 1.0f;
++                        bufferedProgress = MediaController.getInstance().isStreamingCurrentAudio() ? FileLoader.getInstance(messageObject.currentAccount).getBufferedProgressFromPosition(messageObject.audioProgress, currentFile) : 1.0f;
+                         lastBufferedPositionCheck = newTime;
+                     } else {
+                         bufferedProgress = -1;
+@@ -2138,15 +2166,45 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+         }
+     };
+ 
++    private void inu_observePlayback(boolean observe) {
++        final int first = inu_browsingSavedMusic ? 0 : currentAccount;
++        final int last = inu_browsingSavedMusic ? UserConfig.MAX_ACCOUNT_COUNT - 1 : currentAccount;
++        final int[] events = {
++            NotificationCenter.messagePlayingDidReset,
++            NotificationCenter.messagePlayingPlayStateChanged,
++            NotificationCenter.messagePlayingDidStart,
++            NotificationCenter.messagePlayingProgressDidChanged,
++            NotificationCenter.messagePlayingDidSeek,
++            NotificationCenter.fileLoaded,
++            NotificationCenter.fileLoadProgressChanged
++        };
++        for (int account = first; account <= last; account++) {
++            final NotificationCenter center = NotificationCenter.getInstance(account);
++            for (int event : events) {
++                if (event == NotificationCenter.messagePlayingDidSeek && !inu_browsingSavedMusic) {
++                    continue;
++                }
++                if (observe) {
++                    center.addWeakObserver(this, event);
++                } else {
++                    center.removeObserver(this, event);
++                }
++            }
++        }
++        if (inu_browsingSavedMusic) {
++            final NotificationCenter center = NotificationCenter.getInstance(currentAccount);
++            if (observe) {
++                center.addWeakObserver(this, NotificationCenter.musicListLoaded);
++            } else {
++                center.removeObserver(this, NotificationCenter.musicListLoaded);
++            }
++        }
++    }
++
+     @Override
+     public void dismiss() {
+         super.dismiss();
+-        NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.messagePlayingDidReset);
+-        NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.messagePlayingPlayStateChanged);
+-        NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.messagePlayingDidStart);
+-        NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.messagePlayingProgressDidChanged);
+-        NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.fileLoaded);
+-        NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.fileLoadProgressChanged);
++        inu_observePlayback(false);
+         NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.musicDidLoad);
+         NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.moreMusicDidLoad);
+         NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.musicIdsLoaded);
+@@ -2269,7 +2327,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+                 } else {
+                     long time = SystemClock.elapsedRealtime();
+                     if (Math.abs(time - lastBufferedPositionCheck) >= 500) {
+-                        bufferedProgress = MediaController.getInstance().isStreamingCurrentAudio() ? FileLoader.getInstance(currentAccount).getBufferedProgressFromPosition(messageObject.audioProgress, currentFile) : 1.0f;
++                        bufferedProgress = MediaController.getInstance().isStreamingCurrentAudio() ? FileLoader.getInstance(messageObject.currentAccount).getBufferedProgressFromPosition(messageObject.audioProgress, currentFile) : 1.0f;
+                         lastBufferedPositionCheck = time;
+                     } else {
+                         bufferedProgress = -1;
+@@ -2283,7 +2341,9 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+                     newTime = (int) (messageObject.getDuration() * seekBarView.getProgress());
+                     messageObject.audioProgressSec = newTime;
+                 } else {
+-                    newTime = messageObject.audioProgressSec;
++                    newTime = inu_browsingSavedMusic && MediaController.getInstance().isMessagePaused()
++                        ? (int) (messageObject.getDuration() * messageObject.audioProgress)
++                        : messageObject.audioProgressSec;
+                 }
+             }
+             if (lastTime != newTime) {
+@@ -2303,12 +2363,16 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+             }
+         }
+         if (cacheFile == null) {
+-            cacheFile = FileLoader.getInstance(currentAccount).getPathToMessage(messageObject.messageOwner);
++            cacheFile = FileLoader.getInstance(messageObject.currentAccount).getPathToMessage(messageObject.messageOwner);
+         }
+         boolean canStream = SharedConfig.streamMedia && (int) messageObject.getDialogId() != 0 && messageObject.isMusic();
+         if (!cacheFile.exists() && !canStream) {
+             String fileName = messageObject.getFileName();
+-            DownloadController.getInstance(currentAccount).addLoadingFileObserver(fileName, this);
++            if (messageObject.currentAccount == currentAccount) {
++                DownloadController.getInstance(currentAccount).addLoadingFileObserver(fileName, this);
++            } else {
++                DownloadController.getInstance(currentAccount).removeLoadingFileObserver(this);
++            }
+             Float progress = ImageLoader.getInstance().getFileProgress(fileName);
+             progressView.setProgress(progress != null ? progress : 0, false);
+             progressView.setVisibility(View.VISIBLE);
+@@ -2322,9 +2386,43 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+         }
+     }
+ 
++    private void inu_syncEditedPlaylist() {
++        playlist.clear();
++        playlist.addAll(savedMusicList.list);
++        if (inu_browsingSavedMusic) {
++            MediaController.getInstance().inu_updateSavedMusicQueue(savedMusicList);
++        }
++    }
++
++    private MessageObject inu_getActiveMusic() {
++        final MessageObject track = MediaController.getInstance().getPlayingMessageObject();
++        return track != null && track.isMusic() ? track : null;
++    }
++
++    private boolean inu_showPlaylistRows() {
++        if (!inu_browsingSavedMusic || playlist.size() != 1) {
++            return playlist.size() > 1;
++        }
++        final MessageObject active = inu_getActiveMusic();
++        return active != null && active != playlist.get(0);
++    }
++
++    private MessageObject inu_getHeaderTrack() {
++        if (!inu_browsingSavedMusic) {
++            return MediaController.getInstance().getPlayingMessageObject();
++        }
++        final MessageObject activeMusic = inu_getActiveMusic();
++        return activeMusic != null || playlist.isEmpty() ? activeMusic : playlist.get(0);
++    }
++
++    private boolean inu_isForwardRestricted(MessageObject track) {
++        return track.messageOwner.noforwards
++            || MessagesController.getInstance(track.currentAccount).isPeerNoForwards(track.getDialogId());
++    }
++
+     private void updateTitle(boolean shutdown) {
+-        MessageObject messageObject = MediaController.getInstance().getPlayingMessageObject();
+-        if (messageObject == null && shutdown || messageObject != null && !messageObject.isMusic()) {
++        final MessageObject messageObject = inu_getHeaderTrack();
++        if (messageObject == null && (shutdown || inu_browsingSavedMusic) || messageObject != null && !messageObject.isMusic()) {
+             dismiss();
+         } else {
+             if (messageObject == null) {
+@@ -2333,18 +2431,15 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+             }
+             final boolean sameMessageObject = messageObject == lastMessageObject;
+             lastMessageObject = messageObject;
+-            if (messageObject.eventId != 0 || messageObject.getId() <= -2000000000) {
++            final boolean preview = inu_browsingSavedMusic && inu_getActiveMusic() == null;
++            final boolean externalTrack = inu_browsingSavedMusic && !playlist.contains(messageObject);
++            if (externalTrack || messageObject.eventId != 0 || messageObject.getId() <= -2000000000) {
+                 optionsButton.setVisibility(View.INVISIBLE);
+             } else {
+                 optionsButton.setVisibility(View.VISIBLE);
+             }
+-            final long dialogId = messageObject.getDialogId();
+             final long docId = messageObject.getDocument() != null ? messageObject.getDocument().id : 0L;
+-            final boolean noforwards = (
+-                dialogId < 0 && MessagesController.getInstance(currentAccount).isPeerNoForwards(dialogId) ||
+-                MessagesController.getInstance(currentAccount).isPeerNoForwards(messageObject.getDialogId()) ||
+-                messageObject.messageOwner.noforwards
+-            );
++            final boolean noforwards = externalTrack || inu_isForwardRestricted(messageObject);
+             if (noforwards != this.noforwards) {
+                 this.noforwards = noforwards;
+ 
+@@ -2355,6 +2450,9 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+                 layoutParams = (FrameLayout.LayoutParams) playerShadow.getLayoutParams();
+                 layoutParams.bottomMargin = dp(179 + (!isMyList() && !noforwards ? 52 : 0));
+                 playerShadow.setLayoutParams(layoutParams);
++                if (inu_browsingSavedMusic && inu_showPlaylistRows()) {
++                    listView.setPadding(0, listView.getPaddingTop(), 0, dp(179 + (!isMyList() && !noforwards ? 52 : 0)));
++                }
+             }
+             if (noforwards) {
+                 optionsButton.hideSubItem(1);
+@@ -2369,12 +2467,24 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+                 optionsButton.setAdditionalYOffset(-dp(157 + 40));
+             }
+ 
+-            checkIfMusicDownloaded(messageObject);
++            if (preview) {
++                DownloadController.getInstance(currentAccount).removeLoadingFileObserver(this);
++                progressView.setVisibility(View.INVISIBLE);
++                seekBarView.setVisibility(View.VISIBLE);
++                playButton.setEnabled(true);
++            } else {
++                checkIfMusicDownloaded(messageObject);
++            }
++            if (inu_browsingSavedMusic) {
++                seekBarView.setEnabled(!preview);
++                prevButton.setEnabled(!preview);
++                nextButton.setEnabled(!preview);
++            }
+             updateProgress(messageObject, !sameMessageObject);
+             updateCover(messageObject, !sameMessageObject);
+ 
+             desu.inugram.helpers.theme.M3SliderHelper.setWavyPlaying(seekBarView, !MediaController.getInstance().isMessagePaused(), true);
+-            if (MediaController.getInstance().isMessagePaused()) {
++            if (preview || MediaController.getInstance().isMessagePaused()) {
+                 playPauseDrawable.setPause(false);
+                 playButton.setContentDescription(LocaleController.getString(R.string.AccActionPlay));
+             } else {
+@@ -2396,13 +2506,13 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+                 durationTextView.setText(duration != 0 ? AndroidUtilities.formatShortDuration(duration) : "-:--");
+             }
+ 
+-            if (duration > 60 * 10) {
++            if (!preview && duration > 60 * 10) {
+                 playbackSpeedButton.setVisibility(View.VISIBLE);
+             } else {
+                 playbackSpeedButton.setVisibility(View.GONE);
+             }
+ 
+-            if (!sameMessageObject) {
++            if (!sameMessageObject && !preview) {
+                 preloadNeighboringThumbs();
+             }
+         }
+@@ -2410,7 +2520,8 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+ 
+     private void updateCover(MessageObject messageObject, boolean animated) {
+         final BackupImageView imageView = animated ? coverContainer.getNextImageView() : coverContainer.getImageView();
+-        final AudioInfo audioInfo = MediaController.getInstance().getAudioInfo();
++        final AudioInfo audioInfo = inu_browsingSavedMusic && inu_getActiveMusic() == null
++            ? null : MediaController.getInstance().getAudioInfo();
+         if (animated) {
+             coverContainer.switchImageViews();
+         }
+@@ -2507,7 +2618,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+ 
+         private boolean listViewIsVisible;
+         public void setup() {
+-            listViewIsVisible = playlist.size() > 1;
++            listViewIsVisible = inu_showPlaylistRows();
+             if (listViewIsVisible) {
+                 listView.setVisibility(View.VISIBLE);
+                 listView.setTranslationY(0);
+@@ -2520,8 +2631,8 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+         @Override
+         public void notifyDataSetChanged() {
+             super.notifyDataSetChanged();
+-            if ((playlist.size() > 1) != listViewIsVisible) {
+-                listViewIsVisible = playlist.size() > 1;
++            if (inu_showPlaylistRows() != listViewIsVisible) {
++                listViewIsVisible = inu_showPlaylistRows();
+                 if (listViewIsVisible) {
+                     listView.setVisibility(View.VISIBLE);
+                     listView.setTranslationY(AndroidUtilities.displaySize.y);
+@@ -2541,15 +2652,10 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+                         .start();
+                 }
+             }
+-            if (playlist.size() > 1) {
+-                ThemeBind.backgroundColor(playerLayout, Theme.key_player_background, AudioPlayerAlert.this.resourcesProvider);
+-                playerShadow.setVisibility(View.VISIBLE);
+-                listView.setPadding(0, listView.getPaddingTop(), 0, dp(179 + 52));
+-            } else {
+-                ThemeBind.backgroundColor(playerLayout, Theme.key_player_background, AudioPlayerAlert.this.resourcesProvider);
+-                playerShadow.setVisibility(View.VISIBLE);
+-                listView.setPadding(0, listView.getPaddingTop(), 0, 0);
+-            }
++            ThemeBind.backgroundColor(playerLayout, Theme.key_player_background, AudioPlayerAlert.this.resourcesProvider);
++            playerShadow.setVisibility(View.VISIBLE);
++            final int controlsHeight = inu_browsingSavedMusic && (isMyList() || noforwards) ? 179 : 179 + 52;
++            listView.setPadding(0, listView.getPaddingTop(), 0, inu_showPlaylistRows() ? dp(controlsHeight) : 0);
+             updateEmptyView();
+         }
+ 
+@@ -2558,7 +2664,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+             if (searchWas) {
+                 return (padWithItem ? 1 : 0) + searchResult.size();
+             }
+-            return playlist.size() > 1 ? (padWithItem ? 1 : 0) + playlist.size() : 0;
++            return inu_showPlaylistRows() ? (padWithItem ? 1 : 0) + playlist.size() : 0;
+         }
+ 
+         @Override
+@@ -2583,7 +2689,15 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+                 paddingView.setTag(RecyclerListView.TAG_NOT_SECTION);
+                 return new RecyclerListView.Holder(paddingView);
+             } else {
+-                View view = new AudioPlayerCell(context, MediaController.getInstance().currentPlaylistIsGlobalSearch() ? AudioPlayerCell.VIEW_TYPE_GLOBAL_SEARCH : AudioPlayerCell.VIEW_TYPE_DEFAULT, resourcesProvider);
++                final boolean globalSearch = !inu_browsingSavedMusic && MediaController.getInstance().currentPlaylistIsGlobalSearch();
++                View view = new AudioPlayerCell(context, globalSearch ? AudioPlayerCell.VIEW_TYPE_GLOBAL_SEARCH : AudioPlayerCell.VIEW_TYPE_DEFAULT, resourcesProvider) {
++                    @Override
++                    protected boolean inu_playMessage(MessageObject track) {
++                        return inu_browsingSavedMusic
++                            ? MediaController.getInstance().inu_playSavedMusic(savedMusicList, track)
++                            : super.inu_playMessage(track);
++                    }
++                };
+                 return new RecyclerListView.Holder(view);
+             }
+         }
+@@ -2625,7 +2739,8 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+                 onReorderTouch = null;
+             }
+             ThemeBind.backgroundColor(cell, Theme.key_dialogBackground, resourcesProvider);
+-            cell.setMessageObject(messageObject, isMyList(), isMyList() || noforwards || messageObject.getId() <= 0 ? null : btn -> showOptions(cell, messageObject), needDivider, onReorderTouch);
++            final boolean restricted = inu_browsingSavedMusic ? inu_isForwardRestricted(messageObject) : noforwards;
++            cell.setMessageObject(messageObject, isMyList(), isMyList() || restricted || messageObject.getId() <= 0 ? null : btn -> showOptions(cell, messageObject), needDivider, onReorderTouch);
+         }
+ 
+         @Override
+@@ -2910,7 +3025,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+     }
+ 
+     private void showMenuOptions(View v) {
+-        final MessageObject messageObject = MediaController.getInstance().getPlayingMessageObject();
++        final MessageObject messageObject = inu_getHeaderTrack();
+         if (messageObject == null) {
+             return;
+         }
+@@ -2990,21 +3105,27 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+     }
+ 
+     private void showOptions(AudioPlayerCell cell, MessageObject messageObject) {
++        final boolean restricted = inu_browsingSavedMusic ? inu_isForwardRestricted(messageObject) : noforwards;
+         final ItemOptions o = ItemOptions.makeOptions(container, resourcesProvider, cell, true);
+ 
+         if (isMyList()) {
+-            o.addIf(!noforwards, R.drawable.msg_forward, getString(R.string.Forward), () -> {
++            o.addIf(!restricted, R.drawable.msg_forward, getString(R.string.Forward), () -> {
+                 o.dismiss();
+                 forward(messageObject);
+             });
+-            o.addIf(!noforwards, R.drawable.msg_shareout, getString(R.string.ShareFile), () -> {
++            o.addIf(!restricted, R.drawable.msg_shareout, getString(R.string.ShareFile), () -> {
+                 o.dismiss();
+                 share(messageObject);
+             });
+             o.add(R.drawable.msg_delete, getString(R.string.Delete), true, () -> {
+                 saveToProfile(messageObject, false, () -> {
+                     savedMusicList.remove(messageObject);
+-                    playlist.remove(messageObject);
++                    if (inu_browsingSavedMusic) {
++                        inu_syncEditedPlaylist();
++                        updateTitle(false);
++                    } else {
++                        playlist.remove(messageObject);
++                    }
+                     listAdapter.notifyDataSetChanged();
+                     o.dismiss();
+ 
+@@ -3017,16 +3138,16 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
+         } else {
+             ItemOptions o2 = buildSaveOptions(o, messageObject);
+ 
+-            o.addIf(!noforwards, R.drawable.msg_stories_save, getString(R.string.AudioSaveTo), () -> o.openSwipeback(o2));
+-            if (!noforwards && o.getLast() != null)
++            o.addIf(!restricted, R.drawable.msg_stories_save, getString(R.string.AudioSaveTo), () -> o.openSwipeback(o2));
++            if (!restricted && o.getLast() != null)
+                 o.getLast().setRightIcon(R.drawable.msg_arrowright);
+ 
+             o.addGap();
+-            o.addIf(!noforwards, R.drawable.msg_forward, getString(R.string.Forward), () -> {
++            o.addIf(!restricted, R.drawable.msg_forward, getString(R.string.Forward), () -> {
+                 o.dismiss();
+                 forward(messageObject);
+             });
+-            o.addIf(!noforwards, R.drawable.msg_share, getString(R.string.ShareFile), () -> {
++            o.addIf(!restricted, R.drawable.msg_share, getString(R.string.ShareFile), () -> {
+                 o.dismiss();
+                 share(messageObject);
+             });
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java
+@@ -2559,6 +2559,34 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+         }
+     }
+ 
++    private void inu_openProfileMusic() {
++        final MediaController mediaController = MediaController.getInstance();
++        final MessagesController.SavedMusicList activeList = mediaController.currentSavedMusicList;
++        if (activeList != null && activeList.currentAccount == currentAccount && activeList.dialogId == getDialogId()) {
++            savedMusicList = activeList;
++        } else if (savedMusicList == null) {
++            savedMusicList = new MessagesController.SavedMusicList(currentAccount, getDialogId());
++            if (userInfo != null && userInfo.saved_music != null) {
++                savedMusicList.setup(userInfo.saved_music);
++            }
++        }
++        if (savedMusicList.list.isEmpty()) {
++            return;
++        }
++        if (desu.inugram.InuConfig.DISABLE_PROFILE_MUSIC_AUTOPLAY.getValue()) {
++            showDialog(new AudioPlayerAlert(getContext(), getResourceProvider(), savedMusicList));
++            return;
++        }
++
++        final MessageObject playingMessage = mediaController.getPlayingMessageObject();
++        if (activeList != savedMusicList
++                || !savedMusicList.list.contains(playingMessage)
++                || (!mediaController.isPlayingMessage(playingMessage) && !mediaController.isDownloadingCurrentMessage())) {
++            mediaController.inu_playSavedMusic(savedMusicList, savedMusicList.list.get(0));
++        }
++        showDialog(new AudioPlayerAlert(getContext(), getResourceProvider()));
++    }
++
+     @Override
+     public View createView(Context context) {
+         inu_materialProfileActions = ProfileHelper.useMaterialProfileActions();
+@@ -3868,49 +3896,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
+             if (userInfo != null && userInfo.saved_music != null) {
+                 musicView.setMusicDocument(userInfo.saved_music);
+             }
+-            musicView.setOnClickListener(v -> {
+-                if (savedMusicList == null) {
+-                    if (
+-                        MediaController.getInstance().currentSavedMusicList != null &&
+-                        MediaController.getInstance().currentSavedMusicList.currentAccount == currentAccount &&
+-                        MediaController.getInstance().currentSavedMusicList.dialogId == getDialogId()) {
+-                        savedMusicList = MediaController.getInstance().currentSavedMusicList;
+-                    } else {
+-                        savedMusicList = new MessagesController.SavedMusicList(currentAccount, getDialogId());
+-                        if (userInfo != null && userInfo.saved_music != null) {
+-                            savedMusicList.setup(userInfo.saved_music);
+-                        }
+-                    }
+-                }
+-                if (!savedMusicList.list.isEmpty()) {
+-                    boolean sameList = false;
+-                    final MessageObject inu_playingMessage = MediaController.getInstance().getPlayingMessageObject();
+-                    if (
+-                        MediaController.getInstance().currentSavedMusicList != savedMusicList ||
+-                        !MediaController.getInstance().isPlayingMessage(inu_playingMessage) ||
+-                        !savedMusicList.list.contains(inu_playingMessage)
+-                    ) {
+-                        MediaController.getInstance().cleanup();
+-                    } else {
+-                        sameList = true;
+-                    }
+-                    MediaController.getInstance().currentSavedMusicList = savedMusicList;
+-                    MediaController.getInstance().getPlaylist().clear();
+-                    MediaController.getInstance().getPlaylist().addAll(savedMusicList.list);
+-                    if (!sameList) {
+-                        if (desu.inugram.InuConfig.DISABLE_PROFILE_MUSIC_AUTOPLAY.getValue()) {
+-                            MediaController.getInstance().inu_prepareMessage(savedMusicList.list.get(0));
+-                        } else {
+-                            MediaController.getInstance().playMessage(savedMusicList.list.get(0));
+-                        }
+-                    }
+-                    showDialog(new AudioPlayerAlert(getContext(), getResourceProvider()), dialog -> {
+-                        if (MediaController.getInstance().currentSavedMusicList == savedMusicList && MediaController.getInstance().inu_isMessagePreparedOnly()) {
+-                            MediaController.getInstance().cleanup();
+-                        }
+-                    });
+-                }
+-            });
++            musicView.setOnClickListener(v -> inu_openProfileMusic());
+ 
+             actionsView = new ProfileActionsView(context, dp(inu_profileActionsHeight));
+             setActionsMode();

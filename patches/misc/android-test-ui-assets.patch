@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: nihmadev <maksimsagorov@gmail.com>
+Date: Sat, 28 Nov 2026 18:30:40 +0400
+Subject: Generate UI resource metadata for Android tests
+
+---
+ TMessagesProj/build.gradle | 21 +++++++++++++++++++++
+ 1 file changed, 21 insertions(+)
+
+diff --git a/TMessagesProj/build.gradle b/TMessagesProj/build.gradle
+index 0000000..0000000 100644
+--- a/TMessagesProj/build.gradle
++++ b/TMessagesProj/build.gradle
+@@ -350,4 +350,25 @@ if (!rootProject.ext.inuPluginless) {
+     tasks.matching { it.name ==~ /merge.*AndroidTestJniLibFolders/ }.configureEach {
+         dependsOn ':TMessagesProj_App:prepareInuTestJniLibs'
+     }
++
++    androidComponents.onVariants(androidComponents.selector().withBuildType('debug')) { variant ->
++        def androidTest = variant.androidTest
++        if (androidTest != null) {
++            // The test APK has its own resource IDs and launches the stock UI.
++            def runtimeSymbols = androidTest.artifacts.get(com.android.build.api.artifact.SingleArtifact.RUNTIME_SYMBOL_LIST.INSTANCE)
++            def generateStringIds = tasks.register('generateDebugAndroidTestStringResourceIdsAsset',
++                    org.telegram.tasks.GenerateStringResourceIdsAssetTask) {
++                runtimeSymbolList.set(runtimeSymbols)
++                outputDir.set(layout.buildDirectory.dir('generated/stringResourceIds/debugAndroidTest/assets'))
++            }
++            androidTest.sources.assets.addGeneratedSourceDirectory(generateStringIds) { it.outputDir }
++
++            def generateLottieMeta = tasks.register('generateDebugAndroidTestLottieMeta',
++                    org.telegram.tasks.GenerateLottieMetadataAssetFileTask) {
++                runtimeSymbolList.set(runtimeSymbols)
++                rawResourceDirs.from(fileTree('src/main/res') { include('raw*/*.json') })
++            }
++            androidTest.sources.assets.addGeneratedSourceDirectory(generateLottieMeta) { it.outputDir }
++        }
++    }
+ }

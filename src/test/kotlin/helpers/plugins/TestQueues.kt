@@ -1,6 +1,6 @@
 package desu.inugram.helpers.plugins
 
-import org.telegram.messenger.DispatchQueue
+import org.telegram.messenger.DispatchQueue2
 import org.telegram.messenger.Utilities
 
 /**
@@ -15,7 +15,7 @@ object TestQueues {
     private var offset = 0L
     private var testThread: Thread? = null
 
-    private class Recording(label: String) : DispatchQueue(label, false) {
+    private class Recording(label: String) : DispatchQueue2(label, false) {
         override fun postRunnable(runnable: Runnable): Boolean = postRunnable(runnable, 0)
 
         override fun postRunnable(runnable: Runnable, delay: Long): Boolean {
