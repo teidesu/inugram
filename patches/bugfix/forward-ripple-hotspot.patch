@@ -1,0 +1,22 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: alina sireneva <alina@tei.pet>
+Date: Sat, 28 Nov 2026 08:54:24 +0400
+Subject: Start forward header ripple from the touch point
+
+---
+ .../src/main/java/org/telegram/ui/Cells/ChatMessageCell.java    | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+index 0000000..0000000 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+@@ -4653,7 +4653,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+                             forwardBotPressed = true;
+                         } else {
+                             if (forwardBg != null) {
+-                                forwardBg.setPressed(true);
++                                forwardBg.setPressed(true, x - forwardNameX, y - forwardNameY);
+                             }
+                             forwardNamePressed = true;
+                         }

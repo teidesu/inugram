@@ -463,3 +463,4 @@ bugfix/network-state-latch.patch
 bugfix/search-unread-counter.patch
 bugfix/rich-audio-layout.patch
 bugfix/scrim-double-service.patch
+bugfix/forward-ripple-hotspot.patch
