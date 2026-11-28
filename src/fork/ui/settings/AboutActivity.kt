@@ -71,20 +71,22 @@ class AboutActivity : SettingsPageActivity(), NotificationCenter.NotificationCen
         )
         items.add(UItem.asShadow(null))
 
-        items.add(UItem.asHeader(LocaleController.getString(R.string.InuUpdates)))
-        items.add(
-            UItem.asCheck(
-                TOGGLE_UPDATES_ENABLED,
-                LocaleController.getString(R.string.InuUpdatesEnabled),
-            ).setChecked(InuConfig.UPDATES_ENABLED.value)
-        )
-        items.add(
-            UItem.asButton(
-                BUTTON_CHECK_NOW,
-                LocaleController.getString(R.string.InuUpdateCheckNow),
+        if (UpdateHelper.isSelfUpdateSupported) {
+            items.add(UItem.asHeader(LocaleController.getString(R.string.InuUpdates)))
+            items.add(
+                UItem.asCheck(
+                    TOGGLE_UPDATES_ENABLED,
+                    LocaleController.getString(R.string.InuUpdatesEnabled),
+                ).setChecked(InuConfig.UPDATES_ENABLED.value)
             )
-        )
-        items.add(UItem.asShadow(updateInfoLabel()))
+            items.add(
+                UItem.asButton(
+                    BUTTON_CHECK_NOW,
+                    LocaleController.getString(R.string.InuUpdateCheckNow),
+                )
+            )
+            items.add(UItem.asShadow(updateInfoLabel()))
+        }
 
         items.add(UItem.asHeader(LocaleController.getString(R.string.InuLogs)))
         items.add(
