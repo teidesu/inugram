@@ -466,3 +466,5 @@ bugfix/scrim-double-service.patch
 bugfix/forward-ripple-hotspot.patch
 bugfix/about-link-collapsed-ripple.patch
 bugfix/unsent-message-date-cursor.patch
+misc/android-test-ui-assets.patch
+bugfix/profile-music-playback.patch

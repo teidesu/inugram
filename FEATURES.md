@@ -341,6 +341,7 @@ most things are toggleable in `Settings → Inugram`, with sensible opinionated 
 - own channel posts with author profiles enabled no longer show the text signature (the optimistic message lacked the `from_id` flag the cell checks, and the server's `post_author` was copied onto it)
 - shared media player visual glitches
 - profile pinned-music sheet bugfixes
+- when profile music autoplay is disabled, browsing another profile keeps the current track and queue, with playback controls in the browsed playlist
 - profile rows right above shared media (e.g. business hours, location) no longer vanish for a few frames when scrolling back up quickly after the media docked (the media pages kept drawing over them until the header animation ended)
 - shared media pager: fling mid-animation to chain tabs or reverse (was ignored until settled); at the edge tab the fling falls through to swipe-to-close
 - shared media grid cells (the opened one's neighbour especially) going blank after opening a photo — the viewer hides the source cell's image receiver a frame or more after resolving it, and restores it by re-resolving by message id; if the grid recycled that cell onto another message in between, the wrong cell was blanked and the restore landed elsewhere, so it never came back. deferred hides now verify the cell still shows what they were resolved for, and a cell rebound to a different message drops any inherited hidden flag
