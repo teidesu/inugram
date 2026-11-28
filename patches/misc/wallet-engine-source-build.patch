@@ -4,20 +4,28 @@ Date: Tue, 3 Nov 2026 18:33:11 +0400
 Subject: build patched wallet-engine from source
 
 ---
- TMessagesProj/build.gradle       | 24 ++++++++++++++++++++++++
- TMessagesProj/jni/CMakeLists.txt |  4 ++--
- 2 files changed, 26 insertions(+), 2 deletions(-)
+ TMessagesProj/build.gradle                    | 34 +++++++++++++++++++
+ TMessagesProj/jni/CMakeLists.txt              |  4 +--
+ .../jni/prebuild/build_wallet_engine.sh       |  5 +--
+ TMessagesProj/jni/prebuild/common.sh          | 17 ++++++++++
+ 4 files changed, 56 insertions(+), 4 deletions(-)
 
 diff --git a/TMessagesProj/build.gradle b/TMessagesProj/build.gradle
 index 0000000..0000000 100644
 --- a/TMessagesProj/build.gradle
 +++ b/TMessagesProj/build.gradle
-@@ -181,6 +181,29 @@ def preprocessInuSources = tasks.register('preprocessInuSources') {
+@@ -181,6 +181,39 @@ def preprocessInuSources = tasks.register('preprocessInuSources') {
      }
  }
  
 +// wallet-engine carries patches-native, so its committed prebuilt archive and bindings are stale
 +def inuWalletEngineDir = layout.buildDirectory.dir('inuWalletEngine').get().asFile
++def inuWindowsHost = System.getProperty('os.name').startsWith('Windows')
++def inuBash = !inuWindowsHost ? 'bash' : ([project.findProperty('bash.path')] +
++    (System.getenv('PATH') ?: '').tokenize(File.pathSeparator).findAll { new File(it, 'git.exe').isFile() }
++        .collect { new File(it, '../bin/bash.exe').canonicalPath } +
++    [System.getenv('ProgramW6432'), System.getenv('ProgramFiles')].findAll { it }.collect { "$it/Git/bin/bash.exe" })
++    .find { it && new File(it).isFile() } ?: 'bash'
 +def buildInuWalletEngine = tasks.register('buildInuWalletEngine', Exec) {
 +    def abis = android.defaultConfig.ndk.abiFilters.join(' ')
 +    inputs.files(fileTree('jni/wallet-engine') { exclude '**/target/**', '.git' }, fileTree('jni/gram-wallet') { exclude 'target/**' },
@@ -27,13 +35,17 @@ index 0000000..0000000 100644
 +    outputs.dirs(new File(inuWalletEngineDir, 'lib'), new File(inuWalletEngineDir, 'include'))
 +    outputs.cacheIf { true }
 +    def userHome = System.getProperty('user.home')
-+    environment 'PATH', [System.getenv('CARGO_HOME') ? "${System.getenv('CARGO_HOME')}/bin" : null, "$userHome/.cargo/bin", System.getenv('PATH')].findAll { it }.join(File.pathSeparator)
++    def walletPath = [System.getenv('CARGO_HOME') ? "${System.getenv('CARGO_HOME')}/bin" : null, "$userHome/.cargo/bin", System.getenv('PATH')].findAll { it }.join(File.pathSeparator)
++    if (inuWindowsHost) {
++        environment.keySet().findAll { it.equalsIgnoreCase('PATH') }.each { environment.remove(it) }
++    }
++    environment 'PATH', walletPath
 +    environment 'ANDROID_NDK_HOME', android.ndkDirectory.absolutePath
 +    environment 'ABIS', abis
 +    environment 'LIB_DIR', new File(inuWalletEngineDir, 'lib').absolutePath
 +    environment 'INCLUDE_DIR', new File(inuWalletEngineDir, 'include').absolutePath
 +    environment 'WALLET_ENGINE_BUILD_DIR', new File(inuWalletEngineDir, 'cargo').absolutePath
-+    commandLine 'bash', file('jni/prebuild/build_wallet_engine.sh').absolutePath
++    commandLine inuBash, file('jni/prebuild/build_wallet_engine.sh').absolutePath
 +}
 +tasks.matching { it.name.startsWith('configureCMake') || it.name.startsWith('buildCMake') }.configureEach {
 +    dependsOn buildInuWalletEngine
@@ -42,11 +54,11 @@ index 0000000..0000000 100644
  android {
      compileSdkVersion 36
      buildToolsVersion '36.0.0'
-@@ -237,6 +260,7 @@ android {
+@@ -237,6 +270,7 @@ android {
              cmake {
                  version '3.22.1'
                  arguments '-DANDROID_STL=c++_static', '-DANDROID_PLATFORM=android-26' //, '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
-+                arguments += ["-DINU_WALLET_ENGINE_DIR=${inuWalletEngineDir.absolutePath}"]
++                arguments += ["-DINU_WALLET_ENGINE_DIR=${inuWindowsHost ? inuWalletEngineDir.absolutePath.replace('\\', '/') : inuWalletEngineDir.absolutePath}"]
                  targets 'tmessages.49', 'twidget'
                  if (!rootProject.ext.inuPluginless) {
                      arguments += ['-DINU_EXPORT_SQLITE=ON']
@@ -67,3 +79,77 @@ index 0000000..0000000 100644
  
  add_library(wallet_engine_cpp STATIC
          ${WALLET_ENGINE_INCLUDE_DIR}/wallet_engine.cpp
+diff --git a/TMessagesProj/jni/prebuild/build_wallet_engine.sh b/TMessagesProj/jni/prebuild/build_wallet_engine.sh
+index 0000000..0000000 100755
+--- a/TMessagesProj/jni/prebuild/build_wallet_engine.sh
++++ b/TMessagesProj/jni/prebuild/build_wallet_engine.sh
+@@ -80,6 +80,7 @@ export CARGO_ENCODED_RUSTFLAGS
+ case "$host_os" in
+     Darwin) host_library=libgram_wallet.dylib ;;
+     Linux) host_library=libgram_wallet.so ;;
++    Windows) host_library=gram_wallet.dll ;;
+ esac
+ echo "Generating Wallet Engine C++ bindings with $(rustc --version)"
+ cargo rustc --manifest-path "$ADAPTER_DIR/Cargo.toml" \
+@@ -102,8 +103,8 @@ for abi in $ABIS; do
+         armeabi-v7a) clang_prefix=armv7a-linux-androideabi ;;
+         *) clang_prefix="$target" ;;
+     esac
+-    linker="$NDK_TOOLCHAIN/bin/${clang_prefix}${API}-clang"
+-    if [[ ! -x "$linker" ]]; then
++    linker="$NDK_TOOLCHAIN/bin/${clang_prefix}${API}-clang$NDK_CLANG_SUFFIX"
++    if [[ "$host_os" == Windows && ! -f "$linker" ]] || [[ "$host_os" != Windows && ! -x "$linker" ]]; then
+         echo "ERROR: Android compiler not found: $linker" >&2
+         exit 1
+     fi
+diff --git a/TMessagesProj/jni/prebuild/common.sh b/TMessagesProj/jni/prebuild/common.sh
+index 0000000..0000000 100755
+--- a/TMessagesProj/jni/prebuild/common.sh
++++ b/TMessagesProj/jni/prebuild/common.sh
+@@ -17,6 +17,9 @@ API="${API:-21}"
+ ABIS="${ABIS:-arm64-v8a armeabi-v7a x86_64 x86}"
+ 
+ host_os="$(uname -s)"
++case "$host_os" in
++    MINGW*|MSYS*|CYGWIN*) host_os=Windows ;;
++esac
+ case "$host_os" in
+     Darwin)
+         DEFAULT_ANDROID_SDK_ROOT="$HOME/Library/Android/sdk"
+@@ -24,6 +27,9 @@ case "$host_os" in
+     Linux)
+         DEFAULT_ANDROID_SDK_ROOT="$HOME/Android/Sdk"
+         ;;
++    Windows)
++        DEFAULT_ANDROID_SDK_ROOT="$(cygpath -m "${LOCALAPPDATA:-$HOME/AppData/Local}")/Android/Sdk"
++        ;;
+     *)
+         echo "ERROR: unsupported host OS: $host_os" >&2
+         return 1 2>/dev/null || exit 1
+@@ -32,6 +38,10 @@ esac
+ 
+ ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$DEFAULT_ANDROID_SDK_ROOT}"
+ ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_SDK_ROOT/ndk/$NDK_VERSION}"
++if [[ "$host_os" == Windows ]]; then
++    ANDROID_SDK_ROOT="$(cygpath -m "$ANDROID_SDK_ROOT")"
++    ANDROID_NDK_HOME="$(cygpath -m "$ANDROID_NDK_HOME")"
++fi
+ TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake"
+ 
+ # Resolve the host-specific LLVM prebuilt directory once for scripts that call
+@@ -63,8 +73,15 @@ case "$host_os" in
+                 ;;
+         esac
+         ;;
++    Windows)
++        NDK_HOST_TAG="windows-x86_64"
++        ;;
+ esac
+ NDK_TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$NDK_HOST_TAG"
++NDK_CLANG_SUFFIX=""
++if [[ "$host_os" == Windows ]]; then
++    NDK_CLANG_SUFFIX=".cmd"
++fi
+ 
+ # Make C/C++ outputs independent from the absolute checkout path.  Clang may
+ # otherwise embed /Users/... on macOS and /home/... on Linux into object files
